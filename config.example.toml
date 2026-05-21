@@ -1,0 +1,49 @@
+[server]
+host = "0.0.0.0"
+port = 8080
+base_url = "http://localhost:8080"
+log_level = "info"
+
+[database]
+url = "sqlite://./data/plane.db?mode=rwc"
+max_connections = 10
+min_connections = 1
+
+[storage]
+backend = "local"
+path = "./data/uploads"
+
+[auth]
+session_secret = "change-me-in-production"
+session_ttl_hours = 720
+
+[auth.oauth.github]
+client_id = ""
+client_secret = ""
+
+[auth.oauth.google]
+client_id = ""
+client_secret = ""
+
+[email]
+enabled = false
+smtp_host = ""
+smtp_port = 587
+smtp_user = ""
+smtp_pass = ""
+from_address = "plane@example.com"
+use_tls = true
+
+[search]
+backend = "tantivy"
+index_path = "./data/search"
+
+[tasks]
+max_retries = 5
+retry_base_delay_secs = 600
+hard_delete_after_days = 30
+
+[cleanup]
+archive_api_logs_days = 30
+max_page_versions = 20
+max_issue_description_versions = 20

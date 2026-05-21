@@ -1,0 +1,253 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { Search, Sun, Moon, Monitor, Bell, Check, ChevronDown } from 'lucide-react';
+import { useThemeStore } from '@/stores/theme';
+import { useAuthStore } from '@/stores/auth';
+import { useWorkspaceStore } from '@/stores/workspace';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
+
+const routeLabels: Record<string, string> = {
+  '': 'Dashboard',
+  projects: 'Projects',
+  issues: 'My Issues',
+  pages: 'Pages',
+  settings: 'Settings',
+  search: 'Search',
+};
+
+export default function TopBar() {
+  const navigate = useNavigate();
+  const { slug } = useParams<{ slug: string }>();
+  const location = useLocation();
+  const { theme, setTheme } = useThemeStore();
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Cmd+K shortcut
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+      if (e.key === 'Escape') {
+        setSearchOpen(false);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
+
+  const handleSearch = () => {
+    if (searchQuery.trim() && slug) {
+      navigate(`/${slug}/search?q=${encodeURIComponent(searchQuery.trim())}`);
+      setSearchQuery('');
+      setSearchOpen(false);
+    }
+  };
+
+  // Build breadcrumb from current route
+  const pathSegments = location.pathname
+    .replace(`/${slug}`, '')
+    .split('/')
+    .filter(Boolean);
+
+  const breadcrumbs = [
+    { label: slug ?? 'Workspace', path: `/${slug}` },
+    ...pathSegments.map((segment, i) => ({
+      label: routeLabels[segment] ?? segment,
+      path: `/${slug}/${pathSegments.slice(0, i + 1).join('/')}`,
+    })),
+  ];
+
+  const initials = user?.display_name
+    ?.split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) ?? 'U';
+
+  const ThemeIcon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
+  const { workspaces, currentSlug, setCurrentSlug } = useWorkspaceStore();
+  const activeSlug = slug ?? currentSlug;
+  const activeWorkspace = workspaces.find((w) => w.slug === activeSlug);
+
+  return (
+    <header className="flex h-14 items-center gap-3 border-b border-border bg-background px-4">
+      {/* Workspace switcher (mobile: icon only, desktop: full) */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button className="flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-muted transition-colors shrink-0">
+            <div className="h-6 w-6 rounded bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center">
+              {(activeWorkspace?.name ?? 'W')[0].toUpperCase()}
+            </div>
+            <span className="hidden sm:inline text-sm font-medium max-w-[120px] truncate">
+              {activeWorkspace?.name ?? activeSlug ?? 'Workspace'}
+            </span>
+            <ChevronDown className="h-3 w-3 text-muted-foreground hidden sm:inline" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-56">
+          {workspaces.map((ws) => (
+            <DropdownMenuItem
+              key={ws.id}
+              className={cn('cursor-pointer', ws.slug === activeSlug && 'bg-accent')}
+              onClick={() => {
+                setCurrentSlug(ws.slug);
+                navigate(`/${ws.slug}`);
+              }}
+            >
+              <div className="mr-2 flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground text-xs font-semibold shrink-0">
+                {ws.name[0].toUpperCase()}
+              </div>
+              <span className="flex-1 truncate">{ws.name}</span>
+              {ws.slug === activeSlug && <Check className="h-4 w-4 text-primary shrink-0" />}
+            </DropdownMenuItem>
+          ))}
+          {workspaces.length === 0 && (
+            <div className="px-2 py-4 text-center text-sm text-muted-foreground">No workspaces</div>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Search */}
+      <div className="relative flex-1 max-w-md">
+        {searchOpen ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSearch();
+            }}
+            className="flex items-center gap-2"
+          >
+            <Input
+              autoFocus
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search issues, projects..."
+              className="h-8 text-sm"
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setSearchOpen(false);
+              }}
+            />
+            <Button type="submit" size="sm" className="h-8 hidden sm:inline-flex">
+              Search
+            </Button>
+          </form>
+        ) : (
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="flex h-8 w-full items-center gap-2 rounded-md border border-input bg-muted/50 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted"
+          >
+            <Search className="h-3.5 w-3.5 shrink-0" />
+            <span className="hidden sm:inline">Search...</span>
+            <kbd className="ml-auto rounded bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground border border-border hidden sm:inline-block">
+              ⌘K
+            </kbd>
+          </button>
+        )}
+      </div>
+
+      {/* Breadcrumb */}
+      <nav className="hidden items-center gap-1 text-sm md:flex">
+        {breadcrumbs.map((crumb, i) => (
+          <span key={crumb.path} className="flex items-center gap-1">
+            {i > 0 && <span className="text-muted-foreground">/</span>}
+            <button
+              onClick={() => navigate(crumb.path)}
+              className={cn(
+                'rounded px-1.5 py-0.5 transition-colors hover:bg-muted',
+                i === breadcrumbs.length - 1
+                  ? 'font-medium text-foreground'
+                  : 'text-muted-foreground'
+              )}
+            >
+              {crumb.label}
+            </button>
+          </span>
+        ))}
+      </nav>
+
+      <div className="ml-auto flex items-center gap-1">
+        {/* Theme toggle */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="hidden sm:flex h-8 w-8 text-muted-foreground">
+              <ThemeIcon className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setTheme('light')}>
+              <Sun className="mr-2 h-4 w-4" /> Light
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme('dark')}>
+              <Moon className="mr-2 h-4 w-4" /> Dark
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme('system')}>
+              <Monitor className="mr-2 h-4 w-4" /> System
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Notifications */}
+        <Button variant="ghost" size="icon" className="hidden sm:flex relative h-8 w-8 text-muted-foreground">
+          <Bell className="h-4 w-4" />
+          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive" />
+        </Button>
+
+        {/* User menu */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="ml-1 h-8 w-8 rounded-full p-0">
+              <Avatar className="h-8 w-8">
+                <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+              </Avatar>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <div className="px-2 py-1.5">
+              <p className="text-sm font-medium">{user?.display_name ?? 'User'}</p>
+              <p className="text-xs text-muted-foreground">{user?.email ?? ''}</p>
+            </div>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => slug && navigate(`/${slug}/settings`)}>
+              Profile & Settings
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <div className="px-2 py-1.5 sm:hidden">
+              <p className="text-xs text-muted-foreground mb-1">Theme</p>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="sm" className="h-7 text-xs flex-1" onClick={() => setTheme('light')}>
+                  <Sun className="h-3 w-3 mr-1" /> Light
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs flex-1" onClick={() => setTheme('dark')}>
+                  <Moon className="h-3 w-3 mr-1" /> Dark
+                </Button>
+              </div>
+            </div>
+            <DropdownMenuSeparator className="sm:hidden" />
+            <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
+              Log out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </header>
+  );
+}

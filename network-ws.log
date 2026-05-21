@@ -1,0 +1,20 @@
+255. [GET] http://localhost:8080/api/instances/ => [200] OK
+256. [GET] http://localhost:8080/api/users/me/ => [200] OK
+257. [GET] http://localhost:8080/api/users/me/profile/ => [200] OK
+258. [GET] http://localhost:8080/api/users/me/settings/ => [200] OK
+259. [GET] http://localhost:8080/api/users/me/workspaces/ => [200] OK
+260. [GET] http://localhost:8080/api/workspaces/test-ws/workspace-members/me/ => [200] OK
+261. [GET] http://localhost:8080/api/users/me/workspaces/test-ws/project-roles/ => [200] OK
+262. [GET] http://localhost:8080/api/workspaces/test-ws/projects/ => [200] OK
+263. [GET] http://localhost:8080/api/workspaces/test-ws/members/ => [200] OK
+264. [GET] http://localhost:8080/api/workspaces/test-ws/states/ => [200] OK
+265. [GET] http://localhost:8080/api/workspaces/test-ws/sidebar-preferences/ => [200] OK
+266. [GET] http://localhost:8080/api/workspaces/test-ws/user-properties/ => [200] OK
+270. [GET] http://localhost:8080/api/workspaces/test-ws/users/notifications/unread/ => [200] OK
+271. [GET] http://localhost:8080/api/workspaces/test-ws/home-preferences/ => [200] OK
+272. [GET] http://localhost:8080/api/workspaces/test-ws/user-favorites/?all=true => [404] Not Found
+275. [GET] http://localhost:8080/api/workspaces/test-ws/members/ => [200] OK
+276. [GET] http://localhost:8080/api/workspaces/test-ws/user-favorites/?all=true => [404] Not Found
+277. [GET] http://localhost:8080/api/workspaces/test-ws/home-preferences/ => [200] OK
+
+Note: 259 static requests not shown, run with "static" option to see them.

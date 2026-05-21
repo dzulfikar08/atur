@@ -1,0 +1,34 @@
+269. [GET] http://localhost:8080/api/instances/ => [200] OK
+270. [GET] http://localhost:8080/api/users/me/ => [200] OK
+271. [GET] http://localhost:8080/api/users/me/profile/ => [200] OK
+272. [GET] http://localhost:8080/api/users/me/settings/ => [200] OK
+273. [GET] http://localhost:8080/api/users/me/workspaces/ => [200] OK
+274. [GET] http://localhost:8080/api/workspaces/test-ws/workspace-members/me/ => [200] OK
+275. [GET] http://localhost:8080/api/users/me/workspaces/test-ws/project-roles/ => [200] OK
+276. [GET] http://localhost:8080/api/workspaces/test-ws/projects/ => [200] OK
+277. [GET] http://localhost:8080/api/workspaces/test-ws/members/ => [200] OK
+278. [GET] http://localhost:8080/api/workspaces/test-ws/states/ => [200] OK
+279. [GET] http://localhost:8080/api/workspaces/test-ws/sidebar-preferences/ => [200] OK
+280. [GET] http://localhost:8080/api/workspaces/test-ws/user-properties/ => [200] OK
+284. [GET] http://localhost:8080/api/workspaces/test-ws/users/notifications/unread/ => [200] OK
+285. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/ => [200] OK
+286. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/project-members/me/ => [404] Not Found
+287. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/user-properties/ => [404] Not Found
+288. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/issue-labels/ => [404] Not Found
+289. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/members/ => [200] OK
+290. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/states/ => [200] OK
+291. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/intake-state/ => [404] Not Found
+292. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/estimates/ => [200] OK
+293. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/cycles/ => [404] Not Found
+294. [GET] http://localhost:8080/api/workspaces/test-ws/modules/ => [200] OK
+295. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/modules/ => [404] Not Found
+296. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/views/ => [404] Not Found
+297. [GET] http://localhost:8080/api/workspaces/test-ws/user-favorites/?all=true => [200] OK
+299. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/user-properties/ => [404] Not Found
+300. [GET] http://localhost:8080/api/workspaces/test-ws/members/ => [200] OK
+301. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/project-members/me/ => [404] Not Found
+302. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/issue-labels/ => [404] Not Found
+303. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/intake-state/ => [404] Not Found
+304. [GET] http://localhost:8080/api/workspaces/test-ws/projects/e2e92ce4-601b-4154-a156-3c9cf608d05b/project-members/me/ => [404] Not Found
+
+Note: 272 static requests not shown, run with "static" option to see them.

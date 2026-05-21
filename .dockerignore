@@ -1,0 +1,40 @@
+# Build artifacts
+target/
+
+# Version control
+.git/
+.gitignore
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Claude Code
+.claude/
+
+# Environment and secrets
+.env
+.env.*
+
+# Documentation
+*.md
+!config.example.toml
+
+# Node (frontend build tooling, not needed in Docker)
+node_modules/
+
+# Local data
+data/
+
+# Log files
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Frontend source (built assets are in static/ and static-editor/)
+frontend/

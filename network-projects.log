@@ -1,0 +1,19 @@
+242. [GET] http://localhost:8080/api/instances/ => [200] OK
+243. [GET] http://localhost:8080/api/users/me/ => [200] OK
+244. [GET] http://localhost:8080/api/users/me/profile/ => [200] OK
+245. [GET] http://localhost:8080/api/users/me/settings/ => [200] OK
+246. [GET] http://localhost:8080/api/users/me/workspaces/ => [200] OK
+247. [GET] http://localhost:8080/api/workspaces/test-ws/workspace-members/me/ => [200] OK
+248. [GET] http://localhost:8080/api/users/me/workspaces/test-ws/project-roles/ => [200] OK
+249. [GET] http://localhost:8080/api/workspaces/test-ws/projects/ => [200] OK
+250. [GET] http://localhost:8080/api/workspaces/test-ws/members/ => [200] OK
+251. [GET] http://localhost:8080/api/workspaces/test-ws/states/ => [200] OK
+252. [GET] http://localhost:8080/api/workspaces/test-ws/sidebar-preferences/ => [200] OK
+253. [GET] http://localhost:8080/api/workspaces/test-ws/user-properties/ => [200] OK
+258. [GET] http://localhost:8080/api/workspaces/test-ws/users/notifications/unread/ => [200] OK
+259. [GET] http://localhost:8080/api/workspaces/test-ws/projects/details/ => [400] Bad Request
+260. [GET] http://localhost:8080/api/workspaces/test-ws/user-favorites/?all=true => [200] OK
+261. [GET] http://localhost:8080/api/workspaces/test-ws/members/ => [200] OK
+262. [GET] http://localhost:8080/api/workspaces/test-ws/projects/details/ => [400] Bad Request
+
+Note: 245 static requests not shown, run with "static" option to see them.
