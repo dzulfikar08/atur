@@ -2392,6 +2392,7 @@ dependencies = [
  "futures-util",
  "hex",
  "hmac",
+ "http-body-util",
  "lettre",
  "multer",
  "rand 0.8.6",

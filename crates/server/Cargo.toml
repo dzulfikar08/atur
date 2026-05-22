@@ -45,4 +45,5 @@ multer = { workspace = true }
 lettre = { workspace = true }
 rmcp.workspace = true
 schemars.workspace = true
+http-body-util = "0.1"
 tantivy = { workspace = true }
