@@ -1,6 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuthStore } from '@/stores/auth';
+import { Routes, Route } from 'react-router-dom';
 import AppShell from '@/components/layout/AppShell';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 
@@ -23,6 +22,7 @@ const GitHubIntegrationPage = lazy(() => import('@/pages/integrations/GitHubInte
 const ClockifyIntegrationPage = lazy(() => import('@/pages/integrations/ClockifyIntegrationPage'));
 const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'));
 const DrawPage = lazy(() => import('@/pages/DrawPage'));
+const LandingPage = lazy(() => import('@/pages/LandingPage'));
 
 function PageLoader() {
   return (
@@ -32,16 +32,13 @@ function PageLoader() {
   );
 }
 
-function RootRedirect() {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  if (isAuthenticated) return <Navigate to="/plane-pmo" replace />;
-  return <Navigate to="/auth/login" replace />;
-}
-
 export default function App() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
+        {/* Landing page — public, no AppShell */}
+        <Route path="/" element={<LandingPage />} />
+
         {/* Public routes */}
         <Route path="/auth/login" element={<LoginPage />} />
         <Route path="/auth/register" element={<RegisterPage />} />
@@ -87,9 +84,6 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-
-        {/* Root redirect */}
-        <Route path="/" element={<RootRedirect />} />
       </Routes>
     </Suspense>
   );

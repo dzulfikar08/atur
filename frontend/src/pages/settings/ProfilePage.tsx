@@ -29,6 +29,7 @@ import { useWorkspaceStore } from "@/stores/workspace";
 import { useNavigate, useParams } from "react-router-dom";
 import { Building2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 const createKeySchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -40,6 +41,7 @@ type CreateKeyForm = z.infer<typeof createKeySchema>;
 export default function ProfilePage() {
   const qc = useQueryClient();
   const { theme, setTheme } = useThemeStore();
+  const { i18n } = useTranslation();
   const { workspaces, currentSlug, setCurrentSlug } = useWorkspaceStore();
   const navigate = useNavigate();
   const params = useParams<{ slug: string }>();
@@ -180,6 +182,18 @@ export default function ProfilePage() {
                   <SelectItem value="light">Light</SelectItem>
                   <SelectItem value="dark">Dark</SelectItem>
                   <SelectItem value="system">System</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-3 mt-4">
+              <label className="text-sm font-medium">Language</label>
+              <Select value={i18n.language?.startsWith('id') ? 'id' : 'en'} onValueChange={(lng) => i18n.changeLanguage(lng)}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="en">English</SelectItem>
+                  <SelectItem value="id">Bahasa Indonesia</SelectItem>
                 </SelectContent>
               </Select>
             </div>
