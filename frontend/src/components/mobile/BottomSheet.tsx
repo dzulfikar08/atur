@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { hapticLight } from '@/lib/haptics';
 
 interface BottomSheetProps {
   open: boolean;
@@ -19,6 +20,7 @@ export default function BottomSheet({ open, onClose, title, children }: BottomSh
     if (open) {
       setDragY(0);
       document.body.style.overflow = 'hidden';
+      hapticLight();
     } else {
       document.body.style.overflow = '';
     }
@@ -41,6 +43,7 @@ export default function BottomSheet({ open, onClose, title, children }: BottomSh
   function handleTouchEnd() {
     setDragging(false);
     if (dragY > 100) {
+      hapticLight();
       onClose();
     } else {
       setDragY(0);

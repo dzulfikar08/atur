@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, api } from '@/lib/api';
 import MobileIssueCard from './MobileIssueCard';
 import BottomSheet from './BottomSheet';
+import PullToRefreshIndicator from './PullToRefreshIndicator';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,7 +13,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import usePullToRefresh from '@/hooks/usePullToRefresh';
+import { hapticMedium } from '@/lib/haptics';
 
 interface Issue {
   id: string;
@@ -99,8 +101,20 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
     return true;
   });
 
+  const { pullDistance, isRefreshing, progress, pullHandlers } = usePullToRefresh({
+    onRefresh: async () => {
+      hapticMedium();
+      await qc.invalidateQueries({ queryKey: ['mobile-issues', slug, projectId] });
+      await qc.invalidateQueries({ queryKey: ['projects', slug] });
+    },
+  });
+
   return (
-    <div className="space-y-3">
+    <div
+      className="space-y-3 overflow-y-auto"
+      {...pullHandlers}
+    >
+      <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} progress={progress} />
       {/* Search + Actions bar */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">

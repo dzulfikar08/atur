@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { ArrowLeft, MessageSquare, Calendar, Clock } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Calendar, Clock, Link2, Plus, X, Trash2 } from 'lucide-react';
 import BottomSheet from './BottomSheet';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { hapticMedium } from '@/lib/haptics';
 
 const STATE_COLORS: Record<string, string> = {
   backlog: 'bg-gray-100 text-gray-700',
@@ -48,6 +49,21 @@ interface State {
   name: string;
   group: string;
 }
+
+interface IssueRelation {
+  id: string;
+  issue_id: string;
+  related_issue_id: string;
+  relation_type: string;
+  created_at: string;
+}
+
+const RELATION_TYPE_LABELS: Record<string, { label: string; color: string }> = {
+  blocks: { label: "Blocks", color: "bg-orange-100 text-orange-700" },
+  is_blocked_by: { label: "Blocked by", color: "bg-red-100 text-red-700" },
+  relates_to: { label: "Relates to", color: "bg-blue-100 text-blue-700" },
+  duplicates: { label: "Duplicates", color: "bg-purple-100 text-purple-700" },
+};
 
 export default function MobileIssueDetail() {
   const { slug, projectId, issueSeqId } = useParams();
@@ -94,6 +110,65 @@ export default function MobileIssueDetail() {
       qc.invalidateQueries({ queryKey: ['comments', slug, projectId, issueSeqId] });
       setCommentText('');
       toast.success('Comment added');
+    },
+  });
+
+  // --- Relations ---
+  const [relationSheetOpen, setRelationSheetOpen] = useState(false);
+  const [relationSearch, setRelationSearch] = useState('');
+  const [relationType, setRelationType] = useState('relates_to');
+  const [selectedRelatedIssue, setSelectedRelatedIssue] = useState<{ id: string; name: string } | null>(null);
+
+  const { data: relations = [] } = useQuery({
+    queryKey: ['relations', slug, projectId, issueSeqId],
+    queryFn: () => apiFetch<IssueRelation[]>(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/relations/`).catch(() => []),
+    enabled: !!slug && !!projectId && !!issueSeqId,
+  });
+
+  const relatedIssueIds = relations.map((r) => r.related_issue_id);
+  const { data: relatedIssues = [] } = useQuery({
+    queryKey: ['related-issues', slug, projectId, relatedIssueIds.join(',')],
+    queryFn: async () => {
+      if (relatedIssueIds.length === 0) return [];
+      const all = await apiFetch<{ results: { id: string; name: string; sequence_id: number }[] }>(
+        `/workspaces/${slug}/projects/${projectId}/issues/?limit=500`
+      ).then((r) => (Array.isArray(r) ? r : r.results));
+      return all.filter((i) => relatedIssueIds.includes(i.id));
+    },
+    enabled: !!slug && !!projectId && relatedIssueIds.length > 0,
+  });
+  const relatedIssueMap = new Map(relatedIssues.map((i) => [i.id, i]));
+
+  const { data: relationSearchResults = [] } = useQuery({
+    queryKey: ['issue-search-rel', slug, projectId, relationSearch],
+    queryFn: () =>
+      apiFetch<{ results: { id: string; name: string; sequence_id: number }[] }>(
+        `/workspaces/${slug}/projects/${projectId}/issues/?search=${encodeURIComponent(relationSearch)}&limit=10`
+      ).then((r) => (Array.isArray(r) ? r : r.results).filter((i) => String(i.sequence_id) !== String(issueSeqId))),
+    enabled: !!slug && !!projectId && relationSearch.length >= 2,
+  });
+
+  const addRelationMutation = useMutation({
+    mutationFn: ({ related_issue_id, relation_type }: { related_issue_id: string; relation_type: string }) =>
+      apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/relations/`, {
+        method: 'POST', body: JSON.stringify({ related_issue_id, relation_type }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['relations', slug, projectId, issueSeqId] });
+      setSelectedRelatedIssue(null);
+      setRelationSearch('');
+      setRelationSheetOpen(false);
+      toast.success('Relation added');
+    },
+    onError: () => toast.error('Failed to add relation'),
+  });
+
+  const deleteRelationMutation = useMutation({
+    mutationFn: (relationId: string) =>
+      apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/relations/${relationId}/`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['relations', slug, projectId, issueSeqId] });
+      toast.success('Relation removed');
     },
   });
 
@@ -152,6 +227,42 @@ export default function MobileIssueDetail() {
             <Clock className="h-3 w-3" />
             <span>Updated {formatDistanceToNow(new Date(issue.updated_at), { addSuffix: true })}</span>
           </div>
+        </div>
+
+        {/* Divider */}
+        <div className="border-t" />
+
+        {/* Relations */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <Link2 className="h-3 w-3" /> Relations ({relations.length})
+            </h3>
+            <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => setRelationSheetOpen(true)}>
+              <Plus className="h-3 w-3 mr-0.5" /> Add
+            </Button>
+          </div>
+          {relations.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">No relations</p>
+          ) : (
+            <div className="space-y-1.5">
+              {relations.map((rel) => {
+                const relInfo = RELATION_TYPE_LABELS[rel.relation_type] || { label: rel.relation_type, color: 'bg-gray-100 text-gray-700' };
+                const related = relatedIssueMap.get(rel.related_issue_id);
+                return (
+                  <div key={rel.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
+                    <Badge className={cn('text-[9px] shrink-0', relInfo.color)} variant="secondary">{relInfo.label}</Badge>
+                    <span className="text-xs flex-1 truncate">
+                      {related ? `#${related.sequence_id} ${related.name}` : '...'}
+                    </span>
+                    <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0 text-muted-foreground" onClick={() => deleteRelationMutation.mutate(rel.id)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Divider */}
@@ -216,6 +327,7 @@ export default function MobileIssueDetail() {
                 s.id === issue.state_id ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/50'
               )}
               onClick={() => {
+                hapticMedium();
                 updateMutation.mutate({ state_id: s.id });
                 setStateSheetOpen(false);
               }}
@@ -238,6 +350,7 @@ export default function MobileIssueDetail() {
                 p === issue.priority ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/50'
               )}
               onClick={() => {
+                hapticMedium();
                 updateMutation.mutate({ priority: p });
                 setPrioritySheetOpen(false);
               }}
@@ -246,6 +359,67 @@ export default function MobileIssueDetail() {
               {p === issue.priority && <span className="text-xs ml-auto">Current</span>}
             </button>
           ))}
+        </div>
+      </BottomSheet>
+
+      {/* Add Relation sheet */}
+      <BottomSheet open={relationSheetOpen} onClose={() => { setRelationSheetOpen(false); setSelectedRelatedIssue(null); setRelationSearch(''); }} title="Add Relation">
+        <div className="space-y-3">
+          {!selectedRelatedIssue ? (
+            <>
+              <input
+                type="text"
+                placeholder="Search issues..."
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={relationSearch}
+                onChange={(e) => setRelationSearch(e.target.value)}
+                autoFocus
+              />
+              {relationSearch.length >= 2 && (
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {relationSearchResults.map((i) => (
+                    <button
+                      key={i.id}
+                      className="w-full text-left p-2 rounded-lg text-sm hover:bg-muted/50"
+                      onClick={() => { setSelectedRelatedIssue({ id: i.id, name: i.name }); setRelationSearch(''); }}
+                    >
+                      <span className="text-muted-foreground font-mono text-xs">#{i.sequence_id}</span> {i.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
+                <span className="text-sm flex-1 truncate">{selectedRelatedIssue.name}</span>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSelectedRelatedIssue(null)}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Relation Type</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {Object.entries(RELATION_TYPE_LABELS).map(([key, { label, color }]) => (
+                    <button
+                      key={key}
+                      className={cn('p-2 rounded-lg text-xs text-center transition-colors', color, relationType === key && 'ring-2 ring-primary')}
+                      onClick={() => setRelationType(key)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <Button
+                className="w-full"
+                disabled={addRelationMutation.isPending}
+                onClick={() => addRelationMutation.mutate({ related_issue_id: selectedRelatedIssue.id, relation_type: relationType })}
+              >
+                {addRelationMutation.isPending ? 'Adding...' : 'Add Relation'}
+              </Button>
+            </>
+          )}
         </div>
       </BottomSheet>
     </div>

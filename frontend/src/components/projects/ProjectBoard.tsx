@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, api, type Issue, type State } from "@/lib/api";
@@ -28,6 +28,26 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  closestCorners,
+  DragOverlay,
+  type DragStartEvent,
+  type DragEndEvent,
+  type DragOverEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useDroppable } from "@dnd-kit/core";
 
 const createIssueSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -45,6 +65,110 @@ const STATE_COLORS: Record<string, string> = {
   cancelled: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
 };
 
+// --- Droppable Column ---
+function DroppableColumn({ state, stateIssues, children }: {
+  state: State;
+  stateIssues: Issue[];
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: state.id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`min-w-[260px] sm:min-w-[280px] w-[260px] sm:w-[280px] flex-shrink-0 snap-start rounded-lg transition-colors ${
+        isOver ? "bg-muted/40 ring-2 ring-primary/20" : ""
+      }`}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Badge className={STATE_COLORS[state.group] || STATE_COLORS.backlog} variant="secondary">
+          {state.name}
+        </Badge>
+        <span className="text-xs text-muted-foreground">{stateIssues.length}</span>
+      </div>
+      <SortableContext items={stateIssues.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+        <div className="space-y-2 min-h-[60px]">
+          {children}
+        </div>
+      </SortableContext>
+    </div>
+  );
+}
+
+// --- Sortable Issue Card ---
+function SortableIssueCard({ issue, onClick }: {
+  issue: Issue;
+  onClick: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: issue.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  return (
+    <Card
+      ref={setNodeRef}
+      style={style}
+      className={`cursor-pointer hover:shadow-md transition-shadow select-none ${
+        isDragging ? "shadow-lg ring-2 ring-primary/30" : ""
+      }`}
+      onClick={onClick}
+      {...attributes}
+      {...listeners}
+    >
+      <CardContent className="p-3">
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{issue.name}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {String(issue.sequence_id).padStart(4, "0")}
+            </p>
+          </div>
+          {issue.priority && issue.priority !== "none" && (
+            <Badge variant="outline" className="text-[10px] ml-2 shrink-0">
+              {issue.priority}
+            </Badge>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// --- Drag Overlay Card ---
+function DragOverlayCard({ issue }: { issue: Issue }) {
+  return (
+    <Card className="shadow-xl ring-2 ring-primary/30 rotate-2 w-[260px] sm:w-[280px]">
+      <CardContent className="p-3">
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{issue.name}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {String(issue.sequence_id).padStart(4, "0")}
+            </p>
+          </div>
+          {issue.priority && issue.priority !== "none" && (
+            <Badge variant="outline" className="text-[10px] ml-2 shrink-0">
+              {issue.priority}
+            </Badge>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ProjectBoard() {
   const { slug, projectId } = useParams();
   const navigate = useNavigate();
@@ -55,6 +179,12 @@ export default function ProjectBoard() {
   const [createOpen, setCreateOpen] = useState(false);
   const [parentSearch, setParentSearch] = useState("");
   const [selectedParent, setSelectedParent] = useState<{ id: string; name: string } | null>(null);
+  const [activeIssueId, setActiveIssueId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const { data: parentSearchResults = [], isLoading: parentSearchLoading } = useQuery({
     queryKey: ["parent-issue-search", slug, projectId, parentSearch],
@@ -119,6 +249,66 @@ export default function ProjectBoard() {
     }
     return Object.values(groups).sort((a, b) => a.state.sequence - b.state.sequence);
   }, [filteredIssues, states]);
+
+  const activeIssue = useMemo(
+    () => issues.find((i) => i.id === activeIssueId) ?? null,
+    [issues, activeIssueId]
+  );
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveIssueId(event.active.id as string);
+  }, []);
+
+  const handleDragOver = useCallback((_event: DragOverEvent) => {
+    // No-op; visual feedback comes from useDroppable isOver
+  }, []);
+
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event;
+      setActiveIssueId(null);
+
+      if (!over || !slug || !projectId) return;
+
+      const issueId = active.id as string;
+      const targetId = over.id as string;
+
+      const draggedIssue = issues.find((i) => i.id === issueId);
+      if (!draggedIssue) return;
+
+      // Find the target state. `over.id` could be a state column id or another issue id.
+      let newStateId: string | null = null;
+
+      // Check if dropped directly on a state column
+      if (states.some((s) => s.id === targetId)) {
+        newStateId = targetId;
+      } else {
+        // Dropped on an issue card — find the state of that issue
+        const targetIssue = issues.find((i) => i.id === targetId);
+        if (targetIssue) {
+          newStateId = targetIssue.state_id;
+        }
+      }
+
+      if (!newStateId || newStateId === draggedIssue.state_id) return;
+
+      try {
+        await apiFetch(
+          `/workspaces/${slug}/projects/${projectId}/issues/${draggedIssue.sequence_id}/`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ state: newStateId }),
+          }
+        );
+        qc.invalidateQueries({ queryKey: ["issues", slug, projectId] });
+        toast.success("Issue moved");
+      } catch {
+        toast.error("Failed to move issue");
+        qc.invalidateQueries({ queryKey: ["issues", slug, projectId] });
+      }
+    },
+    [issues, states, slug, projectId, qc]
+  );
 
   if (issuesLoading) {
     return (
@@ -292,43 +482,30 @@ export default function ProjectBoard() {
       </div>
 
       {view === "board" ? (
-        <div className="flex gap-4 p-4 overflow-x-auto flex-1 snap-x">
-          {groupedByState.map(({ state, issues: stateIssues }) => (
-            <div key={state.id} className="min-w-[260px] sm:min-w-[280px] w-[260px] sm:w-[280px] flex-shrink-0 snap-start">
-              <div className="flex items-center gap-2 mb-3">
-                <Badge className={STATE_COLORS[state.group] || STATE_COLORS.backlog} variant="secondary">
-                  {state.name}
-                </Badge>
-                <span className="text-xs text-muted-foreground">{stateIssues.length}</span>
-              </div>
-              <div className="space-y-2">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="flex gap-4 p-4 overflow-x-auto flex-1 snap-x">
+            {groupedByState.map(({ state, issues: stateIssues }) => (
+              <DroppableColumn key={state.id} state={state} stateIssues={stateIssues}>
                 {stateIssues.map((issue) => (
-                  <Card
+                  <SortableIssueCard
                     key={issue.id}
-                    className="cursor-pointer hover:shadow-md transition-shadow"
+                    issue={issue}
                     onClick={() => navigate(`/${slug}/projects/${projectId}/issues/${issue.sequence_id}`)}
-                  >
-                    <CardContent className="p-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{issue.name}</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {String(issue.sequence_id).padStart(4, "0")}
-                          </p>
-                        </div>
-                        {issue.priority && issue.priority !== "none" && (
-                          <Badge variant="outline" className="text-[10px] ml-2 shrink-0">
-                            {issue.priority}
-                          </Badge>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
+                  />
                 ))}
-              </div>
-            </div>
-          ))}
-        </div>
+              </DroppableColumn>
+            ))}
+          </div>
+          <DragOverlay>
+            {activeIssue ? <DragOverlayCard issue={activeIssue} /> : null}
+          </DragOverlay>
+        </DndContext>
       ) : (
         <div className="p-4">
           <div className="border rounded-lg overflow-x-auto">

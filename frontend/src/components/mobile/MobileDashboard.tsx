@@ -1,10 +1,13 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Issue } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { Layers, Circle, CheckCircle2, AlertTriangle } from 'lucide-react';
 import MobileIssueCard from './MobileIssueCard';
 import { useNavigate } from 'react-router-dom';
+import usePullToRefresh from '@/hooks/usePullToRefresh';
+import PullToRefreshIndicator from './PullToRefreshIndicator';
+import { hapticMedium } from '@/lib/haptics';
 
 interface MobileDashboardProps {
   slug: string;
@@ -20,6 +23,7 @@ const stats = [
 
 export default function MobileDashboard({ slug, workspaceName }: MobileDashboardProps) {
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
   const { data: overview } = useQuery({
     queryKey: ['analytics-overview', slug],
@@ -52,8 +56,22 @@ export default function MobileDashboard({ slug, workspaceName }: MobileDashboard
     enabled: !!slug && !!firstProjectId,
   });
 
+  const { pullDistance, isRefreshing, progress, pullHandlers } = usePullToRefresh({
+    onRefresh: async () => {
+      hapticMedium();
+      await qc.invalidateQueries({ queryKey: ['analytics-overview', slug] });
+      await qc.invalidateQueries({ queryKey: ['projects', slug] });
+      await qc.invalidateQueries({ queryKey: ['recent-issues-mobile', slug] });
+      await qc.invalidateQueries({ queryKey: ['states', slug] });
+    },
+  });
+
   return (
-    <div className="space-y-4">
+    <div
+      className="space-y-4 overflow-y-auto"
+      {...pullHandlers}
+    >
+      <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} progress={progress} />
       {/* Welcome */}
       <div>
         <h1 className="text-lg font-bold">{workspaceName}</h1>
