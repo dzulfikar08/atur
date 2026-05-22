@@ -34,9 +34,20 @@ export const api = {
     apiFetch<{ active_sprints: SprintData[] }>(`/workspaces/${slug}/analytics/sprints`)
       .then(r => r.active_sprints),
   listProjects: (slug: string) => apiFetch<Project[]>(`/workspaces/${slug}/projects/`),
-  listIssues: (slug: string, projectId: string) =>
-    apiFetch<PaginatedResponse<Issue>>(`/workspaces/${slug}/projects/${projectId}/issues/`)
-      .then(r => r.results),
+  listIssues: async (slug: string, projectId: string): Promise<Issue[]> => {
+    const all: Issue[] = [];
+    let offset = 0;
+    const limit = 100;
+    while (true) {
+      const page = await apiFetch<PaginatedResponse<Issue>>(
+        `/workspaces/${slug}/projects/${projectId}/issues/?limit=${limit}&offset=${offset}`
+      );
+      all.push(...page.results);
+      if (all.length >= page.total) break;
+      offset += limit;
+    }
+    return all;
+  },
   listStates: (slug: string, projectId: string) =>
     apiFetch<State[]>(`/workspaces/${slug}/projects/${projectId}/states/`),
   search: (slug: string, query: string) =>
