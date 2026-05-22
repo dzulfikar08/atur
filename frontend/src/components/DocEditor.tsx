@@ -30,6 +30,7 @@ import tippy, { type Instance as TippyInstance } from 'tippy.js'
 import { Markdown } from 'tiptap-markdown'
 import { useCollab } from '../hooks/useCollab'
 import { SlashCommandExtension } from './editor/SlashCommandExtension'
+import { TldrawBlock } from './editor/TldrawBlock'
 import {
   SlashCommandMenu,
   getSlashCommandItems,
@@ -98,6 +99,7 @@ export default function DocEditor({ pageId }: DocEditorProps) {
         allowBase64: true,
       }),
       Markdown,
+      TldrawBlock,
       SlashCommandExtension.configure({
         suggestion: {
           items: ({ query }) => getSlashCommandItems(query),

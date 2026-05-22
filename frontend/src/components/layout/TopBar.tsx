@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { Search, Sun, Moon, Monitor, Bell, Check, ChevronDown } from 'lucide-react';
+import { Search, Sun, Moon, Monitor, Bell, Check, ChevronDown, FileText, Clock, PenTool } from 'lucide-react';
 import { useThemeStore } from '@/stores/theme';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { usePagesStore } from '@/stores/pages';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetch, type Page } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -25,6 +28,11 @@ const routeLabels: Record<string, string> = {
   search: 'Search',
 };
 
+// Helper to list pages for search results
+function listPages(slug: string) {
+  return apiFetch<{ results: Page[] }>(`/workspaces/${slug}/pages/`).then((r) => r.results);
+}
+
 export default function TopBar() {
   const navigate = useNavigate();
   const { slug } = useParams<{ slug: string }>();
@@ -34,6 +42,22 @@ export default function TopBar() {
   const logout = useAuthStore((s) => s.logout);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const { recent } = usePagesStore();
+
+  // Fetch pages for the current workspace so we can show recent page names
+  const { data: pages = [] } = useQuery({
+    queryKey: ['pages', slug],
+    queryFn: () => listPages(slug!),
+    enabled: !!slug && searchOpen,
+  });
+
+  const pagesById = useCallback(() => {
+    const map = new Map<string, Page>();
+    for (const p of pages) {
+      map.set(p.id, p);
+    }
+    return map;
+  }, [pages]);
 
   // Cmd+K shortcut
   const handleKeyDown = useCallback(
@@ -61,6 +85,12 @@ export default function TopBar() {
       setSearchOpen(false);
     }
   };
+
+  // Resolve recent page IDs to page data
+  const recentPages = recent
+    .slice(0, 5)
+    .map((id) => pagesById().get(id))
+    .filter((p): p is Page => !!p);
 
   // Build breadcrumb from current route
   const pathSegments = location.pathname
@@ -129,27 +159,56 @@ export default function TopBar() {
       {/* Search */}
       <div className="relative flex-1 max-w-md">
         {searchOpen ? (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSearch();
-            }}
-            className="flex items-center gap-2"
-          >
-            <Input
-              autoFocus
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search issues, projects..."
-              className="h-8 text-sm"
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setSearchOpen(false);
+          <div className="space-y-2">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSearch();
               }}
-            />
-            <Button type="submit" size="sm" className="h-8 hidden sm:inline-flex">
-              Search
-            </Button>
-          </form>
+              className="flex items-center gap-2"
+            >
+              <Input
+                autoFocus
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search issues, projects..."
+                className="h-8 text-sm"
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setSearchOpen(false);
+                }}
+              />
+              <Button type="submit" size="sm" className="h-8 hidden sm:inline-flex">
+                Search
+              </Button>
+            </form>
+            {/* Recent Pages section in search dropdown */}
+            {!searchQuery && recentPages.length > 0 && slug && (
+              <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-md border bg-popover p-2 shadow-md">
+                <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <Clock className="h-3 w-3" />
+                  Recent Pages
+                </div>
+                {recentPages.map((page) => (
+                  <button
+                    key={page.id}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors cursor-pointer text-left"
+                    onClick={() => {
+                      navigate(`/${slug}/pages/${page.id}`);
+                      setSearchOpen(false);
+                      setSearchQuery('');
+                    }}
+                  >
+                    {page.is_drawing ? (
+                      <PenTool className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+                    ) : (
+                      <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="flex-1 truncate">{page.name || 'Untitled'}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         ) : (
           <button
             onClick={() => setSearchOpen(true)}

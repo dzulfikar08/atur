@@ -116,6 +116,22 @@ export function getSlashCommandItems(query: string): SlashCommandItem[] {
           .run()
       },
     },
+    {
+      title: 'Drawing Canvas',
+      description: 'Embed a tldraw drawing canvas',
+      icon: '\u270E',
+      command: ({ editor, range }) => {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent({
+            type: 'tldraw-block',
+            attrs: { data: '{}' },
+          })
+          .run()
+      },
+    },
   ]
 
   if (!query) return items

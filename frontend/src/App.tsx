@@ -18,6 +18,7 @@ const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'));
 const ProfilePage = lazy(() => import('@/pages/settings/ProfilePage'));
 const MyIssuesPage = lazy(() => import('@/pages/issues/MyIssuesPage'));
 const PagesPage = lazy(() => import('@/pages/pages/PagesPage'));
+const KnowledgeGraphPage = lazy(() => import('@/pages/pages/KnowledgeGraphPage'));
 const GitHubIntegrationPage = lazy(() => import('@/pages/integrations/GitHubIntegrationPage'));
 const ClockifyIntegrationPage = lazy(() => import('@/pages/integrations/ClockifyIntegrationPage'));
 const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'));
@@ -56,6 +57,7 @@ export default function App() {
         >
           <Route path="/:slug" element={<DashboardPage />} />
           <Route path="/:slug/issues" element={<MyIssuesPage />} />
+          <Route path="/:slug/pages/graph" element={<KnowledgeGraphPage />} />
           <Route path="/:slug/pages" element={<PagesPage />} />
           <Route path="/:slug/pages/:pageId" element={<PagesPage />} />
           <Route path="/:slug/projects" element={<ProjectsPage />} />

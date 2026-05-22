@@ -53,6 +53,7 @@
     "@tiptap/suggestion": "^3.23.5",
     "@tldraw/assets": "^5.0.1",
     "@tldraw/tldraw": "^5.0.1",
+    "@xyflow/react": "^12.10.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
