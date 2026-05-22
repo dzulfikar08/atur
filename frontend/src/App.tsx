@@ -21,6 +21,7 @@ const PagesPage = lazy(() => import('@/pages/pages/PagesPage'));
 const GitHubIntegrationPage = lazy(() => import('@/pages/integrations/GitHubIntegrationPage'));
 const ClockifyIntegrationPage = lazy(() => import('@/pages/integrations/ClockifyIntegrationPage'));
 const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'));
+const DrawPage = lazy(() => import('@/pages/DrawPage'));
 
 function PageLoader() {
   return (
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/:slug" element={<DashboardPage />} />
           <Route path="/:slug/issues" element={<MyIssuesPage />} />
           <Route path="/:slug/pages" element={<PagesPage />} />
+          <Route path="/:slug/pages/:pageId" element={<PagesPage />} />
           <Route path="/:slug/projects" element={<ProjectsPage />} />
           <Route path="/:slug/projects/:projectId" element={<ProjectBoardPage />} />
           <Route
@@ -73,6 +75,16 @@ export default function App() {
           <Route path="/:slug/settings" element={<SettingsPage />} />
           <Route path="/:slug/me" element={<ProfilePage />} />
         </Route>
+
+        {/* Drawing page — standalone, no AppShell */}
+        <Route
+          path="/:slug/draw/:pageId"
+          element={
+            <ProtectedRoute>
+              <DrawPage />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Root redirect */}
         <Route path="/" element={<RootRedirect />} />

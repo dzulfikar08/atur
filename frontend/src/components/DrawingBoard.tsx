@@ -1,17 +1,26 @@
 import { Tldraw, Editor, createTLStore, getSnapshot, loadSnapshot } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useThemeStore } from '@/stores/theme'
 
 interface DrawingBoardProps {
   pageId: string
+  editorRef?: React.MutableRefObject<Editor | null>
 }
 
-export default function DrawingBoard({ pageId }: DrawingBoardProps) {
+export default function DrawingBoard({ pageId, editorRef: externalEditorRef }: DrawingBoardProps) {
   const [store] = useState(() => createTLStore())
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const editorRef = useRef<Editor | null>(null)
+  const internalEditorRef = useRef<Editor | null>(null)
+  const editorRef = externalEditorRef ?? internalEditorRef
+
+  // Theme support
+  const { theme } = useThemeStore()
+  const isDark =
+    theme === 'dark' ||
+    (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
 
   // Load drawing from API on mount
   useEffect(() => {
@@ -108,7 +117,8 @@ export default function DrawingBoard({ pageId }: DrawingBoardProps) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'white',
+          background: isDark ? '#1a1a1a' : 'white',
+          color: isDark ? '#ccc' : '#333',
         }}>
           Loading drawing...
         </div>
@@ -119,11 +129,11 @@ export default function DrawingBoard({ pageId }: DrawingBoardProps) {
           top: 8,
           right: 8,
           zIndex: 10,
-          background: '#f3f4f6',
+          background: isDark ? '#333' : '#f3f4f6',
           padding: '4px 8px',
           borderRadius: 4,
           fontSize: 12,
-          color: '#4b5563',
+          color: isDark ? '#ccc' : '#4b5563',
         }}>
           Saving...
         </div>
@@ -131,6 +141,7 @@ export default function DrawingBoard({ pageId }: DrawingBoardProps) {
       <Tldraw
         store={store}
         onMount={handleMount}
+        colorScheme={isDark ? 'dark' : 'light'}
         autoFocus
       />
     </div>

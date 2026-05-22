@@ -244,6 +244,7 @@ pub fn router() -> axum::Router<AppState> {
         .route("/{page_id}/versions/", get(list_page_versions))
         .route("/{page_id}/archive/", post(archive_page))
         .route("/{page_id}/sub-pages/", get(list_sub_pages))
+        .route("/{page_id}/backlinks/", get(list_backlinks))
 }
 
 // ---------------------------------------------------------------------------
@@ -581,6 +582,43 @@ pub async fn list_sub_pages(
 
     let resp: Vec<PageResponse> = children.into_iter().map(Into::into).collect();
     Ok(Json(resp))
+}
+
+/// GET /api/workspaces/<slug>/pages/<uuid>/backlinks/ - Find pages that link to this page
+pub async fn list_backlinks(
+    State(state): State<AppState>,
+    Extension(current_user): Extension<CurrentUser>,
+    Path((slug, page_id)): Path<(String, Uuid)>,
+) -> Result<impl IntoResponse, AppError> {
+    let workspace = load_workspace_by_slug(&state, &slug).await?;
+    require_workspace_role(&state, workspace.id, &current_user, ROLE_GUEST).await?;
+
+    let page = load_page(&state, page_id, workspace.id).await?;
+    let page_name = page.name.to_lowercase();
+
+    // Find pages whose description_stripped contains [[page_name]]
+    let pattern = format!("[[{}]]", page_name);
+    let all_pages: Vec<pages::Model> = pages::Entity::find()
+        .filter(pages::Column::WorkspaceId.eq(workspace.id))
+        .filter(pages::Column::DeletedAt.is_null())
+        .filter(pages::Column::ArchivedAt.is_null())
+        .all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+    let backlinks: Vec<PageResponse> = all_pages
+        .into_iter()
+        .filter(|p| {
+            p.id != page_id
+                && p.description_stripped
+                    .as_deref()
+                    .map(|d| d.to_lowercase().contains(&pattern))
+                    .unwrap_or(false)
+        })
+        .map(Into::into)
+        .collect();
+
+    Ok(Json(backlinks))
 }
 
 // ---------------------------------------------------------------------------

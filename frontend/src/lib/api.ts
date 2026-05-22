@@ -125,3 +125,16 @@ export interface State {
   color?: string;
   slug?: string;
 }
+
+export interface Page {
+  id: string;
+  name: string;
+  description_html: string | null;
+  description_json: unknown | null;
+  parent: string | null;
+  workspace: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  is_drawing?: boolean;
+}
