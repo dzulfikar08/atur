@@ -2,6 +2,15 @@ import type { Editor } from '@tldraw/tldraw'
 import { toRichText } from '@tldraw/tlschema'
 import type { DrawingTemplate } from './index'
 
+const milestoneColors = [
+  'green' as const,
+  'blue' as const,
+  'violet' as const,
+  'orange' as const,
+  'red' as const,
+  'green' as const,
+]
+
 export const timelineTemplate: DrawingTemplate = {
   id: 'timeline',
   name: 'Timeline',
@@ -13,12 +22,12 @@ export const timelineTemplate: DrawingTemplate = {
       const startX = 100
       const endX = 1400
       const milestones = [
-        { label: 'Kickoff', date: 'Jan 6', color: 'green' },
-        { label: 'Design Complete', date: 'Jan 20', color: 'blue' },
-        { label: 'Alpha Release', date: 'Feb 3', color: 'violet' },
-        { label: 'Beta Release', date: 'Feb 17', color: 'orange' },
-        { label: 'QA & Testing', date: 'Mar 3', color: 'red' },
-        { label: 'Launch', date: 'Mar 17', color: 'green' },
+        { label: 'Kickoff', date: 'Jan 6' },
+        { label: 'Design Complete', date: 'Jan 20' },
+        { label: 'Alpha Release', date: 'Feb 3' },
+        { label: 'Beta Release', date: 'Feb 17' },
+        { label: 'QA & Testing', date: 'Mar 3' },
+        { label: 'Launch', date: 'Mar 17' },
       ]
 
       // Title
@@ -54,14 +63,15 @@ export const timelineTemplate: DrawingTemplate = {
         x: 0,
         y: 0,
         props: {
-          start: { x: { value: endX - 40 }, y: { value: lineY } } as any,
-          end: { x: { value: endX + 30 }, y: { value: lineY } } as any,
+          start: { x: endX - 40, y: lineY },
+          end: { x: endX + 30, y: lineY },
           color: 'grey',
         },
       })
 
       milestones.forEach((ms, i) => {
         const x = startX + 60 + i * 200
+        const color = milestoneColors[i]
 
         // Milestone dot
         editor.createShape({
@@ -73,7 +83,7 @@ export const timelineTemplate: DrawingTemplate = {
             w: 30,
             h: 30,
             fill: 'solid',
-            color: ms.color as any,
+            color,
             richText: toRichText(''),
           },
         })
@@ -88,9 +98,9 @@ export const timelineTemplate: DrawingTemplate = {
           x: 0,
           y: 0,
           props: {
-            start: { x: { value: x }, y: { value: above ? lineY - 15 : lineY + 15 } } as any,
-            end: { x: { value: x }, y: { value: above ? labelY + 70 : labelY } } as any,
-            color: ms.color as any,
+            start: { x, y: above ? lineY - 15 : lineY + 15 },
+            end: { x, y: above ? labelY + 70 : labelY },
+            color,
             size: 's',
           },
         })
@@ -105,7 +115,7 @@ export const timelineTemplate: DrawingTemplate = {
             w: 140,
             h: 70,
             fill: 'semi',
-            color: ms.color as any,
+            color,
             richText: toRichText(ms.label),
             font: 'sans',
             size: 's',

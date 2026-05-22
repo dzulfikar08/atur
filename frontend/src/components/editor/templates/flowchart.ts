@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { Editor } from '@tldraw/tldraw'
 import { toRichText } from '@tldraw/tlschema'
 import type { DrawingTemplate } from './index'
@@ -127,37 +126,37 @@ export const flowchartTemplate: DrawingTemplate = {
         },
       })
 
-      // Arrows
-      // Start → Process
+      // Arrows — start/end are VecModel { x, y }
+      // Start -> Process
       editor.createShape({
         type: 'arrow',
         x: 0,
         y: 0,
         props: {
-          start: { type: 'point', x: cx, y: start + 60 },
-          end: { type: 'point', x: cx, y: 200 },
+          start: { x: cx, y: start + 60 },
+          end: { x: cx, y: 200 },
         },
       })
 
-      // Process → Decision
+      // Process -> Decision
       editor.createShape({
         type: 'arrow',
         x: 0,
         y: 0,
         props: {
-          start: { type: 'point', x: cx, y: 280 },
-          end: { type: 'point', x: cx, y: 360 },
+          start: { x: cx, y: 280 },
+          end: { x: cx, y: 360 },
         },
       })
 
-      // Decision (Yes) → Save
+      // Decision (Yes) -> Save
       editor.createShape({
         type: 'arrow',
         x: 0,
         y: 0,
         props: {
-          start: { type: 'point', x: cx, y: 520 },
-          end: { type: 'point', x: cx, y: 600 },
+          start: { x: cx, y: 520 },
+          end: { x: cx, y: 600 },
         },
       })
 
@@ -174,14 +173,14 @@ export const flowchartTemplate: DrawingTemplate = {
         },
       })
 
-      // Decision (No) → Handle Error
+      // Decision (No) -> Handle Error
       editor.createShape({
         type: 'arrow',
         x: 0,
         y: 0,
         props: {
-          start: { type: 'point', x: cx + 100, y: 440 },
-          end: { type: 'point', x: cx + 250, y: 420 },
+          start: { x: cx + 100, y: 440 },
+          end: { x: cx + 250, y: 420 },
         },
       })
 
@@ -198,25 +197,25 @@ export const flowchartTemplate: DrawingTemplate = {
         },
       })
 
-      // Handle Error → back to Process (loop)
+      // Handle Error -> back to Process (loop)
       editor.createShape({
         type: 'arrow',
         x: 0,
         y: 0,
         props: {
-          start: { type: 'point', x: cx + 350, y: 380 },
-          end: { type: 'point', x: cx + 140, y: 240 },
+          start: { x: cx + 350, y: 380 },
+          end: { x: cx + 140, y: 240 },
         },
       })
 
-      // Save → End
+      // Save -> End
       editor.createShape({
         type: 'arrow',
         x: 0,
         y: 0,
         props: {
-          start: { type: 'point', x: cx, y: 680 },
-          end: { type: 'point', x: cx, y: 760 },
+          start: { x: cx, y: 680 },
+          end: { x: cx, y: 760 },
         },
       })
 

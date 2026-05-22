@@ -1,7 +1,15 @@
-// @ts-nocheck
 import type { Editor } from '@tldraw/tldraw'
 import { toRichText } from '@tldraw/tlschema'
 import type { DrawingTemplate } from './index'
+
+const branchColors = [
+  'green' as const,
+  'violet' as const,
+  'orange' as const,
+  'red' as const,
+  'light-blue' as const,
+  'yellow' as const,
+]
 
 export const mindMapTemplate: DrawingTemplate = {
   id: 'mindmap',
@@ -34,22 +42,19 @@ export const mindMapTemplate: DrawingTemplate = {
 
       // Branches
       const branches = [
-        { label: 'Planning', angle: -60, dist: 280, color: 'green' },
-        { label: 'Design', angle: -20, dist: 300, color: 'violet' },
-        { label: 'Development', angle: 20, dist: 300, color: 'orange' },
-        { label: 'Testing', angle: 60, dist: 280, color: 'red' },
-        { label: 'Research', angle: -120, dist: 260, color: 'light-blue' },
-        { label: 'Launch', angle: 120, dist: 260, color: 'yellow' },
+        { label: 'Planning', angle: -60, dist: 280 },
+        { label: 'Design', angle: -20, dist: 300 },
+        { label: 'Development', angle: 20, dist: 300 },
+        { label: 'Testing', angle: 60, dist: 280 },
+        { label: 'Research', angle: -120, dist: 260 },
+        { label: 'Launch', angle: 120, dist: 260 },
       ]
 
-      const branchEndPoints: { x: number; y: number }[] = []
-
-      branches.forEach((branch) => {
+      branches.forEach((branch, bi) => {
         const rad = (branch.angle * Math.PI) / 180
         const bx = cx + Math.cos(rad) * branch.dist
         const by = cy + Math.sin(rad) * branch.dist
-
-        branchEndPoints.push({ x: bx, y: by })
+        const color = branchColors[bi]
 
         // Branch node
         editor.createShape({
@@ -61,13 +66,12 @@ export const mindMapTemplate: DrawingTemplate = {
             w: 160,
             h: 70,
             fill: 'solid',
-            color: branch.color,
+            color,
             richText: toRichText(branch.label),
             font: 'sans',
             size: 'm',
             align: 'middle',
             verticalAlign: 'middle',
-            radius: 12,
           },
         })
 
@@ -83,9 +87,9 @@ export const mindMapTemplate: DrawingTemplate = {
           x: 0,
           y: 0,
           props: {
-            start: { type: 'point', x: sx, y: sy },
-            end: { type: 'point', x: ex, y: ey },
-            color: branch.color,
+            start: { x: sx, y: sy },
+            end: { x: ex, y: ey },
+            color,
           },
         })
 
@@ -118,13 +122,12 @@ export const mindMapTemplate: DrawingTemplate = {
               w: 130,
               h: 50,
               fill: 'semi',
-              color: branch.color,
+              color,
               richText: toRichText(subLabel),
               font: 'sans',
               size: 's',
               align: 'middle',
               verticalAlign: 'middle',
-              radius: 8,
             },
           })
 
@@ -139,9 +142,9 @@ export const mindMapTemplate: DrawingTemplate = {
             x: 0,
             y: 0,
             props: {
-              start: { type: 'point', x: subSx, y: subSy },
-              end: { type: 'point', x: subEx, y: subEy },
-              color: branch.color,
+              start: { x: subSx, y: subSy },
+              end: { x: subEx, y: subEy },
+              color,
               size: 's',
             },
           })

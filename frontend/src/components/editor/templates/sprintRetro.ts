@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { Editor } from '@tldraw/tldraw'
 import { toRichText } from '@tldraw/tlschema'
 import type { DrawingTemplate } from './index'
@@ -11,9 +10,9 @@ export const sprintRetroTemplate: DrawingTemplate = {
   apply: (editor: Editor) => {
     editor.run(() => {
       const cols = [
-        { label: 'Went Well', color: 'green', noteColor: 'light-green' },
-        { label: 'Improve', color: 'orange', noteColor: 'light-yellow' },
-        { label: 'Actions', color: 'blue', noteColor: 'light-blue' },
+        { label: 'Went Well', color: 'green' as const, noteColor: 'light-green' as const },
+        { label: 'Improve', color: 'orange' as const, noteColor: 'yellow' as const },
+        { label: 'Actions', color: 'blue' as const, noteColor: 'light-blue' as const },
       ]
 
       const colWidth = 300

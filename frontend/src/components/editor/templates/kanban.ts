@@ -2,17 +2,13 @@ import type { Editor } from '@tldraw/tldraw'
 import { toRichText } from '@tldraw/tlschema'
 import type { DrawingTemplate } from './index'
 
-const Color = {
-  grey: 'grey' as const,
-  blue: 'blue' as const,
-  yellow: 'yellow' as const,
-  green: 'green' as const,
-  lightYellow: 'light-yellow' as const,
-  lightBlue: 'light-blue' as const,
-  lightGreen: 'light-green' as const,
-  lightRed: 'light-red' as const,
-  lightViolet: 'light-violet' as const,
-}
+const noteColors = [
+  'yellow' as const,
+  'light-blue' as const,
+  'light-green' as const,
+  'light-red' as const,
+  'light-violet' as const,
+]
 
 export const kanbanTemplate: DrawingTemplate = {
   id: 'kanban',
@@ -26,7 +22,7 @@ export const kanbanTemplate: DrawingTemplate = {
       const colWidth = 280
       const colHeight = 600
       const headerH = 50
-      const colors = [Color.grey, Color.blue, Color.yellow, Color.green]
+      const colors = ['grey', 'blue', 'yellow', 'green'] as const
 
       cols.forEach((label, i) => {
         // Column frame
@@ -65,7 +61,6 @@ export const kanbanTemplate: DrawingTemplate = {
         })
 
         // Sample sticky notes
-        const noteColors = [Color.lightYellow, Color.lightBlue, Color.lightGreen, Color.lightRed, Color.lightViolet]
         const notes: string[][] = [
           ['Research competitors', 'Draft proposal'],
           ['Setup CI/CD', 'Design mockups'],
