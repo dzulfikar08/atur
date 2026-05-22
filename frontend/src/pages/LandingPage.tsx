@@ -1,6 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import {
   Zap,
   LayoutDashboard,
@@ -10,228 +13,165 @@ import {
   Bot,
   ArrowRight,
   Check,
-  X,
   Menu,
-  Star,
+  X,
+  ChevronRight,
+  Gauge,
+  Shield,
+  Blocks,
+  Cpu,
+  Network,
+  Sparkles,
 } from 'lucide-react';
-import { useState } from 'react';
-
-function GithubIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-    </svg>
-  );
-}
-
-const navLinks = [
-  { label: 'Features', href: '#features' },
-  { label: 'Pages', href: '#pages' },
-  { label: 'Open Source', href: '#opensource' },
-];
 
 const features = [
   {
-    icon: Zap,
-    title: 'Lightning Fast',
-    description: 'Built with Rust and SQLite. Runs on 50MB RAM.',
-  },
-  {
     icon: LayoutDashboard,
-    title: 'Kanban Board',
-    description: 'Drag-and-drop issue management with custom states.',
+    title: 'Kanban Boards',
+    description: 'Drag-and-drop issue management with custom workflows and states.',
   },
   {
     icon: FileText,
-    title: 'Obsidian-like Pages',
-    description:
-      'Rich text pages with wikilinks, backlinks, and knowledge graph.',
+    title: 'Connected Pages',
+    description: 'Rich text with [[wikilinks]], backlinks, and a knowledge graph to connect your thinking.',
   },
   {
     icon: PenTool,
     title: 'Drawing Canvas',
-    description: 'Embed tldraw whiteboards directly in your pages.',
+    description: 'Embed tldraw whiteboards directly inside any page for visual thinking.',
+  },
+  {
+    icon: Gauge,
+    title: 'Rust-Powered',
+    description: 'Runs on 50MB RAM. Starts in under a second. A single binary you deploy anywhere.',
   },
   {
     icon: Smartphone,
-    title: 'Mobile First',
-    description: 'Native iOS/Android apps built with Capacitor.',
+    title: 'Mobile Ready',
+    description: 'Native iOS and Android via Capacitor. Manage projects on the move.',
   },
   {
     icon: Bot,
-    title: 'AI-Powered',
-    description: 'MCP server for AI agent integration.',
+    title: 'AI Integration',
+    description: 'Built-in MCP server for AI agents. Let Claude, Cursor, and Copilot manage your projects.',
   },
 ];
 
-const comparisonData = [
-  { metric: 'RAM Usage', pmo: '50 MB', traditional: '3 GB+', pmoGood: true },
-  {
-    metric: 'Deployment',
-    pmo: '1 Binary',
-    traditional: '10+ Containers',
-    pmoGood: true,
-  },
-  {
-    metric: 'Tech Stack',
-    pmo: 'Rust + SQLite',
-    traditional: 'Python + PostgreSQL + Redis',
-    pmoGood: true,
-  },
-  {
-    metric: 'Startup Time',
-    pmo: '< 1 second',
-    traditional: '30+ seconds',
-    pmoGood: true,
-  },
-  {
-    metric: 'Self-Hosted',
-    pmo: 'Yes',
-    traditional: 'Complicated',
-    pmoGood: true,
-  },
-  {
-    metric: 'Open Source',
-    pmo: 'MIT License',
-    traditional: 'Source-Available',
-    pmoGood: true,
-  },
+const metrics = [
+  { value: '50MB', label: 'RAM Usage' },
+  { value: '<1s', label: 'Start Time' },
+  { value: '1', label: 'Binary' },
+  { value: '35+', label: 'MCP Tools' },
 ];
 
 export default function LandingPage() {
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Ensure dark class is on html for the landing page
   useEffect(() => {
     const html = document.documentElement;
     html.classList.add('dark');
-    // Also update the title
-    document.title = 'Plane PMO — Self-Hosted Project Management';
+    document.title = 'Atur — Organize Everything';
     return () => {
       html.classList.remove('dark');
     };
   }, []);
 
-  const handleSmoothScroll = (
-    e: React.MouseEvent<HTMLAnchorElement>,
-    href: string,
-  ) => {
-    e.preventDefault();
+  const scrollTo = (id: string) => {
     setMobileMenuOpen(false);
-    const el = document.querySelector(href);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
-    }
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
   };
 
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
-      {/* ── Navbar ── */}
-      <nav className="fixed top-0 inset-x-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-          {/* Logo */}
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="flex items-center gap-2.5 text-foreground"
-          >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-blue-500">
-              <span className="text-sm font-bold text-white">P</span>
-            </div>
-            <span className="text-lg font-semibold tracking-tight">
-              Plane PMO
-            </span>
-          </a>
+      <style>{`
+        .font-display {
+          font-family: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+        }
+        .font-display-italic {
+          font-family: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+          font-style: italic;
+        }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .anim-1 { animation: fadeUp 0.6s ease-out both; }
+        .anim-2 { animation: fadeUp 0.6s ease-out 0.08s both; }
+        .anim-3 { animation: fadeUp 0.6s ease-out 0.16s both; }
+        .anim-4 { animation: fadeUp 0.6s ease-out 0.24s both; }
+        .anim-5 { animation: fadeUp 0.6s ease-out 0.32s both; }
+        .grid-lines {
+          background-image:
+            linear-gradient(var(--border) 1px, transparent 1px),
+            linear-gradient(90deg, var(--border) 1px, transparent 1px);
+          background-size: 72px 72px;
+          opacity: 0.4;
+        }
+        .noise {
+          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+        }
+      `}</style>
 
-          {/* Desktop nav */}
-          <div className="hidden md:flex items-center gap-8">
-            {navLinks.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                onClick={(e) => handleSmoothScroll(e, link.href)}
-                className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-              >
-                {link.label}
-              </a>
-            ))}
+      {/* ── Navbar ── */}
+      <nav className="fixed top-0 inset-x-0 z-50 border-b border-border bg-background/90 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8">
+          <button
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="flex items-center gap-2.5"
+          >
+            <img src="/logo-128.png" alt="" className="h-8 w-8 rounded-md border border-border" />
+            <span className="text-base font-semibold tracking-tight">
+              Atur
+            </span>
+          </button>
+
+          <div className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
+            <button onClick={() => scrollTo('features')} className="hover:text-foreground transition-colors">Features</button>
+            <button onClick={() => scrollTo('pages')} className="hover:text-foreground transition-colors">Pages</button>
+            <button onClick={() => scrollTo('pricing')} className="hover:text-foreground transition-colors">Pricing</button>
           </div>
 
-          {/* Desktop actions */}
           <div className="hidden md:flex items-center gap-3">
             <Button
               variant="ghost"
               size="sm"
-              asChild
+              onClick={() => navigate('/auth/login')}
             >
-              <a
-                href="https://github.com"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <GithubIcon className="h-4 w-4" />
-                GitHub
-              </a>
+              Sign In
             </Button>
             <Button
               size="sm"
               onClick={() => navigate('/auth/login')}
-              className="bg-gradient-to-r from-violet-500 to-blue-500 text-white hover:opacity-90"
             >
               Get Started
-              <ArrowRight className="h-3.5 w-3.5" />
             </Button>
           </div>
 
-          {/* Mobile menu button */}
           <button
-            className="md:hidden p-2 text-muted-foreground hover:text-foreground"
+            className="md:hidden p-2 text-muted-foreground"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
-            <Menu className="h-5 w-5" />
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>
 
-        {/* Mobile menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-border bg-background px-4 pb-4 pt-2">
-            {navLinks.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                onClick={(e) => handleSmoothScroll(e, link.href)}
-                className="block py-2 text-sm text-muted-foreground hover:text-foreground"
+          <div className="md:hidden border-t border-border bg-background px-5 pb-5 pt-3 space-y-1">
+            {['features', 'pages', 'pricing'].map((id) => (
+              <button
+                key={id}
+                onClick={() => scrollTo(id)}
+                className="block w-full text-left py-2.5 text-sm text-muted-foreground hover:text-foreground capitalize"
               >
-                {link.label}
-              </a>
+                {id}
+              </button>
             ))}
-            <div className="mt-3 flex flex-col gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                asChild
-              >
-                <a
-                  href="https://github.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <GithubIcon className="h-4 w-4" />
-                  GitHub
-                </a>
+            <div className="pt-3 flex flex-col gap-2">
+              <Button size="sm" variant="outline" onClick={() => navigate('/auth/login')}>
+                Sign In
               </Button>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  navigate('/auth/login');
-                }}
-                className="bg-gradient-to-r from-violet-500 to-blue-500 text-white hover:opacity-90"
-              >
+              <Button size="sm" onClick={() => navigate('/auth/login')}>
                 Get Started
               </Button>
             </div>
@@ -240,116 +180,115 @@ export default function LandingPage() {
       </nav>
 
       {/* ── Hero ── */}
-      <section className="relative pt-32 pb-20 sm:pt-40 sm:pb-28">
-        {/* Background gradient orbs */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -top-40 left-1/2 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-gradient-to-br from-violet-600/20 to-blue-600/20 blur-3xl" />
-        </div>
+      <section className="relative pt-28 pb-20 sm:pt-40 sm:pb-28">
+        <div className="grid-lines pointer-events-none absolute inset-0" />
+        <div className="noise pointer-events-none absolute inset-0" />
 
-        <div className="relative mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="mx-auto max-w-3xl text-center">
-            {/* Badge */}
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-muted/50 px-4 py-1.5 text-xs text-muted-foreground">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
-              Open Source &middot; Self-Hosted
-            </div>
+        <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
+          <div className="mx-auto max-w-4xl text-center">
+            <Badge variant="outline" className="anim-1 mb-8 gap-2 rounded-full px-4 py-1.5 font-normal">
+              <span className="h-1.5 w-1.5 rounded-full bg-foreground" />
+              Project management for teams that ship
+            </Badge>
 
-            <h1 className="text-4xl font-bold tracking-tight sm:text-6xl lg:text-7xl">
-              Project Management,{' '}
-              <span className="bg-gradient-to-r from-violet-400 to-blue-400 bg-clip-text text-transparent">
-                Self-Hosted
-              </span>
+            <h1 className="anim-2 text-5xl font-bold tracking-tight sm:text-7xl lg:text-8xl leading-[0.95]">
+              Manage projects
+              <br />
+              <span className="font-display-italic font-normal text-muted-foreground">without the bloat</span>
             </h1>
 
-            <p className="mx-auto mt-6 max-w-xl text-lg text-muted-foreground sm:text-xl">
-              Rust-powered speed meets modern project management. Issues, sprints, pages, and
-              whiteboards -- all in one lightweight binary.
+            <p className="anim-3 mx-auto mt-7 max-w-lg text-lg text-muted-foreground leading-relaxed sm:text-xl">
+              Issues, sprints, pages, and whiteboards — in one lightweight binary.
+              Rust-powered. Self-hosted. AI-ready.
             </p>
 
-            <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <div className="anim-4 mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Button
                 size="lg"
                 onClick={() => navigate('/auth/login')}
-                className="w-full bg-gradient-to-r from-violet-500 to-blue-500 text-white hover:opacity-90 sm:w-auto"
+                className="px-8 h-12 text-base"
               >
-                Start Free
-                <ArrowRight className="h-4 w-4" />
+                Start Free Trial
+                <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
               <Button
                 size="lg"
                 variant="outline"
-                asChild
-                className="w-full sm:w-auto"
+                onClick={() => navigate('/auth/login')}
+                className="h-12"
               >
-                <a
-                  href="https://github.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <GithubIcon className="h-4 w-4" />
-                  View on GitHub
-                </a>
+                View Demo
+                <ChevronRight className="ml-0.5 h-4 w-4" />
               </Button>
             </div>
           </div>
 
-          {/* Mockup / screenshot placeholder */}
-          <div className="relative mx-auto mt-16 max-w-4xl">
-            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-2xl shadow-violet-500/5">
+          {/* App mockup */}
+          <div className="anim-5 relative mx-auto mt-16 max-w-5xl">
+            <Card className="overflow-hidden rounded-2xl">
               {/* Window chrome */}
-              <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+              <div className="flex items-center gap-2 border-b border-border px-4 py-3 bg-card">
                 <div className="flex gap-1.5">
-                  <div className="h-3 w-3 rounded-full bg-red-500/70" />
-                  <div className="h-3 w-3 rounded-full bg-yellow-500/70" />
-                  <div className="h-3 w-3 rounded-full bg-green-500/70" />
+                  <div className="h-3 w-3 rounded-full bg-muted-foreground/30" />
+                  <div className="h-3 w-3 rounded-full bg-muted-foreground/30" />
+                  <div className="h-3 w-3 rounded-full bg-muted-foreground/30" />
                 </div>
-                <div className="mx-auto flex h-6 w-64 items-center justify-center rounded-md bg-muted/50 text-[11px] text-muted-foreground">
-                  app.plane-pmo.dev
+                <div className="mx-auto flex h-6 w-72 items-center justify-center rounded-md bg-muted text-[11px] text-muted-foreground">
+                  atur.dev
                 </div>
               </div>
 
-              {/* Wireframe content */}
-              <div className="flex h-72 sm:h-96">
+              {/* Wireframe */}
+              <div className="flex h-72 sm:h-[420px]">
                 {/* Sidebar */}
-                <div className="hidden w-48 flex-col border-r border-border bg-muted/20 p-4 sm:flex">
-                  <div className="mb-4 h-4 w-24 rounded bg-violet-500/20" />
-                  <div className="space-y-2.5">
-                    <div className="h-3 w-28 rounded bg-muted-foreground/15" />
-                    <div className="h-3 w-20 rounded bg-violet-500/30" />
-                    <div className="h-3 w-24 rounded bg-muted-foreground/15" />
-                    <div className="h-3 w-16 rounded bg-muted-foreground/15" />
-                    <div className="h-3 w-28 rounded bg-muted-foreground/15" />
+                <div className="hidden w-52 flex-col border-r border-border bg-card p-4 sm:flex">
+                  <div className="mb-5 h-4 w-20 rounded bg-foreground/15" />
+                  <div className="space-y-3">
+                    {[80, 60, 72, 48, 64, 56, 68].map((w, i) => (
+                      <div
+                        key={i}
+                        className="h-2.5 rounded"
+                        style={{
+                          width: `${w}%`,
+                          background: i === 1 ? 'var(--foreground)' : 'var(--muted)',
+                          opacity: i === 1 ? 0.15 : 0.4,
+                        }}
+                      />
+                    ))}
                   </div>
-                  <div className="mt-auto space-y-2.5">
-                    <div className="h-3 w-20 rounded bg-muted-foreground/10" />
-                    <div className="h-3 w-16 rounded bg-muted-foreground/10" />
+                  <div className="mt-auto space-y-3">
+                    <div className="h-2 w-16 rounded bg-muted" />
+                    <div className="h-2 w-20 rounded bg-muted" />
                   </div>
                 </div>
-                {/* Main area */}
+
+                {/* Main content */}
                 <div className="flex-1 p-4 sm:p-6">
                   <div className="mb-5 flex items-center justify-between">
-                    <div className="h-5 w-32 rounded bg-foreground/20" />
-                    <div className="h-8 w-24 rounded-md bg-gradient-to-r from-violet-500/30 to-blue-500/30" />
+                    <div className="h-5 w-28 rounded bg-foreground/10" />
+                    <div className="h-8 w-24 rounded-md bg-primary/20" />
                   </div>
-                  {/* Kanban columns */}
                   <div className="grid grid-cols-3 gap-3 sm:gap-4">
-                    {['Backlog', 'In Progress', 'Done'].map((col, i) => (
+                    {['Backlog', 'In Progress', 'Done'].map((col, ci) => (
                       <div key={col}>
-                        <div className="mb-2 text-[10px] font-medium text-muted-foreground/60 sm:text-xs">
+                        <div className="mb-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider sm:text-[11px]">
                           {col}
                         </div>
-                        <div className="space-y-2">
-                          {[1, 2].map((card) => (
-                            <div
-                              key={card}
-                              className="rounded-lg border border-border bg-background p-2.5 sm:p-3"
-                            >
-                              <div className="mb-1.5 h-2.5 w-3/4 rounded bg-foreground/15" />
-                              <div className="h-2 w-1/2 rounded bg-muted-foreground/10" />
-                              {i === 1 && card === 1 && (
-                                <div className="mt-2 h-1.5 w-2/3 rounded-full bg-gradient-to-r from-violet-500/40 to-blue-500/40" />
+                        <div className="space-y-2.5">
+                          {[0, 1].map((card) => (
+                            <Card key={card} className="p-3">
+                              <div className="mb-2 h-2.5 w-3/4 rounded bg-foreground/[0.07]" />
+                              <div className="h-2 w-1/2 rounded bg-muted" />
+                              {ci === 1 && card === 0 && (
+                                <div className="mt-3 h-1.5 w-2/3 rounded-full bg-primary/30" />
                               )}
-                            </div>
+                              {ci === 2 && card === 0 && (
+                                <div className="mt-2 flex items-center gap-1.5">
+                                  <div className="h-4 w-4 rounded-full bg-primary/20 border border-primary/30" />
+                                  <div className="h-2 w-8 rounded bg-muted" />
+                                </div>
+                              )}
+                            </Card>
                           ))}
                         </div>
                       </div>
@@ -357,286 +296,324 @@ export default function LandingPage() {
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Glow effect under mockup */}
-            <div className="pointer-events-none absolute -bottom-8 left-1/2 h-32 w-3/4 -translate-x-1/2 bg-gradient-to-r from-violet-600/10 to-blue-600/10 blur-2xl" />
-          </div>
-        </div>
-      </section>
-
-      {/* ── Features ── */}
-      <section id="features" className="py-20 sm:py-28">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="mx-auto max-w-2xl text-center">
-            <p className="text-sm font-semibold uppercase tracking-wider text-violet-400">
-              Features
-            </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
-              Everything you need, nothing you don&apos;t
-            </h2>
-            <p className="mt-4 text-muted-foreground">
-              A full project management toolkit in a single lightweight binary.
-            </p>
+            </Card>
           </div>
 
-          <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {features.map(({ icon: Icon, title, description }) => (
+          {/* Metrics strip */}
+          <div className="mt-16 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border sm:grid-cols-4">
+            {metrics.map(({ value, label }) => (
               <div
-                key={title}
-                className="group rounded-xl border border-border bg-card p-6 transition-all hover:border-violet-500/30 hover:shadow-lg hover:shadow-violet-500/5"
+                key={label}
+                className="flex flex-col items-center justify-center bg-card px-4 py-6"
               >
-                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500/10 to-blue-500/10 text-violet-400 transition-colors group-hover:from-violet-500/20 group-hover:to-blue-500/20">
-                  <Icon className="h-5 w-5" />
-                </div>
-                <h3 className="text-lg font-semibold">{title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  {description}
-                </p>
+                <span className="text-3xl font-bold sm:text-4xl">
+                  {value}
+                </span>
+                <span className="mt-1 text-xs text-muted-foreground uppercase tracking-wider">
+                  {label}
+                </span>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Pages / Knowledge Graph section ── */}
-      <section id="pages" className="py-20 sm:py-28 border-t border-border">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+      <Separator />
+
+      {/* ── Features ── */}
+      <section id="features" className="relative py-24 sm:py-32">
+        <div className="noise pointer-events-none absolute inset-0 opacity-50" />
+        <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              Capabilities
+            </p>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-5xl">
+              Everything you need,<br />
+              <span className="text-muted-foreground">nothing you don&apos;t</span>
+            </h2>
+          </div>
+
+          <div className="mt-16 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {features.map(({ icon: Icon, title, description }) => (
+              <Card key={title} className="group transition-colors hover:bg-accent">
+                <CardContent className="p-7">
+                  <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-muted">
+                    <Icon className="h-5 w-5 text-foreground" />
+                  </div>
+                  <h3 className="text-base font-semibold">{title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    {description}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <Separator />
+
+      {/* ── Pages / Knowledge Graph ── */}
+      <section id="pages" className="py-24 sm:py-32">
+        <div className="mx-auto max-w-7xl px-5 sm:px-8">
+          <div className="grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-20">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-wider text-blue-400">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                 Knowledge Base
               </p>
-              <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
-                Pages that connect your thinking
+              <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-5xl leading-tight">
+                Pages that connect<br />
+                <span className="font-display-italic font-normal text-muted-foreground">your thinking</span>
               </h2>
-              <p className="mt-4 text-muted-foreground leading-relaxed">
+              <p className="mt-5 text-muted-foreground leading-relaxed">
                 Write documentation, meeting notes, and specs with an Obsidian-inspired editor.
-                Use <code className="rounded bg-muted px-1.5 py-0.5 text-sm">[[wikilinks]]</code> to
+                Use <code className="rounded bg-muted px-1.5 py-0.5 text-sm text-foreground">[[wikilinks]]</code> to
                 connect pages, then explore everything through an interactive knowledge graph.
               </p>
-              <ul className="mt-6 space-y-3">
+              <ul className="mt-8 space-y-4">
                 {[
-                  'Rich text with slash commands and callouts',
-                  'Wikilinks with backlink references',
-                  'Interactive knowledge graph visualization',
-                  'Embedded tldraw whiteboards',
-                ].map((item) => (
-                  <li key={item} className="flex items-start gap-2.5 text-sm">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
-                    <span className="text-muted-foreground">{item}</span>
+                  { icon: Blocks, text: 'Rich text with slash commands and callouts' },
+                  { icon: Network, text: 'Wikilinks with backlink references' },
+                  { icon: Sparkles, text: 'Interactive knowledge graph visualization' },
+                  { icon: PenTool, text: 'Embedded tldraw whiteboards' },
+                ].map(({ icon: ItemIcon, text }) => (
+                  <li key={text} className="flex items-start gap-3 text-sm">
+                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted">
+                      <ItemIcon className="h-3 w-3 text-foreground" />
+                    </div>
+                    <span className="text-muted-foreground">{text}</span>
                   </li>
                 ))}
               </ul>
             </div>
 
             {/* Pages mockup */}
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
-              <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-                <div className="h-2.5 w-20 rounded bg-muted-foreground/20" />
-                <div className="ml-auto h-2.5 w-16 rounded bg-violet-500/20" />
+            <Card className="overflow-hidden rounded-2xl">
+              <div className="flex items-center gap-2 border-b border-border px-5 py-3">
+                <div className="h-2.5 w-16 rounded bg-foreground/[0.08]" />
+                <div className="mx-auto h-2.5 w-40 rounded bg-primary/20" />
+                <div className="h-2.5 w-12 rounded bg-muted" />
               </div>
-              <div className="p-5 sm:p-6 space-y-3">
-                <div className="h-6 w-2/3 rounded bg-foreground/20" />
-                <div className="h-3 w-full rounded bg-muted-foreground/10" />
-                <div className="h-3 w-5/6 rounded bg-muted-foreground/10" />
-                <div className="h-3 w-4/6 rounded bg-muted-foreground/10" />
-                <div className="my-3 rounded-lg border border-violet-500/20 bg-violet-500/5 p-3">
-                  <div className="h-3 w-24 rounded bg-violet-400/30" />
-                  <div className="mt-2 h-2.5 w-full rounded bg-muted-foreground/8" />
+              <div className="p-6 sm:p-8 space-y-3.5">
+                <div className="h-7 w-2/3 rounded bg-foreground/[0.08]" />
+                <div className="h-3 w-full rounded bg-muted" />
+                <div className="h-3 w-5/6 rounded bg-muted" />
+                <div className="h-3 w-4/6 rounded bg-muted" />
+                <div className="my-4 rounded-xl border border-border bg-muted/50 p-4">
+                  <div className="h-3 w-20 rounded bg-foreground/[0.1]" />
+                  <div className="mt-2.5 h-2.5 w-full rounded bg-muted" />
+                  <div className="mt-2 h-2.5 w-4/5 rounded bg-muted" />
                 </div>
-                <div className="h-3 w-full rounded bg-muted-foreground/10" />
-                <div className="inline-flex items-center gap-1 rounded-md bg-blue-500/10 px-2 py-1 text-xs text-blue-400">
+                <div className="h-3 w-full rounded bg-muted" />
+                <div className="h-3 w-3/4 rounded bg-muted" />
+                <Badge variant="outline" className="gap-1.5 text-xs">
                   <FileText className="h-3 w-3" />
                   linked-page
-                </div>
-                <div className="h-3 w-3/4 rounded bg-muted-foreground/10" />
+                </Badge>
+                <div className="h-3 w-5/6 rounded bg-muted" />
               </div>
-            </div>
+            </Card>
           </div>
         </div>
       </section>
 
-      {/* ── Resource Comparison ── */}
-      <section className="py-20 sm:py-28 border-t border-border">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+      <Separator />
+
+      {/* ── Why Atur ── */}
+      <section className="relative py-24 sm:py-32">
+        <div className="grid-lines pointer-events-none absolute inset-0" />
+        <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
           <div className="mx-auto max-w-2xl text-center">
-            <p className="text-sm font-semibold uppercase tracking-wider text-green-400">
-              Lightweight
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              Why Atur
             </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
-              Plane PMO vs Traditional PM Tools
-            </h2>
-          </div>
-
-          <div className="mx-auto mt-14 max-w-3xl overflow-hidden rounded-xl border border-border">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                    Metric
-                  </th>
-                  <th className="px-4 py-3 text-center text-sm font-medium text-violet-400">
-                    Plane PMO
-                  </th>
-                  <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">
-                    Traditional Tools
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {comparisonData.map(({ metric, pmo, traditional }) => (
-                  <tr
-                    key={metric}
-                    className="border-b border-border last:border-0"
-                  >
-                    <td className="px-4 py-3 text-sm font-medium">{metric}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-400">
-                        <Check className="h-3.5 w-3.5" />
-                        {pmo}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                        <X className="h-3.5 w-3.5 text-red-400/60" />
-                        {traditional}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Open Source ── */}
-      <section id="opensource" className="py-20 sm:py-28 border-t border-border">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="mx-auto max-w-2xl text-center">
-            <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
-              <GithubIcon className="h-7 w-7" />
-            </div>
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Open Source &amp; Community Driven
+            <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-5xl">
+              Built different
             </h2>
             <p className="mt-4 text-muted-foreground">
-              Plane PMO is MIT licensed and built in the open. Contribute, fork,
-              or self-host with complete freedom.
+              Most PM tools need a DevOps team to deploy. We don&apos;t.
             </p>
+          </div>
 
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/40 px-4 py-2 text-sm">
-                <Star className="h-4 w-4 text-yellow-500" />
-                <span>Star us on GitHub</span>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/40 px-4 py-2 text-sm">
-                <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
-                MIT License
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/40 px-4 py-2 text-sm">
-                <span className="font-mono text-xs">Rust + React</span>
-              </div>
-            </div>
+          <div className="mx-auto mt-16 grid max-w-4xl gap-6 sm:grid-cols-2">
+            {[
+              {
+                icon: Cpu,
+                title: 'Single Binary',
+                desc: 'No containers, no orchestration. Download, run, done. Runs on a Raspberry Pi.',
+              },
+              {
+                icon: Shield,
+                title: 'Self-Hosted',
+                desc: 'Your data stays on your infrastructure. No third-party servers, no surprises.',
+              },
+              {
+                icon: Zap,
+                title: 'Blazing Fast',
+                desc: 'Rust + SQLite means sub-millisecond responses. Your team never waits.',
+              },
+              {
+                icon: Bot,
+                title: 'AI-Native',
+                desc: '35+ MCP tools let AI agents create issues, manage sprints, and update pages.',
+              },
+            ].map(({ icon: CardIcon, title, desc }) => (
+              <Card key={title} className="transition-colors hover:border-foreground/20">
+                <CardContent className="p-7">
+                  <CardIcon className="h-5 w-5 text-foreground" />
+                  <h3 className="mt-4 text-base font-semibold">{title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{desc}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
 
-            <div className="mt-10">
+      <Separator />
+
+      {/* ── Pricing ── */}
+      <section id="pricing" className="py-24 sm:py-32">
+        <div className="mx-auto max-w-7xl px-5 sm:px-8">
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              Pricing
+            </p>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-5xl">
+              Simple, affordable pricing
+            </h2>
+            <p className="mt-4 text-muted-foreground">
+              No per-seat charges. No feature gates. One price, everything included.
+            </p>
+          </div>
+
+          <div className="mx-auto mt-14 grid max-w-3xl gap-6 sm:grid-cols-2">
+            {/* Self-Hosted */}
+            <Card className="flex flex-col p-8">
+              <h3 className="text-base font-semibold">Self-Hosted</h3>
+              <div className="mt-4 flex items-baseline gap-1">
+                <span className="text-5xl font-extrabold">$9</span>
+                <span className="text-sm text-muted-foreground">/month</span>
+              </div>
+              <p className="mt-3 text-sm text-muted-foreground">
+                Host it yourself. Full control, your infrastructure.
+              </p>
+              <ul className="mt-6 space-y-3 flex-1">
+                {[
+                  'Unlimited projects & issues',
+                  'All 35+ MCP tools',
+                  'Pages & knowledge graph',
+                  'tldraw whiteboards',
+                  'Mobile apps (iOS & Android)',
+                  'Email support',
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                    <Check className="h-4 w-4 shrink-0 text-foreground" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
               <Button
                 size="lg"
                 variant="outline"
-                asChild
+                onClick={() => navigate('/auth/login')}
+                className="mt-8 w-full"
               >
-                <a
-                  href="https://github.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <GithubIcon className="h-4 w-4" />
-                  Fork on GitHub
-                </a>
+                Start Free Trial
               </Button>
-            </div>
-          </div>
-        </div>
-      </section>
+            </Card>
 
-      {/* ── Final CTA ── */}
-      <section className="relative py-20 sm:py-28 border-t border-border">
-        {/* Background glow */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute bottom-0 left-1/2 h-96 w-[600px] -translate-x-1/2 bg-gradient-to-t from-violet-600/10 to-transparent blur-3xl" />
-        </div>
-
-        <div className="relative mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Start managing projects{' '}
-              <span className="bg-gradient-to-r from-violet-400 to-blue-400 bg-clip-text text-transparent">
-                the simple way
-              </span>
-            </h2>
-            <p className="mt-4 text-muted-foreground">
-              Deploy in minutes. Manage with confidence. Ship faster.
-            </p>
-            <div className="mt-8">
+            {/* Managed */}
+            <Card className="relative flex flex-col p-8 border-foreground/20">
+              <Badge className="absolute -top-3 right-6 rounded-full">
+                Popular
+              </Badge>
+              <h3 className="text-base font-semibold">Managed Cloud</h3>
+              <div className="mt-4 flex items-baseline gap-1">
+                <span className="text-5xl font-extrabold">$29</span>
+                <span className="text-sm text-muted-foreground">/month</span>
+              </div>
+              <p className="mt-3 text-sm text-muted-foreground">
+                We handle hosting. You handle projects.
+              </p>
+              <ul className="mt-6 space-y-3 flex-1">
+                {[
+                  'Everything in Self-Hosted',
+                  'Managed infrastructure',
+                  'Automatic backups',
+                  'Custom domain support',
+                  'Priority support',
+                  'Team onboarding assistance',
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                    <Check className="h-4 w-4 shrink-0 text-foreground" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
               <Button
                 size="lg"
                 onClick={() => navigate('/auth/login')}
-                className="bg-gradient-to-r from-violet-500 to-blue-500 text-white hover:opacity-90"
+                className="mt-8 w-full"
               >
-                Get Started
-                <ArrowRight className="h-4 w-4" />
+                Start Free Trial
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            </Card>
+          </div>
+
+          <p className="mt-8 text-center text-sm text-muted-foreground/50">
+            14-day free trial on all plans. No credit card required.
+          </p>
+        </div>
+      </section>
+
+      <Separator />
+
+      {/* ── Final CTA ── */}
+      <section className="relative py-24 sm:py-32 overflow-hidden">
+        <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="text-3xl font-bold tracking-tight sm:text-5xl">
+              Ready to ship faster?
+            </h2>
+            <p className="mt-5 text-lg text-muted-foreground">
+              Deploy in minutes. Manage with confidence. Scale without surprises.
+            </p>
+            <div className="mt-10">
+              <Button
+                size="lg"
+                onClick={() => navigate('/auth/login')}
+                className="px-8 h-12 text-base"
+              >
+                Get Started Now
+                <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
             </div>
           </div>
         </div>
       </section>
 
+      <Separator />
+
       {/* ── Footer ── */}
-      <footer className="border-t border-border py-10">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
+      <footer className="py-10">
+        <div className="mx-auto max-w-7xl px-5 sm:px-8">
+          <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-violet-500 to-blue-500">
-                <span className="text-xs font-bold text-white">P</span>
-              </div>
-              <span className="text-sm font-medium">Plane PMO</span>
+              <img src="/logo-128.png" alt="" className="h-7 w-7 rounded-md border border-border" />
+              <span className="text-sm font-medium">Atur</span>
             </div>
 
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <a
-                href="#features"
-                onClick={(e) => handleSmoothScroll(e, '#features')}
-                className="hover:text-foreground transition-colors"
-              >
-                Features
-              </a>
-              <a
-                href="#pages"
-                onClick={(e) => handleSmoothScroll(e, '#pages')}
-                className="hover:text-foreground transition-colors"
-              >
-                Pages
-              </a>
-              <a
-                href="#opensource"
-                onClick={(e) => handleSmoothScroll(e, '#opensource')}
-                className="hover:text-foreground transition-colors"
-              >
-                Open Source
-              </a>
-              <a
-                href="https://github.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-foreground transition-colors"
-              >
-                GitHub
-              </a>
+              <button onClick={() => scrollTo('features')} className="hover:text-foreground transition-colors">Features</button>
+              <button onClick={() => scrollTo('pages')} className="hover:text-foreground transition-colors">Pages</button>
+              <button onClick={() => scrollTo('pricing')} className="hover:text-foreground transition-colors">Pricing</button>
             </div>
 
-            <p className="text-sm text-muted-foreground">
-              &copy; 2025 Plane PMO. Built with Rust + React.
+            <p className="text-sm text-muted-foreground/50">
+              &copy; 2026 Atur
             </p>
           </div>
         </div>

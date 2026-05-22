@@ -8,13 +8,12 @@ const WS_PROTOCOL = {
 } as const
 
 export function useCollab(pageId: string) {
-  const ydocRef = useRef<Y.Doc | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
+  const [ydoc, setYdoc] = useState<Y.Doc | null>(null)
   const [connected, setConnected] = useState(false)
 
   useEffect(() => {
     const doc = new Y.Doc()
-    ydocRef.current = doc
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${protocol}//${window.location.host}/live/collaboration/${pageId}`
@@ -68,12 +67,16 @@ export function useCollab(pageId: string) {
       setConnected(false)
     }
 
+    // Set ydoc in state so consumers re-render with the doc available
+    setYdoc(doc)
+
     return () => {
       doc.off('update', updateListener)
       ws.close()
       doc.destroy()
+      setYdoc(null)
     }
   }, [pageId])
 
-  return { ydoc: ydocRef.current, connected }
+  return { ydoc, connected }
 }

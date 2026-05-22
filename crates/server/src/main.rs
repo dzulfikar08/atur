@@ -12,7 +12,7 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(name = "plane-pmo", about = "Project management, self-hosted")]
+#[command(name = "atur", about = "Organize everything")]
 struct Cli {
     #[arg(short, long, default_value = "config.toml")]
     config: String,
@@ -89,7 +89,7 @@ async fn run_server(cfg: config::Config) -> anyhow::Result<()> {
     tracing::info!(
         host = %cfg.server.host,
         port = %cfg.server.port,
-        "Starting plane-pmo server"
+        "Starting atur server"
     );
 
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", cfg.server.host, cfg.server.port)).await?;

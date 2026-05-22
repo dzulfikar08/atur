@@ -1,10 +1,10 @@
 [package]
-name = "plane-pmo"
+name = "atur"
 version.workspace = true
 edition.workspace = true
 
 [[bin]]
-name = "plane-pmo"
+name = "atur"
 path = "src/main.rs"
 
 [dependencies]

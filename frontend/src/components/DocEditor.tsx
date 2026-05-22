@@ -9,7 +9,7 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
-import Image from '@tiptap/extension-image'
+import ImageExt from '@tiptap/extension-image'
 import HorizontalRule from '@tiptap/extension-horizontal-rule'
 import { createLowlight } from 'lowlight'
 import javascript from 'highlight.js/lib/languages/javascript'
@@ -26,8 +26,26 @@ import go from 'highlight.js/lib/languages/go'
 import java from 'highlight.js/lib/languages/java'
 import yaml from 'highlight.js/lib/languages/yaml'
 import { useCallback, useState, useEffect } from 'react'
+import * as Y from 'yjs'
 import tippy, { type Instance as TippyInstance } from 'tippy.js'
 import { Markdown } from 'tiptap-markdown'
+import {
+  Bold,
+  Italic,
+  Strikethrough,
+  Heading1,
+  Heading2,
+  Heading3,
+  List,
+  ListOrdered,
+  CheckSquare,
+  Quote,
+  Code2,
+  ImageIcon,
+  TableIcon,
+  Minus,
+  FileCode,
+} from 'lucide-react'
 import { useCollab } from '../hooks/useCollab'
 import { SlashCommandExtension } from './editor/SlashCommandExtension'
 import { TldrawBlock } from './editor/TldrawBlock'
@@ -39,7 +57,6 @@ import {
 
 const lowlight = createLowlight()
 
-// Register common languages for syntax highlighting
 lowlight.register({ javascript })
 lowlight.register({ typescript })
 lowlight.register({ python })
@@ -60,6 +77,13 @@ interface DocEditorProps {
 
 export default function DocEditor({ pageId }: DocEditorProps) {
   const { ydoc, connected } = useCollab(pageId)
+
+  if (!ydoc) return <div className="p-4">Loading editor...</div>
+
+  return <DocEditorInner ydoc={ydoc} connected={connected} />
+}
+
+function DocEditorInner({ ydoc, connected }: { ydoc: Y.Doc; connected: boolean }) {
   const [isMarkdownMode, setIsMarkdownMode] = useState(false)
   const [markdownText, setMarkdownText] = useState('')
   const [wordCount, setWordCount] = useState(0)
@@ -67,9 +91,9 @@ export default function DocEditor({ pageId }: DocEditorProps) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        undoRedo: false, // Let Y.js handle history
-        codeBlock: false, // Replaced by CodeBlockLowlight
-        horizontalRule: false, // Replaced by our extension
+        undoRedo: false,
+        codeBlock: false,
+        horizontalRule: false,
       }),
       HorizontalRule,
       CodeBlockLowlight.configure({
@@ -94,7 +118,7 @@ export default function DocEditor({ pageId }: DocEditorProps) {
       TableRow,
       TableCell,
       TableHeader,
-      Image.configure({
+      ImageExt.configure({
         inline: true,
         allowBase64: true,
       }),
@@ -186,93 +210,89 @@ export default function DocEditor({ pageId }: DocEditorProps) {
     }
   }, [editor, isMarkdownMode, markdownText])
 
-  if (!ydoc) return <div className="p-4">Loading editor...</div>
-
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="flex items-center gap-1 border-b px-4 py-2 bg-gray-50 dark:bg-gray-900 dark:border-gray-700 flex-wrap">
+      <div className="flex items-center gap-0.5 border-b px-2 py-1.5 bg-muted/30 flex-wrap">
         <ToolbarButton
           onClick={() => editor?.chain().focus().toggleBold().run()}
           active={editor?.isActive('bold') ?? false}
           title="Bold"
         >
-          B
+          <Bold className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor?.chain().focus().toggleItalic().run()}
           active={editor?.isActive('italic') ?? false}
           title="Italic"
-          className="italic"
         >
-          I
+          <Italic className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor?.chain().focus().toggleStrike().run()}
           active={editor?.isActive('strike') ?? false}
           title="Strikethrough"
-          className="line-through"
         >
-          S
+          <Strikethrough className="h-4 w-4" />
         </ToolbarButton>
-        <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+        <ToolbarSeparator />
         <ToolbarButton
           onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
           active={editor?.isActive('heading', { level: 1 }) ?? false}
           title="Heading 1"
         >
-          H1
+          <Heading1 className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
           active={editor?.isActive('heading', { level: 2 }) ?? false}
           title="Heading 2"
         >
-          H2
+          <Heading2 className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
           active={editor?.isActive('heading', { level: 3 }) ?? false}
           title="Heading 3"
         >
-          H3
+          <Heading3 className="h-4 w-4" />
         </ToolbarButton>
-        <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+        <ToolbarSeparator />
         <ToolbarButton
           onClick={() => editor?.chain().focus().toggleBulletList().run()}
           active={editor?.isActive('bulletList') ?? false}
           title="Bullet List"
         >
-          &#8226;
+          <List className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor?.chain().focus().toggleOrderedList().run()}
           active={editor?.isActive('orderedList') ?? false}
           title="Ordered List"
         >
-          1.
+          <ListOrdered className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor?.chain().focus().toggleTaskList().run()}
           active={editor?.isActive('taskList') ?? false}
           title="Task List"
         >
-          &#9745;
+          <CheckSquare className="h-4 w-4" />
         </ToolbarButton>
-        <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+        <ToolbarSeparator />
         <ToolbarButton
           onClick={() => editor?.chain().focus().toggleBlockquote().run()}
           active={editor?.isActive('blockquote') ?? false}
           title="Blockquote"
         >
-          &#8220;
+          <Quote className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
           active={editor?.isActive('codeBlock') ?? false}
           title="Code Block"
         >
-          {'</>'}
+          <Code2 className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => {
@@ -282,35 +302,40 @@ export default function DocEditor({ pageId }: DocEditorProps) {
           active={false}
           title="Insert Image"
         >
-          &#128444;
+          <ImageIcon className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
           active={editor?.isActive('table') ?? false}
           title="Insert Table"
         >
-          &#9638;
+          <TableIcon className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor?.chain().focus().setHorizontalRule().run()}
           active={false}
           title="Horizontal Rule"
         >
-          &#8213;
+          <Minus className="h-4 w-4" />
         </ToolbarButton>
 
         <div className="flex-1" />
-        <span className="text-xs text-gray-500 dark:text-gray-400 mr-2">
+        <span className="text-xs text-muted-foreground mr-2 hidden sm:inline">
           {wordCount} words
         </span>
-        <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mr-2">
+        <span className="flex items-center gap-1 text-xs text-muted-foreground mr-2">
           <span className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
-          {connected ? 'Connected' : 'Disconnected'}
+          <span className="hidden sm:inline">{connected ? 'Connected' : 'Disconnected'}</span>
         </span>
         <button
           onClick={toggleMarkdown}
-          className={`px-3 py-1 rounded text-sm border ${isMarkdownMode ? 'bg-blue-100 border-blue-300 dark:bg-blue-900 dark:border-blue-700' : 'hover:bg-gray-200 dark:hover:bg-gray-700 dark:border-gray-600'}`}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+            isMarkdownMode
+              ? 'bg-primary/10 border-primary/30 text-primary'
+              : 'border-border hover:bg-muted'
+          }`}
         >
+          <FileCode className="h-3.5 w-3.5" />
           {isMarkdownMode ? 'Rich Text' : 'Markdown'}
         </button>
       </div>
@@ -318,7 +343,7 @@ export default function DocEditor({ pageId }: DocEditorProps) {
       {/* Editor area */}
       {isMarkdownMode ? (
         <textarea
-          className="flex-1 p-4 font-mono text-sm resize-none focus:outline-none bg-white dark:bg-gray-900 dark:text-gray-100"
+          className="flex-1 p-4 font-mono text-sm resize-none focus:outline-none bg-background"
           value={markdownText}
           onChange={(e) => setMarkdownText(e.target.value)}
         />
@@ -329,27 +354,29 @@ export default function DocEditor({ pageId }: DocEditorProps) {
   )
 }
 
+function ToolbarSeparator() {
+  return <div className="w-px h-5 bg-border mx-1" />
+}
+
 function ToolbarButton({
   onClick,
   active,
   title,
-  className = '',
   children,
 }: {
   onClick: () => void
   active: boolean
   title: string
-  className?: string
   children: React.ReactNode
 }) {
   return (
     <button
       onClick={onClick}
       title={title}
-      className={`px-2 py-1 rounded text-sm font-medium transition-colors ${className} ${
+      className={`p-1.5 rounded-md transition-colors ${
         active
-          ? 'bg-gray-300 dark:bg-gray-600'
-          : 'hover:bg-gray-200 dark:hover:bg-gray-700'
+          ? 'bg-accent text-accent-foreground'
+          : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
       }`}
     >
       {children}

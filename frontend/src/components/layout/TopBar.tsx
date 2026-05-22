@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { Search, Sun, Moon, Monitor, Bell, Check, ChevronDown, FileText, Clock, PenTool } from 'lucide-react';
+import { Search, Sun, Moon, Monitor, Bell, FileText, Clock, PenTool } from 'lucide-react';
 import { useThemeStore } from '@/stores/theme';
 import { useAuthStore } from '@/stores/auth';
-import { useWorkspaceStore } from '@/stores/workspace';
 import { usePagesStore } from '@/stores/pages';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch, type Page } from '@/lib/api';
@@ -114,48 +113,9 @@ export default function TopBar() {
     .slice(0, 2) ?? 'U';
 
   const ThemeIcon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
-  const { workspaces, currentSlug, setCurrentSlug } = useWorkspaceStore();
-  const activeSlug = slug ?? currentSlug;
-  const activeWorkspace = workspaces.find((w) => w.slug === activeSlug);
 
   return (
     <header className="flex h-14 items-center gap-3 border-b border-border bg-background px-4">
-      {/* Workspace switcher (mobile: icon only, desktop: full) */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button className="flex items-center gap-1.5 rounded-md px-2 py-1 hover:bg-muted transition-colors shrink-0">
-            <div className="h-6 w-6 rounded bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center">
-              {(activeWorkspace?.name ?? 'W')[0].toUpperCase()}
-            </div>
-            <span className="hidden sm:inline text-sm font-medium max-w-[120px] truncate">
-              {activeWorkspace?.name ?? activeSlug ?? 'Workspace'}
-            </span>
-            <ChevronDown className="h-3 w-3 text-muted-foreground hidden sm:inline" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-56">
-          {workspaces.map((ws) => (
-            <DropdownMenuItem
-              key={ws.id}
-              className={cn('cursor-pointer', ws.slug === activeSlug && 'bg-accent')}
-              onClick={() => {
-                setCurrentSlug(ws.slug);
-                navigate(`/${ws.slug}`);
-              }}
-            >
-              <div className="mr-2 flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground text-xs font-semibold shrink-0">
-                {ws.name[0].toUpperCase()}
-              </div>
-              <span className="flex-1 truncate">{ws.name}</span>
-              {ws.slug === activeSlug && <Check className="h-4 w-4 text-primary shrink-0" />}
-            </DropdownMenuItem>
-          ))}
-          {workspaces.length === 0 && (
-            <div className="px-2 py-4 text-center text-sm text-muted-foreground">No workspaces</div>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-
       {/* Search */}
       <div className="relative flex-1 max-w-md">
         {searchOpen ? (

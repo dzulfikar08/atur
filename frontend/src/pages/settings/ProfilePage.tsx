@@ -169,7 +169,7 @@ export default function ProfilePage() {
         <Card>
           <CardHeader>
             <CardTitle>Appearance</CardTitle>
-            <CardDescription>Customize how Plane PMO looks</CardDescription>
+            <CardDescription>Customize how Atur looks</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-3">

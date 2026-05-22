@@ -111,7 +111,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/workspaces", search_routes)
         .nest("/api/assets", asset_routes)
         .nest("/live", live_routes)
-        .route_service("/mcp", mcp_service)
+        .route_service("/mcp", axum::routing::any_service(mcp_service))
         .fallback(serve_static_or_spa)
         .layer(middleware::from_fn(rate_limit_middleware))
         .layer(CompressionLayer::new())

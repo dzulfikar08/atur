@@ -47,6 +47,10 @@ function createPage(slug: string, data: { name: string; parent?: string; descrip
   });
 }
 
+function isPageDrawing(page: Page): boolean {
+  return page.description_html?.trimStart().startsWith('<!-- drawing -->') ?? false;
+}
+
 function deletePage(slug: string, id: string) {
   return apiFetch<void>(`/workspaces/${slug}/pages/${id}/`, { method: 'DELETE' });
 }
@@ -128,7 +132,7 @@ function PageTreeItem({
   const hasChildren = node.children.length > 0;
   const isExpanded = expandedIds.has(node.page.id);
   const isActive = activePageId === node.page.id;
-  const isDrawing = node.page.is_drawing ?? false;
+  const isDrawing = isPageDrawing(node.page);
   const { favorites, pinned, toggleFavorite, togglePin } = usePagesStore();
   const isFav = favorites.includes(node.page.id);
   const isPinned = pinned.includes(node.page.id);
@@ -158,7 +162,7 @@ function PageTreeItem({
     <div>
       <div
         className={cn(
-          'group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm cursor-pointer transition-colors',
+          'group flex items-center gap-1 rounded-md px-2 py-2 md:py-1.5 text-sm cursor-pointer transition-colors',
           isActive
             ? 'bg-accent text-accent-foreground'
             : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
@@ -205,11 +209,13 @@ function PageTreeItem({
           {formatDistanceToNow(parseISO(node.page.updated_at), { addSuffix: false })}
         </span>
 
-        {/* Quick action buttons on hover */}
+        {/* Quick action buttons — always visible on mobile when favorited */}
         <button
           className={cn(
             'shrink-0 h-5 w-5 items-center justify-center rounded hover:bg-muted transition-colors',
-            isFav ? 'inline-flex opacity-100 text-amber-500' : 'hidden group-hover:inline-flex opacity-0 group-hover:opacity-100'
+            isFav
+              ? 'inline-flex opacity-100 text-amber-500'
+              : 'hidden group-hover:inline-flex opacity-0 group-hover:opacity-100'
           )}
           onClick={(e) => {
             e.stopPropagation();
@@ -220,7 +226,7 @@ function PageTreeItem({
           <Star className={cn('h-3 w-3', isFav && 'fill-current')} />
         </button>
 
-        {/* Actions dropdown */}
+        {/* Actions dropdown — always visible on mobile */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -439,7 +445,7 @@ function PageSidebar({
   const hasQuickAccessSections = pinnedPages.length > 0 || favoritePages.length > 0 || recentPages.length > 0;
 
   return (
-    <div className="flex h-full flex-col border-r border-border bg-background">
+    <div className="flex h-full flex-col border-r-0 md:border-r border-border bg-background">
       {/* Header */}
       <div className="flex items-center justify-between border-b px-3 py-3">
         <h2 className="text-sm font-semibold">Pages</h2>
@@ -506,7 +512,7 @@ function PageSidebar({
                   onClick={() => navigate(`/${slug}/pages/${page.id}`)}
                 >
                   <Pin className="h-3 w-3 shrink-0 text-primary" />
-                  {page.is_drawing ? (
+                  {isPageDrawing(page) ? (
                     <PenTool className="h-3.5 w-3.5 shrink-0 text-orange-500" />
                   ) : (
                     <FileText className="h-3.5 w-3.5 shrink-0" />
@@ -542,7 +548,7 @@ function PageSidebar({
                   onClick={() => navigate(`/${slug}/pages/${page.id}`)}
                 >
                   <Star className="h-3 w-3 shrink-0 fill-amber-500 text-amber-500" />
-                  {page.is_drawing ? (
+                  {isPageDrawing(page) ? (
                     <PenTool className="h-3.5 w-3.5 shrink-0 text-orange-500" />
                   ) : (
                     <FileText className="h-3.5 w-3.5 shrink-0" />
@@ -578,7 +584,7 @@ function PageSidebar({
                   onClick={() => navigate(`/${slug}/pages/${page.id}`)}
                 >
                   <Clock className="h-3 w-3 shrink-0" />
-                  {page.is_drawing ? (
+                  {isPageDrawing(page) ? (
                     <PenTool className="h-3 w-3 shrink-0 text-orange-500" />
                   ) : (
                     <FileText className="h-3 w-3 shrink-0" />
@@ -699,7 +705,7 @@ function PageEditor({ slug, pageId }: { slug: string; pageId: string }) {
     );
   }
 
-  const isDrawing = page.is_drawing ?? false;
+  const isDrawing = isPageDrawing(page);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -815,10 +821,10 @@ export default function PagesPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; is_drawing?: boolean }) =>
+    mutationFn: (data: { name: string; description_html?: string }) =>
       createPage(slug!, {
         name: data.name,
-        ...(data.is_drawing ? { description_html: '' } : {}),
+        description_html: data.description_html,
       }),
     onSuccess: (newPage) => {
       qc.invalidateQueries({ queryKey: ['pages', slug] });
@@ -831,7 +837,7 @@ export default function PagesPage() {
     (isDrawing: boolean) => {
       createMutation.mutate({
         name: isDrawing ? 'Untitled Drawing' : 'Untitled Page',
-        is_drawing: isDrawing,
+        description_html: isDrawing ? '<!-- drawing -->' : undefined,
       });
     },
     [createMutation]
@@ -842,10 +848,10 @@ export default function PagesPage() {
 
   return (
     <div className="flex h-[calc(100vh-7.5rem)] -m-4 md:-m-6 lg:-m-8">
-      {/* Left sidebar — hidden on mobile when viewing a page */}
+      {/* Left sidebar — full width on mobile, fixed width on desktop */}
       <div
         className={cn(
-          'shrink-0 w-[280px]',
+          'shrink-0 w-full md:w-[280px]',
           showMobileEditor ? 'hidden md:block' : 'block'
         )}
       >

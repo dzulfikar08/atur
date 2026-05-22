@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.planepmo.app',
-  appName: 'Plane PMO',
+  appName: 'Atur',
   webDir: '../static-app',
   server: {
     url: process.env.CAPACITOR_SERVER_URL || undefined,

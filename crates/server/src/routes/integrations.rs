@@ -282,7 +282,7 @@ pub async fn github_connect_repo(
     let resp = reqwest::Client::new()
         .get(&github_url)
         .header("Authorization", format!("Bearer {}", body.access_token))
-        .header("User-Agent", "plane-pmo")
+        .header("User-Agent", "atur")
         .send()
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("GitHub API request failed: {}", e)))?;
@@ -429,7 +429,7 @@ pub async fn list_repositories(
 // GitHub Sync Logic
 // ---------------------------------------------------------------------------
 
-/// Fetch open GitHub issues and create/update plane-pmo issues.
+/// Fetch open GitHub issues and create/update Atur issues.
 pub async fn sync_github_to_plane(
     integration: &github_integrations::Model,
     state: &AppState,
@@ -447,7 +447,7 @@ pub async fn sync_github_to_plane(
     let resp = reqwest::Client::new()
         .get(&url)
         .header("Authorization", format!("Bearer {}", access_token))
-        .header("User-Agent", "plane-pmo")
+        .header("User-Agent", "atur")
         .send()
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("GitHub API request failed: {}", e)))?;

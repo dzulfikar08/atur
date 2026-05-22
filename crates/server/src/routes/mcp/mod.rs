@@ -1,4 +1,4 @@
-//! MCP (Model Context Protocol) server exposing Plane PMO tools to AI agents.
+//! MCP (Model Context Protocol) server exposing Atur tools to AI agents.
 //!
 //! Mounted at `/mcp` as a Tower service using rmcp's `StreamableHttpService`.
 
@@ -517,7 +517,8 @@ impl PlaneMcpServer {
 impl ServerHandler for PlaneMcpServer {
     fn get_info(&self) -> ServerInfo {
         let mut info = ServerInfo::default();
-        info.server_info = Implementation::new("plane-pmo", env!("CARGO_PKG_VERSION"));
+        info.server_info = Implementation::new("atur", env!("CARGO_PKG_VERSION"));
+        info.capabilities.tools = Some(rmcp::model::ToolsCapability { list_changed: None });
         info
     }
 }

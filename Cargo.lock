@@ -234,6 +234,50 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "atur"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "argon2",
+ "axum",
+ "chrono",
+ "clap",
+ "collab",
+ "csv",
+ "db",
+ "domain",
+ "futures-util",
+ "hex",
+ "hmac",
+ "http-body-util",
+ "lettre",
+ "multer",
+ "rand 0.8.6",
+ "reqwest",
+ "rmcp",
+ "schemars",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tantivy",
+ "tasks",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml",
+ "tower",
+ "tower-http",
+ "tower-sessions",
+ "tower-sessions-core",
+ "tracing",
+ "tracing-subscriber",
+ "urlencoding",
+ "uuid",
+ "validator",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2375,50 +2419,6 @@ name = "plain"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
-
-[[package]]
-name = "plane-pmo"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "argon2",
- "axum",
- "chrono",
- "clap",
- "collab",
- "csv",
- "db",
- "domain",
- "futures-util",
- "hex",
- "hmac",
- "http-body-util",
- "lettre",
- "multer",
- "rand 0.8.6",
- "reqwest",
- "rmcp",
- "schemars",
- "sea-orm",
- "sea-orm-migration",
- "serde",
- "serde_json",
- "sha2",
- "tantivy",
- "tasks",
- "thiserror 2.0.18",
- "tokio",
- "toml",
- "tower",
- "tower-http",
- "tower-sessions",
- "tower-sessions-core",
- "tracing",
- "tracing-subscriber",
- "urlencoding",
- "uuid",
- "validator",
-]
 
 [[package]]
 name = "potential_utf"

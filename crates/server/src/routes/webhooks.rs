@@ -505,7 +505,7 @@ async fn handle_github_pr_event(
     Ok(())
 }
 
-/// Upsert a plane-pmo issue from a GitHub issue number.
+/// Upsert a Atur issue from a GitHub issue number.
 async fn upsert_github_issue(
     state: &AppState,
     integration: &db::entities::github_integrations::Model,
@@ -518,7 +518,7 @@ async fn upsert_github_issue(
     upsert_github_issue_by_id(state, integration, &external_id, title, body, gh_state).await
 }
 
-/// Upsert a plane-pmo issue from a GitHub external ID.
+/// Upsert a Atur issue from a GitHub external ID.
 async fn upsert_github_issue_by_id(
     state: &AppState,
     integration: &db::entities::github_integrations::Model,

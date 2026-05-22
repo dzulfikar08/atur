@@ -881,7 +881,7 @@ pub async fn oauth_github_callback(
     let gh_user: GitHubUser = client
         .get("https://api.github.com/user")
         .header("Authorization", format!("Bearer {}", token_resp.access_token))
-        .header("User-Agent", "plane-pmo")
+        .header("User-Agent", "atur")
         .send()
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("GitHub user fetch failed: {}", e)))?
@@ -935,7 +935,7 @@ async fn fetch_github_primary_email(client: &reqwest::Client, access_token: &str
     let emails: Vec<GitHubEmail> = client
         .get("https://api.github.com/user/emails")
         .header("Authorization", format!("Bearer {}", access_token))
-        .header("User-Agent", "plane-pmo")
+        .header("User-Agent", "atur")
         .send()
         .await
         .ok()?

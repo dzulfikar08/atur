@@ -42,7 +42,7 @@ export default function OAuthCallbackPage() {
         await fetchUser();
 
         const redirect =
-          sessionStorage.getItem("redirect_after_login") ?? "/plane-pmo";
+          sessionStorage.getItem("redirect_after_login") ?? "/";
         sessionStorage.removeItem("redirect_after_login");
         navigate(redirect, { replace: true });
       } catch (err) {

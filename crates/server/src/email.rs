@@ -34,7 +34,7 @@ impl EmailService {
         let from_address = cfg
             .from_address
             .clone()
-            .unwrap_or_else(|| format!("Plane PMO <{}>", user));
+            .unwrap_or_else(|| format!("Atur <{}>", user));
 
         let creds = Credentials::new(user.to_string(), pass.to_string());
 
@@ -107,13 +107,13 @@ pub fn html_wrapper(title: &str, body_content: &str) -> String {
 <tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;">
 <tr><td style="background:#3b82f6;padding:24px;color:#ffffff;">
-<h1 style="margin:0;font-size:20px;">Plane PMO</h1>
+<h1 style="margin:0;font-size:20px;">Atur</h1>
 </td></tr>
 <tr><td style="padding:24px 32px;">
 {body_content}
 </td></tr>
 <tr><td style="padding:16px 32px;background:#f9fafb;color:#6b7280;font-size:12px;text-align:center;">
-You received this email because you have email notifications enabled in Plane PMO.
+You received this email because you have email notifications enabled in Atur.
 </td></tr>
 </table>
 </td></tr>

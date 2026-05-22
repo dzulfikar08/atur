@@ -1,4 +1,4 @@
-import { NavLink, useParams } from 'react-router-dom';
+import { NavLink, useNavigate, useParams } from 'react-router-dom';
 import {
   LayoutDashboard,
   FolderKanban,
@@ -43,6 +43,7 @@ const navItems = [
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { workspaces, currentSlug, setCurrentSlug } = useWorkspaceStore();
@@ -74,9 +75,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 collapsed && 'justify-center px-0'
               )}
             >
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-semibold">
-                {(currentSlug ?? slug)?.[0]?.toUpperCase() ?? 'W'}
-              </div>
+              <img src="/logo-128.png" alt="" className="h-7 w-7 shrink-0 rounded-md" />
               {!collapsed && (
                 <>
                   <span className="flex-1 truncate text-sm font-medium text-left">
@@ -94,14 +93,17 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             {workspaces.map((ws) => (
               <DropdownMenuItem
                 key={ws.id}
-                onClick={() => setCurrentSlug(ws.slug)}
+                onClick={() => {
+                  setCurrentSlug(ws.slug);
+                  navigate(`/${ws.slug}`);
+                }}
                 className={cn(
                   'cursor-pointer',
                   ws.slug === currentSlug && 'bg-accent'
                 )}
               >
-                <div className="mr-2 flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground text-xs font-semibold">
-                  {ws.name[0].toUpperCase()}
+                <div className="mr-2 flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground">
+                  <span className="text-xs font-semibold">{ws.name[0].toUpperCase()}</span>
                 </div>
                 <span className="flex-1">{ws.name}</span>
               </DropdownMenuItem>
