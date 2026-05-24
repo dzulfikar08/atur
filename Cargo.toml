@@ -5,6 +5,7 @@ members = [
     "crates/db",
     "crates/tasks",
     "crates/collab",
+    "crates/tui",
 ]
 resolver = "2"
 
