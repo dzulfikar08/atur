@@ -105,6 +105,22 @@ pub struct SprintProgress {
     pub cancelled: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct State {
+    pub id: String,
+    pub name: String,
+    pub group: String,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub slug: Option<String>,
+    pub sequence: f64,
+    #[serde(default)]
+    pub is_default: bool,
+    #[serde(default)]
+    pub is_triage: bool,
+}
+
 // ---------------------------------------------------------------------------
 // Client handler (implements rmcp ClientHandler trait)
 // ---------------------------------------------------------------------------
@@ -319,6 +335,20 @@ impl AturClient {
             args["workspace"] = serde_json::json!(ws);
         }
         self.call_tool_typed("get_sprint_progress", args).await
+    }
+
+    pub async fn list_states(
+        &self,
+        project_id: &str,
+        workspace: Option<&str>,
+    ) -> Result<Vec<State>> {
+        let mut args = serde_json::json!({
+            "project_id": project_id,
+        });
+        if let Some(ws) = workspace {
+            args["workspace"] = serde_json::json!(ws);
+        }
+        self.call_tool_typed("list_states", args).await
     }
 }
 

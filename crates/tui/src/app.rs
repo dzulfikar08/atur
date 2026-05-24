@@ -1,4 +1,4 @@
-use crate::client::{AturClient, Issue, IssueList, Project, Sprint, SprintProgress, Workspace};
+use crate::client::{AturClient, Issue, IssueList, Project, Sprint, SprintProgress, State, Workspace};
 use crate::components::table::TableState;
 
 /// Which view is currently active.
@@ -66,6 +66,9 @@ pub struct App {
     // Sprint detail: issues in the sprint.
     pub sprint_issues: Vec<Issue>,
 
+    // State name cache: state_id -> state name
+    pub states: Vec<State>,
+
     // Issue filter state: 0=None, 1=urgent, 2=high, 3=medium, 4=low, 5=none.
     pub filter_index: usize,
 }
@@ -93,6 +96,7 @@ impl App {
             sprints: Vec::new(),
             sprint_progress: None,
             sprint_issues: Vec::new(),
+            states: Vec::new(),
             filter_index: 0,
         }
     }
@@ -490,6 +494,12 @@ impl App {
             .client
             .list_issues(&project_id, Some(&workspace_slug), Some(100), None)
             .await?;
+        // Fetch states for this project so we can show state names.
+        self.states = self
+            .client
+            .list_states(&project_id, Some(&workspace_slug))
+            .await
+            .unwrap_or_default();
         // Item count is based on filtered list.
         let count = self.filtered_issues().len();
         if let Some(frame) = self.current_frame_mut() {
@@ -551,6 +561,15 @@ impl App {
     // ── Filtered issues ─────────────────────────────────────────────────
 
     /// Return issues filtered by the current priority filter.
+    /// Look up a state name by ID.
+    fn state_name(&self, state_id: &Option<String>) -> String {
+        state_id
+            .as_ref()
+            .and_then(|id| self.states.iter().find(|s| s.id == *id))
+            .map(|s| s.name.clone())
+            .unwrap_or_else(|| "-".to_string())
+    }
+
     pub fn filtered_issues(&self) -> Vec<&Issue> {
         if self.filter_index == 0 {
             self.issues.results.iter().collect()
@@ -576,7 +595,7 @@ impl App {
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(1)])
+            .constraints([Constraint::Min(0), Constraint::Length(1), Constraint::Length(1)])
             .split(frame.area());
 
         // Determine the index of the view to render (skip Help overlay to show behind it).
@@ -631,6 +650,63 @@ impl App {
             error: self.error.clone(),
         };
         status.render(frame, chunks[1]);
+
+        // Hotkey footer.
+        self.render_hotkey_bar(frame, chunks[2]);
+    }
+
+    fn render_hotkey_bar(&self, frame: &mut ratatui::Frame, area: ratatui::layout::Rect) {
+        use ratatui::style::Style;
+        use ratatui::text::{Line, Span};
+        use ratatui::widgets::{Block, Paragraph};
+
+        let keys: Vec<(&str, &str)> = match self.view_stack.last().map(|f| &f.view) {
+            Some(View::WorkspaceList) => vec![
+                ("j/k", "Navigate"), ("Enter", "Select"), ("?", "Help"), ("q", "Quit"),
+            ],
+            Some(View::ProjectList { .. }) => vec![
+                ("j/k", "Navigate"), ("Enter", "Select"), ("Esc", "Back"), ("?", "Help"), ("q", "Quit"),
+            ],
+            Some(View::ProjectMenu { .. }) => vec![
+                ("j/k", "Navigate"), ("Enter", "Select"), ("Esc", "Back"), ("?", "Help"),
+            ],
+            Some(View::IssueList { .. }) => vec![
+                ("j/k", "Nav"), ("Enter", "Open"), ("Tab", "Filter"), ("r", "Refresh"), ("Esc", "Back"), ("?", "Help"),
+            ],
+            Some(View::IssueDetail { .. }) => vec![
+                ("Esc", "Back"), ("?", "Help"),
+            ],
+            Some(View::SprintList { .. }) => vec![
+                ("j/k", "Navigate"), ("Enter", "Select"), ("Esc", "Back"), ("?", "Help"),
+            ],
+            Some(View::SprintDetail { .. }) => vec![
+                ("j/k", "Navigate"), ("Enter", "Open issue"), ("Esc", "Back"), ("?", "Help"),
+            ],
+            Some(View::Help) => vec![
+                ("Esc", "Close"), ("q", "Quit"),
+            ],
+            None => vec![],
+        };
+
+        let mut spans: Vec<Span> = Vec::new();
+        for (i, (key, desc)) in keys.iter().enumerate() {
+            if i > 0 {
+                spans.push(Span::styled("  ", crate::theme::muted_style()));
+            }
+            spans.push(Span::styled(
+                format!(" {} ", key),
+                Style::default().fg(crate::theme::ACCENT).bg(crate::theme::SURFACE),
+            ));
+            spans.push(Span::styled(
+                format!(" {}", desc),
+                crate::theme::muted_style(),
+            ));
+        }
+
+        let bar = Paragraph::new(Line::from(spans)).block(
+            Block::default().style(Style::default().bg(crate::theme::BG)),
+        );
+        frame.render_widget(bar, area);
     }
 
     fn render_workspaces(
@@ -709,12 +785,13 @@ impl App {
     ) {
         let filter_label = self.current_filter();
         let title = format!("Issues [filter: {}]", filter_label);
-        let headers = ["#", "Priority", "Name", "Created"];
+        let headers = ["#", "Status", "Priority", "Name", "Created"];
         let widths = [
             ratatui::layout::Constraint::Length(6),
+            ratatui::layout::Constraint::Length(14),
             ratatui::layout::Constraint::Length(10),
-            ratatui::layout::Constraint::Percentage(50),
-            ratatui::layout::Constraint::Percentage(25),
+            ratatui::layout::Constraint::Percentage(40),
+            ratatui::layout::Constraint::Percentage(20),
         ];
         let visible = self.filtered_issues();
         let rows: Vec<Vec<String>> = visible
@@ -722,6 +799,7 @@ impl App {
             .map(|i| {
                 vec![
                     i.sequence_id.to_string(),
+                    self.state_name(&i.state_id),
                     i.priority.clone().unwrap_or_else(|| "-".to_string()),
                     i.name.clone(),
                     i.created_at.clone(),
