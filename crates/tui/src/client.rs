@@ -242,6 +242,7 @@ impl AturClient {
         project_id: &str,
         workspace: Option<&str>,
         limit: Option<u64>,
+        sprint: Option<&str>,
     ) -> Result<IssueList> {
         let mut args = serde_json::json!({
             "project_id": project_id,
@@ -251,6 +252,9 @@ impl AturClient {
         }
         if let Some(limit) = limit {
             args["limit"] = serde_json::json!(limit);
+        }
+        if let Some(sprint_id) = sprint {
+            args["sprint"] = serde_json::json!(sprint_id);
         }
         self.call_tool_typed("list_issues", args).await
     }

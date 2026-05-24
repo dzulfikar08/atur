@@ -223,7 +223,7 @@ impl App {
             KeyCode::Esc => {
                 if self.view_stack.len() > 1 {
                     self.pop_view();
-                    HandleResult::Fetch
+                    HandleResult::None
                 } else {
                     self.should_quit = true;
                     HandleResult::None
@@ -488,7 +488,7 @@ impl App {
     ) -> anyhow::Result<()> {
         self.issues = self
             .client
-            .list_issues(&project_id, Some(&workspace_slug), Some(100))
+            .list_issues(&project_id, Some(&workspace_slug), Some(100), None)
             .await?;
         // Item count is based on filtered list.
         let count = self.filtered_issues().len();
@@ -539,15 +539,12 @@ impl App {
                 .get_sprint_progress(&project_id, &sprint_id, Some(&workspace_slug))
                 .await?,
         );
-        // Fetch all issues and filter to sprint.
-        let all = self
+        // Fetch issues filtered by sprint
+        let result = self
             .client
-            .list_issues(&project_id, Some(&workspace_slug), Some(100))
+            .list_issues(&project_id, Some(&workspace_slug), Some(100), Some(&sprint_id))
             .await?;
-        // For now store all issues; proper sprint filtering would need the
-        // sprint field on issues or a dedicated API. The sprint_issues list
-        // is populated from the full issue list.
-        self.sprint_issues = all.results;
+        self.sprint_issues = result.results;
         Ok(())
     }
 
@@ -574,7 +571,7 @@ impl App {
 
     // ── Rendering ───────────────────────────────────────────────────────
 
-    pub fn render(&self, frame: &mut ratatui::Frame) {
+    pub fn render(&mut self, frame: &mut ratatui::Frame) {
         use ratatui::layout::{Constraint, Direction, Layout};
 
         let chunks = Layout::default()
@@ -582,60 +579,49 @@ impl App {
             .constraints([Constraint::Min(0), Constraint::Length(1)])
             .split(frame.area());
 
-        // Render current view in main area.
-        if let Some(frame_view) = self.current_frame() {
-            match &frame_view.view {
+        // Determine the index of the view to render (skip Help overlay to show behind it).
+        let render_idx = if self.view_stack.last().map(|f| matches!(f.view, View::Help)).unwrap_or(false) && self.view_stack.len() >= 2 {
+            self.view_stack.len() - 2
+        } else {
+            self.view_stack.len().saturating_sub(1)
+        };
+
+        // Extract view info to avoid borrow conflicts, then write back table_state after render.
+        let frame_info = self.view_stack.get(render_idx).map(|f| (f.view.clone(), f.table_state.clone()));
+        if let Some((view, mut table_state)) = frame_info {
+            match &view {
                 View::WorkspaceList => {
-                    self.render_workspaces(frame, chunks[0], &frame_view.table_state.clone());
+                    self.render_workspaces(frame, chunks[0], &mut table_state);
                 }
                 View::ProjectList { .. } => {
-                    self.render_projects(frame, chunks[0], &frame_view.table_state.clone());
+                    self.render_projects(frame, chunks[0], &mut table_state);
                 }
                 View::ProjectMenu { .. } => {
-                    self.render_project_menu(frame, chunks[0], &frame_view.table_state.clone());
+                    self.render_project_menu(frame, chunks[0], &mut table_state);
                 }
                 View::IssueList { .. } => {
-                    self.render_issues(frame, chunks[0], &frame_view.table_state.clone());
+                    self.render_issues(frame, chunks[0], &mut table_state);
                 }
                 View::IssueDetail { .. } => {
                     self.render_issue_detail(frame, chunks[0]);
                 }
                 View::SprintList { .. } => {
-                    self.render_sprints(frame, chunks[0], &frame_view.table_state.clone());
+                    self.render_sprints(frame, chunks[0], &mut table_state);
                 }
                 View::SprintDetail { .. } => {
-                    self.render_sprint_detail(frame, chunks[0], &frame_view.table_state.clone());
+                    self.render_sprint_detail(frame, chunks[0], &mut table_state);
                 }
-                View::Help => {
-                    // Re-render the view behind the overlay.
-                    if self.view_stack.len() >= 2 {
-                        let prev = &self.view_stack[self.view_stack.len() - 2];
-                        match &prev.view {
-                            View::WorkspaceList => {
-                                self.render_workspaces(
-                                    frame,
-                                    chunks[0],
-                                    &prev.table_state.clone(),
-                                );
-                            }
-                            View::ProjectList { .. } => {
-                                self.render_projects(frame, chunks[0], &prev.table_state.clone());
-                            }
-                            View::ProjectMenu { .. } => {
-                                self.render_project_menu(frame, chunks[0], &prev.table_state.clone());
-                            }
-                            View::IssueList { .. } => {
-                                self.render_issues(frame, chunks[0], &prev.table_state.clone());
-                            }
-                            View::SprintList { .. } => {
-                                self.render_sprints(frame, chunks[0], &prev.table_state.clone());
-                            }
-                            _ => {}
-                        }
-                    }
-                    crate::components::help::HelpOverlay::render(frame, frame.area());
-                }
+                View::Help => {}
             }
+            // Write back the (possibly scroll-adjusted) table state.
+            if let Some(f) = self.view_stack.get_mut(render_idx) {
+                f.table_state = table_state;
+            }
+        }
+
+        // Help overlay on top of everything.
+        if self.view_stack.last().map(|f| matches!(f.view, View::Help)).unwrap_or(false) {
+            crate::components::help::HelpOverlay::render(frame, frame.area());
         }
 
         // Status bar.
@@ -651,7 +637,7 @@ impl App {
         &self,
         frame: &mut ratatui::Frame,
         area: ratatui::layout::Rect,
-        state: &TableState,
+        state: &mut TableState,
     ) {
         let headers = ["Name", "Slug", "Created"];
         let widths = [
@@ -664,15 +650,14 @@ impl App {
             .iter()
             .map(|w| vec![w.name.clone(), w.slug.clone(), w.created_at.clone()])
             .collect();
-        let mut state = state.clone();
-        crate::components::table::render(frame, area, "Workspaces", &headers, &widths, &rows, &mut state);
+        crate::components::table::render(frame, area, "Workspaces", &headers, &widths, &rows, state);
     }
 
     fn render_projects(
         &self,
         frame: &mut ratatui::Frame,
         area: ratatui::layout::Rect,
-        state: &TableState,
+        state: &mut TableState,
     ) {
         let headers = ["Identifier", "Name", "Created"];
         let widths = [
@@ -691,15 +676,14 @@ impl App {
                 ]
             })
             .collect();
-        let mut state = state.clone();
-        crate::components::table::render(frame, area, "Projects", &headers, &widths, &rows, &mut state);
+        crate::components::table::render(frame, area, "Projects", &headers, &widths, &rows, state);
     }
 
     fn render_project_menu(
         &self,
         frame: &mut ratatui::Frame,
         area: ratatui::layout::Rect,
-        state: &TableState,
+        state: &mut TableState,
     ) {
         // Get the project name from the current view for the title.
         let project_name = self.current_project_name().unwrap_or("Project");
@@ -714,15 +698,14 @@ impl App {
             vec!["Issues".to_string(), "View and manage project issues".to_string()],
             vec!["Sprints".to_string(), "View and manage project sprints / cycles".to_string()],
         ];
-        let mut state = state.clone();
-        crate::components::table::render(frame, area, &title, &headers, &widths, &rows, &mut state);
+        crate::components::table::render(frame, area, &title, &headers, &widths, &rows, state);
     }
 
     fn render_issues(
         &self,
         frame: &mut ratatui::Frame,
         area: ratatui::layout::Rect,
-        state: &TableState,
+        state: &mut TableState,
     ) {
         let filter_label = self.current_filter();
         let title = format!("Issues [filter: {}]", filter_label);
@@ -745,8 +728,7 @@ impl App {
                 ]
             })
             .collect();
-        let mut state = state.clone();
-        crate::components::table::render(frame, area, &title, &headers, &widths, &rows, &mut state);
+        crate::components::table::render(frame, area, &title, &headers, &widths, &rows, state);
     }
 
     fn render_issue_detail(&self, frame: &mut ratatui::Frame, area: ratatui::layout::Rect) {
@@ -908,7 +890,7 @@ impl App {
         &self,
         frame: &mut ratatui::Frame,
         area: ratatui::layout::Rect,
-        state: &TableState,
+        state: &mut TableState,
     ) {
         let headers = ["Name", "Start", "End", "Created"];
         let widths = [
@@ -929,15 +911,14 @@ impl App {
                 ]
             })
             .collect();
-        let mut state = state.clone();
-        crate::components::table::render(frame, area, "Sprints", &headers, &widths, &rows, &mut state);
+        crate::components::table::render(frame, area, "Sprints", &headers, &widths, &rows, state);
     }
 
     fn render_sprint_detail(
         &self,
         frame: &mut ratatui::Frame,
         area: ratatui::layout::Rect,
-        state: &TableState,
+        state: &mut TableState,
     ) {
         use ratatui::layout::{Constraint, Direction, Layout};
         use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
@@ -1005,7 +986,6 @@ impl App {
                 ]
             })
             .collect();
-        let mut state = state.clone();
         crate::components::table::render(
             frame,
             chunks[1],
@@ -1013,7 +993,7 @@ impl App {
             &headers,
             &widths,
             &rows,
-            &mut state,
+            state,
         );
     }
 }
