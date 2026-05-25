@@ -1088,25 +1088,179 @@ pub enum HandleResult {
 }
 
 /// Strip basic HTML tags from a string for display in the terminal.
-fn strip_html_tags(html: &str) -> String {
-    // Simple approach: remove anything between < and >.
-    let mut result = String::with_capacity(html.len());
+/// Convert HTML to readable plain text, preserving structure (headings,
+/// paragraphs, lists, line breaks). Strips tags intelligently.
+fn html_to_text(html: &str) -> String {
+    let mut out = String::with_capacity(html.len());
     let mut in_tag = false;
-    for ch in html.chars() {
+    let mut tag_name = String::new();
+    let mut collecting_tag = false;
+
+    let block_tags = [
+        "p", "div", "br", "hr",
+        "h1", "h2", "h3", "h4", "h5", "h6",
+        "ul", "ol", "li",
+        "blockquote", "pre",
+        "table", "tr",
+    ];
+
+    let chars: Vec<char> = html.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        let ch = chars[i];
         match ch {
-            '<' => in_tag = true,
+            '<' => {
+                // Flush buffered tag name processing
+                if !tag_name.is_empty() {
+                    process_block_tag(&tag_name, &mut out, true);
+                }
+
+                in_tag = true;
+                collecting_tag = true;
+                tag_name.clear();
+
+                // Skip closing slash
+                if i + 1 < len && chars[i + 1] == '/' {
+                    i += 1;
+                    collecting_tag = false; // don't collect for closing tags
+                }
+            }
             '>' => {
                 in_tag = false;
-                continue;
+                if collecting_tag && !tag_name.is_empty() {
+                    process_block_tag(&tag_name, &mut out, false);
+                } else if !collecting_tag && !tag_name.is_empty() {
+                    // Closing tag
+                    process_block_tag(&tag_name, &mut out, true);
+                }
+                tag_name.clear();
+                collecting_tag = false;
             }
-            _ if !in_tag => result.push(ch),
-            _ => {}
+            _ if in_tag => {
+                if collecting_tag {
+                    if ch.is_whitespace() || ch == '>' {
+                        collecting_tag = false;
+                        if !tag_name.is_empty() {
+                            process_block_tag(&tag_name, &mut out, false);
+                        }
+                    } else {
+                        tag_name.push(ch.to_ascii_lowercase());
+                    }
+                }
+                // else: inside tag attributes or closing tag name — skip
+            }
+            _ => {
+                // Decode common entities
+                if ch == '&' {
+                    if let Some(entity_end) = html[i..].find(';') {
+                        let entity = &html[i..i + entity_end + 1];
+                        match entity {
+                            "&amp;" => out.push('&'),
+                            "&lt;" => out.push('<'),
+                            "&gt;" => out.push('>'),
+                            "&nbsp;" => out.push(' '),
+                            "&quot;" => out.push('"'),
+                            "&#39;" => out.push('\''),
+                            _ => out.push_str(entity),
+                        }
+                        i += entity_end;
+                    } else {
+                        out.push(ch);
+                    }
+                } else {
+                    out.push(ch);
+                }
+            }
+        }
+        i += 1;
+    }
+
+    // Clean up: collapse 3+ consecutive blank lines into 2
+    let mut cleaned = String::with_capacity(out.len());
+    let mut blank_count = 0u8;
+    for line in out.lines() {
+        let trimmed = line.trim_end();
+        if trimmed.is_empty() {
+            blank_count += 1;
+            if blank_count <= 2 {
+                cleaned.push('\n');
+            }
+        } else {
+            blank_count = 0;
+            if !cleaned.is_empty() && !cleaned.ends_with('\n') {
+                cleaned.push('\n');
+            }
+            cleaned.push_str(trimmed);
         }
     }
-    // Collapse multiple whitespace.
-    let collapsed: String = result
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    collapsed
+    cleaned.trim().to_string()
+}
+
+fn process_block_tag(tag: &str, out: &mut String, is_closing: bool) {
+    // Add line breaks around block-level elements for readability
+    match tag {
+        // Headings: add underline-style markers
+        "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
+            if is_closing {
+                out.push('\n');
+            } else {
+                ensure_blank_line(out);
+            }
+        }
+        // Paragraphs: blank line before/after
+        "p" | "div" => {
+            out.push('\n');
+        }
+        // Line break
+        "br" => {
+            out.push('\n');
+        }
+        // Horizontal rule
+        "hr" => {
+            ensure_blank_line(out);
+            out.push_str("────────────────────");
+            out.push('\n');
+        }
+        // List items: indent with bullet
+        "li" => {
+            out.push('\n');
+            out.push_str("  • ");
+        }
+        // Lists: add blank line before/after
+        "ul" | "ol" => {
+            out.push('\n');
+        }
+        // Blockquote: prefix lines
+        "blockquote" => {
+            if !is_closing {
+                out.push('\n');
+            }
+        }
+        // Preformatted: preserve as-is
+        "pre" => {
+            out.push('\n');
+        }
+        // Table rows
+        "tr" => {
+            out.push('\n');
+        }
+        // Table cells: add separator
+        "td" | "th" => {
+            out.push_str(" │ ");
+        }
+        _ => {}
+    }
+}
+
+fn ensure_blank_line(out: &mut String) {
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+}
+
+/// Legacy alias used elsewhere
+fn strip_html_tags(html: &str) -> String {
+    html_to_text(html)
 }
