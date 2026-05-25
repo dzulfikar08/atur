@@ -15,6 +15,42 @@ pub struct ListLabelsParams {
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct CreateLabelParams {
+    #[schemars(description = "Workspace slug")]
+    pub workspace: Option<String>,
+    #[schemars(description = "Project UUID")]
+    pub project_id: String,
+    #[schemars(description = "Label name")]
+    pub name: String,
+    #[schemars(description = "Label color (hex, e.g. '#FF0000')")]
+    pub color: Option<String>,
+    #[schemars(description = "Label description")]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct UpdateLabelParams {
+    #[schemars(description = "Workspace slug")]
+    pub workspace: Option<String>,
+    #[schemars(description = "Label UUID")]
+    pub label_id: String,
+    #[schemars(description = "Label name")]
+    pub name: Option<String>,
+    #[schemars(description = "Label color (hex, e.g. '#FF0000')")]
+    pub color: Option<String>,
+    #[schemars(description = "Label description")]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct DeleteLabelParams {
+    #[schemars(description = "Workspace slug")]
+    pub workspace: Option<String>,
+    #[schemars(description = "Label UUID")]
+    pub label_id: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct ListMembersParams {
     pub workspace: Option<String>,
     pub project_id: String,
@@ -28,6 +64,28 @@ pub struct SetAssigneeParams {
     pub user_id: String,
     #[schemars(description = "\"add\" (default) or \"remove\"")]
     pub action: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct AddProjectMemberParams {
+    #[schemars(description = "Workspace slug")]
+    pub workspace: Option<String>,
+    #[schemars(description = "Project UUID")]
+    pub project_id: String,
+    #[schemars(description = "User UUID")]
+    pub user_id: String,
+    #[schemars(description = "Role: 20=admin, 15=member, 5=guest")]
+    pub role: Option<i16>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct RemoveProjectMemberParams {
+    #[schemars(description = "Workspace slug")]
+    pub workspace: Option<String>,
+    #[schemars(description = "Project UUID")]
+    pub project_id: String,
+    #[schemars(description = "User UUID")]
+    pub user_id: String,
 }
 
 // --- Label & Member implementations ---
@@ -72,6 +130,232 @@ pub async fn list_labels_impl(
             ok_json(serde_json::json!(result))
         }
         Err(e) => err_str(e),
+    }
+}
+
+pub async fn create_label_impl(
+    db: &sea_orm::DatabaseConnection,
+    params: CreateLabelParams,
+) -> String {
+    let ws = match resolve_workspace(db, params.workspace.as_ref()).await {
+        Ok(ws) => ws,
+        Err(e) => return err_str(e),
+    };
+    let project_id = match parse_uuid(&params.project_id, "project_id") {
+        Ok(id) => id,
+        Err(e) => return err_str(e),
+    };
+
+    let now = Utc::now().fixed_offset();
+
+    match (labels::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        name: Set(params.name),
+        description: Set(params.description),
+        color: Set(params.color),
+        sort_order: Set(65535.0),
+        parent_id: Set(None),
+        workspace_id: Set(ws.id),
+        project_id: Set(Some(project_id)),
+        created_at: Set(Some(now)),
+        updated_at: Set(Some(now)),
+        deleted_at: Set(None),
+    })
+    .insert(db)
+    .await
+    {
+        Ok(l) => ok_json(serde_json::json!({
+            "id": l.id,
+            "name": l.name,
+            "description": l.description,
+            "color": l.color,
+            "project_id": l.project_id,
+        })),
+        Err(e) => err_str(format!("Label insert error: {}", e)),
+    }
+}
+
+pub async fn update_label_impl(
+    db: &sea_orm::DatabaseConnection,
+    params: UpdateLabelParams,
+) -> String {
+    let _ws = match resolve_workspace(db, params.workspace.as_ref()).await {
+        Ok(ws) => ws,
+        Err(e) => return err_str(e),
+    };
+    let label_id = match parse_uuid(&params.label_id, "label_id") {
+        Ok(id) => id,
+        Err(e) => return err_str(e),
+    };
+
+    let label = match labels::Entity::find()
+        .filter(labels::Column::Id.eq(label_id))
+        .filter(labels::Column::DeletedAt.is_null())
+        .one(db)
+        .await
+    {
+        Ok(Some(l)) => l,
+        Ok(None) => return err_str("Label not found"),
+        Err(e) => return err_str(e),
+    };
+
+    let now = Utc::now().fixed_offset();
+    let mut active: labels::ActiveModel = label.into();
+
+    if let Some(name) = params.name {
+        active.name = Set(name);
+    }
+    if let Some(color) = params.color {
+        active.color = Set(Some(color));
+    }
+    if let Some(description) = params.description {
+        active.description = Set(Some(description));
+    }
+    active.updated_at = Set(Some(now));
+
+    match active.update(db).await {
+        Ok(updated) => ok_json(serde_json::json!({
+            "id": updated.id,
+            "name": updated.name,
+            "description": updated.description,
+            "color": updated.color,
+            "project_id": updated.project_id,
+        })),
+        Err(e) => err_str(format!("DB update error: {}", e)),
+    }
+}
+
+pub async fn delete_label_impl(
+    db: &sea_orm::DatabaseConnection,
+    params: DeleteLabelParams,
+) -> String {
+    let _ws = match resolve_workspace(db, params.workspace.as_ref()).await {
+        Ok(ws) => ws,
+        Err(e) => return err_str(e),
+    };
+    let label_id = match parse_uuid(&params.label_id, "label_id") {
+        Ok(id) => id,
+        Err(e) => return err_str(e),
+    };
+
+    let label = match labels::Entity::find()
+        .filter(labels::Column::Id.eq(label_id))
+        .filter(labels::Column::DeletedAt.is_null())
+        .one(db)
+        .await
+    {
+        Ok(Some(l)) => l,
+        Ok(None) => return err_str("Label not found"),
+        Err(e) => return err_str(e),
+    };
+
+    let now = Utc::now().fixed_offset();
+    let mut active: labels::ActiveModel = label.into();
+    active.deleted_at = Set(Some(now));
+    active.updated_at = Set(Some(now));
+
+    match active.update(db).await {
+        Ok(_) => ok_json(serde_json::json!({ "message": "Label deleted" })),
+        Err(e) => err_str(format!("DB update error: {}", e)),
+    }
+}
+
+pub async fn add_project_member_impl(
+    db: &sea_orm::DatabaseConnection,
+    params: AddProjectMemberParams,
+) -> String {
+    let ws = match resolve_workspace(db, params.workspace.as_ref()).await {
+        Ok(ws) => ws,
+        Err(e) => return err_str(e),
+    };
+    let project_id = match parse_uuid(&params.project_id, "project_id") {
+        Ok(id) => id,
+        Err(e) => return err_str(e),
+    };
+    let user_id = match parse_uuid(&params.user_id, "user_id") {
+        Ok(id) => id,
+        Err(e) => return err_str(e),
+    };
+
+    // Check if already a member
+    match project_members::Entity::find()
+        .filter(project_members::Column::ProjectId.eq(project_id))
+        .filter(project_members::Column::MemberId.eq(user_id))
+        .filter(project_members::Column::DeletedAt.is_null())
+        .one(db)
+        .await
+    {
+        Ok(Some(_)) => return err_str("User is already a project member"),
+        Ok(None) => {}
+        Err(e) => return err_str(e),
+    }
+
+    let now = Utc::now().fixed_offset();
+    let role = params.role.unwrap_or(15);
+
+    match (project_members::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        project_id: Set(project_id),
+        workspace_id: Set(ws.id),
+        member_id: Set(user_id),
+        role: Set(role),
+        is_active: Set(true),
+        sort_order: Set(65535.0),
+        created_at: Set(Some(now)),
+        updated_at: Set(Some(now)),
+        deleted_at: Set(None),
+    })
+    .insert(db)
+    .await
+    {
+        Ok(_) => ok_json(serde_json::json!({
+            "message": "Project member added",
+            "project_id": project_id,
+            "user_id": user_id,
+            "role": role,
+        })),
+        Err(e) => err_str(format!("Project member insert error: {}", e)),
+    }
+}
+
+pub async fn remove_project_member_impl(
+    db: &sea_orm::DatabaseConnection,
+    params: RemoveProjectMemberParams,
+) -> String {
+    let _ws = match resolve_workspace(db, params.workspace.as_ref()).await {
+        Ok(ws) => ws,
+        Err(e) => return err_str(e),
+    };
+    let project_id = match parse_uuid(&params.project_id, "project_id") {
+        Ok(id) => id,
+        Err(e) => return err_str(e),
+    };
+    let user_id = match parse_uuid(&params.user_id, "user_id") {
+        Ok(id) => id,
+        Err(e) => return err_str(e),
+    };
+
+    let member = match project_members::Entity::find()
+        .filter(project_members::Column::ProjectId.eq(project_id))
+        .filter(project_members::Column::MemberId.eq(user_id))
+        .filter(project_members::Column::DeletedAt.is_null())
+        .one(db)
+        .await
+    {
+        Ok(Some(m)) => m,
+        Ok(None) => return err_str("User is not a project member"),
+        Err(e) => return err_str(e),
+    };
+
+    let now = Utc::now().fixed_offset();
+    let mut active: project_members::ActiveModel = member.into();
+    active.deleted_at = Set(Some(now));
+    active.updated_at = Set(Some(now));
+    active.is_active = Set(false);
+
+    match active.update(db).await {
+        Ok(_) => ok_json(serde_json::json!({ "message": "Project member removed" })),
+        Err(e) => err_str(format!("DB update error: {}", e)),
     }
 }
 

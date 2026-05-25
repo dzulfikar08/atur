@@ -264,3 +264,119 @@ pub async fn create_project_impl(
         "created_at": now.to_rfc3339(),
     }))
 }
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct UpdateProjectParams {
+    #[schemars(description = "Workspace slug")]
+    pub workspace: Option<String>,
+    #[schemars(description = "Project UUID")]
+    pub project_id: String,
+    #[schemars(description = "Project name")]
+    pub name: Option<String>,
+    #[schemars(description = "Project description")]
+    pub description: Option<String>,
+    #[schemars(description = "Project emoji icon")]
+    pub emoji: Option<String>,
+    #[schemars(description = "Cover image URL")]
+    pub cover_image: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct DeleteProjectParams {
+    #[schemars(description = "Workspace slug")]
+    pub workspace: Option<String>,
+    #[schemars(description = "Project UUID")]
+    pub project_id: String,
+}
+
+pub async fn update_project_impl(
+    db: &sea_orm::DatabaseConnection,
+    params: UpdateProjectParams,
+) -> String {
+    let ws = match resolve_workspace(db, params.workspace.as_ref()).await {
+        Ok(ws) => ws,
+        Err(e) => return err_str(e),
+    };
+    let project_id = match parse_uuid(&params.project_id, "project_id") {
+        Ok(id) => id,
+        Err(e) => return err_str(e),
+    };
+
+    let project = match projects::Entity::find()
+        .filter(projects::Column::Id.eq(project_id))
+        .filter(projects::Column::WorkspaceId.eq(ws.id))
+        .filter(projects::Column::DeletedAt.is_null())
+        .one(db)
+        .await
+    {
+        Ok(Some(p)) => p,
+        Ok(None) => return err_str("Project not found"),
+        Err(e) => return err_str(e),
+    };
+
+    let now = Utc::now().fixed_offset();
+    let mut active: projects::ActiveModel = project.into();
+
+    if let Some(name) = params.name {
+        active.name = Set(name);
+    }
+    if let Some(description) = params.description {
+        active.description = Set(Some(description));
+    }
+    if let Some(emoji) = params.emoji {
+        active.emoji = Set(Some(emoji));
+    }
+    if let Some(cover_image) = params.cover_image {
+        active.cover_image = Set(Some(cover_image));
+    }
+    active.updated_at = Set(Some(now));
+
+    match active.update(db).await {
+        Ok(updated) => ok_json(serde_json::json!({
+            "id": updated.id,
+            "name": updated.name,
+            "identifier": updated.identifier,
+            "description": updated.description,
+            "emoji": updated.emoji,
+            "cover_image": updated.cover_image,
+            "workspace_id": updated.workspace_id,
+        })),
+        Err(e) => err_str(format!("DB update error: {}", e)),
+    }
+}
+
+pub async fn delete_project_impl(
+    db: &sea_orm::DatabaseConnection,
+    params: DeleteProjectParams,
+) -> String {
+    let ws = match resolve_workspace(db, params.workspace.as_ref()).await {
+        Ok(ws) => ws,
+        Err(e) => return err_str(e),
+    };
+    let project_id = match parse_uuid(&params.project_id, "project_id") {
+        Ok(id) => id,
+        Err(e) => return err_str(e),
+    };
+
+    let project = match projects::Entity::find()
+        .filter(projects::Column::Id.eq(project_id))
+        .filter(projects::Column::WorkspaceId.eq(ws.id))
+        .filter(projects::Column::DeletedAt.is_null())
+        .one(db)
+        .await
+    {
+        Ok(Some(p)) => p,
+        Ok(None) => return err_str("Project not found"),
+        Err(e) => return err_str(e),
+    };
+
+    let now = Utc::now().fixed_offset();
+    let mut active: projects::ActiveModel = project.into();
+    active.deleted_at = Set(Some(now));
+    active.updated_at = Set(Some(now));
+
+    match active.update(db).await {
+        Ok(_) => ok_json(serde_json::json!({ "message": "Project deleted" })),
+        Err(e) => err_str(format!("DB update error: {}", e)),
+    }
+}

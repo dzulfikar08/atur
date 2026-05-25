@@ -4,9 +4,9 @@ use axum::Json;
 use axum::routing::{delete, get, patch, post};
 use chrono::Utc;
 use db::entities::{
-    issue_activities, issue_assignees, issue_attachments, issue_comments, issue_labels,
-    issue_links, issue_reactions, issue_relations, issue_sequences, issue_subscribers, issues,
-    states,
+    custom_fields, issue_activities, issue_assignees, issue_attachments, issue_comments,
+    issue_custom_values, issue_labels, issue_links, issue_reactions, issue_relations,
+    issue_sequences, issue_subscribers, issues, states, time_entries,
 };
 use sea_orm::ActiveValue::Set;
 use sea_orm::{
@@ -569,6 +569,20 @@ pub fn router() -> axum::Router<AppState> {
         .route(
             "/{seq_id}/sub-issues/",
             get(list_sub_issues),
+        )
+        // Custom field values
+        .route(
+            "/{seq_id}/custom-values/",
+            get(list_custom_values).post(set_custom_values),
+        )
+        // Time entries
+        .route(
+            "/{seq_id}/time-entries/",
+            get(list_time_entries).post(create_time_entry),
+        )
+        .route(
+            "/{seq_id}/time-entries/{entry_id}/",
+            delete(delete_time_entry),
         )
         // Archive
         .route(
@@ -1993,4 +2007,367 @@ fn index_issue(state: &AppState, issue: &issues::Model) {
             tracing::warn!(error = %e, issue_id = %issue.id, "Failed to index issue in Tantivy");
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Custom field values
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+pub struct CustomFieldValueResponse {
+    pub id: Uuid,
+    pub issue_id: Uuid,
+    pub custom_field_id: Uuid,
+    pub value_json: Option<serde_json::Value>,
+    pub field_name: String,
+    pub field_type: String,
+    pub field_settings: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetCustomValuesRequest {
+    pub values: Vec<CustomValueInput>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CustomValueInput {
+    pub custom_field_id: Uuid,
+    pub value_json: Option<serde_json::Value>,
+}
+
+/// GET /api/workspaces/{slug}/projects/{project_id}/issues/{seq_id}/custom-values/
+async fn list_custom_values(
+    State(state): State<AppState>,
+    Extension(current_user): Extension<CurrentUser>,
+    Path((slug, project_id, seq_id)): Path<(String, Uuid, i64)>,
+) -> Result<impl IntoResponse, AppError> {
+    let workspace = load_workspace_by_slug(&state, &slug).await?;
+    require_project_role(&state, workspace.id, project_id, &current_user, ROLE_GUEST).await?;
+    let issue = load_issue_by_seq(&state, project_id, seq_id).await?;
+
+    // Load field definitions for this project
+    let field_defs = custom_fields::Entity::find()
+        .filter(custom_fields::Column::ProjectId.eq(project_id))
+        .filter(custom_fields::Column::DeletedAt.is_null())
+        .all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+    let field_map: std::collections::HashMap<Uuid, custom_fields::Model> = field_defs
+        .iter()
+        .map(|f| (f.id, f.clone()))
+        .collect();
+
+    // Load values for this issue
+    let values = issue_custom_values::Entity::find()
+        .filter(issue_custom_values::Column::IssueId.eq(issue.id))
+        .filter(issue_custom_values::Column::DeletedAt.is_null())
+        .all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+    let resp: Vec<CustomFieldValueResponse> = values
+        .into_iter()
+        .filter_map(|v| {
+            let field = field_map.get(&v.custom_field_id)?;
+            Some(CustomFieldValueResponse {
+                id: v.id,
+                issue_id: v.issue_id,
+                custom_field_id: v.custom_field_id,
+                value_json: v.value_json,
+                field_name: field.name.clone(),
+                field_type: field.field_type.clone(),
+                field_settings: field.settings.clone(),
+            })
+        })
+        .collect();
+
+    Ok(Json(resp))
+}
+
+/// POST /api/workspaces/{slug}/projects/{project_id}/issues/{seq_id}/custom-values/
+async fn set_custom_values(
+    State(state): State<AppState>,
+    Extension(current_user): Extension<CurrentUser>,
+    Path((slug, project_id, seq_id)): Path<(String, Uuid, i64)>,
+    Json(body): Json<SetCustomValuesRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let workspace = load_workspace_by_slug(&state, &slug).await?;
+    require_project_role(&state, workspace.id, project_id, &current_user, ROLE_MEMBER).await?;
+    let issue = load_issue_by_seq(&state, project_id, seq_id).await?;
+
+    // Load field definitions for validation
+    let field_defs = custom_fields::Entity::find()
+        .filter(custom_fields::Column::ProjectId.eq(project_id))
+        .filter(custom_fields::Column::DeletedAt.is_null())
+        .all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+    let field_map: std::collections::HashMap<Uuid, custom_fields::Model> = field_defs
+        .iter()
+        .map(|f| (f.id, f.clone()))
+        .collect();
+
+    for input in &body.values {
+        let field = field_map.get(&input.custom_field_id).ok_or_else(|| {
+            AppError::BadRequest(format!(
+                "Custom field {} not found in this project",
+                input.custom_field_id
+            ))
+        })?;
+
+        validate_field_value(&field.field_type, field.settings.as_ref(), &input.value_json)?;
+
+        if input.value_json.is_none() || input.value_json.as_ref().map_or(false, |v| v.is_null()) {
+            // Clear: soft-delete existing value
+            let existing = issue_custom_values::Entity::find()
+                .filter(issue_custom_values::Column::IssueId.eq(issue.id))
+                .filter(issue_custom_values::Column::CustomFieldId.eq(input.custom_field_id))
+                .filter(issue_custom_values::Column::DeletedAt.is_null())
+                .one(&state.db)
+                .await
+                .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+            if let Some(row) = existing {
+                let now = Utc::now().fixed_offset();
+                let mut active: issue_custom_values::ActiveModel = row.into();
+                active.deleted_at = Set(Some(now));
+                active.updated_at = Set(Some(now));
+                active.update(&state.db).await.map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+            }
+        } else {
+            // Upsert: find existing or create new
+            let existing = issue_custom_values::Entity::find()
+                .filter(issue_custom_values::Column::IssueId.eq(issue.id))
+                .filter(issue_custom_values::Column::CustomFieldId.eq(input.custom_field_id))
+                .filter(issue_custom_values::Column::DeletedAt.is_null())
+                .one(&state.db)
+                .await
+                .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+            let now = Utc::now().fixed_offset();
+            if let Some(row) = existing {
+                let mut active: issue_custom_values::ActiveModel = row.into();
+                active.value_json = Set(input.value_json.clone());
+                active.updated_at = Set(Some(now));
+                active.update(&state.db).await.map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+            } else {
+                let new_val = issue_custom_values::ActiveModel {
+                    id: Set(Uuid::new_v4()),
+                    issue_id: Set(issue.id),
+                    custom_field_id: Set(input.custom_field_id),
+                    value_json: Set(input.value_json.clone()),
+                    created_at: Set(Some(now)),
+                    updated_at: Set(Some(now)),
+                    deleted_at: Set(None),
+                };
+                new_val.insert(&state.db).await.map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+            }
+        }
+    }
+
+    Ok(Json(serde_json::json!({"success": true})))
+}
+
+fn validate_field_value(
+    field_type: &str,
+    settings: Option<&serde_json::Value>,
+    value: &Option<serde_json::Value>,
+) -> Result<(), AppError> {
+    let val = match value {
+        None | Some(serde_json::Value::Null) => return Ok(()),
+        Some(v) => v,
+    };
+
+    match field_type {
+        "text" | "url" => {
+            if !val.is_string() {
+                return Err(AppError::BadRequest(format!("Field type '{}' requires a string value", field_type)));
+            }
+        }
+        "number" => {
+            if !val.is_number() {
+                return Err(AppError::BadRequest("Field type 'number' requires a numeric value".into()));
+            }
+        }
+        "checkbox" => {
+            if !val.is_boolean() {
+                return Err(AppError::BadRequest("Field type 'checkbox' requires a boolean value".into()));
+            }
+        }
+        "date" => {
+            if let Some(s) = val.as_str() {
+                if s.parse::<chrono::NaiveDate>().is_err() {
+                    return Err(AppError::BadRequest("Field type 'date' requires YYYY-MM-DD format".into()));
+                }
+            } else {
+                return Err(AppError::BadRequest("Field type 'date' requires a date string".into()));
+            }
+        }
+        "select" => {
+            if let Some(s) = val.as_str() {
+                if let Some(settings) = settings {
+                    if let Some(opts) = settings.get("options").and_then(|o| o.as_array()) {
+                        let valid_ids: Vec<&str> = opts.iter().filter_map(|o| o.get("id")?.as_str()).collect();
+                        if !valid_ids.contains(&s) {
+                            return Err(AppError::BadRequest(format!("Invalid option '{}' for select field", s)));
+                        }
+                    }
+                }
+            } else {
+                return Err(AppError::BadRequest("Field type 'select' requires a string option id".into()));
+            }
+        }
+        "multi_select" => {
+            if let Some(arr) = val.as_array() {
+                if let Some(settings) = settings {
+                    if let Some(opts) = settings.get("options").and_then(|o| o.as_array()) {
+                        let valid_ids: Vec<&str> = opts.iter().filter_map(|o| o.get("id")?.as_str()).collect();
+                        for item in arr {
+                            if let Some(s) = item.as_str() {
+                                if !valid_ids.contains(&s) {
+                                    return Err(AppError::BadRequest(format!("Invalid option '{}' for multi_select field", s)));
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                return Err(AppError::BadRequest("Field type 'multi_select' requires an array of option ids".into()));
+            }
+        }
+        "user" => {
+            if val.is_string() {
+                if val.as_str().unwrap().parse::<Uuid>().is_err() {
+                    return Err(AppError::BadRequest("Field type 'user' requires a valid UUID".into()));
+                }
+            } else {
+                return Err(AppError::BadRequest("Field type 'user' requires a user UUID string".into()));
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Time Entries
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+pub struct TimeEntryResponse {
+    pub id: Uuid,
+    pub issue_id: Uuid,
+    pub user_id: Uuid,
+    pub duration_seconds: i32,
+    pub description: Option<String>,
+    pub started_at: String,
+    pub ended_at: Option<String>,
+    pub created_at: Option<String>,
+}
+
+impl From<time_entries::Model> for TimeEntryResponse {
+    fn from(m: time_entries::Model) -> Self {
+        Self {
+            id: m.id,
+            issue_id: m.issue_id,
+            user_id: m.user_id,
+            duration_seconds: m.duration_seconds,
+            description: m.description,
+            started_at: m.started_at.to_rfc3339(),
+            ended_at: m.ended_at.map(|dt| dt.to_rfc3339()),
+            created_at: m.created_at.map(|dt| dt.to_rfc3339()),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateTimeEntryRequest {
+    pub duration_seconds: i32,
+    pub description: Option<String>,
+}
+
+/// GET .../issues/<seq_id>/time-entries/
+pub async fn list_time_entries(
+    State(state): State<AppState>,
+    Extension(current_user): Extension<CurrentUser>,
+    Path((slug, project_id, seq_id)): Path<(String, Uuid, i64)>,
+) -> Result<impl IntoResponse, AppError> {
+    let workspace = load_workspace_by_slug(&state, &slug).await?;
+    require_project_role(&state, workspace.id, project_id, &current_user, ROLE_GUEST).await?;
+
+    let issue = load_issue_by_seq(&state, project_id, seq_id).await?;
+
+    let entries = time_entries::Entity::find()
+        .filter(time_entries::Column::IssueId.eq(issue.id))
+        .filter(time_entries::Column::DeletedAt.is_null())
+        .order_by_desc(time_entries::Column::CreatedAt)
+        .all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+    let resp: Vec<TimeEntryResponse> = entries.into_iter().map(Into::into).collect();
+    Ok(Json(resp))
+}
+
+/// POST .../issues/<seq_id>/time-entries/
+pub async fn create_time_entry(
+    State(state): State<AppState>,
+    Extension(current_user): Extension<CurrentUser>,
+    Path((slug, project_id, seq_id)): Path<(String, Uuid, i64)>,
+    Json(body): Json<CreateTimeEntryRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let workspace = load_workspace_by_slug(&state, &slug).await?;
+    require_project_role(&state, workspace.id, project_id, &current_user, ROLE_MEMBER).await?;
+
+    let issue = load_issue_by_seq(&state, project_id, seq_id).await?;
+    let now = Utc::now().fixed_offset();
+
+    let entry = time_entries::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        issue_id: Set(issue.id),
+        workspace_id: Set(workspace.id),
+        user_id: Set(current_user.0.id),
+        duration_seconds: Set(body.duration_seconds),
+        description: Set(body.description),
+        started_at: Set(now),
+        ended_at: Set(None),
+        created_at: Set(Some(now)),
+        updated_at: Set(Some(now)),
+        deleted_at: Set(None),
+        clockify_id: Set(None),
+    }
+    .insert(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("Time entry insert error: {}", e)))?;
+
+    Ok((axum::http::StatusCode::CREATED, Json(TimeEntryResponse::from(entry))))
+}
+
+/// DELETE .../issues/<seq_id>/time-entries/<entry_id>/
+pub async fn delete_time_entry(
+    State(state): State<AppState>,
+    Extension(current_user): Extension<CurrentUser>,
+    Path((slug, project_id, seq_id, entry_id)): Path<(String, Uuid, i64, Uuid)>,
+) -> Result<impl IntoResponse, AppError> {
+    let workspace = load_workspace_by_slug(&state, &slug).await?;
+    require_project_role(&state, workspace.id, project_id, &current_user, ROLE_MEMBER).await?;
+
+    let _issue = load_issue_by_seq(&state, project_id, seq_id).await?;
+
+    let entry = time_entries::Entity::find_by_id(entry_id)
+        .one(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?
+        .ok_or_else(|| AppError::NotFound("Time entry not found".into()))?;
+
+    let now = Utc::now().fixed_offset();
+    let mut active: time_entries::ActiveModel = entry.into();
+    active.deleted_at = Set(Some(now));
+    active.update(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Delete error: {}", e)))?;
+
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }

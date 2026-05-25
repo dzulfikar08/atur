@@ -38,3 +38,5 @@ pub mod views;
 pub mod api_keys;
 pub mod time_entries;
 pub mod github_integrations;
+pub mod custom_fields;
+pub mod issue_custom_values;

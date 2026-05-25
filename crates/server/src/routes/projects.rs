@@ -373,6 +373,11 @@ pub fn router() -> axum::Router<AppState> {
             "/{project_id}/cycles",
             super::cycles::router(),
         )
+        // Custom field definitions
+        .nest(
+            "/{project_id}/custom-fields",
+            super::custom_fields::router(),
+        )
         // Module routes nested under each project
         .nest(
             "/{project_id}/modules",
@@ -421,7 +426,7 @@ pub fn router() -> axum::Router<AppState> {
         .route("/{project_id}/views/", get(list_views).post(create_view))
         .route("/{project_id}/views", get(list_views).post(create_view))
         // Cycles with trailing slash (standalone, alongside nested router)
-        .route("/{project_id}/cycles/", get(list_project_cycles_alias))
+        .route("/{project_id}/cycles/", get(list_project_cycles_alias).post(create_project_cycle_alias))
         .route("/{project_id}/modules/", get(list_project_modules_alias))
         // Issues with trailing slash (alongside nested router)
         .route("/{project_id}/issues/", get(list_project_issues_alias))
@@ -1434,6 +1439,16 @@ pub async fn list_project_cycles_alias(
     Path((slug, project_id)): Path<(String, Uuid)>,
 ) -> Result<impl IntoResponse, AppError> {
     super::cycles::list_cycles(State(state), Extension(current_user), Path((slug, project_id))).await
+}
+
+/// POST cycles with trailing slash - alias that delegates to the nested router's create handler.
+pub async fn create_project_cycle_alias(
+    State(state): State<AppState>,
+    Extension(current_user): Extension<CurrentUser>,
+    Path((slug, project_id)): Path<(String, Uuid)>,
+    Json(body): Json<super::cycles::CreateCycleRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    super::cycles::create_cycle(State(state), Extension(current_user), Path((slug, project_id)), Json(body)).await
 }
 
 /// GET modules with trailing slash - alias that delegates to the nested router's list handler.
