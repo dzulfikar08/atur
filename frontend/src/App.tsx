@@ -11,6 +11,9 @@ const DashboardPage = lazy(() => import('@/pages/dashboard/DashboardPage'));
 const ProjectsPage = lazy(() => import('@/pages/projects/ProjectsPage'));
 const ProjectBoardPage = lazy(() => import('@/pages/projects/ProjectBoardPage'));
 const IssueDetailPage = lazy(() => import('@/pages/projects/IssueDetailPage'));
+const ProjectSettingsPage = lazy(() => import('@/pages/projects/ProjectSettingsPage'));
+const ModulesPage = lazy(() => import('@/pages/projects/ModulesPage'));
+const ModuleDetailPage = lazy(() => import('@/pages/projects/ModuleDetailPage'));
 const CyclesPage = lazy(() => import('@/pages/cycles/CyclesPage'));
 const CycleDetailPage = lazy(() => import('@/pages/cycles/CycleDetailPage'));
 const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'));
@@ -21,7 +24,7 @@ const KnowledgeGraphPage = lazy(() => import('@/pages/pages/KnowledgeGraphPage')
 const GitHubIntegrationPage = lazy(() => import('@/pages/integrations/GitHubIntegrationPage'));
 const ClockifyIntegrationPage = lazy(() => import('@/pages/integrations/ClockifyIntegrationPage'));
 const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'));
-const DrawPage = lazy(() => import('@/pages/DrawPage'));
+const NotificationsPage = lazy(() => import('@/pages/notifications/NotificationsPage'));
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
 
 function PageLoader() {
@@ -59,6 +62,9 @@ export default function App() {
           <Route path="/:slug/pages/:pageId" element={<PagesPage />} />
           <Route path="/:slug/projects" element={<ProjectsPage />} />
           <Route path="/:slug/projects/:projectId" element={<ProjectBoardPage />} />
+          <Route path="/:slug/projects/:projectId/settings" element={<ProjectSettingsPage />} />
+          <Route path="/:slug/projects/:projectId/modules" element={<ModulesPage />} />
+          <Route path="/:slug/projects/:projectId/modules/:moduleId" element={<ModuleDetailPage />} />
           <Route
             path="/:slug/projects/:projectId/issues/:issueSeqId"
             element={<IssueDetailPage />}
@@ -71,19 +77,10 @@ export default function App() {
           <Route path="/:slug/integrations/github" element={<GitHubIntegrationPage />} />
           <Route path="/:slug/integrations/clockify" element={<ClockifyIntegrationPage />} />
           <Route path="/:slug/admin" element={<AdminDashboardPage />} />
+          <Route path="/:slug/notifications" element={<NotificationsPage />} />
           <Route path="/:slug/settings" element={<SettingsPage />} />
           <Route path="/:slug/me" element={<ProfilePage />} />
         </Route>
-
-        {/* Drawing page — standalone, no AppShell */}
-        <Route
-          path="/:slug/draw/:pageId"
-          element={
-            <ProtectedRoute>
-              <DrawPage />
-            </ProtectedRoute>
-          }
-        />
       </Routes>
     </Suspense>
   );

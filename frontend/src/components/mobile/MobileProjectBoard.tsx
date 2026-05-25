@@ -8,7 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { ChevronDown, ChevronRight, Plus, SlidersHorizontal } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronDown, ChevronRight, Plus, SlidersHorizontal, Timer } from 'lucide-react';
 import MobileIssueCard from './MobileIssueCard';
 import BottomSheet from './BottomSheet';
 import PullToRefreshIndicator from './PullToRefreshIndicator';
@@ -136,6 +137,7 @@ function MobileDragOverlayCard({ issue, states }: { issue: Issue; states: State[
 
 export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoardProps) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [expandedStates, setExpandedStates] = useState<Set<string>>(new Set(['started', 'unstarted']));
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterPriority, setFilterPriority] = useState<string>('all');
@@ -284,6 +286,9 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => setFilterOpen(true)}>
             <SlidersHorizontal className="h-3 w-3" /> Filter
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => navigate(`/${slug}/projects/${projectId}/cycles`)}>
+            <Timer className="h-3 w-3" /> Sprints
           </Button>
           {filterPriority !== 'all' && (
             <Badge variant="secondary" className="text-xs gap-1 cursor-pointer" onClick={() => setFilterPriority('all')}>

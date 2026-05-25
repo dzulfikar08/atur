@@ -8,7 +8,21 @@ import {
   ArrowLeft,
   ListChecks,
   Inbox,
+  BarChart3,
 } from "lucide-react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  Legend,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from "recharts";
 import { apiFetch, api } from "@/lib/api";
 import type { Issue, State } from "@/lib/api";
 import { toast } from "sonner";
@@ -112,6 +126,22 @@ function IssueRow({
   );
 }
 
+const STATE_GROUP_COLORS: Record<string, string> = {
+  backlog: "#6b7280",
+  unstarted: "#6366f1",
+  started: "#f59e0b",
+  completed: "#10b981",
+  cancelled: "#ef4444",
+};
+
+const STATE_GROUP_LABELS: Record<string, string> = {
+  backlog: "Backlog",
+  unstarted: "Todo",
+  started: "In Progress",
+  completed: "Done",
+  cancelled: "Cancelled",
+};
+
 function SectionSkeleton() {
   return (
     <div className="space-y-2">
@@ -207,6 +237,43 @@ export default function CycleDetail({
     cycle?.completed_issues ??
     inSprintIssues.filter((i) => i.state_id && completedStateIds.has(i.state_id)).length;
   const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  // State distribution for pie chart
+  const stateDistribution = useMemo(() => {
+    const groups: Record<string, number> = {};
+    for (const issue of inSprintIssues) {
+      const sid = issue.state_id;
+      const group = sid ? stateLookup.get(sid)?.group ?? "backlog" : "backlog";
+      groups[group] = (groups[group] ?? 0) + 1;
+    }
+    return Object.entries(groups)
+      .map(([group, count]) => ({
+        name: STATE_GROUP_LABELS[group] ?? group,
+        value: count,
+        color: STATE_GROUP_COLORS[group] ?? "#6b7280",
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [inSprintIssues, stateLookup]);
+
+  // Priority breakdown for bar chart
+  const priorityBreakdown = useMemo(() => {
+    const order = ["urgent", "high", "medium", "low", "none"];
+    const labels: Record<string, string> = {
+      urgent: "Urgent",
+      high: "High",
+      medium: "Medium",
+      low: "Low",
+      none: "No priority",
+    };
+    const counts: Record<string, number> = {};
+    for (const issue of inSprintIssues) {
+      const p = issue.priority ?? "none";
+      counts[p] = (counts[p] ?? 0) + 1;
+    }
+    return order
+      .filter((p) => counts[p])
+      .map((p) => ({ name: labels[p], count: counts[p] }));
+  }, [inSprintIssues]);
 
   const addMutation = useMutation({
     mutationFn: (issueId: string) =>
@@ -317,6 +384,94 @@ export default function CycleDetail({
 
       {/* Content */}
       <div className="flex-1 overflow-auto px-4 md:px-6 py-4 space-y-6">
+        {/* Analytics */}
+        {inSprintIssues.length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold">Analytics</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* State Distribution Pie */}
+              <div className="rounded-lg border p-4">
+                <h3 className="text-xs font-medium text-muted-foreground mb-2">State Distribution</h3>
+                {stateDistribution.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie
+                        data={stateDistribution}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={70}
+                        innerRadius={40}
+                        paddingAngle={2}
+                      >
+                        {stateDistribution.map((entry, i) => (
+                          <Cell key={i} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          fontSize: 12,
+                          borderRadius: 8,
+                          border: "1px solid hsl(var(--border))",
+                        }}
+                      />
+                      <Legend
+                        iconType="circle"
+                        iconSize={8}
+                        wrapperStyle={{ fontSize: 12 }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-xs text-muted-foreground text-center py-8">No data</p>
+                )}
+              </div>
+
+              {/* Priority Breakdown Bar */}
+              <div className="rounded-lg border p-4">
+                <h3 className="text-xs font-medium text-muted-foreground mb-2">Priority Breakdown</h3>
+                {priorityBreakdown.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={priorityBreakdown} margin={{ top: 4, right: 4, bottom: 4, left: -12 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{
+                          fontSize: 12,
+                          borderRadius: 8,
+                          border: "1px solid hsl(var(--border))",
+                        }}
+                      />
+                      <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-xs text-muted-foreground text-center py-8">No data</p>
+                )}
+              </div>
+            </div>
+
+            {/* Stats summary */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+              {stateDistribution.map((s) => (
+                <div key={s.name} className="rounded-lg border p-3 text-center">
+                  <div className="text-xl font-bold" style={{ color: s.color }}>
+                    {s.value}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{s.name}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <Separator />
+
         {/* In Sprint */}
         <section>
           <div className="flex items-center gap-2 mb-3">

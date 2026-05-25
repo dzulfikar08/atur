@@ -38,7 +38,7 @@ const features = [
   {
     icon: PenTool,
     title: 'Drawing Canvas',
-    description: 'Embed tldraw whiteboards directly inside any page for visual thinking.',
+    description: 'Embed whiteboards directly inside any page for visual thinking.',
   },
   {
     icon: Gauge,
@@ -376,7 +376,7 @@ export default function LandingPage() {
                   { icon: Blocks, text: 'Rich text with slash commands and callouts' },
                   { icon: Network, text: 'Wikilinks with backlink references' },
                   { icon: Sparkles, text: 'Interactive knowledge graph visualization' },
-                  { icon: PenTool, text: 'Embedded tldraw whiteboards' },
+                  { icon: PenTool, text: 'Embedded drawing whiteboards' },
                 ].map(({ icon: ItemIcon, text }) => (
                   <li key={text} className="flex items-start gap-3 text-sm">
                     <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted">
@@ -504,7 +504,7 @@ export default function LandingPage() {
                   'Unlimited projects & issues',
                   'All 35+ MCP tools',
                   'Pages & knowledge graph',
-                  'tldraw whiteboards',
+                  'Drawing whiteboards',
                   'Mobile apps (iOS & Android)',
                   'Email support',
                 ].map((item) => (
