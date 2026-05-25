@@ -2,11 +2,18 @@ import { useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, api, type Issue, type State } from "@/lib/api";
+import CustomFieldManager from "@/components/projects/CustomFieldManager";
+import FilterBar, { type FilterState } from "@/components/issues/FilterBar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -23,11 +30,12 @@ import {
 } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, List, Columns3, Filter, GitBranch, X } from "lucide-react";
+import { Plus, List, Columns3, GitBranch, X, Timer, Settings, Package, Bookmark, Save, Trash2, Table2, Calendar, GanttChart } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
+import { formatDistanceToNow, format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, isSameDay, addMonths, subMonths, parseISO, isWithinInterval, differenceInDays, addDays } from "date-fns";
 import {
   DndContext,
   PointerSensor,
@@ -131,7 +139,8 @@ function SortableIssueCard({ issue, onClick }: {
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{issue.name}</p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              {issue.parent_id && <GitBranch className="h-3 w-3" />}
               {String(issue.sequence_id).padStart(4, "0")}
             </p>
           </div>
@@ -173,13 +182,56 @@ export default function ProjectBoard() {
   const { slug, projectId } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [view, setView] = useState<"board" | "list">("board");
-  const [filterState, setFilterState] = useState<string>("all");
-  const [filterPriority, setFilterPriority] = useState<string>("all");
+  const [view, setView] = useState<"board" | "list" | "sheet" | "calendar" | "gantt">("board");
+  const [filters, setFilters] = useState<FilterState>({
+    stateId: 'all',
+    priority: 'all',
+    groupBy: 'none',
+    sortBy: 'created_at',
+    sortDir: 'desc',
+  });
   const [createOpen, setCreateOpen] = useState(false);
   const [parentSearch, setParentSearch] = useState("");
   const [selectedParent, setSelectedParent] = useState<{ id: string; name: string } | null>(null);
   const [activeIssueId, setActiveIssueId] = useState<string | null>(null);
+  const [viewName, setViewName] = useState("");
+  const [viewsOpen, setViewsOpen] = useState(false);
+  const [calMonth, setCalMonth] = useState(new Date());
+
+  // Saved views
+  const { data: savedViews = [] } = useQuery({
+    queryKey: ["views", slug, projectId],
+    queryFn: () => api.listViews(slug!, projectId!),
+    enabled: !!slug && !!projectId,
+  });
+
+  const saveViewMutation = useMutation({
+    mutationFn: (name: string) =>
+      api.createView(slug!, projectId!, {
+        name,
+        query: { filters, layout: view },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["views", slug, projectId] });
+      setViewName("");
+      toast.success("View saved");
+    },
+    onError: () => toast.error("Failed to save view"),
+  });
+
+  const deleteViewMutation = useMutation({
+    mutationFn: (id: string) => api.deleteView(slug!, projectId!, id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["views", slug, projectId] });
+      toast.success("View deleted");
+    },
+  });
+
+  const loadView = (v: any) => {
+    if (v.query?.filters) setFilters(v.query.filters as FilterState);
+    if (v.query?.layout) setView(v.query.layout);
+    setViewsOpen(false);
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -230,12 +282,23 @@ export default function ProjectBoard() {
   });
 
   const filteredIssues = useMemo(() => {
-    return issues.filter((i) => {
-      if (filterState !== "all" && i.state_id !== filterState) return false;
-      if (filterPriority !== "all" && i.priority !== filterPriority) return false;
+    const priorityOrder: Record<string, number> = { urgent: 4, high: 3, medium: 2, low: 1, none: 0 };
+    let result = issues.filter((i) => {
+      if (filters.stateId !== 'all' && i.state_id !== filters.stateId) return false;
+      if (filters.priority !== 'all' && i.priority !== filters.priority) return false;
       return true;
     });
-  }, [issues, filterState, filterPriority]);
+    // Sort
+    result.sort((a, b) => {
+      let cmp = 0;
+      if (filters.sortBy === 'updated_at') cmp = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+      else if (filters.sortBy === 'created_at') cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      else if (filters.sortBy === 'sequence_id') cmp = a.sequence_id - b.sequence_id;
+      else if (filters.sortBy === 'priority') cmp = (priorityOrder[a.priority || 'none'] || 0) - (priorityOrder[b.priority || 'none'] || 0);
+      return filters.sortDir === 'desc' ? -cmp : cmp;
+    });
+    return result;
+  }, [issues, filters.stateId, filters.priority, filters.sortBy, filters.sortDir]);
 
   const groupedByState = useMemo(() => {
     const groups: Record<string, { state: State; issues: Issue[] }> = {};
@@ -330,32 +393,85 @@ export default function ProjectBoard() {
               <TabsTrigger value="list" className="text-xs px-2">
                 <List className="h-3 w-3 mr-1" /> List
               </TabsTrigger>
+              <TabsTrigger value="sheet" className="text-xs px-2">
+                <Table2 className="h-3 w-3 mr-1" /> Sheet
+              </TabsTrigger>
+              <TabsTrigger value="calendar" className="text-xs px-2">
+                <Calendar className="h-3 w-3 mr-1" /> Calendar
+              </TabsTrigger>
+              <TabsTrigger value="gantt" className="text-xs px-2">
+                <GanttChart className="h-3 w-3 mr-1" /> Gantt
+              </TabsTrigger>
             </TabsList>
           </Tabs>
-          <Select value={filterState} onValueChange={setFilterState}>
-            <SelectTrigger className="h-8 w-[130px] sm:w-[140px] text-xs">
-              <Filter className="h-3 w-3 mr-1" />
-              <SelectValue placeholder="State" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All States</SelectItem>
-              {states.map((s) => (
-                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterPriority} onValueChange={setFilterPriority}>
-            <SelectTrigger className="h-8 w-[110px] sm:w-[120px] text-xs">
-              <SelectValue placeholder="Priority" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Priority</SelectItem>
-              {["urgent", "high", "medium", "low", "none"].map((p) => (
-                <SelectItem key={p} value={p}>{p}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => navigate(`/${slug}/projects/${projectId}/cycles`)}>
+            <Timer className="h-3.5 w-3.5" /> Sprints
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => navigate(`/${slug}/projects/${projectId}/modules`)}>
+            <Package className="h-3.5 w-3.5" /> Modules
+          </Button>
+          <FilterBar filters={filters} onChange={setFilters} states={states} />
+          <Popover open={viewsOpen} onOpenChange={setViewsOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+                <Bookmark className="h-3 w-3" />
+                Views {savedViews.length > 0 && `(${savedViews.length})`}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-2" align="start">
+              {/* Save current view */}
+              <div className="flex gap-1 mb-2">
+                <Input
+                  placeholder="View name..."
+                  value={viewName}
+                  onChange={(e) => setViewName(e.target.value)}
+                  className="h-7 text-xs"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && viewName.trim()) saveViewMutation.mutate(viewName.trim());
+                  }}
+                />
+                <Button
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  disabled={!viewName.trim()}
+                  onClick={() => saveViewMutation.mutate(viewName.trim())}
+                >
+                  <Save className="h-3 w-3" />
+                </Button>
+              </div>
+              {/* Saved views list */}
+              {savedViews.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-2 text-center">No saved views</p>
+              ) : (
+                <div className="space-y-0.5">
+                  {savedViews.map((v: any) => (
+                    <div key={v.id} className="flex items-center gap-1 group">
+                      <button
+                        className="flex-1 text-left px-2 py-1.5 text-sm rounded hover:bg-accent truncate"
+                        onClick={() => loadView(v)}
+                      >
+                        <Bookmark className="h-3 w-3 inline mr-1 text-muted-foreground" />
+                        {v.name}
+                      </button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                        onClick={() => deleteViewMutation.mutate(v.id)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
         </div>
+        <div className="flex items-center gap-2">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/${slug}/projects/${projectId}/settings`)}>
+              <Settings className="h-4 w-4" />
+            </Button>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
             <Button size="sm">
@@ -479,9 +595,10 @@ export default function ProjectBoard() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
-      {view === "board" ? (
+      {view === "board" && (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCorners}
@@ -506,48 +623,414 @@ export default function ProjectBoard() {
             {activeIssue ? <DragOverlayCard issue={activeIssue} /> : null}
           </DragOverlay>
         </DndContext>
-      ) : (
+      )}
+
+      {view === "list" && (
         <div className="p-4">
           <div className="border rounded-lg overflow-x-auto">
-            <table className="w-full text-sm min-w-[500px]">
+            <table className="w-full text-sm min-w-[600px]">
               <thead className="bg-muted/50">
                 <tr>
-                  <th className="text-left p-2 font-medium text-muted-foreground">ID</th>
+                  <th className="text-left p-2 font-medium text-muted-foreground w-16">ID</th>
                   <th className="text-left p-2 font-medium text-muted-foreground">Title</th>
-                  <th className="text-left p-2 font-medium text-muted-foreground">State</th>
-                  <th className="text-left p-2 font-medium text-muted-foreground">Priority</th>
-                  <th className="text-left p-2 font-medium text-muted-foreground hidden sm:table-cell">Created</th>
+                  <th className="text-left p-2 font-medium text-muted-foreground w-28">State</th>
+                  <th className="text-left p-2 font-medium text-muted-foreground w-24">Priority</th>
+                  <th className="text-left p-2 font-medium text-muted-foreground w-16">Pts</th>
+                  <th className="text-left p-2 font-medium text-muted-foreground hidden md:table-cell w-24">Updated</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredIssues.map((issue) => (
-                  <tr
-                    key={issue.id}
-                    className="border-t hover:bg-muted/30 cursor-pointer"
-                    onClick={() => navigate(`/${slug}/projects/${projectId}/issues/${issue.sequence_id}`)}
-                  >
-                    <td className="p-2 text-muted-foreground">{String(issue.sequence_id).padStart(4, "0")}</td>
-                    <td className="p-2 font-medium">{issue.name}</td>
-                    <td className="p-2">
-                      <Badge variant="secondary" className="text-xs">
-                        {states.find(s => s.id === issue.state_id)?.name ?? "—"}
-                      </Badge>
-                    </td>
-                    <td className="p-2">
-                      <Badge variant="outline" className="text-xs">
-                        {issue.priority || "none"}
-                      </Badge>
-                    </td>
-                    <td className="p-2 text-muted-foreground text-xs hidden sm:table-cell">
-                      {new Date(issue.created_at).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
+                {filteredIssues.map((issue) => {
+                  const st = states.find(s => s.id === issue.state_id);
+                  const priorityColors: Record<string, string> = {
+                    urgent: "text-red-600 bg-red-50 dark:bg-red-950",
+                    high: "text-orange-600 bg-orange-50 dark:bg-orange-950",
+                    medium: "text-yellow-600 bg-yellow-50 dark:bg-yellow-950",
+                    low: "text-blue-600 bg-blue-50 dark:bg-blue-950",
+                    none: "text-muted-foreground bg-muted",
+                  };
+                  return (
+                    <tr
+                      key={issue.id}
+                      className="border-t hover:bg-muted/30 cursor-pointer transition-colors"
+                      onClick={() => navigate(`/${slug}/projects/${projectId}/issues/${issue.sequence_id}`)}
+                    >
+                      <td className="p-2 text-muted-foreground text-xs font-mono">
+                        {String(issue.sequence_id).padStart(4, "0")}
+                      </td>
+                      <td className="p-2 font-medium max-w-xs truncate">{issue.name}</td>
+                      <td className="p-2">
+                        <span
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full"
+                          style={{
+                            backgroundColor: (st?.color || "#6b7280") + "20",
+                            color: st?.color || "#6b7280",
+                          }}
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: st?.color || "#6b7280" }} />
+                          {st?.name ?? "—"}
+                        </span>
+                      </td>
+                      <td className="p-2">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${priorityColors[issue.priority || "none"] || priorityColors.none}`}>
+                          {issue.priority || "none"}
+                        </span>
+                      </td>
+                      <td className="p-2 text-muted-foreground text-xs">
+                        {issue.estimate_points != null ? issue.estimate_points : "—"}
+                      </td>
+                      <td className="p-2 text-muted-foreground text-xs hidden md:table-cell">
+                        {formatDistanceToNow(new Date(issue.updated_at), { addSuffix: true })}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {/* Inline quick-add row */}
+                <tr className="border-t">
+                  <td colSpan={6} className="p-1">
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const fd = new FormData(e.currentTarget);
+                        const name = fd.get("quick-add") as string;
+                        if (name.trim()) {
+                          createMutation.mutate({ name: name.trim(), description_html: "", priority: "none" });
+                          e.currentTarget.reset();
+                        }
+                      }}
+                      className="flex items-center"
+                    >
+                      <Plus className="h-4 w-4 text-muted-foreground mx-2 shrink-0" />
+                      <input
+                        name="quick-add"
+                        placeholder="Add issue..."
+                        className="flex-1 bg-transparent text-sm py-1.5 px-1 outline-none placeholder:text-muted-foreground"
+                      />
+                    </form>
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
         </div>
       )}
+
+      {view === "sheet" && (
+        <div className="p-4 overflow-auto flex-1">
+          <table className="w-full text-sm border-collapse min-w-[800px]">
+            <thead>
+              <tr className="bg-muted/50 border-b">
+                <th className="text-left p-2 font-medium text-muted-foreground w-16 sticky top-0 bg-muted/50">ID</th>
+                <th className="text-left p-2 font-medium text-muted-foreground sticky top-0 bg-muted/50 min-w-[200px]">Title</th>
+                <th className="text-left p-2 font-medium text-muted-foreground w-32 sticky top-0 bg-muted/50">State</th>
+                <th className="text-left p-2 font-medium text-muted-foreground w-28 sticky top-0 bg-muted/50">Priority</th>
+                <th className="text-left p-2 font-medium text-muted-foreground w-32 sticky top-0 bg-muted/50">Start</th>
+                <th className="text-left p-2 font-medium text-muted-foreground w-32 sticky top-0 bg-muted/50">Target</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredIssues.map((issue) => {
+                const st = states.find(s => s.id === issue.state_id);
+                const priorityColors: Record<string, string> = {
+                  urgent: "text-red-600 bg-red-50 dark:bg-red-950",
+                  high: "text-orange-600 bg-orange-50 dark:bg-orange-950",
+                  medium: "text-yellow-600 bg-yellow-50 dark:bg-yellow-950",
+                  low: "text-blue-600 bg-blue-50 dark:bg-blue-950",
+                  none: "text-muted-foreground bg-muted",
+                };
+                return (
+                  <tr
+                    key={issue.id}
+                    className="border-b hover:bg-muted/20 cursor-pointer group"
+                    onClick={() => navigate(`/${slug}/projects/${projectId}/issues/${issue.sequence_id}`)}
+                  >
+                    <td className="p-2 text-xs font-mono text-muted-foreground">{String(issue.sequence_id).padStart(4, "0")}</td>
+                    <td className="p-2 font-medium">{issue.name}</td>
+                    <td className="p-1" onClick={(e) => e.stopPropagation()}>
+                      <select
+                        className="text-xs bg-transparent rounded px-1 py-0.5 w-full cursor-pointer"
+                        style={{ color: st?.color || '#6b7280' }}
+                        value={issue.state_id || ''}
+                        onChange={(e) => {
+                          apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issue.sequence_id}/`, {
+                            method: 'PATCH', body: JSON.stringify({ state: e.target.value }),
+                          }).then(() => qc.invalidateQueries({ queryKey: ['issues', slug, projectId] }));
+                        }}
+                      >
+                        {states.map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="p-1" onClick={(e) => e.stopPropagation()}>
+                      <select
+                        className={`text-xs rounded px-1 py-0.5 w-full cursor-pointer ${priorityColors[issue.priority || 'none']}`}
+                        value={issue.priority || 'none'}
+                        onChange={(e) => {
+                          apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issue.sequence_id}/`, {
+                            method: 'PATCH', body: JSON.stringify({ priority: e.target.value }),
+                          }).then(() => qc.invalidateQueries({ queryKey: ['issues', slug, projectId] }));
+                        }}
+                      >
+                        {['urgent', 'high', 'medium', 'low', 'none'].map(p => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="p-1" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="date"
+                        className="text-xs bg-transparent rounded px-1 py-0.5 w-full"
+                        value={issue.start_date || ''}
+                        onChange={(e) => {
+                          apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issue.sequence_id}/`, {
+                            method: 'PATCH', body: JSON.stringify({ start_date: e.target.value || null }),
+                          }).then(() => qc.invalidateQueries({ queryKey: ['issues', slug, projectId] }));
+                        }}
+                      />
+                    </td>
+                    <td className="p-1" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="date"
+                        className="text-xs bg-transparent rounded px-1 py-0.5 w-full"
+                        value={issue.target_date || ''}
+                        onChange={(e) => {
+                          apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issue.sequence_id}/`, {
+                            method: 'PATCH', body: JSON.stringify({ target_date: e.target.value || null }),
+                          }).then(() => qc.invalidateQueries({ queryKey: ['issues', slug, projectId] }));
+                        }}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {view === "calendar" && (
+        <div className="flex-1 overflow-auto p-4">
+          {/* Month navigation */}
+          <div className="flex items-center justify-between mb-4">
+            <Button variant="ghost" size="sm" onClick={() => setCalMonth(subMonths(calMonth, 1))}>
+              ← Prev
+            </Button>
+            <h3 className="text-sm font-semibold">{format(calMonth, "MMMM yyyy")}</h3>
+            <Button variant="ghost" size="sm" onClick={() => setCalMonth(addMonths(calMonth, 1))}>
+              Next →
+            </Button>
+          </div>
+          {/* Calendar grid */}
+          {(() => {
+            const monthStart = startOfMonth(calMonth);
+            const monthEnd = endOfMonth(calMonth);
+            const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+            const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+            const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
+            const today = new Date();
+            const issuesWithDates = filteredIssues.filter(
+              (i) => i.start_date || i.target_date
+            );
+
+            return (
+              <div className="border rounded-lg overflow-hidden">
+                {/* Day headers */}
+                <div className="grid grid-cols-7 bg-muted/50">
+                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+                    <div key={d} className="p-2 text-center text-xs font-medium text-muted-foreground border-r last:border-r-0">
+                      {d}
+                    </div>
+                  ))}
+                </div>
+                {/* Weeks */}
+                {Array.from({ length: Math.ceil(days.length / 7) }, (_, weekIdx) => (
+                  <div key={weekIdx} className="grid grid-cols-7 border-t">
+                    {days.slice(weekIdx * 7, weekIdx * 7 + 7).map((day) => {
+                      const dayIssues = issuesWithDates.filter((i) => {
+                        const start = i.start_date ? parseISO(i.start_date) : null;
+                        const end = i.target_date ? parseISO(i.target_date) : null;
+                        if (start && end) return isWithinInterval(day, { start, end });
+                        if (start) return isSameDay(day, start);
+                        if (end) return isSameDay(day, end);
+                        return false;
+                      });
+                      const inMonth = isSameMonth(day, calMonth);
+
+                      return (
+                        <div
+                          key={day.toISOString()}
+                          className={`min-h-[100px] border-r last:border-r-0 p-1 ${
+                            !inMonth ? "bg-muted/20" : ""
+                          } ${isSameDay(day, today) ? "bg-primary/5" : ""}`}
+                        >
+                          <div
+                            className={`text-xs mb-1 px-1 ${
+                              isSameDay(day, today)
+                                ? "font-bold text-primary"
+                                : inMonth
+                                  ? "text-foreground"
+                                  : "text-muted-foreground/50"
+                            }`}
+                          >
+                            {format(day, "d")}
+                          </div>
+                          <div className="space-y-0.5">
+                            {dayIssues.slice(0, 3).map((issue) => {
+                              const st = states.find((s) => s.id === issue.state_id);
+                              return (
+                                <button
+                                  key={issue.id}
+                                  className="w-full text-left text-[10px] leading-tight px-1 py-0.5 rounded truncate hover:bg-muted/50 transition-colors"
+                                  style={{
+                                    borderLeft: `2px solid ${st?.color || "#6b7280"}`,
+                                    backgroundColor: (st?.color || "#6b7280") + "10",
+                                  }}
+                                  onClick={() =>
+                                    navigate(
+                                      `/${slug}/projects/${projectId}/issues/${issue.sequence_id}`
+                                    )
+                                  }
+                                  title={issue.name}
+                                >
+                                  {issue.name}
+                                </button>
+                              );
+                            })}
+                            {dayIssues.length > 3 && (
+                              <div className="text-[10px] text-muted-foreground px-1">
+                                +{dayIssues.length - 3} more
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {view === "gantt" && (() => {
+        const issuesWithDates = filteredIssues.filter(
+          (i) => i.start_date || i.target_date
+        );
+        if (issuesWithDates.length === 0) {
+          return (
+            <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+              No issues with date ranges to display.
+            </div>
+          );
+        }
+        // Calculate date range
+        const allDates = issuesWithDates.flatMap((i) => [
+          i.start_date ? parseISO(i.start_date) : new Date(),
+          i.target_date ? parseISO(i.target_date) : new Date(),
+        ]);
+        const rangeStart = subMonths(new Date(Math.min(...allDates.map(Number))), 0);
+        const rangeEnd = addMonths(new Date(Math.max(...allDates.map(Number))), 0);
+        const totalDays = Math.max(differenceInDays(rangeEnd, rangeStart), 1);
+        const today = new Date();
+        const todayOffset = differenceInDays(today, rangeStart);
+        const PADDING = 2;
+
+        return (
+          <div className="flex-1 overflow-auto p-4">
+            <div className="border rounded-lg overflow-hidden">
+              {/* Header with date markers */}
+              <div className="flex border-b bg-muted/50">
+                <div className="w-48 sm:w-64 shrink-0 p-2 text-xs font-medium text-muted-foreground border-r">
+                  Issue
+                </div>
+                <div className="flex-1 relative h-6 min-w-[400px]">
+                  {(() => {
+                    const markers: React.ReactNode[] = [];
+                    const step = totalDays <= 31 ? 1 : totalDays <= 90 ? 7 : 14;
+                    for (let d = 0; d <= totalDays; d += step) {
+                      const date = addDays(rangeStart, d);
+                      const pct = (d / totalDays) * 100;
+                      markers.push(
+                        <span
+                          key={d}
+                          className="absolute text-[10px] text-muted-foreground"
+                          style={{ left: `${pct}%`, top: 4 }}
+                        >
+                          {format(date, "MMM d")}
+                        </span>
+                      );
+                    }
+                    return markers;
+                  })()}
+                </div>
+              </div>
+              {/* Rows */}
+              {issuesWithDates.map((issue) => {
+                const st = states.find((s) => s.id === issue.state_id);
+                const start = issue.start_date ? parseISO(issue.start_date) : rangeStart;
+                const end = issue.target_date ? parseISO(issue.target_date) : start;
+                const offset = Math.max(differenceInDays(start, rangeStart) - PADDING, 0);
+                const duration = Math.max(differenceInDays(end, start) + 1, 1);
+                const leftPct = (offset / totalDays) * 100;
+                const widthPct = Math.max((duration / totalDays) * 100, 1);
+
+                return (
+                  <div
+                    key={issue.id}
+                    className="flex items-center border-b last:border-b-0 hover:bg-muted/20 transition-colors"
+                  >
+                    <div className="w-48 sm:w-64 shrink-0 p-2 border-r truncate">
+                      <button
+                        className="text-xs font-medium truncate text-left hover:underline"
+                        onClick={() =>
+                          navigate(
+                            `/${slug}/projects/${projectId}/issues/${issue.sequence_id}`
+                          )
+                        }
+                      >
+                        {String(issue.sequence_id).padStart(4, "0")} {issue.name}
+                      </button>
+                    </div>
+                    <div className="flex-1 relative h-10 min-w-[400px]">
+                      {/* Today line */}
+                      {todayOffset >= 0 && todayOffset <= totalDays && (
+                        <div
+                          className="absolute top-0 bottom-0 w-px bg-red-400 z-10"
+                          style={{ left: `${(todayOffset / totalDays) * 100}%` }}
+                        />
+                      )}
+                      {/* Bar */}
+                      <div
+                        className="absolute top-2 h-6 rounded-md flex items-center px-2 cursor-pointer hover:opacity-80 transition-opacity"
+                        style={{
+                          left: `${leftPct}%`,
+                          width: `${widthPct}%`,
+                          backgroundColor: (st?.color || "#6366f1") + "80",
+                          borderLeft: `3px solid ${st?.color || "#6366f1"}`,
+                        }}
+                        onClick={() =>
+                          navigate(
+                            `/${slug}/projects/${projectId}/issues/${issue.sequence_id}`
+                          )
+                        }
+                        title={issue.name}
+                      >
+                        {widthPct > 5 && (
+                          <span className="text-[10px] font-medium text-white truncate">
+                            {issue.name}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
