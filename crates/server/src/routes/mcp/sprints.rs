@@ -66,6 +66,13 @@ pub struct GetSprintProgressParams {
     pub sprint_id: String,
 }
 
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct DeleteSprintParams {
+    pub workspace: Option<String>,
+    pub project_id: String,
+    pub sprint_id: String,
+}
+
 // --- Sprint implementations ---
 
 pub async fn list_sprints_impl(
@@ -229,6 +236,47 @@ pub async fn update_sprint_impl(
 
     match active.update(db).await {
         Ok(updated) => ok_json(cycle_to_json(&updated)),
+        Err(e) => err_str(format!("DB update error: {}", e)),
+    }
+}
+
+pub async fn delete_sprint_impl(
+    db: &sea_orm::DatabaseConnection,
+    params: DeleteSprintParams,
+) -> String {
+    let ws = match resolve_workspace(db, params.workspace.as_ref()).await {
+        Ok(ws) => ws,
+        Err(e) => return err_str(e),
+    };
+    let project_id = match parse_uuid(&params.project_id, "project_id") {
+        Ok(id) => id,
+        Err(e) => return err_str(e),
+    };
+    let sprint_id = match parse_uuid(&params.sprint_id, "sprint_id") {
+        Ok(id) => id,
+        Err(e) => return err_str(e),
+    };
+
+    let cycle = match cycles::Entity::find()
+        .filter(cycles::Column::Id.eq(sprint_id))
+        .filter(cycles::Column::ProjectId.eq(project_id))
+        .filter(cycles::Column::WorkspaceId.eq(ws.id))
+        .filter(cycles::Column::DeletedAt.is_null())
+        .one(db)
+        .await
+    {
+        Ok(Some(c)) => c,
+        Ok(None) => return err_str("Sprint not found"),
+        Err(e) => return err_str(e),
+    };
+
+    let now = Utc::now().fixed_offset();
+    let mut active: cycles::ActiveModel = cycle.into();
+    active.deleted_at = Set(Some(now));
+    active.updated_at = Set(Some(now));
+
+    match active.update(db).await {
+        Ok(_) => ok_json(serde_json::json!({ "message": "Sprint deleted" })),
         Err(e) => err_str(format!("DB update error: {}", e)),
     }
 }

@@ -17,6 +17,7 @@ pub mod assets;
 pub mod integrations;
 pub mod search;
 pub mod mcp;
+pub mod custom_fields;
 
 use axum::Router;
 use axum::extract::Request;
@@ -97,7 +98,11 @@ pub fn router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
     // MCP service (no auth required)
-    let mcp_service = mcp::create_mcp_service(state.db.clone());
+    let mcp_service = mcp::create_mcp_service(
+        state.db.clone(),
+        state.config.storage.path.clone(),
+        state.config.server.base_url.clone(),
+    );
 
     let app = Router::new()
         .merge(health::router())

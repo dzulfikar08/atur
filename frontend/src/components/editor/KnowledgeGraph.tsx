@@ -333,13 +333,14 @@ export default function KnowledgeGraph({ slug }: KnowledgeGraphProps) {
 
     const nodesList: Node[] = pages.map((p) => {
       const pos = positions.get(p.id) || { x: 0, y: 0 };
-      const isDrawing = p.is_drawing ?? false;
+      const isDrawing = p.description_html?.trimStart().startsWith('<!-- drawing -->') ?? false;
       const descJson = p.description_json as Record<string, unknown> | null;
-      const hasTldraw =
+      const isDrawingPage =
         isDrawing ||
         (descJson != null &&
           typeof descJson === 'object' &&
-          ('tldraw' in descJson || 'shapes' in descJson));
+          'type' in descJson &&
+          descJson.type === 'excalidraw');
 
       return {
         id: p.id,
@@ -348,7 +349,7 @@ export default function KnowledgeGraph({ slug }: KnowledgeGraphProps) {
         data: {
           label: p.name || 'Untitled',
           pageId: p.id,
-          isDrawing: hasTldraw,
+          isDrawing: isDrawingPage,
           linkCount: pageLinkCount.get(p.id) || 0,
         },
       };

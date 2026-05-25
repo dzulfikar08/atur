@@ -9,6 +9,7 @@ mod m20250521_000006_api_keys;
 mod m20250521_000007_webhooks;
 mod m20250521_000008_time_entries;
 mod m20250521_000009_github_integrations;
+mod m20250522_000010_custom_fields;
 
 mod migrator {
     use sea_orm_migration::prelude::*;
@@ -22,6 +23,7 @@ mod migrator {
     use super::m20250521_000007_webhooks;
     use super::m20250521_000008_time_entries;
     use super::m20250521_000009_github_integrations;
+    use super::m20250522_000010_custom_fields;
 
     pub struct Migrator;
 
@@ -38,6 +40,7 @@ mod migrator {
                 Box::new(m20250521_000007_webhooks::Migration),
                 Box::new(m20250521_000008_time_entries::Migration),
                 Box::new(m20250521_000009_github_integrations::Migration),
+                Box::new(m20250522_000010_custom_fields::Migration),
             ]
         }
     }

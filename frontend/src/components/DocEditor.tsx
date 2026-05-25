@@ -48,7 +48,6 @@ import {
 } from 'lucide-react'
 import { useCollab } from '../hooks/useCollab'
 import { SlashCommandExtension } from './editor/SlashCommandExtension'
-import { TldrawBlock } from './editor/TldrawBlock'
 import {
   SlashCommandMenu,
   getSlashCommandItems,
@@ -123,7 +122,6 @@ function DocEditorInner({ ydoc, connected }: { ydoc: Y.Doc; connected: boolean }
         allowBase64: true,
       }),
       Markdown,
-      TldrawBlock,
       SlashCommandExtension.configure({
         suggestion: {
           items: ({ query }) => getSlashCommandItems(query),

@@ -14,7 +14,6 @@ import {
   ImageIcon,
   Minus,
   Info,
-  PenTool,
 } from 'lucide-react'
 
 export function getSlashCommandItems(query: string): SlashCommandItem[] {
@@ -130,22 +129,6 @@ export function getSlashCommandItems(query: string): SlashCommandItem[] {
           .run()
       },
     },
-    {
-      title: 'Drawing Canvas',
-      description: 'Embed a tldraw drawing canvas',
-      icon: 'drawing',
-      command: ({ editor, range }) => {
-        editor
-          .chain()
-          .focus()
-          .deleteRange(range)
-          .insertContent({
-            type: 'tldraw-block',
-            attrs: { data: '{}' },
-          })
-          .run()
-      },
-    },
   ]
 
   if (!query) return items
@@ -170,7 +153,6 @@ const iconMap: Record<string, React.ElementType> = {
   'image': ImageIcon,
   'minus': Minus,
   'info': Info,
-  'drawing': PenTool,
 }
 
 export interface SlashCommandMenuRef {

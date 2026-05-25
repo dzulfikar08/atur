@@ -1,0 +1,37 @@
+[package]
+name = "atur-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "atur-tui"
+path = "src/main.rs"
+
+[dependencies]
+# MCP client
+rmcp = { version = "1.7", features = ["client", "transport-streamable-http-client-reqwest"] }
+
+# HTTP types (for custom headers in MCP transport)
+http = "1"
+
+# TUI
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+
+# Async runtime
+tokio = { workspace = true }
+
+# CLI
+clap = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Async utilities
+futures = "0.3"

@@ -774,11 +774,13 @@ function PageEditor({ slug, pageId }: { slug: string; pageId: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Lazy-loaded editors (avoid bundling tldraw/tiptap for every page load)
+// Lazy-loaded editors
 // ---------------------------------------------------------------------------
 
 import DocEditor from '@/components/DocEditor';
-import DrawingBoard from '@/components/DrawingBoard';
+import { lazy, Suspense } from 'react';
+
+const DrawingBoard = lazy(() => import('@/components/DrawingBoard'));
 
 function DocEditorLazy({ pageId }: { pageId: string }) {
   return (
@@ -789,7 +791,11 @@ function DocEditorLazy({ pageId }: { pageId: string }) {
 }
 
 function DrawingBoardLazy({ pageId }: { pageId: string }) {
-  return <DrawingBoard pageId={pageId} />;
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full text-sm text-muted-foreground">Loading drawing...</div>}>
+      <DrawingBoard pageId={pageId} />
+    </Suspense>
+  );
 }
 
 // ---------------------------------------------------------------------------

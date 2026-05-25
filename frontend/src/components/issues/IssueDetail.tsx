@@ -2,9 +2,11 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import CustomFieldValues from "@/components/issues/CustomFieldValues";
+import CommentEditor from "@/components/editor/CommentEditor";
+import CommentContent from "@/components/editor/CommentContent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Calendar, MessageSquare, Clock, Link2, GitBranch, Trash2, X } from "lucide-react";
+import { ArrowLeft, Calendar, MessageSquare, Clock, Link2, GitBranch, Trash2, X, Activity, Paperclip, Upload, FileIcon, Download, Timer } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
@@ -73,6 +75,34 @@ interface SubIssue {
   project_detail?: { name: string; identifier: string };
 }
 
+interface IssueActivity {
+  id: string;
+  verb: string | null;
+  field: string | null;
+  old_value: string | null;
+  new_value: string | null;
+  actor_id: string | null;
+  created_at: string | null;
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  state: "State",
+  priority: "Priority",
+  name: "Title",
+  start_date: "Start Date",
+  target_date: "Target Date",
+  description_html: "Description",
+  parent: "Parent",
+};
+
+const PRIORITY_LABELS: Record<string, string> = {
+  none: "None",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  urgent: "Urgent",
+};
+
 const RELATION_TYPE_LABELS: Record<string, { label: string; color: string }> = {
   blocks: { label: "Blocks", color: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300" },
   is_blocked_by: { label: "Blocked by", color: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" },
@@ -85,6 +115,7 @@ export default function IssueDetail() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [commentText, setCommentText] = useState("");
+  const [activeTab, setActiveTab] = useState<"comments" | "activity" | "attachments" | "time">("comments");
 
   const { data: issue, isLoading } = useQuery({
     queryKey: ["issue", slug, projectId, issueId],
@@ -105,6 +136,15 @@ export default function IssueDetail() {
       .catch(() => []),
     enabled: !!slug && !!projectId,
   });
+
+  const { data: activitiesData, isLoading: activitiesLoading } = useQuery({
+    queryKey: ["activities", slug, projectId, issueId],
+    queryFn: () => apiFetch<{ results: IssueActivity[]; total: number }>(
+      `/workspaces/${slug}/projects/${projectId}/issues/${issueId}/activities/`
+    ).catch(() => ({ results: [], total: 0 })),
+    enabled: !!slug && !!projectId && !!issueId,
+  });
+  const activities = activitiesData?.results ?? [];
 
   const updateMutation = useMutation({
     mutationFn: (data: Record<string, any>) =>
@@ -204,6 +244,114 @@ export default function IssueDetail() {
     queryFn: () => apiFetch<SubIssue[]>(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/sub-issues/`)
       .catch(() => []),
     enabled: !!slug && !!projectId && !!issueId,
+  });
+
+  const [newSubIssue, setNewSubIssue] = useState("");
+  const createSubIssueMutation = useMutation({
+    mutationFn: (name: string) =>
+      apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/`, {
+        method: "POST",
+        body: JSON.stringify({ name, parent_id: issue?.id, priority: "none" }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sub-issues", slug, projectId, issueId] });
+      qc.invalidateQueries({ queryKey: ["issues", slug, projectId] });
+      setNewSubIssue("");
+      toast.success("Sub-issue created");
+    },
+    onError: () => toast.error("Failed to create sub-issue"),
+  });
+
+  // --- Attachments ---
+  const { data: attachments = [], isLoading: attachmentsLoading } = useQuery({
+    queryKey: ["attachments", slug, projectId, issueId],
+    queryFn: () =>
+      apiFetch<{ id: string; issue_id: string; asset: string | null; attributes: { name?: string; size?: number; type?: string } | null; created_at: string | null }[]>(
+        `/workspaces/${slug}/projects/${projectId}/issues/${issueId}/attachments/`
+      ),
+    enabled: !!slug && !!projectId && !!issueId,
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      const uploadRes = await fetch("/api/assets/upload/", {
+        method: "POST",
+        credentials: "include",
+        body: form,
+      });
+      if (!uploadRes.ok) throw new Error("Upload failed");
+      const uploaded = await uploadRes.json();
+      return apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/attachments/`, {
+        method: "POST",
+        body: JSON.stringify({
+          asset: uploaded.id || uploaded.asset || uploaded.url || String(uploaded),
+          attributes: { name: file.name, size: file.size, type: file.type },
+        }),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["attachments", slug, projectId, issueId] });
+      toast.success("File attached");
+    },
+    onError: () => toast.error("Failed to upload file"),
+  });
+
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: (attId: string) =>
+      apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/attachments/${attId}/`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["attachments", slug, projectId, issueId] });
+      toast.success("Attachment removed");
+    },
+    onError: () => toast.error("Failed to remove attachment"),
+  });
+
+  // --- Time entries ---
+  const [timeHours, setTimeHours] = useState("");
+  const [timeMinutes, setTimeMinutes] = useState("");
+  const [timeDesc, setTimeDesc] = useState("");
+
+  const { data: timeEntries = [], isLoading: timeEntriesLoading } = useQuery({
+    queryKey: ["time-entries", slug, projectId, issueId],
+    queryFn: () =>
+      apiFetch<{ id: string; duration_seconds: number; description: string | null; created_at: string | null }[]>(
+        `/workspaces/${slug}/projects/${projectId}/issues/${issueId}/time-entries/`
+      ),
+    enabled: !!slug && !!projectId && !!issueId,
+  });
+
+  const totalTimeSeconds = timeEntries.reduce((sum, e) => sum + e.duration_seconds, 0);
+
+  const logTimeMutation = useMutation({
+    mutationFn: ({ duration_seconds, description }: { duration_seconds: number; description?: string }) =>
+      apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/time-entries/`, {
+        method: "POST",
+        body: JSON.stringify({ duration_seconds, description }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["time-entries", slug, projectId, issueId] });
+      setTimeHours("");
+      setTimeMinutes("");
+      setTimeDesc("");
+      toast.success("Time logged");
+    },
+    onError: () => toast.error("Failed to log time"),
+  });
+
+  const deleteTimeMutation = useMutation({
+    mutationFn: (entryId: string) =>
+      apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/time-entries/${entryId}/`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["time-entries", slug, projectId, issueId] });
+      toast.success("Time entry removed");
+    },
+    onError: () => toast.error("Failed to remove time entry"),
   });
 
   // Fetch parent issue if parent_id exists
@@ -452,60 +600,381 @@ export default function IssueDetail() {
                 ))}
               </div>
             )}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (newSubIssue.trim()) createSubIssueMutation.mutate(newSubIssue.trim());
+              }}
+              className="flex items-center gap-2 mt-2"
+            >
+              <GitBranch className="h-3 w-3 text-muted-foreground shrink-0" />
+              <input
+                placeholder="Add sub-issue..."
+                value={newSubIssue}
+                onChange={(e) => setNewSubIssue(e.target.value)}
+                className="flex-1 bg-transparent text-sm py-1 px-1 border-b border-input outline-none placeholder:text-muted-foreground focus:border-primary"
+              />
+              <Button type="submit" size="sm" variant="ghost" className="h-6 text-xs" disabled={!newSubIssue.trim() || createSubIssueMutation.isPending}>
+                {createSubIssueMutation.isPending ? "..." : "Add"}
+              </Button>
+            </form>
           </div>
 
           <Separator className="my-6" />
 
+          {/* Activity / Comments tabs */}
           <div className="space-y-4">
-            <h3 className="text-sm font-medium flex items-center gap-2">
-              <MessageSquare className="h-4 w-4" /> Comments ({comments.length})
-            </h3>
+            <div className="flex gap-1 border-b">
+              <button
+                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === "comments"
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setActiveTab("comments")}
+              >
+                <MessageSquare className="h-3.5 w-3.5 inline mr-1" />
+                Comments ({comments.length})
+              </button>
+              <button
+                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === "activity"
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setActiveTab("activity")}
+              >
+                <Activity className="h-3.5 w-3.5 inline mr-1" />
+                Activity ({activities.length})
+              </button>
+              <button
+                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === "attachments"
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setActiveTab("attachments")}
+              >
+                <Paperclip className="h-3.5 w-3.5 inline mr-1" />
+                Attachments ({attachments.length})
+              </button>
+              <button
+                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === "time"
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setActiveTab("time")}
+              >
+                <Timer className="h-3.5 w-3.5 inline mr-1" />
+                Time ({Math.floor(totalTimeSeconds / 3600)}h {Math.floor((totalTimeSeconds % 3600) / 60)}m)
+              </button>
+            </div>
 
-            {commentsLoading ? (
-              <div className="animate-pulse text-sm text-muted-foreground">Loading comments...</div>
-            ) : (
-              <div className="space-y-4">
-                {comments.map((c) => (
-                  <div key={c.id} className="flex gap-3">
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="text-xs">
-                        {c.actor_detail?.display_name?.charAt(0) || "U"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-medium">{c.actor_detail?.display_name || "User"}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
-                        </span>
+            {activeTab === "comments" && (
+              <>
+                {commentsLoading ? (
+                  <div className="animate-pulse text-sm text-muted-foreground">Loading comments...</div>
+                ) : (
+                  <div className="space-y-4">
+                    {comments.map((c) => (
+                      <div key={c.id} className="flex gap-3">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="text-xs">
+                            {c.actor_detail?.display_name?.charAt(0) || "U"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-medium">{c.actor_detail?.display_name || "User"}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
+                            </span>
+                          </div>
+                          <div className="text-sm"><CommentContent html={c.comment_html} /></div>
+                        </div>
                       </div>
-                      <p className="text-sm">{c.comment_stripped}</p>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
+
+                <div className="flex gap-3 mt-4">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="text-xs">Y</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 space-y-2">
+                    <CommentEditor
+                      value={commentText}
+                      onChange={(html) => setCommentText(html)}
+                      onSubmit={() => {
+                        if (commentText.replace(/<[^>]*>/g, '').trim() && !commentMutation.isPending) {
+                          commentMutation.mutate(commentText);
+                        }
+                      }}
+                      placeholder="Add a comment..."
+                    />
+                    <Button
+                      size="sm"
+                      disabled={!commentText.replace(/<[^>]*>/g, '').trim() || commentMutation.isPending}
+                      onClick={() => commentMutation.mutate(commentText)}
+                    >
+                      {commentMutation.isPending ? "Sending..." : "Comment"}
+                    </Button>
+                  </div>
+                </div>
+              </>
             )}
 
-            <div className="flex gap-3 mt-4">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="text-xs">Y</AvatarFallback>
-              </Avatar>
-              <div className="flex-1 space-y-2">
-                <Textarea
-                  placeholder="Add a comment..."
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  rows={3}
-                />
-                <Button
-                  size="sm"
-                  disabled={!commentText.trim() || commentMutation.isPending}
-                  onClick={() => commentMutation.mutate(commentText)}
-                >
-                  {commentMutation.isPending ? "Sending..." : "Comment"}
-                </Button>
-              </div>
-            </div>
+            {activeTab === "activity" && (
+              <>
+                {activitiesLoading ? (
+                  <div className="animate-pulse text-sm text-muted-foreground">Loading activity...</div>
+                ) : activities.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic py-4">No activity yet</p>
+                ) : (
+                  <div className="space-y-1">
+                    {activities.map((a) => {
+                      const fieldLabel = FIELD_LABELS[a.field || ""] || a.field || "Unknown";
+                      const formatVal = (v: string | null) => {
+                        if (!v) return "—";
+                        if (a.field === "priority") return PRIORITY_LABELS[v] || v;
+                        return v;
+                      };
+                      return (
+                        <div key={a.id} className="flex items-start gap-3 py-2 text-sm">
+                          <div className="h-2 w-2 rounded-full bg-muted-foreground/30 mt-1.5 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-muted-foreground">
+                              <span className="font-medium text-foreground">{fieldLabel}</span>
+                              {" changed from "}
+                              <span className="font-mono text-xs bg-muted px-1 rounded">{formatVal(a.old_value)}</span>
+                              {" to "}
+                              <span className="font-mono text-xs bg-muted px-1 rounded">{formatVal(a.new_value)}</span>
+                            </span>
+                            {a.created_at && (
+                              <span className="text-xs text-muted-foreground ml-2">
+                                {formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === "attachments" && (
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm text-muted-foreground">
+                    {attachments.length} file{attachments.length !== 1 ? "s" : ""}
+                  </span>
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      className="hidden"
+                      multiple
+                      onChange={(e) => {
+                        const files = e.target.files;
+                        if (!files) return;
+                        for (let i = 0; i < files.length; i++) {
+                          uploadMutation.mutate(files[i]);
+                        }
+                        e.target.value = "";
+                      }}
+                    />
+                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1" asChild>
+                      <span>
+                        <Upload className="h-3 w-3" /> Upload
+                      </span>
+                    </Button>
+                  </label>
+                </div>
+                {attachmentsLoading ? (
+                  <div className="animate-pulse text-sm text-muted-foreground">Loading attachments...</div>
+                ) : attachments.length === 0 ? (
+                  <div className="text-center py-8 border border-dashed rounded-lg">
+                    <Paperclip className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">No attachments yet</p>
+                    <p className="text-xs text-muted-foreground mt-1">Upload files or drag & drop here</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {attachments.map((att) => {
+                      const name = att.attributes?.name || "File";
+                      const size = att.attributes?.size;
+                      const type = att.attributes?.type || "";
+                      const isImage = type.startsWith("image/");
+                      const fmtSize = size
+                        ? size > 1024 * 1024
+                          ? `${(size / 1024 / 1024).toFixed(1)} MB`
+                          : `${(size / 1024).toFixed(0)} KB`
+                        : "";
+                      return (
+                        <div
+                          key={att.id}
+                          className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/20 transition-colors"
+                        >
+                          {isImage ? (
+                            <div className="h-10 w-10 rounded bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+                              {att.asset ? (
+                                <img src={att.asset} alt={name} className="h-10 w-10 object-cover" />
+                              ) : (
+                                <FileIcon className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </div>
+                          ) : (
+                            <div className="h-10 w-10 rounded bg-muted flex items-center justify-center shrink-0">
+                              <FileIcon className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {fmtSize}{type && ` · ${type}`}
+                              {att.created_at && ` · ${formatDistanceToNow(new Date(att.created_at), { addSuffix: true })}`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {att.asset && (
+                              <a
+                                href={att.asset}
+                                download={name}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-muted transition-colors"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Download className="h-3.5 w-3.5 text-muted-foreground" />
+                              </a>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              onClick={() => deleteAttachmentMutation.mutate(att.id)}
+                              disabled={deleteAttachmentMutation.isPending}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === "time" && (
+              <>
+                {/* Log time form */}
+                <div className="rounded-lg border p-3 mb-4">
+                  <h4 className="text-xs font-semibold mb-2">Log Time</h4>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder="Hours"
+                      className="h-8 w-20 text-sm"
+                      value={timeHours}
+                      onChange={(e) => setTimeHours(e.target.value)}
+                    />
+                    <span className="text-xs text-muted-foreground">h</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="59"
+                      placeholder="Minutes"
+                      className="h-8 w-20 text-sm"
+                      value={timeMinutes}
+                      onChange={(e) => setTimeMinutes(e.target.value)}
+                    />
+                    <span className="text-xs text-muted-foreground">m</span>
+                  </div>
+                  <Input
+                    placeholder="Description (optional)"
+                    className="h-8 text-sm mb-2"
+                    value={timeDesc}
+                    onChange={(e) => setTimeDesc(e.target.value)}
+                  />
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={!timeHours && !timeMinutes}
+                    onClick={() => {
+                      const secs =
+                        (parseInt(timeHours || "0") * 3600) +
+                        (parseInt(timeMinutes || "0") * 60);
+                      if (secs > 0) {
+                        logTimeMutation.mutate({
+                          duration_seconds: secs,
+                          description: timeDesc || undefined,
+                        });
+                      }
+                    }}
+                  >
+                    {logTimeMutation.isPending ? "Logging..." : "Log Time"}
+                  </Button>
+                </div>
+
+                {/* Total */}
+                <div className="flex items-center gap-2 mb-3">
+                  <Timer className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">
+                    Total: {Math.floor(totalTimeSeconds / 3600)}h {Math.floor((totalTimeSeconds % 3600) / 60)}m
+                  </span>
+                </div>
+
+                {/* Entries list */}
+                {timeEntriesLoading ? (
+                  <div className="animate-pulse text-sm text-muted-foreground">Loading...</div>
+                ) : timeEntries.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic py-4">No time logged yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {timeEntries.map((entry) => {
+                      const hrs = Math.floor(entry.duration_seconds / 3600);
+                      const mins = Math.floor((entry.duration_seconds % 3600) / 60);
+                      return (
+                        <div
+                          key={entry.id}
+                          className="flex items-center justify-between gap-3 rounded-lg border p-3 hover:bg-muted/20"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">
+                              {hrs}h {mins}m
+                            </p>
+                            {entry.description && (
+                              <p className="text-xs text-muted-foreground truncate">
+                                {entry.description}
+                              </p>
+                            )}
+                            {entry.created_at && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {formatDistanceToNow(new Date(entry.created_at), { addSuffix: true })}
+                              </p>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                            onClick={() => deleteTimeMutation.mutate(entry.id)}
+                            disabled={deleteTimeMutation.isPending}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
 
@@ -547,6 +1016,24 @@ export default function IssueDetail() {
           </div>
 
           <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Estimate (pts)</label>
+            <Select
+              value={String(issue.estimate_points ?? "")}
+              onValueChange={(v) => updateMutation.mutate({ estimate_points: v ? Number(v) : null })}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="No estimate" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">None</SelectItem>
+                {[0, 1, 2, 3, 5, 8, 13, 21].map((p) => (
+                  <SelectItem key={p} value={String(p)}>{p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
               <Calendar className="h-3 w-3" /> Start Date
             </label>
@@ -569,6 +1056,14 @@ export default function IssueDetail() {
               onChange={(e) => updateMutation.mutate({ target_date: e.target.value || null })}
             />
           </div>
+
+          {slug && projectId && issueId && (
+            <CustomFieldValues
+              slug={slug}
+              projectId={projectId}
+              issueSeqId={Number(issueId)}
+            />
+          )}
 
           </div>
           <Separator className="hidden lg:block" />

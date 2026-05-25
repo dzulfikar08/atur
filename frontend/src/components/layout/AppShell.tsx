@@ -1,11 +1,25 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import BottomNav from '@/components/mobile/BottomNav';
+import CommandPalette from './CommandPalette';
+import { api } from '@/lib/api';
+import { useWorkspaceStore } from '@/stores/workspace';
 
 export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
+
+  // Ensure workspaces are loaded for sidebar/bottom-nav switchers
+  useQuery({
+    queryKey: ['workspaces'],
+    queryFn: async () => {
+      const ws = await api.listWorkspaces();
+      useWorkspaceStore.getState().setWorkspaces(ws);
+      return ws;
+    },
+  });
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -28,6 +42,9 @@ export default function AppShell() {
 
       {/* Mobile bottom navigation */}
       <BottomNav />
+
+      {/* Command palette (Cmd+K) */}
+      <CommandPalette />
     </div>
   );
 }

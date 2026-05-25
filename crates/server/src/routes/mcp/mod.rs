@@ -11,6 +11,7 @@ mod relations;
 mod sprints;
 mod states;
 mod workspace;
+mod custom_fields;
 
 use std::future::Future;
 use std::pin::Pin;
@@ -33,21 +34,29 @@ pub use issues::{
     AddCommentParams, CreateIssueParams, DeleteIssueParams, GetIssueParams, ListCommentsParams,
     ListIssuesParams, SearchIssuesParams, UpdateIssueParams,
 };
-pub use labels::{ListLabelsParams, ListMembersParams, SetAssigneeParams};
-pub use modules::{
-    AddIssueToModuleParams, ListModulesParams, RemoveIssueFromModuleParams, GetModuleParams,
+pub use labels::{
+    AddProjectMemberParams, CreateLabelParams, DeleteLabelParams, ListLabelsParams,
+    ListMembersParams, RemoveProjectMemberParams, SetAssigneeParams, UpdateLabelParams,
 };
-pub use pages::{CreatePageParams, GetPageParams, ListPagesParams, UpdatePageParams};
-pub use projects::{CreateProjectParams, GetProjectParams, ListProjectsParams};
+pub use modules::{
+    AddIssueToModuleParams, CreateModuleParams, DeleteModuleParams, GetModuleParams,
+    ListModulesParams, RemoveIssueFromModuleParams, UpdateModuleParams,
+};
+pub use pages::{CreatePageParams, DeletePageParams, GetPageParams, ListPagesParams, UpdatePageParams};
+pub use projects::{CreateProjectParams, DeleteProjectParams, GetProjectParams, ListProjectsParams, UpdateProjectParams};
 pub use relations::{
     AddIssueRelationParams, ListIssueRelationsParams, RemoveIssueRelationParams,
 };
 pub use sprints::{
-    AddIssueToSprintParams, CreateSprintParams, GetSprintParams, GetSprintProgressParams,
-    ListSprintsParams, RemoveIssueFromSprintParams, UpdateSprintParams,
+    AddIssueToSprintParams, CreateSprintParams, DeleteSprintParams, GetSprintParams,
+    GetSprintProgressParams, ListSprintsParams, RemoveIssueFromSprintParams, UpdateSprintParams,
 };
-pub use states::ListStatesParams;
-pub use workspace::ListWorkspaceMembersParams;
+pub use states::{CreateStateParams, DeleteStateParams, ListStatesParams, UpdateStateParams};
+pub use workspace::{
+    AddWorkspaceMemberParams, CreateWorkspaceParams, ListWorkspaceMembersParams,
+    RemoveWorkspaceMemberParams, UpdateWorkspaceMemberRoleParams,
+};
+pub use custom_fields::{ListCustomFieldsParams, GetCustomFieldParams, SetCustomFieldValueParams};
 
 // ---------------------------------------------------------------------------
 // Parameter structs for tools kept in mod.rs
@@ -153,12 +162,14 @@ const MCP_BOT_USER_ID: &str = "00000000-0000-0000-0000-000000000000";
 pub struct PlaneMcpServer {
     db: sea_orm::DatabaseConnection,
     bot_user_id: Uuid,
+    storage_path: String,
+    base_url: String,
 }
 
 impl PlaneMcpServer {
-    pub fn new(db: sea_orm::DatabaseConnection) -> Self {
+    pub fn new(db: sea_orm::DatabaseConnection, storage_path: String, base_url: String) -> Self {
         let bot_user_id = Uuid::parse_str(MCP_BOT_USER_ID).unwrap_or_else(|_| Uuid::new_v4());
-        Self { db, bot_user_id }
+        Self { db, bot_user_id, storage_path, base_url }
     }
 }
 
@@ -200,6 +211,14 @@ impl PlaneMcpServer {
         }
     }
 
+    #[tool(description = "Create a new workspace")]
+    async fn create_workspace(
+        &self,
+        Parameters(params): Parameters<CreateWorkspaceParams>,
+    ) -> String {
+        workspace::create_workspace_impl(&self.db, params, self.bot_user_id).await
+    }
+
     // =======================================================================
     // Project tools
     // =======================================================================
@@ -226,6 +245,22 @@ impl PlaneMcpServer {
         Parameters(params): Parameters<CreateProjectParams>,
     ) -> String {
         projects::create_project_impl(&self.db, params, self.bot_user_id).await
+    }
+
+    #[tool(description = "Update project settings")]
+    async fn update_project(
+        &self,
+        Parameters(params): Parameters<UpdateProjectParams>,
+    ) -> String {
+        projects::update_project_impl(&self.db, params).await
+    }
+
+    #[tool(description = "Delete a project (soft delete)")]
+    async fn delete_project(
+        &self,
+        Parameters(params): Parameters<DeleteProjectParams>,
+    ) -> String {
+        projects::delete_project_impl(&self.db, params).await
     }
 
     // =======================================================================
@@ -332,6 +367,14 @@ impl PlaneMcpServer {
         sprints::update_sprint_impl(&self.db, params).await
     }
 
+    #[tool(description = "Delete a sprint (soft delete)")]
+    async fn delete_sprint(
+        &self,
+        Parameters(params): Parameters<DeleteSprintParams>,
+    ) -> String {
+        sprints::delete_sprint_impl(&self.db, params).await
+    }
+
     #[tool(description = "Add an issue to a sprint (cycle)")]
     async fn add_issue_to_sprint(
         &self,
@@ -368,6 +411,30 @@ impl PlaneMcpServer {
         labels::list_labels_impl(&self.db, params).await
     }
 
+    #[tool(description = "Create a new label")]
+    async fn create_label(
+        &self,
+        Parameters(params): Parameters<CreateLabelParams>,
+    ) -> String {
+        labels::create_label_impl(&self.db, params).await
+    }
+
+    #[tool(description = "Update a label")]
+    async fn update_label(
+        &self,
+        Parameters(params): Parameters<UpdateLabelParams>,
+    ) -> String {
+        labels::update_label_impl(&self.db, params).await
+    }
+
+    #[tool(description = "Delete a label")]
+    async fn delete_label(
+        &self,
+        Parameters(params): Parameters<DeleteLabelParams>,
+    ) -> String {
+        labels::delete_label_impl(&self.db, params).await
+    }
+
     #[tool(description = "List members of a project")]
     async fn list_members(
         &self,
@@ -384,6 +451,22 @@ impl PlaneMcpServer {
         labels::set_assignee_impl(&self.db, params).await
     }
 
+    #[tool(description = "Add a member to a project")]
+    async fn add_project_member(
+        &self,
+        Parameters(params): Parameters<AddProjectMemberParams>,
+    ) -> String {
+        labels::add_project_member_impl(&self.db, params).await
+    }
+
+    #[tool(description = "Remove a member from a project")]
+    async fn remove_project_member(
+        &self,
+        Parameters(params): Parameters<RemoveProjectMemberParams>,
+    ) -> String {
+        labels::remove_project_member_impl(&self.db, params).await
+    }
+
     // =======================================================================
     // State tools
     // =======================================================================
@@ -394,6 +477,30 @@ impl PlaneMcpServer {
         Parameters(params): Parameters<ListStatesParams>,
     ) -> String {
         states::list_states_impl(&self.db, params).await
+    }
+
+    #[tool(description = "Create a new workflow state")]
+    async fn create_state(
+        &self,
+        Parameters(params): Parameters<CreateStateParams>,
+    ) -> String {
+        states::create_state_impl(&self.db, params).await
+    }
+
+    #[tool(description = "Update a workflow state")]
+    async fn update_state(
+        &self,
+        Parameters(params): Parameters<UpdateStateParams>,
+    ) -> String {
+        states::update_state_impl(&self.db, params).await
+    }
+
+    #[tool(description = "Delete a workflow state")]
+    async fn delete_state(
+        &self,
+        Parameters(params): Parameters<DeleteStateParams>,
+    ) -> String {
+        states::delete_state_impl(&self.db, params).await
     }
 
     // =======================================================================
@@ -460,6 +567,14 @@ impl PlaneMcpServer {
         pages::update_page_impl(&self.db, params).await
     }
 
+    #[tool(description = "Delete a page")]
+    async fn delete_page(
+        &self,
+        Parameters(params): Parameters<DeletePageParams>,
+    ) -> String {
+        pages::delete_page_impl(&self.db, params).await
+    }
+
     // =======================================================================
     // Workspace member tools
     // =======================================================================
@@ -470,6 +585,30 @@ impl PlaneMcpServer {
         Parameters(params): Parameters<ListWorkspaceMembersParams>,
     ) -> String {
         workspace::list_workspace_members_impl(&self.db, params).await
+    }
+
+    #[tool(description = "Add a member to a workspace")]
+    async fn add_workspace_member(
+        &self,
+        Parameters(params): Parameters<AddWorkspaceMemberParams>,
+    ) -> String {
+        workspace::add_workspace_member_impl(&self.db, params).await
+    }
+
+    #[tool(description = "Remove a member from a workspace")]
+    async fn remove_workspace_member(
+        &self,
+        Parameters(params): Parameters<RemoveWorkspaceMemberParams>,
+    ) -> String {
+        workspace::remove_workspace_member_impl(&self.db, params).await
+    }
+
+    #[tool(description = "Update a workspace member's role")]
+    async fn update_workspace_member_role(
+        &self,
+        Parameters(params): Parameters<UpdateWorkspaceMemberRoleParams>,
+    ) -> String {
+        workspace::update_workspace_member_role_impl(&self.db, params).await
     }
 
     // =======================================================================
@@ -492,6 +631,30 @@ impl PlaneMcpServer {
         modules::get_module_impl(&self.db, params).await
     }
 
+    #[tool(description = "Create a new module")]
+    async fn create_module(
+        &self,
+        Parameters(params): Parameters<CreateModuleParams>,
+    ) -> String {
+        modules::create_module_impl(&self.db, params).await
+    }
+
+    #[tool(description = "Update a module")]
+    async fn update_module(
+        &self,
+        Parameters(params): Parameters<UpdateModuleParams>,
+    ) -> String {
+        modules::update_module_impl(&self.db, params).await
+    }
+
+    #[tool(description = "Delete a module")]
+    async fn delete_module(
+        &self,
+        Parameters(params): Parameters<DeleteModuleParams>,
+    ) -> String {
+        modules::delete_module_impl(&self.db, params).await
+    }
+
     #[tool(description = "Add an issue to a module")]
     async fn add_issue_to_module(
         &self,
@@ -506,6 +669,123 @@ impl PlaneMcpServer {
         Parameters(params): Parameters<RemoveIssueFromModuleParams>,
     ) -> String {
         modules::remove_issue_from_module_impl(&self.db, params).await
+    }
+
+    // =======================================================================
+    // Custom field tools
+    // =======================================================================
+
+    #[tool(description = "List custom field definitions for a project")]
+    async fn list_custom_fields(
+        &self,
+        Parameters(params): Parameters<ListCustomFieldsParams>,
+    ) -> String {
+        custom_fields::list_custom_fields_impl(&self.db, params).await
+    }
+
+    #[tool(description = "Get custom field details including options")]
+    async fn get_custom_field(
+        &self,
+        Parameters(params): Parameters<GetCustomFieldParams>,
+    ) -> String {
+        custom_fields::get_custom_field_impl(&self.db, params).await
+    }
+
+    #[tool(description = "Set or clear a custom field value on an issue")]
+    async fn set_custom_field_value(
+        &self,
+        Parameters(params): Parameters<SetCustomFieldValueParams>,
+    ) -> String {
+        custom_fields::set_custom_field_value_impl(&self.db, params).await
+    }
+
+    // =======================================================================
+    // Asset upload tool
+    // =======================================================================
+
+    #[tool(description = "Upload a base64-encoded image and return its URL. Use this to attach screenshots to comments.")]
+    async fn upload_image(
+        &self,
+        Parameters(params): Parameters<UploadImageParams>,
+    ) -> String {
+        self.upload_image_impl(params).await
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Asset upload implementation
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct UploadImageParams {
+    #[schemars(description = "Base64-encoded image data (without data URI prefix)")]
+    pub data: String,
+    #[schemars(description = "Filename (e.g. 'screenshot.png')")]
+    pub filename: String,
+    #[schemars(description = "MIME type (e.g. 'image/png', 'image/jpeg')")]
+    pub mime_type: Option<String>,
+}
+
+impl PlaneMcpServer {
+    async fn upload_image_impl(&self, params: UploadImageParams) -> String {
+        use base64::Engine;
+        let data = match base64::engine::general_purpose::STANDARD.decode(&params.data) {
+            Ok(d) => d,
+            Err(e) => return err_str(format!("Invalid base64: {}", e)),
+        };
+
+        let mime = params.mime_type.unwrap_or_else(|| "image/png".to_string());
+        let ext = match mime.as_str() {
+            "image/png" => "png",
+            "image/jpeg" | "image/jpg" => "jpg",
+            "image/gif" => "gif",
+            "image/webp" => "webp",
+            "image/svg+xml" => "svg",
+            _ => "png",
+        };
+
+        let asset_id = Uuid::new_v4();
+        let stored_filename = format!("{}.{}", asset_id, ext);
+        let storage_path = &self.storage_path;
+
+        if let Err(e) = tokio::fs::create_dir_all(storage_path).await {
+            return err_str(format!("Storage dir error: {}", e));
+        }
+
+        let file_path = std::path::Path::new(storage_path).join(&stored_filename);
+        if let Err(e) = tokio::fs::write(&file_path, &data).await {
+            return err_str(format!("File write error: {}", e));
+        }
+
+        let now = chrono::Utc::now().fixed_offset();
+        use sea_orm::ActiveValue::Set;
+        use sea_orm::ActiveModelTrait;
+        use db::entities::file_assets;
+
+        let model = file_assets::ActiveModel {
+            id: Set(asset_id),
+            asset: Set(Some(stored_filename)),
+            attributes: Set(Some(serde_json::json!({ "original_name": params.filename }))),
+            entity_id: Set(None),
+            entity_type: Set(None),
+            size: Set(Some(data.len() as i64)),
+            content_type: Set(Some(mime)),
+            is_uploaded: Set(true),
+            created_by_id: Set(self.bot_user_id),
+            created_at: Set(Some(now)),
+            updated_at: Set(Some(now)),
+            deleted_at: Set(None),
+        };
+        if let Err(e) = ActiveModelTrait::insert(model, &self.db).await {
+            return err_str(format!("Asset insert error: {}", e));
+        }
+
+        let url = format!("{}/api/assets/{}", self.base_url, asset_id);
+        ok_json(serde_json::json!({
+            "id": asset_id,
+            "url": url,
+            "size": data.len(),
+        }))
     }
 }
 
@@ -681,10 +961,18 @@ async fn validate_bearer(db: &sea_orm::DatabaseConnection, token: &str) -> Optio
 /// When PLANE_MCP_AUTH=true, wraps with API key / Bearer token auth.
 pub fn create_mcp_service(
     db: sea_orm::DatabaseConnection,
+    storage_path: String,
+    base_url: String,
 ) -> McpAuthService<StreamableHttpService<PlaneMcpServer, LocalSessionManager>> {
     let db_clone = db.clone();
     let service = StreamableHttpService::new(
-        move || Ok(PlaneMcpServer::new(db_clone.clone())),
+        move || {
+            Ok(PlaneMcpServer::new(
+                db_clone.clone(),
+                storage_path.clone(),
+                base_url.clone(),
+            ))
+        },
         LocalSessionManager::default().into(),
         Default::default(),
     );

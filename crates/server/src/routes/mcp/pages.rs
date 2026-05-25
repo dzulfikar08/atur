@@ -54,6 +54,14 @@ pub struct UpdatePageParams {
     pub is_locked: Option<bool>,
 }
 
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct DeletePageParams {
+    #[schemars(description = "Workspace slug")]
+    pub workspace: Option<String>,
+    #[schemars(description = "Page UUID")]
+    pub page_id: String,
+}
+
 // --- Pages implementations ---
 
 pub async fn list_pages_impl(
@@ -222,6 +230,41 @@ pub async fn update_page_impl(
 
     match active.update(db).await {
         Ok(updated) => ok_json(page_to_json(&updated)),
+        Err(e) => err_str(format!("DB update error: {}", e)),
+    }
+}
+
+pub async fn delete_page_impl(
+    db: &sea_orm::DatabaseConnection,
+    params: DeletePageParams,
+) -> String {
+    let _ws = match resolve_workspace(db, params.workspace.as_ref()).await {
+        Ok(ws) => ws,
+        Err(e) => return err_str(e),
+    };
+    let page_id = match parse_uuid(&params.page_id, "page_id") {
+        Ok(id) => id,
+        Err(e) => return err_str(e),
+    };
+
+    let page = match pages::Entity::find()
+        .filter(pages::Column::Id.eq(page_id))
+        .filter(pages::Column::DeletedAt.is_null())
+        .one(db)
+        .await
+    {
+        Ok(Some(p)) => p,
+        Ok(None) => return err_str("Page not found"),
+        Err(e) => return err_str(e),
+    };
+
+    let now = Utc::now().fixed_offset();
+    let mut active: pages::ActiveModel = page.into();
+    active.deleted_at = Set(Some(now));
+    active.updated_at = Set(Some(now));
+
+    match active.update(db).await {
+        Ok(_) => ok_json(serde_json::json!({ "message": "Page deleted" })),
         Err(e) => err_str(format!("DB update error: {}", e)),
     }
 }

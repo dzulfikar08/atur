@@ -225,9 +225,13 @@ export default function TopBar() {
         </DropdownMenu>
 
         {/* Notifications */}
-        <Button variant="ghost" size="icon" className="hidden sm:flex relative h-8 w-8 text-muted-foreground">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden sm:flex relative h-8 w-8 text-muted-foreground"
+          onClick={() => slug && navigate(`/${slug}/notifications`)}
+        >
           <Bell className="h-4 w-4" />
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive" />
         </Button>
 
         {/* User menu */}
