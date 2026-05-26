@@ -47,4 +47,3 @@ rmcp.workspace = true
 schemars.workspace = true
 http-body-util = "0.1"
 tantivy = { workspace = true }
-base64 = "0.22"

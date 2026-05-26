@@ -746,7 +746,7 @@ impl PlaneMcpServer {
     // Asset upload tool
     // =======================================================================
 
-    #[tool(description = "Upload a base64-encoded image and return its URL. Use this to attach screenshots to comments.")]
+    #[tool(description = "Upload an image file from the server's filesystem and return its URL. Use this to attach screenshots to comments.")]
     async fn upload_image(
         &self,
         Parameters(params): Parameters<UploadImageParams>,
@@ -761,31 +761,43 @@ impl PlaneMcpServer {
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct UploadImageParams {
-    #[schemars(description = "Base64-encoded image data (without data URI prefix)")]
-    pub data: String,
-    #[schemars(description = "Filename (e.g. 'screenshot.png')")]
-    pub filename: String,
-    #[schemars(description = "MIME type (e.g. 'image/png', 'image/jpeg')")]
+    #[schemars(description = "Absolute path to the image file on the server's filesystem")]
+    pub file_path: String,
+    #[schemars(description = "MIME type (e.g. 'image/png', 'image/jpeg'). Auto-detected from extension if omitted.")]
     pub mime_type: Option<String>,
 }
 
 impl PlaneMcpServer {
     async fn upload_image_impl(&self, params: UploadImageParams) -> String {
-        use base64::Engine;
-        let data = match base64::engine::general_purpose::STANDARD.decode(&params.data) {
+        let src = std::path::Path::new(&params.file_path);
+        if !src.exists() {
+            return err_str(format!("File not found: {}", params.file_path));
+        }
+
+        let data = match tokio::fs::read(&src).await {
             Ok(d) => d,
-            Err(e) => return err_str(format!("Invalid base64: {}", e)),
+            Err(e) => return err_str(format!("Failed to read file: {}", e)),
         };
 
-        let mime = params.mime_type.unwrap_or_else(|| "image/png".to_string());
-        let ext = match mime.as_str() {
-            "image/png" => "png",
-            "image/jpeg" | "image/jpg" => "jpg",
-            "image/gif" => "gif",
-            "image/webp" => "webp",
-            "image/svg+xml" => "svg",
-            _ => "png",
-        };
+        let original_name = src
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("upload")
+            .to_string();
+
+        let ext = src
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("png")
+            .to_string();
+
+        let mime = params.mime_type.unwrap_or_else(|| match ext.as_str() {
+            "jpg" | "jpeg" => "image/jpeg".to_string(),
+            "gif" => "image/gif".to_string(),
+            "webp" => "image/webp".to_string(),
+            "svg" => "image/svg+xml".to_string(),
+            _ => "image/png".to_string(),
+        });
 
         let asset_id = Uuid::new_v4();
         let stored_filename = format!("{}.{}", asset_id, ext);
@@ -795,9 +807,9 @@ impl PlaneMcpServer {
             return err_str(format!("Storage dir error: {}", e));
         }
 
-        let file_path = std::path::Path::new(storage_path).join(&stored_filename);
-        if let Err(e) = tokio::fs::write(&file_path, &data).await {
-            return err_str(format!("File write error: {}", e));
+        let dest = std::path::Path::new(storage_path).join(&stored_filename);
+        if let Err(e) = tokio::fs::copy(&src, &dest).await {
+            return err_str(format!("File copy error: {}", e));
         }
 
         let now = chrono::Utc::now().fixed_offset();
@@ -808,7 +820,7 @@ impl PlaneMcpServer {
         let model = file_assets::ActiveModel {
             id: Set(asset_id),
             asset: Set(Some(stored_filename)),
-            attributes: Set(Some(serde_json::json!({ "original_name": params.filename }))),
+            attributes: Set(Some(serde_json::json!({ "original_name": original_name }))),
             entity_id: Set(None),
             entity_type: Set(None),
             size: Set(Some(data.len() as i64)),
