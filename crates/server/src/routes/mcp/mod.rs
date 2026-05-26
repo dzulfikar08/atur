@@ -169,7 +169,50 @@ pub struct PlaneMcpServer {
 impl PlaneMcpServer {
     pub fn new(db: sea_orm::DatabaseConnection, storage_path: String, base_url: String) -> Self {
         let bot_user_id = Uuid::parse_str(MCP_BOT_USER_ID).unwrap_or_else(|_| Uuid::new_v4());
+
+        // Ensure the bot user exists in the DB (needed for FK constraints on comments, etc.)
+        let db_clone = db.clone();
+        let bid = bot_user_id;
+        tokio::spawn(async move {
+            Self::ensure_bot_user(&db_clone, bid).await;
+        });
+
         Self { db, bot_user_id, storage_path, base_url }
+    }
+
+    /// Insert the MCP bot user if it doesn't exist yet.
+    async fn ensure_bot_user(db: &sea_orm::DatabaseConnection, bot_id: Uuid) {
+        use sea_orm::ActiveValue::Set;
+        use db::entities::users;
+
+        let exists = users::Entity::find_by_id(bot_id)
+            .one(db)
+            .await
+            .ok()
+            .flatten()
+            .is_some();
+
+        if !exists {
+            let now = chrono::Utc::now().fixed_offset();
+            let bot = users::ActiveModel {
+                id: Set(bot_id),
+                email: Set("bot@atur.internal".to_string()),
+                username: Set("atur-bot".to_string()),
+                display_name: Set(Some("Atur Bot".to_string())),
+                password_hash: Set(None),
+                avatar: Set(None),
+                token: Set(None),
+                user_timezone: Set(None),
+                is_active: Set(true),
+                is_superuser: Set(false),
+                is_email_verified: Set(true),
+                is_bot: Set(true),
+                created_at: Set(Some(now)),
+                updated_at: Set(Some(now)),
+                deleted_at: Set(None),
+            };
+            let _ = sea_orm::ActiveModelTrait::insert(bot, db).await;
+        }
     }
 }
 
