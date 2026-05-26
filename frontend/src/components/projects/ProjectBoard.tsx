@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, api, type Issue, type State } from "@/lib/api";
+import { apiFetch, api, type Issue, type State, type Module } from "@/lib/api";
 import CustomFieldManager from "@/components/projects/CustomFieldManager";
 import FilterBar, { type FilterState } from "@/components/issues/FilterBar";
 import { Button } from "@/components/ui/button";
@@ -104,9 +104,10 @@ function DroppableColumn({ state, stateIssues, children }: {
 }
 
 // --- Sortable Issue Card ---
-function SortableIssueCard({ issue, onClick }: {
+function SortableIssueCard({ issue, onClick, moduleMap }: {
   issue: Issue;
   onClick: () => void;
+  moduleMap: Map<string, Module>;
 }) {
   const {
     attributes,
@@ -123,6 +124,10 @@ function SortableIssueCard({ issue, onClick }: {
     opacity: isDragging ? 0.4 : 1,
     zIndex: isDragging ? 50 : undefined,
   };
+
+  const issueModules = (issue.module_ids ?? [])
+    .map(mid => moduleMap.get(mid))
+    .filter(Boolean) as Module[];
 
   return (
     <Card
@@ -150,13 +155,27 @@ function SortableIssueCard({ issue, onClick }: {
             </Badge>
           )}
         </div>
+        {issueModules.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {issueModules.map(m => (
+              <Badge key={m.id} variant="secondary" className="text-[10px] gap-1">
+                <Package className="h-2.5 w-2.5" />
+                {m.name}
+              </Badge>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 }
 
 // --- Drag Overlay Card ---
-function DragOverlayCard({ issue }: { issue: Issue }) {
+function DragOverlayCard({ issue, moduleMap }: { issue: Issue; moduleMap: Map<string, Module> }) {
+  const issueModules = (issue.module_ids ?? [])
+    .map(mid => moduleMap.get(mid))
+    .filter(Boolean) as Module[];
+
   return (
     <Card className="shadow-xl ring-2 ring-primary/30 rotate-2 w-[260px] sm:w-[280px]">
       <CardContent className="p-3">
@@ -173,6 +192,16 @@ function DragOverlayCard({ issue }: { issue: Issue }) {
             </Badge>
           )}
         </div>
+        {issueModules.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {issueModules.map(m => (
+              <Badge key={m.id} variant="secondary" className="text-[10px] gap-1">
+                <Package className="h-2.5 w-2.5" />
+                {m.name}
+              </Badge>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -186,6 +215,7 @@ export default function ProjectBoard() {
   const [filters, setFilters] = useState<FilterState>({
     stateId: 'all',
     priority: 'all',
+    moduleId: 'all',
     groupBy: 'none',
     sortBy: 'created_at',
     sortDir: 'desc',
@@ -193,6 +223,7 @@ export default function ProjectBoard() {
   const [createOpen, setCreateOpen] = useState(false);
   const [parentSearch, setParentSearch] = useState("");
   const [selectedParent, setSelectedParent] = useState<{ id: string; name: string } | null>(null);
+  const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>([]);
   const [activeIssueId, setActiveIssueId] = useState<string | null>(null);
   const [viewName, setViewName] = useState("");
   const [viewsOpen, setViewsOpen] = useState(false);
@@ -259,13 +290,21 @@ export default function ProjectBoard() {
     enabled: !!slug && !!projectId,
   });
 
+  const { data: modules = [] } = useQuery({
+    queryKey: ["modules", slug, projectId],
+    queryFn: () => api.listModules(slug!, projectId!),
+    enabled: !!slug && !!projectId,
+  });
+
+  const moduleMap = useMemo(() => new Map(modules.map(m => [m.id, m])), [modules]);
+
   const form = useForm<CreateIssueForm>({
     resolver: zodResolver(createIssueSchema),
     defaultValues: { name: "", description_html: "", priority: "none" },
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: CreateIssueForm & { parent_id?: string | null }) =>
+    mutationFn: (data: CreateIssueForm & { parent_id?: string | null; module_ids?: string[] }) =>
       apiFetch(`/workspaces/${slug}/projects/${projectId}/issues`, {
         method: "POST",
         body: JSON.stringify(data),
@@ -276,6 +315,7 @@ export default function ProjectBoard() {
       form.reset();
       setSelectedParent(null);
       setParentSearch("");
+      setSelectedModuleIds([]);
       toast.success("Issue created");
     },
     onError: () => toast.error("Failed to create issue"),
@@ -286,6 +326,7 @@ export default function ProjectBoard() {
     let result = issues.filter((i) => {
       if (filters.stateId !== 'all' && i.state_id !== filters.stateId) return false;
       if (filters.priority !== 'all' && i.priority !== filters.priority) return false;
+      if (filters.moduleId !== 'all' && !(i.module_ids ?? []).includes(filters.moduleId)) return false;
       return true;
     });
     // Sort
@@ -298,7 +339,7 @@ export default function ProjectBoard() {
       return filters.sortDir === 'desc' ? -cmp : cmp;
     });
     return result;
-  }, [issues, filters.stateId, filters.priority, filters.sortBy, filters.sortDir]);
+  }, [issues, filters.stateId, filters.priority, filters.moduleId, filters.sortBy, filters.sortDir]);
 
   const groupedByState = useMemo(() => {
     const groups: Record<string, { state: State; issues: Issue[] }> = {};
@@ -410,7 +451,7 @@ export default function ProjectBoard() {
           <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => navigate(`/${slug}/projects/${projectId}/modules`)}>
             <Package className="h-3.5 w-3.5" /> Modules
           </Button>
-          <FilterBar filters={filters} onChange={setFilters} states={states} />
+          <FilterBar filters={filters} onChange={setFilters} states={states} modules={modules.map(m => ({ id: m.id, name: m.name }))} />
           <Popover open={viewsOpen} onOpenChange={setViewsOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
@@ -483,7 +524,7 @@ export default function ProjectBoard() {
               <DialogTitle>Create Issue</DialogTitle>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit((d) => createMutation.mutate({ ...d, parent_id: selectedParent?.id || null }))} className="space-y-4">
+              <form onSubmit={form.handleSubmit((d) => createMutation.mutate({ ...d, parent_id: selectedParent?.id || null, module_ids: selectedModuleIds.length > 0 ? selectedModuleIds : undefined }))} className="space-y-4">
                 <FormField
                   control={form.control}
                   name="name"
@@ -588,6 +629,54 @@ export default function ProjectBoard() {
                     </FormItem>
                   )}
                 />
+                {modules.length > 0 && (
+                  <div>
+                    <label className="text-sm font-medium mb-1 block flex items-center gap-1">
+                      <Package className="h-3 w-3" /> Modules
+                      <span className="text-muted-foreground font-normal">(optional)</span>
+                    </label>
+                    <div className="space-y-1">
+                      {selectedModuleIds.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {selectedModuleIds.map(mid => {
+                            const mod = modules.find(m => m.id === mid);
+                            return mod ? (
+                              <Badge key={mid} variant="secondary" className="text-xs gap-1">
+                                {mod.name}
+                                <button
+                                  type="button"
+                                  className="ml-0.5 hover:text-destructive"
+                                  onClick={() => setSelectedModuleIds(prev => prev.filter(id => id !== mid))}
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            ) : null;
+                          })}
+                        </div>
+                      )}
+                      <Select
+                        value=""
+                        onValueChange={(v) => {
+                          if (!selectedModuleIds.includes(v)) {
+                            setSelectedModuleIds(prev => [...prev, v]);
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Add to module..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {modules
+                            .filter(m => !selectedModuleIds.includes(m.id))
+                            .map(m => (
+                              <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
                 <Button type="submit" className="w-full" disabled={createMutation.isPending}>
                   {createMutation.isPending ? "Creating..." : "Create Issue"}
                 </Button>
@@ -613,6 +702,7 @@ export default function ProjectBoard() {
                   <SortableIssueCard
                     key={issue.id}
                     issue={issue}
+                    moduleMap={moduleMap}
                     onClick={() => navigate(`/${slug}/projects/${projectId}/issues/${issue.sequence_id}`)}
                   />
                 ))}
@@ -620,7 +710,7 @@ export default function ProjectBoard() {
             ))}
           </div>
           <DragOverlay>
-            {activeIssue ? <DragOverlayCard issue={activeIssue} /> : null}
+            {activeIssue ? <DragOverlayCard issue={activeIssue} moduleMap={moduleMap} /> : null}
           </DragOverlay>
         </DndContext>
       )}
@@ -635,6 +725,7 @@ export default function ProjectBoard() {
                   <th className="text-left p-2 font-medium text-muted-foreground">Title</th>
                   <th className="text-left p-2 font-medium text-muted-foreground w-28">State</th>
                   <th className="text-left p-2 font-medium text-muted-foreground w-24">Priority</th>
+                  <th className="text-left p-2 font-medium text-muted-foreground w-28">Module</th>
                   <th className="text-left p-2 font-medium text-muted-foreground w-16">Pts</th>
                   <th className="text-left p-2 font-medium text-muted-foreground hidden md:table-cell w-24">Updated</th>
                 </tr>
@@ -676,6 +767,23 @@ export default function ProjectBoard() {
                           {issue.priority || "none"}
                         </span>
                       </td>
+                      <td className="p-2">
+                        {(issue.module_ids ?? []).length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {(issue.module_ids ?? []).map(mid => {
+                              const mod = moduleMap.get(mid);
+                              return mod ? (
+                                <Badge key={mid} variant="secondary" className="text-[10px] gap-0.5">
+                                  <Package className="h-2.5 w-2.5" />
+                                  {mod.name}
+                                </Badge>
+                              ) : null;
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
                       <td className="p-2 text-muted-foreground text-xs">
                         {issue.estimate_points != null ? issue.estimate_points : "—"}
                       </td>
@@ -687,7 +795,7 @@ export default function ProjectBoard() {
                 })}
                 {/* Inline quick-add row */}
                 <tr className="border-t">
-                  <td colSpan={6} className="p-1">
+                  <td colSpan={7} className="p-1">
                     <form
                       onSubmit={(e) => {
                         e.preventDefault();

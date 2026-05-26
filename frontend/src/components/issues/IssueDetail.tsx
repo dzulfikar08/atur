@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, api, type Module } from "@/lib/api";
 import CustomFieldValues from "@/components/issues/CustomFieldValues";
 import CommentEditor from "@/components/editor/CommentEditor";
 import CommentContent from "@/components/editor/CommentContent";
@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Calendar, MessageSquare, Clock, Link2, GitBranch, Trash2, X, Activity, Paperclip, Upload, FileIcon, Download, Timer } from "lucide-react";
+import { ArrowLeft, Calendar, MessageSquare, Clock, Link2, GitBranch, Trash2, X, Activity, Paperclip, Upload, FileIcon, Download, Timer, Package } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
@@ -366,6 +366,43 @@ export default function IssueDetail() {
     },
     enabled: !!slug && !!projectId && !!issue?.parent_id,
   });
+
+  // --- Modules ---
+  const { data: issueModules = [], isLoading: issueModulesLoading } = useQuery({
+    queryKey: ["issue-modules", slug, projectId, issueId],
+    queryFn: () => api.listIssueModules(slug!, projectId!, Number(issueId!)).catch(() => []),
+    enabled: !!slug && !!projectId && !!issueId,
+  });
+
+  const { data: projectModules = [] } = useQuery({
+    queryKey: ["modules", slug, projectId],
+    queryFn: () => api.listModules(slug!, projectId!).catch(() => []),
+    enabled: !!slug && !!projectId,
+  });
+
+  const addModuleMutation = useMutation({
+    mutationFn: (moduleId: string) =>
+      api.addIssueToModule(slug!, projectId!, Number(issueId!), moduleId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["issue-modules", slug, projectId, issueId] });
+      qc.invalidateQueries({ queryKey: ["issues", slug, projectId] });
+      toast.success("Added to module");
+    },
+    onError: () => toast.error("Failed to add to module"),
+  });
+
+  const removeModuleMutation = useMutation({
+    mutationFn: (moduleId: string) =>
+      api.removeIssueFromModule(slug!, projectId!, Number(issueId!), moduleId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["issue-modules", slug, projectId, issueId] });
+      qc.invalidateQueries({ queryKey: ["issues", slug, projectId] });
+      toast.success("Removed from module");
+    },
+    onError: () => toast.error("Failed to remove from module"),
+  });
+
+  const [moduleSelectValue, setModuleSelectValue] = useState("");
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-64"><div className="animate-pulse text-muted-foreground">Loading issue...</div></div>;
@@ -1055,6 +1092,62 @@ export default function IssueDetail() {
               value={issue.target_date || ""}
               onChange={(e) => updateMutation.mutate({ target_date: e.target.value || null })}
             />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+              <Package className="h-3 w-3" /> Modules
+            </label>
+            {issueModulesLoading ? (
+              <p className="text-xs text-muted-foreground animate-pulse">Loading...</p>
+            ) : (
+              <div className="space-y-1.5">
+                {issueModules.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {issueModules.map((m: Module) => (
+                      <Badge key={m.id} variant="secondary" className="text-xs gap-1 pr-1">
+                        <Package className="h-2.5 w-2.5" />
+                        {m.name}
+                        <button
+                          className="ml-0.5 hover:text-destructive"
+                          onClick={() => removeModuleMutation.mutate(m.id)}
+                          disabled={removeModuleMutation.isPending}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                {projectModules.length > 0 && (() => {
+                  const issueModuleIds = new Set(issueModules.map((m: Module) => m.id));
+                  const available = projectModules.filter(m => !issueModuleIds.has(m.id));
+                  return available.length > 0 ? (
+                    <Select
+                      value={moduleSelectValue}
+                      onValueChange={(v) => {
+                        addModuleMutation.mutate(v);
+                        setModuleSelectValue("");
+                      }}
+                    >
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue placeholder="Add to module..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {available.map(m => (
+                          <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : issueModules.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">No modules available</p>
+                  ) : null;
+                })()}
+                {projectModules.length === 0 && issueModules.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">No modules in project</p>
+                )}
+              </div>
+            )}
           </div>
 
           {slug && projectId && issueId && (
