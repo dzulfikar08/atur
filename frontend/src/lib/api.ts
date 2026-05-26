@@ -105,6 +105,20 @@ export const api = {
   listWorkspaceMembers: (slug: string) =>
     apiFetch<any[]>(`/workspaces/${slug}/members/`),
 
+  // Modules
+  listModules: (slug: string, projectId: string) =>
+    apiFetch<Module[]>(`/workspaces/${slug}/projects/${projectId}/modules/`),
+  listIssueModules: (slug: string, projectId: string, seqId: number) =>
+    apiFetch<Module[]>(`/workspaces/${slug}/projects/${projectId}/issues/${seqId}/modules/`),
+  addIssueToModule: (slug: string, projectId: string, seqId: number, moduleId: string) =>
+    apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${seqId}/modules/`, {
+      method: 'POST', body: JSON.stringify({ module_id: moduleId }),
+    }),
+  removeIssueFromModule: (slug: string, projectId: string, seqId: number, moduleId: string) =>
+    apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${seqId}/modules/${moduleId}/`, {
+      method: 'DELETE',
+    }),
+
   // Custom field definitions
   listCustomFields: (slug: string, projectId: string) =>
     apiFetch<CustomField[]>(`/workspaces/${slug}/projects/${projectId}/custom-fields/`),
@@ -236,6 +250,7 @@ export interface Issue {
   target_date: string | null;
   completed_at: string | null;
   estimate_points: number | null;
+  module_ids?: string[];
 }
 
 export interface SearchResult {
@@ -333,6 +348,17 @@ export interface View {
   is_favorite: boolean;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface Module {
+  id: string;
+  name: string;
+  description: string | null;
+  status: string | null;
+  start_date: string | null;
+  target_date: string | null;
+  project_id: string;
+  workspace_id: string;
 }
 
 export interface Attachment {

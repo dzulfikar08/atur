@@ -6,11 +6,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Filter, X, ArrowUpDown, Columns3 } from 'lucide-react';
+import { Filter, X, ArrowUpDown, Columns3, Package } from 'lucide-react';
 
 export interface FilterState {
   stateId: string;
   priority: string;
+  moduleId: string;
   groupBy: string;
   sortBy: string;
   sortDir: 'asc' | 'desc';
@@ -20,6 +21,7 @@ interface FilterBarProps {
   filters: FilterState;
   onChange: (filters: FilterState) => void;
   states: { id: string; name: string; color?: string; group: string }[];
+  modules?: { id: string; name: string }[];
 }
 
 const PRIORITIES = ['urgent', 'high', 'medium', 'low', 'none'];
@@ -35,17 +37,18 @@ const SORT_OPTIONS = [
   { value: 'priority', label: 'Priority' },
 ];
 
-export default function FilterBar({ filters, onChange, states }: FilterBarProps) {
+export default function FilterBar({ filters, onChange, states, modules }: FilterBarProps) {
   const [stateOpen, setStateOpen] = useState(false);
   const [priorityOpen, setPriorityOpen] = useState(false);
+  const [moduleOpen, setModuleOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
 
-  const activeCount = [filters.stateId !== 'all', filters.priority !== 'all'].filter(Boolean).length;
+  const activeCount = [filters.stateId !== 'all', filters.priority !== 'all', filters.moduleId !== 'all'].filter(Boolean).length;
 
   const update = (patch: Partial<FilterState>) => onChange({ ...filters, ...patch });
 
-  const clearAll = () => update({ stateId: 'all', priority: 'all' });
+  const clearAll = () => update({ stateId: 'all', priority: 'all', moduleId: 'all' });
 
   const priorityColors: Record<string, string> = {
     urgent: 'bg-red-500',
@@ -121,6 +124,41 @@ export default function FilterBar({ filters, onChange, states }: FilterBarProps)
           ))}
         </PopoverContent>
       </Popover>
+
+      {/* Module filter */}
+      {modules && modules.length > 0 && (
+        <Popover open={moduleOpen} onOpenChange={setModuleOpen}>
+          <PopoverTrigger asChild>
+            <Button variant={filters.moduleId !== 'all' ? 'secondary' : 'outline'} size="sm" className="h-7 text-xs gap-1">
+              <Package className="h-3 w-3" />
+              Module
+              {filters.moduleId !== 'all' && (
+                <Badge variant="secondary" className="h-4 px-1 text-[10px] ml-0.5">
+                  {modules.find(m => m.id === filters.moduleId)?.name?.slice(0, 10) || '...'}
+                </Badge>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48 p-1" align="start">
+            <button
+              className={`w-full text-left px-3 py-1.5 text-sm rounded-sm hover:bg-accent ${filters.moduleId === 'all' ? 'bg-accent font-medium' : ''}`}
+              onClick={() => { update({ moduleId: 'all' }); setModuleOpen(false); }}
+            >
+              All Modules
+            </button>
+            {modules.map(m => (
+              <button
+                key={m.id}
+                className={`w-full text-left px-3 py-1.5 text-sm rounded-sm hover:bg-accent flex items-center gap-2 ${filters.moduleId === m.id ? 'bg-accent font-medium' : ''}`}
+                onClick={() => { update({ moduleId: m.id }); setModuleOpen(false); }}
+              >
+                <Package className="h-3 w-3 text-muted-foreground" />
+                {m.name}
+              </button>
+            ))}
+          </PopoverContent>
+        </Popover>
+      )}
 
       {/* Group by */}
       <Popover open={groupOpen} onOpenChange={setGroupOpen}>

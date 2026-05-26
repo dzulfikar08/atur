@@ -6,7 +6,7 @@ use chrono::Utc;
 use db::entities::{
     custom_fields, issue_activities, issue_assignees, issue_attachments, issue_comments,
     issue_custom_values, issue_labels, issue_links, issue_reactions, issue_relations,
-    issue_sequences, issue_subscribers, issues, states, time_entries,
+    issue_sequences, issue_subscribers, issues, module_issues, modules, states, time_entries,
 };
 use sea_orm::ActiveValue::Set;
 use sea_orm::{
@@ -391,6 +391,7 @@ pub struct IssueListQuery {
     pub assignee: Option<Uuid>,
     pub search: Option<String>,
     pub parent: Option<Uuid>,
+    pub module: Option<Uuid>,
     pub limit: Option<u64>,
     pub offset: Option<u64>,
 }
@@ -589,6 +590,15 @@ pub fn router() -> axum::Router<AppState> {
             "/{seq_id}/archive/",
             post(archive_issue),
         )
+        // Issue <-> Module
+        .route(
+            "/{seq_id}/modules/",
+            get(list_issue_modules).post(add_issue_module),
+        )
+        .route(
+            "/{seq_id}/modules/{module_id}/",
+            delete(remove_issue_module),
+        )
         // Bulk delete
         .route(
             "/../bulk-delete-issues/",
@@ -652,6 +662,21 @@ pub async fn list_issues(
         condition = condition.add(issues::Column::Id.is_in(assigned_issue_ids));
     }
 
+    // Handle module filter (requires subquery via junction table)
+    if let Some(module_id) = query.module {
+        let module_issue_ids: Vec<Uuid> = module_issues::Entity::find()
+            .filter(module_issues::Column::ModuleId.eq(module_id))
+            .filter(module_issues::Column::DeletedAt.is_null())
+            .all(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?
+            .into_iter()
+            .map(|mi| mi.issue_id)
+            .collect();
+
+        condition = condition.add(issues::Column::Id.is_in(module_issue_ids));
+    }
+
     let query_builder = issues::Entity::find()
         .filter(condition)
         .order_by_asc(issues::Column::SortOrder);
@@ -672,13 +697,60 @@ pub async fn list_issues(
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
 
-    let resp: Vec<IssueResponse> = issue_list.into_iter().map(Into::into).collect();
+    // Batch-query module_issues for the paginated results
+    let issue_ids: Vec<Uuid> = issue_list.iter().map(|i| i.id).collect();
+    let all_module_issues: Vec<module_issues::Model> = if issue_ids.is_empty() {
+        Vec::new()
+    } else {
+        module_issues::Entity::find()
+            .filter(module_issues::Column::IssueId.is_in(issue_ids.clone()))
+            .filter(module_issues::Column::DeletedAt.is_null())
+            .all(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?
+    };
+
+    // Build issue_id -> Vec<module_id> map
+    let mut issue_modules_map: std::collections::HashMap<Uuid, Vec<Uuid>> = std::collections::HashMap::new();
+    let mut all_module_ids: std::collections::HashSet<Uuid> = std::collections::HashSet::new();
+    for mi in &all_module_issues {
+        issue_modules_map.entry(mi.issue_id).or_default().push(mi.module_id);
+        all_module_ids.insert(mi.module_id);
+    }
+
+    // Build module_map (module_id -> module name) for frontend display
+    let module_map: std::collections::HashMap<String, String> = if all_module_ids.is_empty() {
+        std::collections::HashMap::new()
+    } else {
+        let module_list = modules::Entity::find()
+            .filter(modules::Column::Id.is_in(all_module_ids.into_iter().collect::<Vec<_>>()))
+            .filter(modules::Column::DeletedAt.is_null())
+            .all(&state.db)
+            .await
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        module_list.into_iter()
+            .map(|m| (m.id.to_string(), m.name))
+            .collect()
+    };
+
+    let resp: Vec<serde_json::Value> = issue_list.into_iter().map(|issue| {
+        let base = serde_json::to_value(IssueResponse::from(issue.clone()))
+            .unwrap_or_default();
+        let module_ids: Vec<String> = issue_modules_map
+            .get(&issue.id)
+            .map(|ids| ids.iter().map(|id| id.to_string()).collect())
+            .unwrap_or_default();
+        let mut obj = base.as_object().cloned().unwrap_or_default();
+        obj.insert("module_ids".to_string(), serde_json::json!(module_ids));
+        serde_json::Value::Object(obj)
+    }).collect();
 
     Ok(Json(serde_json::json!({
         "results": resp,
         "total": total,
         "limit": limit,
         "offset": offset,
+        "module_map": module_map,
     })))
 }
 
@@ -1940,6 +2012,156 @@ pub async fn archive_issue(
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB update error: {}", e)))?;
 
     Ok(Json(IssueResponse::from(updated)))
+}
+
+// ---------------------------------------------------------------------------
+// Handlers - Issue <-> Module
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+pub struct AddIssueModuleRequest {
+    pub module_id: Uuid,
+}
+
+/// GET .../issues/<seq_id>/modules/ - List modules for an issue
+pub async fn list_issue_modules(
+    State(state): State<AppState>,
+    Extension(current_user): Extension<CurrentUser>,
+    Path((slug, project_id, seq_id)): Path<(String, Uuid, i64)>,
+) -> Result<impl IntoResponse, AppError> {
+    let workspace = load_workspace_by_slug(&state, &slug).await?;
+    require_project_role(&state, workspace.id, project_id, &current_user, ROLE_GUEST).await?;
+
+    let issue = load_issue_by_seq(&state, project_id, seq_id).await?;
+
+    // Find all module_issues for this issue
+    let mi_list = module_issues::Entity::find()
+        .filter(module_issues::Column::IssueId.eq(issue.id))
+        .filter(module_issues::Column::DeletedAt.is_null())
+        .all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+    let module_ids: Vec<Uuid> = mi_list.iter().map(|mi| mi.module_id).collect();
+
+    if module_ids.is_empty() {
+        return Ok(Json(serde_json::json!([])));
+    }
+
+    // Fetch the actual modules
+    let module_list = modules::Entity::find()
+        .filter(modules::Column::Id.is_in(module_ids))
+        .filter(modules::Column::DeletedAt.is_null())
+        .all(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+    let resp: Vec<serde_json::Value> = module_list.into_iter().map(|m| {
+        serde_json::json!({
+            "id": m.id,
+            "name": m.name,
+            "description": m.description,
+            "status": m.status,
+            "start_date": m.start_date,
+            "target_date": m.target_date,
+            "project_id": m.project_id,
+            "workspace_id": m.workspace_id,
+        })
+    }).collect();
+
+    Ok(Json(serde_json::json!(resp)))
+}
+
+/// POST .../issues/<seq_id>/modules/ - Add issue to a module
+pub async fn add_issue_module(
+    State(state): State<AppState>,
+    Extension(current_user): Extension<CurrentUser>,
+    Path((slug, project_id, seq_id)): Path<(String, Uuid, i64)>,
+    Json(body): Json<AddIssueModuleRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let workspace = load_workspace_by_slug(&state, &slug).await?;
+    require_project_role(&state, workspace.id, project_id, &current_user, ROLE_MEMBER).await?;
+
+    let issue = load_issue_by_seq(&state, project_id, seq_id).await?;
+
+    // Verify module exists in this project
+    let _module = modules::Entity::find()
+        .filter(modules::Column::Id.eq(body.module_id))
+        .filter(modules::Column::ProjectId.eq(project_id))
+        .filter(modules::Column::DeletedAt.is_null())
+        .one(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?
+        .ok_or_else(|| AppError::NotFound("Module not found".into()))?;
+
+    // Check if already in this module
+    let existing = module_issues::Entity::find()
+        .filter(module_issues::Column::ModuleId.eq(body.module_id))
+        .filter(module_issues::Column::IssueId.eq(issue.id))
+        .filter(module_issues::Column::DeletedAt.is_null())
+        .one(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+    if existing.is_some() {
+        return Err(AppError::Conflict(
+            "Issue is already in this module".into(),
+        ));
+    }
+
+    let now = Utc::now().fixed_offset();
+    let module_issue = module_issues::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        module_id: Set(body.module_id),
+        issue_id: Set(issue.id),
+        created_at: Set(Some(now)),
+        updated_at: Set(Some(now)),
+        deleted_at: Set(None),
+    }
+    .insert(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("Module issue insert error: {}", e)))?;
+
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!({
+            "id": module_issue.id,
+            "module_id": module_issue.module_id,
+            "issue_id": module_issue.issue_id,
+        })),
+    ))
+}
+
+/// DELETE .../issues/<seq_id>/modules/<module_id>/ - Remove issue from a module
+pub async fn remove_issue_module(
+    State(state): State<AppState>,
+    Extension(current_user): Extension<CurrentUser>,
+    Path((slug, project_id, seq_id, module_id)): Path<(String, Uuid, i64, Uuid)>,
+) -> Result<impl IntoResponse, AppError> {
+    let workspace = load_workspace_by_slug(&state, &slug).await?;
+    require_project_role(&state, workspace.id, project_id, &current_user, ROLE_MEMBER).await?;
+
+    let issue = load_issue_by_seq(&state, project_id, seq_id).await?;
+
+    let module_issue = module_issues::Entity::find()
+        .filter(module_issues::Column::ModuleId.eq(module_id))
+        .filter(module_issues::Column::IssueId.eq(issue.id))
+        .filter(module_issues::Column::DeletedAt.is_null())
+        .one(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?
+        .ok_or_else(|| AppError::NotFound("Issue not found in this module".into()))?;
+
+    let now = Utc::now().fixed_offset();
+    let mut active: module_issues::ActiveModel = module_issue.into();
+    active.deleted_at = Set(Some(now));
+    active.updated_at = Set(Some(now));
+    active
+        .update(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB update error: {}", e)))?;
+
+    Ok(Json(serde_json::json!({ "message": "Issue removed from module" })))
 }
 
 // ---------------------------------------------------------------------------
