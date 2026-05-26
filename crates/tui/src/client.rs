@@ -106,6 +106,26 @@ pub struct SprintProgress {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Module {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub start_date: Option<String>,
+    #[serde(default)]
+    pub target_date: Option<String>,
+    pub project_id: String,
+    pub workspace_id: String,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct State {
     pub id: String,
     pub name: String,
@@ -335,6 +355,36 @@ impl AturClient {
             args["workspace"] = serde_json::json!(ws);
         }
         self.call_tool_typed("get_sprint_progress", args).await
+    }
+
+    pub async fn list_modules(
+        &self,
+        project_id: &str,
+        workspace: Option<&str>,
+    ) -> Result<Vec<Module>> {
+        let mut args = serde_json::json!({
+            "project_id": project_id,
+        });
+        if let Some(ws) = workspace {
+            args["workspace"] = serde_json::json!(ws);
+        }
+        self.call_tool_typed("list_modules", args).await
+    }
+
+    pub async fn get_module(
+        &self,
+        project_id: &str,
+        module_id: &str,
+        workspace: Option<&str>,
+    ) -> Result<Module> {
+        let mut args = serde_json::json!({
+            "project_id": project_id,
+            "module_id": module_id,
+        });
+        if let Some(ws) = workspace {
+            args["workspace"] = serde_json::json!(ws);
+        }
+        self.call_tool_typed("get_module", args).await
     }
 
     pub async fn list_states(

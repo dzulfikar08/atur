@@ -1,4 +1,4 @@
-use crate::client::{AturClient, Issue, IssueList, Project, Sprint, SprintProgress, State, Workspace};
+use crate::client::{AturClient, Issue, IssueList, Module, Project, Sprint, SprintProgress, State, Workspace};
 use crate::components::table::TableState;
 
 /// Which view is currently active.
@@ -34,11 +34,21 @@ pub enum View {
         project_id: String,
         sprint_id: String,
     },
+    ModuleList {
+        workspace_slug: String,
+        project_id: String,
+        project_name: String,
+    },
+    ModuleDetail {
+        workspace_slug: String,
+        project_id: String,
+        module_id: String,
+    },
     Help,
 }
 
 /// Options available in the ProjectMenu.
-const PROJECT_MENU_OPTIONS: &[&str] = &["Issues", "Sprints"];
+const PROJECT_MENU_OPTIONS: &[&str] = &["Issues", "Sprints", "Modules"];
 
 /// A view on the navigation stack, each with its own table state.
 #[derive(Debug, Clone)]
@@ -65,6 +75,10 @@ pub struct App {
 
     // Sprint detail: issues in the sprint.
     pub sprint_issues: Vec<Issue>,
+
+    // Module data
+    pub modules: Vec<Module>,
+    pub current_module: Option<Module>,
 
     // State name cache: state_id -> state name
     pub states: Vec<State>,
@@ -96,6 +110,8 @@ impl App {
             sprints: Vec::new(),
             sprint_progress: None,
             sprint_issues: Vec::new(),
+            modules: Vec::new(),
+            current_module: None,
             states: Vec::new(),
             filter_index: 0,
         }
@@ -136,6 +152,8 @@ impl App {
                 View::IssueDetail { workspace_slug, .. } => return Some(workspace_slug),
                 View::SprintList { workspace_slug, .. } => return Some(workspace_slug),
                 View::SprintDetail { workspace_slug, .. } => return Some(workspace_slug),
+                View::ModuleList { workspace_slug, .. } => return Some(workspace_slug),
+                View::ModuleDetail { workspace_slug, .. } => return Some(workspace_slug),
                 _ => {}
             }
         }
@@ -151,6 +169,8 @@ impl App {
                 View::IssueDetail { project_id, .. } => return Some(project_id),
                 View::SprintList { project_id, .. } => return Some(project_id),
                 View::SprintDetail { project_id, .. } => return Some(project_id),
+                View::ModuleList { project_id, .. } => return Some(project_id),
+                View::ModuleDetail { project_id, .. } => return Some(project_id),
                 _ => {}
             }
         }
@@ -164,6 +184,7 @@ impl App {
                 View::ProjectMenu { project_name, .. } => return Some(project_name),
                 View::IssueList { project_name, .. } => return Some(project_name),
                 View::SprintList { project_name, .. } => return Some(project_name),
+                View::ModuleList { project_name, .. } => return Some(project_name),
                 _ => {}
             }
         }
@@ -189,6 +210,12 @@ impl App {
                 } => parts.push(format!("{} > Sprints", project_name)),
                 View::SprintDetail { sprint_id, .. } => {
                     parts.push(format!("Sprint {}", sprint_id))
+                }
+                View::ModuleList {
+                    project_name, ..
+                } => parts.push(format!("{} > Modules", project_name)),
+                View::ModuleDetail { module_id, .. } => {
+                    parts.push(format!("Module {}", module_id))
                 }
                 View::Help => parts.push("Help".to_string()),
             }
@@ -354,6 +381,15 @@ impl App {
                         });
                         self.fetch_current_view().await;
                     }
+                    2 => {
+                        // Modules
+                        self.push_view(View::ModuleList {
+                            workspace_slug: ws,
+                            project_id: pid,
+                            project_name: pname,
+                        });
+                        self.fetch_current_view().await;
+                    }
                     _ => {}
                 }
             }
@@ -391,6 +427,24 @@ impl App {
                         workspace_slug: ws,
                         project_id: pid,
                         sprint_id: sid,
+                    });
+                    self.fetch_current_view().await;
+                }
+            }
+            View::ModuleList {
+                workspace_slug,
+                project_id,
+                ..
+            } => {
+                let idx = frame.table_state.selected;
+                if let Some(module) = self.modules.get(idx) {
+                    let ws = workspace_slug.clone();
+                    let pid = project_id.clone();
+                    let mid = module.id.clone();
+                    self.push_view(View::ModuleDetail {
+                        workspace_slug: ws,
+                        project_id: pid,
+                        module_id: mid,
                     });
                     self.fetch_current_view().await;
                 }
@@ -450,6 +504,23 @@ impl App {
                 self.fetch_sprint_detail(
                     project_id.clone(),
                     sprint_id.clone(),
+                    workspace_slug.clone(),
+                )
+                .await
+            }
+            View::ModuleList {
+                workspace_slug,
+                project_id,
+                ..
+            } => self.fetch_modules(project_id.clone(), workspace_slug.clone()).await,
+            View::ModuleDetail {
+                workspace_slug,
+                project_id,
+                module_id,
+            } => {
+                self.fetch_module_detail(
+                    project_id.clone(),
+                    module_id.clone(),
                     workspace_slug.clone(),
                 )
                 .await
@@ -558,6 +629,36 @@ impl App {
         Ok(())
     }
 
+    async fn fetch_modules(
+        &mut self,
+        project_id: String,
+        workspace_slug: String,
+    ) -> anyhow::Result<()> {
+        self.modules = self
+            .client
+            .list_modules(&project_id, Some(&workspace_slug))
+            .await?;
+        let count = self.modules.len();
+        if let Some(frame) = self.current_frame_mut() {
+            frame.table_state.set_items(count);
+        }
+        Ok(())
+    }
+
+    async fn fetch_module_detail(
+        &mut self,
+        project_id: String,
+        module_id: String,
+        workspace_slug: String,
+    ) -> anyhow::Result<()> {
+        self.current_module = Some(
+            self.client
+                .get_module(&project_id, &module_id, Some(&workspace_slug))
+                .await?,
+        );
+        Ok(())
+    }
+
     // ── Filtered issues ─────────────────────────────────────────────────
 
     /// Return issues filtered by the current priority filter.
@@ -630,6 +731,12 @@ impl App {
                 View::SprintDetail { .. } => {
                     self.render_sprint_detail(frame, chunks[0], &mut table_state);
                 }
+                View::ModuleList { .. } => {
+                    self.render_modules(frame, chunks[0], &mut table_state);
+                }
+                View::ModuleDetail { .. } => {
+                    self.render_module_detail(frame, chunks[0]);
+                }
                 View::Help => {}
             }
             // Write back the (possibly scroll-adjusted) table state.
@@ -681,6 +788,12 @@ impl App {
             ],
             Some(View::SprintDetail { .. }) => vec![
                 ("j/k", "Navigate"), ("Enter", "Open issue"), ("Esc", "Back"), ("?", "Help"),
+            ],
+            Some(View::ModuleList { .. }) => vec![
+                ("j/k", "Navigate"), ("Enter", "Select"), ("Esc", "Back"), ("?", "Help"),
+            ],
+            Some(View::ModuleDetail { .. }) => vec![
+                ("Esc", "Back"), ("?", "Help"),
             ],
             Some(View::Help) => vec![
                 ("Esc", "Close"), ("q", "Quit"),
@@ -773,6 +886,7 @@ impl App {
         let rows: Vec<Vec<String>> = vec![
             vec!["Issues".to_string(), "View and manage project issues".to_string()],
             vec!["Sprints".to_string(), "View and manage project sprints / cycles".to_string()],
+            vec!["Modules".to_string(), "View and manage project modules".to_string()],
         ];
         crate::components::table::render(frame, area, &title, &headers, &widths, &rows, state);
     }
@@ -1073,6 +1187,133 @@ impl App {
             &rows,
             state,
         );
+    }
+
+    fn render_modules(
+        &self,
+        frame: &mut ratatui::Frame,
+        area: ratatui::layout::Rect,
+        state: &mut TableState,
+    ) {
+        let headers = ["Name", "Status", "Start", "Target"];
+        let widths = [
+            ratatui::layout::Constraint::Percentage(35),
+            ratatui::layout::Constraint::Length(14),
+            ratatui::layout::Constraint::Percentage(15),
+            ratatui::layout::Constraint::Percentage(15),
+        ];
+        let rows: Vec<Vec<String>> = self
+            .modules
+            .iter()
+            .map(|m| {
+                let fmt_date = |d: &Option<String>| -> String {
+                    d.as_ref()
+                        .map(|s| s.split('T').next().unwrap_or(s).to_string())
+                        .unwrap_or_else(|| "-".to_string())
+                };
+                vec![
+                    m.name.clone(),
+                    m.status.clone().unwrap_or_else(|| "-".to_string()),
+                    fmt_date(&m.start_date),
+                    fmt_date(&m.target_date),
+                ]
+            })
+            .collect();
+        crate::components::table::render(frame, area, "Modules", &headers, &widths, &rows, state);
+    }
+
+    fn render_module_detail(&self, frame: &mut ratatui::Frame, area: ratatui::layout::Rect) {
+        use ratatui::style::{Modifier, Style};
+        use ratatui::text::{Line, Span};
+        use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+
+        let content = if let Some(module) = &self.current_module {
+            let fmt_date = |d: &Option<String>| -> String {
+                d.as_ref()
+                    .map(|s| s.split('T').next().unwrap_or(s).to_string())
+                    .unwrap_or_else(|| "-".to_string())
+            };
+
+            let status = module.status.clone().unwrap_or_else(|| "-".to_string());
+            let start = fmt_date(&module.start_date);
+            let target = fmt_date(&module.target_date);
+            let created = fmt_date(&module.created_at);
+            let updated = fmt_date(&module.updated_at);
+
+            let desc = module
+                .description
+                .as_deref()
+                .unwrap_or("(no description)");
+
+            let mut lines = vec![
+                // Title
+                Line::from(vec![
+                    Span::styled(
+                        "Module: ",
+                        Style::default()
+                            .fg(crate::theme::MUTED),
+                    ),
+                    Span::styled(
+                        module.name.clone(),
+                        Style::default()
+                            .fg(crate::theme::FG)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                ]),
+                Line::raw(""),
+                // Status
+                Line::from(vec![
+                    Span::styled("Status:  ", Style::default().fg(crate::theme::MUTED)),
+                    Span::styled(status, Style::default().fg(crate::theme::ACCENT)),
+                ]),
+                // Blank
+                Line::raw(""),
+                // Dates
+                Line::from(vec![
+                    Span::styled("Start:   ", Style::default().fg(crate::theme::MUTED)),
+                    Span::raw(start),
+                ]),
+                Line::from(vec![
+                    Span::styled("Target:  ", Style::default().fg(crate::theme::MUTED)),
+                    Span::raw(target),
+                ]),
+                Line::from(vec![
+                    Span::styled("Created: ", Style::default().fg(crate::theme::MUTED)),
+                    Span::raw(created),
+                ]),
+                Line::from(vec![
+                    Span::styled("Updated: ", Style::default().fg(crate::theme::MUTED)),
+                    Span::raw(updated),
+                ]),
+                Line::raw(""),
+                // Description header
+                Line::from(vec![Span::styled(
+                    "-- Description --",
+                    Style::default().fg(crate::theme::ACCENT),
+                )]),
+            ];
+
+            for line in desc.lines() {
+                lines.push(Line::raw(line.to_string()));
+            }
+
+            lines
+        } else {
+            vec![Line::raw("No module loaded.")]
+        };
+
+        let paragraph = Paragraph::new(content)
+            .block(
+                Block::default()
+                    .title(" Module Detail ")
+                    .title_style(crate::theme::title_style())
+                    .borders(Borders::ALL)
+                    .style(ratatui::style::Style::default().bg(crate::theme::BG)),
+            )
+            .wrap(Wrap { trim: true })
+            .style(crate::theme::normal_style());
+
+        frame.render_widget(paragraph, area);
     }
 }
 
