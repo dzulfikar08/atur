@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,6 @@ interface Notification {
 }
 
 export default function NotificationsPage() {
-  const navigate = useNavigate();
   const qc = useQueryClient();
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
 

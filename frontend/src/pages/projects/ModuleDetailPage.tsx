@@ -5,9 +5,9 @@ import { apiFetch } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Package, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Package, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatDistanceToNow } from 'date-fns';
+
 
 interface ModuleData {
   id: string;

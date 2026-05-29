@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { apiFetch } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +10,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import {
-  ArrowLeft, Settings, Users, Tag, Columns3, Palette, Plus, Trash2, Pencil,
+  ArrowLeft, Settings, Users, Tag, Columns3, Plus, Trash2,
 } from 'lucide-react';
 
 const STATE_GROUPS = [
@@ -121,7 +120,6 @@ export default function ProjectSettingsPage() {
   const memberIds = new Set(members.map((m: any) => m.member?.id || m.id));
   const availableMembers = wsMembers.filter((m: any) => !memberIds.has(m.member?.id || m.id));
 
-  const groupColor = (group: string) => STATE_GROUPS.find(g => g.value === group)?.color ?? '#6b7280';
 
   return (
     <div className="max-w-4xl mx-auto">
