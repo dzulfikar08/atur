@@ -34,6 +34,7 @@ interface Issue {
   parent_id: string | null;
   created_at: string;
   updated_at: string;
+  estimate_points: number | null;
   assignees: any[];
   labels: any[];
   project: string;
@@ -1055,14 +1056,14 @@ export default function IssueDetail() {
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">Estimate (pts)</label>
             <Select
-              value={String(issue.estimate_points ?? "")}
-              onValueChange={(v) => updateMutation.mutate({ estimate_points: v ? Number(v) : null })}
+              value={issue.estimate_points != null ? String(issue.estimate_points) : "__none__"}
+              onValueChange={(v) => updateMutation.mutate({ estimate_points: v === "__none__" ? null : Number(v) })}
             >
               <SelectTrigger className="h-8 text-sm">
                 <SelectValue placeholder="No estimate" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="__none__">None</SelectItem>
                 {[0, 1, 2, 3, 5, 8, 13, 21].map((p) => (
                   <SelectItem key={p} value={String(p)}>{p}</SelectItem>
                 ))}

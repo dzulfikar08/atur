@@ -2,7 +2,6 @@ import { useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, api, type Issue, type State, type Module } from "@/lib/api";
-import CustomFieldManager from "@/components/projects/CustomFieldManager";
 import FilterBar, { type FilterState } from "@/components/issues/FilterBar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";

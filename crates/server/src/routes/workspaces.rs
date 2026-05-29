@@ -1304,15 +1304,16 @@ async fn build_overview(
     let now_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
 
     // Base filter conditions
+    let ws = uuid_blob(workspace_id);
     let project_filter = match project_id {
-        Some(pid) => format!(" AND project_id = '{}'", pid),
+        Some(pid) => format!(" AND project_id = {}", uuid_blob(pid)),
         None => String::new(),
     };
 
     // Total issues
     let total_sql = format!(
-        "SELECT COUNT(*) as count FROM issues WHERE workspace_id = '{}' AND deleted_at IS NULL{}",
-        workspace_id, project_filter
+        "SELECT COUNT(*) as count FROM issues WHERE workspace_id = {} AND deleted_at IS NULL{}",
+        ws, project_filter
     );
     let total: i64 = query_count(db, &total_sql).await?;
 
@@ -1328,13 +1329,13 @@ async fn build_overview(
             .collect::<Vec<_>>()
             .join(",");
         format!(
-            "SELECT COUNT(*) as count FROM issues i {} WHERE i.workspace_id = '{}' AND i.deleted_at IS NULL{} AND s.group IN ({})",
-            state_filter, workspace_id, project_filter, groups_csv
+            "SELECT COUNT(*) as count FROM issues i {} WHERE i.workspace_id = {} AND i.deleted_at IS NULL{} AND s.\"group\" IN ({})",
+            state_filter, ws, project_filter, groups_csv
         )
     } else {
         format!(
-            "SELECT COUNT(*) as count FROM issues WHERE workspace_id = '{}' AND deleted_at IS NULL{}",
-            workspace_id, project_filter
+            "SELECT COUNT(*) as count FROM issues WHERE workspace_id = {} AND deleted_at IS NULL{}",
+            ws, project_filter
         )
     };
     let closed: i64 = if completed_groups.is_empty() {
@@ -1350,10 +1351,10 @@ async fn build_overview(
         "SELECT COALESCE(s.name, 'Unset') as name, COUNT(i.id) as count \
          FROM issues i \
          LEFT JOIN states s ON i.state_id = s.id \
-         WHERE i.workspace_id = '{}' AND i.deleted_at IS NULL{} \
+         WHERE i.workspace_id = {} AND i.deleted_at IS NULL{} \
          GROUP BY s.name \
          ORDER BY count DESC",
-        workspace_id, project_filter
+        ws, project_filter
     );
     let issues_by_state = query_group_counts(db, &issues_by_state_sql).await?;
 
@@ -1361,10 +1362,10 @@ async fn build_overview(
     let issues_by_priority_sql = format!(
         "SELECT COALESCE(priority, 'None') as name, COUNT(*) as count \
          FROM issues \
-         WHERE workspace_id = '{}' AND deleted_at IS NULL{} \
+         WHERE workspace_id = {} AND deleted_at IS NULL{} \
          GROUP BY priority \
          ORDER BY count DESC",
-        workspace_id, project_filter
+        ws, project_filter
     );
     let issues_by_priority = query_group_counts(db, &issues_by_priority_sql).await?;
 
@@ -1373,17 +1374,17 @@ async fn build_overview(
         let state_filter = build_state_join_filter(&completed_groups);
         format!(
             "SELECT COUNT(*) as count FROM issues i {} \
-             WHERE i.workspace_id = '{}' AND i.deleted_at IS NULL{} \
+             WHERE i.workspace_id = {} AND i.deleted_at IS NULL{} \
              AND i.target_date IS NOT NULL AND i.target_date < '{}' \
-             AND (s.group IS NULL OR s.group != 'completed')",
-            state_filter, workspace_id, project_filter, now_str
+             AND (s.\"group\" IS NULL OR s.\"group\" != 'completed')",
+            state_filter, ws, project_filter, now_str
         )
     } else {
         format!(
             "SELECT COUNT(*) as count FROM issues \
-             WHERE workspace_id = '{}' AND deleted_at IS NULL{} \
+             WHERE workspace_id = {} AND deleted_at IS NULL{} \
              AND target_date IS NOT NULL AND target_date < '{}'",
-            workspace_id, project_filter, now_str
+            ws, project_filter, now_str
         )
     };
     let overdue: i64 = query_count(db, &overdue_sql).await?;
@@ -1391,9 +1392,9 @@ async fn build_overview(
     // Recently created (last 30 days)
     let recently_created_sql = format!(
         "SELECT COUNT(*) as count FROM issues \
-         WHERE workspace_id = '{}' AND deleted_at IS NULL{} \
+         WHERE workspace_id = {} AND deleted_at IS NULL{} \
          AND created_at >= '{}'",
-        workspace_id, project_filter, thirty_days_ago_str
+        ws, project_filter, thirty_days_ago_str
     );
     let recently_created: i64 = query_count(db, &recently_created_sql).await?;
 
@@ -1407,9 +1408,9 @@ async fn build_overview(
             .join(",");
         let sql = format!(
             "SELECT COUNT(*) as count FROM issues i {} \
-             WHERE i.workspace_id = '{}' AND i.deleted_at IS NULL{} \
-             AND i.updated_at >= '{}' AND s.group IN ({})",
-            state_filter, workspace_id, project_filter, thirty_days_ago_str, groups_csv
+             WHERE i.workspace_id = {} AND i.deleted_at IS NULL{} \
+             AND i.updated_at >= '{}' AND s.\"group\" IN ({})",
+            state_filter, ws, project_filter, thirty_days_ago_str, groups_csv
         );
         query_count(db, &sql).await?
     } else {
@@ -1500,12 +1501,13 @@ pub async fn sprint_analytics(
     let mut active_sprints = Vec::new();
 
     for cycle in &active_cycles {
+        let cycle_blob = uuid_blob(cycle.id);
         // Count total issues in this cycle
         let total_sql = format!(
             "SELECT COUNT(*) as count FROM cycle_issues ci \
              JOIN issues i ON ci.issue_id = i.id \
-             WHERE ci.cycle_id = '{}' AND ci.deleted_at IS NULL AND i.deleted_at IS NULL",
-            cycle.id
+             WHERE ci.cycle_id = {} AND ci.deleted_at IS NULL AND i.deleted_at IS NULL",
+            cycle_blob
         );
         let total: i64 = query_count(&state.db, &total_sql).await?;
 
@@ -1520,9 +1522,9 @@ pub async fn sprint_analytics(
                 "SELECT COUNT(*) as count FROM cycle_issues ci \
                  JOIN issues i ON ci.issue_id = i.id \
                  LEFT JOIN states s ON i.state_id = s.id \
-                 WHERE ci.cycle_id = '{}' AND ci.deleted_at IS NULL AND i.deleted_at IS NULL \
-                 AND s.group IN ({})",
-                cycle.id, groups_csv
+                 WHERE ci.cycle_id = {} AND ci.deleted_at IS NULL AND i.deleted_at IS NULL \
+                 AND s.\"group\" IN ({})",
+                cycle_blob, groups_csv
             );
             query_count(&state.db, &completed_sql).await?
         } else {
@@ -1584,14 +1586,14 @@ pub async fn completion_trend(
     let completed_groups = get_completed_state_groups(&state.db, workspace.id).await?;
 
     // Build trend data for last 30 days
-    // We use raw SQL for date grouping which is SQLite-compatible
+    let ws = uuid_blob(workspace.id);
     let created_sql = format!(
         "SELECT DATE(created_at) as name, COUNT(*) as count \
          FROM issues \
-         WHERE workspace_id = '{}' AND deleted_at IS NULL \
+         WHERE workspace_id = {} AND deleted_at IS NULL \
          AND DATE(created_at) >= '{}' \
          GROUP BY DATE(created_at)",
-        workspace.id, start_date_str
+        ws, start_date_str
     );
     let created_counts = query_group_counts(&state.db, &created_sql).await?;
     let created_map: std::collections::HashMap<String, i64> = created_counts
@@ -1610,11 +1612,11 @@ pub async fn completion_trend(
             "SELECT DATE(i.updated_at) as name, COUNT(*) as count \
              FROM issues i \
              LEFT JOIN states s ON i.state_id = s.id \
-             WHERE i.workspace_id = '{}' AND i.deleted_at IS NULL \
-             AND s.group IN ({}) \
+             WHERE i.workspace_id = {} AND i.deleted_at IS NULL \
+             AND s.\"group\" IN ({}) \
              AND DATE(i.updated_at) >= '{}' \
              GROUP BY DATE(i.updated_at)",
-            workspace.id, groups_csv, start_date_str
+            ws, groups_csv, start_date_str
         );
         let completed_counts = query_group_counts(&state.db, &completed_sql).await?;
         completed_counts
@@ -1642,6 +1644,13 @@ pub async fn completion_trend(
 // ---------------------------------------------------------------------------
 // Analytics helpers
 // ---------------------------------------------------------------------------
+
+/// Format a UUID for raw SQL comparison against SQLite blob columns.
+/// SQLite stores UUIDs as 16-byte blobs; comparing with a string literal always fails.
+/// Use: `WHERE workspace_id = {}` where the placeholder is `uuid_blob(workspace_id)`.
+fn uuid_blob(id: Uuid) -> String {
+    format!("x'{}'", id.as_simple())
+}
 
 async fn query_count(
     db: &sea_orm::DatabaseConnection,
@@ -1711,8 +1720,8 @@ async fn get_completed_state_groups(
     // The DEFAULT_STATES define "Done" as group "completed" and "Cancelled" as group "cancelled".
     // We'll check for both "completed" and "cancelled" groups.
     let sql = format!(
-        "SELECT DISTINCT \"group\" FROM states WHERE workspace_id = '{}' AND deleted_at IS NULL",
-        workspace_id
+        "SELECT DISTINCT \"group\" FROM states WHERE workspace_id = {} AND deleted_at IS NULL",
+        uuid_blob(workspace_id)
     );
     let all_groups = query_group_counts_with_first_col(db, &sql).await?;
 

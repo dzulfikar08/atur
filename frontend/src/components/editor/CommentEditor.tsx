@@ -36,7 +36,7 @@ interface CommentEditorProps {
   compact?: boolean
 }
 
-export default function CommentEditor({ value, onChange, onSubmit, placeholder, compact }: CommentEditorProps) {
+export default function CommentEditor({ value, onChange, onSubmit, placeholder, compact: _compact }: CommentEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const editor = useEditor({
@@ -58,14 +58,14 @@ export default function CommentEditor({ value, onChange, onSubmit, placeholder, 
       attributes: {
         class: 'prose prose-sm max-w-none focus:outline-none min-h-[80px] px-3 py-2',
       },
-      handleKeyDown: (view, event) => {
+      handleKeyDown: (_view, event) => {
         if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
           onSubmit?.()
           return true
         }
         return false
       },
-      handlePaste: (view, event) => {
+      handlePaste: (_view, event) => {
         const items = event.clipboardData?.items
         if (!items) return false
         for (const item of items) {
@@ -78,7 +78,7 @@ export default function CommentEditor({ value, onChange, onSubmit, placeholder, 
         }
         return false
       },
-      handleDrop: (view, event) => {
+      handleDrop: (_view, event) => {
         const files = event.dataTransfer?.files
         if (!files || files.length === 0) return false
         for (const file of files) {

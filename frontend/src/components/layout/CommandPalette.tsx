@@ -17,9 +17,7 @@ import {
   FileText,
   Settings,
   Plus,
-  Search,
   LayoutDashboard,
-  ArrowRight,
 } from 'lucide-react';
 
 export default function CommandPalette() {
@@ -54,7 +52,7 @@ export default function CommandPalette() {
     enabled: !!slug && open,
   });
 
-  const { data: searchResults } = useQuery({
+  const { data: _searchResults } = useQuery({
     queryKey: ['search', slug],
     queryFn: () => api.search(slug!, ''),
     enabled: false, // only search on demand via input
