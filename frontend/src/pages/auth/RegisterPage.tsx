@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2 } from '@/lib/icons';
 
 import { useAuthStore } from "@/stores/auth";
 import { ApiError } from "@/lib/api";
@@ -59,11 +59,6 @@ export default function RegisterPage() {
   const loading = useAuthStore((s) => s.loading);
   const [error, setError] = useState<string | null>(null);
 
-  if (isAuthenticated) {
-    navigate("/", { replace: true });
-    return null;
-  }
-
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
@@ -73,6 +68,16 @@ export default function RegisterPage() {
       confirm_password: "",
     },
   });
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/", { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
+  if (isAuthenticated) {
+    return null;
+  }
 
   async function onSubmit(values: RegisterFormValues) {
     setError(null);

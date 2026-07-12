@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { ArrowLeft, MessageSquare, Calendar, Clock, Link2, Plus, X, Trash2 } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Calendar, Clock, Link2, Plus, X, Trash2 } from '@/lib/icons';
 import BottomSheet from './BottomSheet';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';

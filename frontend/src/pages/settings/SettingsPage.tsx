@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Settings, Users, Tag } from "lucide-react";
+import { Settings, Users, Tag } from '@/lib/icons';
 import { useState } from "react";
 
 export default function SettingsPage() {

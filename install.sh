@@ -1,11 +1,11 @@
 #!/bin/bash
-# Install plane-pmo
+# Install atur
 set -e
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 
-echo "Installing plane-pmo..."
+echo "Installing atur..."
 echo "  OS:   $OS"
 echo "  ARCH: $ARCH"
 
@@ -16,22 +16,22 @@ if ! command -v cargo &>/dev/null; then
 fi
 
 echo ""
-echo "Building plane-pmo from source..."
+echo "Building atur from source..."
 cargo build --release
 
 echo ""
 echo "Installing binary to /usr/local/bin..."
 if [ -w /usr/local/bin ]; then
-    cp target/release/plane-pmo /usr/local/bin/
+    cp target/release/atur /usr/local/bin/
 else
     echo "sudo required to write to /usr/local/bin"
-    sudo cp target/release/plane-pmo /usr/local/bin/
+    sudo cp target/release/atur /usr/local/bin/
 fi
 
 echo ""
-echo "Done! Run: plane-pmo serve"
+echo "Done! Run: atur serve"
 echo ""
 echo "Quick start:"
 echo "  1. Copy config.example.toml to config.toml and edit"
-echo "  2. Run: plane-pmo migrate"
-echo "  3. Run: plane-pmo serve"
+echo "  2. Run: atur migrate"
+echo "  3. Run: atur serve"

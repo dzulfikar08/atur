@@ -9,7 +9,7 @@ import {
   ListChecks,
   Inbox,
   BarChart3,
-} from "lucide-react";
+} from '@/lib/icons';
 import {
   PieChart,
   Pie,

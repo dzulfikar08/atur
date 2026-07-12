@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Issue } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { Layers, Circle, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Layers, Circle, CheckCircle2, AlertTriangle } from '@/lib/icons';
 import MobileIssueCard from './MobileIssueCard';
 import { useNavigate } from 'react-router-dom';
 import usePullToRefresh from '@/hooks/usePullToRefresh';

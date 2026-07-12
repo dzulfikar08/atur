@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 
 interface PullToRefreshIndicatorProps {

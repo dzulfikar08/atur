@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { Search, Sun, Moon, Monitor, Bell, FileText, Clock, PenTool } from 'lucide-react';
+import { Search, Sun, Moon, Monitor, Bell, FileText, Clock, PenTool } from '@/lib/icons';
 import { useThemeStore } from '@/stores/theme';
 import { useAuthStore } from '@/stores/auth';
 import { usePagesStore } from '@/stores/pages';

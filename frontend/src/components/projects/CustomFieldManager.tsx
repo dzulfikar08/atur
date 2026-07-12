@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, GripVertical, X } from "lucide-react";
+import { Plus, Pencil, Trash2, GripVertical, X } from '@/lib/icons';
 import { toast } from "sonner";
 
 const FIELD_TYPES: { value: FieldType; label: string }[] = [

@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNow, parseISO } from 'date-fns';
-import { Circle, ArrowUpRight } from 'lucide-react';
+import { Circle, ArrowUpRight } from '@/lib/icons';
 import AnalyticsCards from '@/components/dashboard/AnalyticsCards';
 import CompletionChart from '@/components/dashboard/CompletionChart';
 import SprintProgress from '@/components/dashboard/SprintProgress';

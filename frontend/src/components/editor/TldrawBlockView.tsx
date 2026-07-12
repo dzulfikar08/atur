@@ -3,7 +3,7 @@ import type { NodeViewProps } from '@tiptap/react'
 import { NodeViewWrapper } from '@tiptap/react'
 import { Tldraw, Editor, createTLStore, getSnapshot, loadSnapshot } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
-import { Maximize2, Save, Trash2 } from 'lucide-react'
+import { Maximize2, Save, Trash2 } from '@/lib/icons'
 import { useThemeStore } from '@/stores/theme'
 import { TldrawFullscreenModal } from './TldrawFullscreenModal'
 

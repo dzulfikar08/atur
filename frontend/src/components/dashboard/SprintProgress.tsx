@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays } from '@/lib/icons';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';

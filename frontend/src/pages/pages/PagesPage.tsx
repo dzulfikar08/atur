@@ -26,7 +26,7 @@ import {
   Pin,
   Clock,
   Network,
-} from 'lucide-react';
+} from '@/lib/icons';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';

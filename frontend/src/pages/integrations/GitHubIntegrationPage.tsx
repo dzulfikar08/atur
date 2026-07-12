@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { GitBranch, RefreshCw, Trash2, ExternalLink, Puzzle } from 'lucide-react';
+import { GitBranch, RefreshCw, Trash2, ExternalLink, Puzzle } from '@/lib/icons';
 
 // --- Types ---
 

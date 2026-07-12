@@ -46,25 +46,27 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8787',
         changeOrigin: true,
       },
       '/auth': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8787',
         changeOrigin: true,
       },
       '/live': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8787',
         ws: true,
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8787',
         changeOrigin: true,
       },
     },
   },
   build: {
     outDir: '../static-app',
+    emptyOutDir: true,
+    chunkSizeWarningLimit: 1000,
   },
 })

@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Shield, Users, Activity, TrendingUp, TrendingDown, FolderKanban, ArrowUpRight } from 'lucide-react';
+import { Shield, Users, Activity, TrendingUp, TrendingDown, FolderKanban, ArrowUpRight } from '@/lib/icons';
 
 interface Member {
   id: string;

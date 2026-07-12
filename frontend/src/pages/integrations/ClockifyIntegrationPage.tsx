@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Clock, RefreshCw, Link2, CheckCircle2, XCircle } from 'lucide-react';
+import { Clock, RefreshCw, Link2, CheckCircle2, XCircle } from '@/lib/icons';
 import { toast } from 'sonner';
 
 interface ClockifyStatus {

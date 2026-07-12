@@ -14,7 +14,7 @@ import {
   ImageIcon,
   Minus,
   Info,
-} from 'lucide-react'
+} from '@/lib/icons'
 
 export function getSlashCommandItems(query: string): SlashCommandItem[] {
   const items: SlashCommandItem[] = [

@@ -1,5 +1,5 @@
 # ===========================================================================
-# Plane PMO - Multi-stage Dockerfile
+# Atur - Multi-stage Dockerfile
 # ===========================================================================
 # Stage 1: Build the Rust binary in release mode
 # Stage 2: Minimal runtime image with only what's needed
@@ -25,13 +25,15 @@ COPY crates/domain/Cargo.toml crates/domain/Cargo.toml
 COPY crates/db/Cargo.toml crates/db/Cargo.toml
 COPY crates/tasks/Cargo.toml crates/tasks/Cargo.toml
 COPY crates/collab/Cargo.toml crates/collab/Cargo.toml
+COPY crates/tui/Cargo.toml crates/tui/Cargo.toml
 
 # Create dummy source files so cargo can resolve the workspace.
 RUN mkdir -p crates/server/src && echo "fn main() {}" > crates/server/src/main.rs \
     && mkdir -p crates/domain/src && echo "" > crates/domain/src/lib.rs \
     && mkdir -p crates/db/src && echo "" > crates/db/src/lib.rs \
     && mkdir -p crates/tasks/src && echo "" > crates/tasks/src/lib.rs \
-    && mkdir -p crates/collab/src && echo "" > crates/collab/src/lib.rs
+    && mkdir -p crates/collab/src && echo "" > crates/collab/src/lib.rs \
+    && mkdir -p crates/tui/src && echo "fn main() {}" > crates/tui/src/main.rs
 
 # Build dependencies only (the dummy main will fail to link, which is fine).
 RUN cargo build --release 2>/dev/null || true
@@ -61,9 +63,10 @@ RUN groupadd --system plane && useradd --system --gid plane --create-home plane
 WORKDIR /app
 
 # Copy the compiled binary
-COPY --from=builder /app/target/release/plane-pmo /usr/local/bin/plane-pmo
+COPY --from=builder /app/target/release/atur /usr/local/bin/atur
 
 # Copy static assets served by the application
+COPY --from=builder /app/static-app ./static-app
 COPY --from=builder /app/static ./static
 COPY --from=builder /app/static-editor ./static-editor
 
@@ -87,5 +90,5 @@ VOLUME ["/app/static"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:8080/health 2>/dev/null | grep -q '"status":"ok"' || exit 1
 
-ENTRYPOINT ["plane-pmo"]
+ENTRYPOINT ["atur"]
 CMD ["--config", "config.toml", "serve"]

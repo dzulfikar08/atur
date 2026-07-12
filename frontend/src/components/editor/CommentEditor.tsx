@@ -23,7 +23,7 @@ import {
   List, ListOrdered, CheckSquare,
   Quote, Code2,
   ImageIcon, LinkIcon,
-} from 'lucide-react'
+} from '@/lib/icons'
 
 const lowlight = createLowlight()
 lowlight.register({ javascript, typescript, python, css, json, bash, sql, rust })

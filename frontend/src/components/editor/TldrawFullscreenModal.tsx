@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Tldraw, Editor, createTLStore, getSnapshot, loadSnapshot } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
-import { X, Save } from 'lucide-react'
+import { X, Save } from '@/lib/icons'
 import { useThemeStore } from '@/stores/theme'
 
 interface TldrawFullscreenModalProps {
