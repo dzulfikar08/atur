@@ -45,7 +45,7 @@ import {
   TableIcon,
   Minus,
   FileCode,
-} from 'lucide-react'
+} from '@/lib/icons'
 import { useCollab } from '../hooks/useCollab'
 import { SlashCommandExtension } from './editor/SlashCommandExtension'
 import {

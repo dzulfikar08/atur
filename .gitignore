@@ -10,6 +10,11 @@ frontend/dist/
 static/
 static-app/
 static-editor/
+build/
+
+# Wrangler local dev state
+.wrangler/
+wrangler.local.toml
 
 # Database
 data/*.db

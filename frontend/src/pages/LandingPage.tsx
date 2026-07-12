@@ -22,7 +22,7 @@ import {
   Cpu,
   Network,
   Sparkles,
-} from 'lucide-react';
+} from '@/lib/icons';
 
 const features = [
   {

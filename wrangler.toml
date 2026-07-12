@@ -1,0 +1,30 @@
+name = "atur"
+main = "build/worker/shim.mjs"
+compatibility_date = "2026-04-08"
+compatibility_flags = ["nodejs_compat"]
+account_id = "b7e6f8457bd39fa37a7eea5249799754"
+
+[[routes]]
+pattern = "diatur.com/*"
+zone_id = "85af83477a97625830e3a172e1d04aed"
+[build]
+command = "bash crates/atur-worker/build.sh"
+
+[assets]
+directory = "static-app"
+not_found_handling = "single-page-application"
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/auth/*", "/health", "/readiness"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "atur-db"
+database_id = "08a18888-5e9a-4384-8ec2-03e73adab633"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "atur-assets"
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "767d9b9dfa0e4f79a70f7f3c3e205f69"

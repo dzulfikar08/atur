@@ -24,7 +24,10 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
 }
 
 export const api = {
-  listWorkspaces: () => apiFetch<Workspace[]>('/workspaces/'),
+  listWorkspaces: async () => {
+    const data = await apiFetch<{results: Workspace[]}>('/workspaces/');
+    return data.results;
+  },
   analyticsOverview: (slug: string) =>
     apiFetch<AnalyticsOverview>(`/workspaces/${slug}/analytics/overview`),
   completionTrend: (slug: string) =>
@@ -33,7 +36,10 @@ export const api = {
   sprintAnalytics: (slug: string) =>
     apiFetch<{ active_sprints: SprintData[] }>(`/workspaces/${slug}/analytics/sprints`)
       .then(r => r.active_sprints),
-  listProjects: (slug: string) => apiFetch<Project[]>(`/workspaces/${slug}/projects/`),
+  listProjects: async (slug: string) => {
+    const data = await apiFetch<{results: Project[]}>(`/workspaces/${slug}/projects/`);
+    return data.results;
+  },
   listIssues: async (slug: string, projectId: string): Promise<Issue[]> => {
     const all: Issue[] = [];
     let offset = 0;
@@ -43,13 +49,15 @@ export const api = {
         `/workspaces/${slug}/projects/${projectId}/issues/?limit=${limit}&offset=${offset}`
       );
       all.push(...page.results);
-      if (all.length >= page.total) break;
+      if (!page.total || page.results.length === 0 || all.length >= page.total) break;
       offset += limit;
     }
     return all;
   },
-  listStates: (slug: string, projectId: string) =>
-    apiFetch<State[]>(`/workspaces/${slug}/projects/${projectId}/states/`),
+  listStates: async (slug: string, projectId: string) => {
+    const data = await apiFetch<{results: State[]}>(`/workspaces/${slug}/projects/${projectId}/states/`);
+    return data.results;
+  },
   search: (slug: string, query: string) =>
     apiFetch<SearchResult>(`/workspaces/${slug}/search/?q=${encodeURIComponent(query)}`),
 
@@ -74,16 +82,20 @@ export const api = {
     apiFetch(`/workspaces/${slug}/projects/${projectId}/states/${stateId}/`, { method: 'DELETE' }),
 
   // Labels
-  listLabels: (slug: string, projectId: string) =>
-    apiFetch<Label[]>(`/workspaces/${slug}/projects/${projectId}/labels/`),
+  listLabels: async (slug: string, projectId: string) => {
+    const data = await apiFetch<{results: Label[]}>(`/workspaces/${slug}/projects/${projectId}/labels/`);
+    return data.results;
+  },
   createLabel: (slug: string, projectId: string, data: { name: string; color?: string; description?: string }) =>
     apiFetch<Label>(`/workspaces/${slug}/projects/${projectId}/labels/`, {
       method: 'POST', body: JSON.stringify(data),
     }),
 
   // Project members
-  listProjectMembers: (slug: string, projectId: string) =>
-    apiFetch<ProjectMember[]>(`/workspaces/${slug}/projects/${projectId}/members/`),
+  listProjectMembers: async (slug: string, projectId: string) => {
+    const data = await apiFetch<{results: ProjectMember[]}>(`/workspaces/${slug}/projects/${projectId}/members/`);
+    return data.results;
+  },
   addProjectMember: (slug: string, projectId: string, userId: string, role?: number) =>
     apiFetch(`/workspaces/${slug}/projects/${projectId}/members/`, {
       method: 'POST', body: JSON.stringify({ user_id: userId, role: role ?? 15 }),
@@ -92,8 +104,10 @@ export const api = {
     apiFetch(`/workspaces/${slug}/projects/${projectId}/members/${userId}/`, { method: 'DELETE' }),
 
   // Views
-  listViews: (slug: string, projectId: string) =>
-    apiFetch<View[]>(`/workspaces/${slug}/projects/${projectId}/views/`),
+  listViews: async (slug: string, projectId: string) => {
+    const data = await apiFetch<{results: View[]}>(`/workspaces/${slug}/projects/${projectId}/views/`);
+    return data.results;
+  },
   createView: (slug: string, projectId: string, data: { name: string; query?: unknown; access?: string }) =>
     apiFetch<View>(`/workspaces/${slug}/projects/${projectId}/views/`, {
       method: 'POST', body: JSON.stringify(data),
@@ -102,14 +116,20 @@ export const api = {
     apiFetch(`/workspaces/${slug}/projects/${projectId}/views/${viewId}/`, { method: 'DELETE' }),
 
   // Workspace members (for adding to project)
-  listWorkspaceMembers: (slug: string) =>
-    apiFetch<any[]>(`/workspaces/${slug}/members/`),
+  listWorkspaceMembers: async (slug: string) => {
+    const data = await apiFetch<{results: any[]}>(`/workspaces/${slug}/members/`);
+    return data.results;
+  },
 
   // Modules
-  listModules: (slug: string, projectId: string) =>
-    apiFetch<Module[]>(`/workspaces/${slug}/projects/${projectId}/modules/`),
-  listIssueModules: (slug: string, projectId: string, seqId: number) =>
-    apiFetch<Module[]>(`/workspaces/${slug}/projects/${projectId}/issues/${seqId}/modules/`),
+  listModules: async (slug: string, projectId: string) => {
+    const data = await apiFetch<{results: Module[]}>(`/workspaces/${slug}/projects/${projectId}/modules/`);
+    return data.results;
+  },
+  listIssueModules: async (slug: string, projectId: string, seqId: number) => {
+    const data = await apiFetch<{results: Module[]}>(`/workspaces/${slug}/projects/${projectId}/issues/${seqId}/modules/`);
+    return data.results;
+  },
   addIssueToModule: (slug: string, projectId: string, seqId: number, moduleId: string) =>
     apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${seqId}/modules/`, {
       method: 'POST', body: JSON.stringify({ module_id: moduleId }),
@@ -120,8 +140,10 @@ export const api = {
     }),
 
   // Custom field definitions
-  listCustomFields: (slug: string, projectId: string) =>
-    apiFetch<CustomField[]>(`/workspaces/${slug}/projects/${projectId}/custom-fields/`),
+  listCustomFields: async (slug: string, projectId: string) => {
+    const data = await apiFetch<{results: CustomField[]}>(`/workspaces/${slug}/projects/${projectId}/custom-fields/`);
+    return data.results;
+  },
   createCustomField: (slug: string, projectId: string, data: Partial<CustomField>) =>
     apiFetch<CustomField>(`/workspaces/${slug}/projects/${projectId}/custom-fields/`, {
       method: 'POST', body: JSON.stringify(data),
@@ -144,8 +166,10 @@ export const api = {
     }),
 
   // Attachments
-  listAttachments: (slug: string, projectId: string, issueSeqId: number) =>
-    apiFetch<Attachment[]>(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/attachments/`),
+  listAttachments: async (slug: string, projectId: string, issueSeqId: number) => {
+    const data = await apiFetch<{results: Attachment[]}>(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/attachments/`);
+    return data.results;
+  },
   createAttachment: (slug: string, projectId: string, issueSeqId: number, data: { asset?: string; attributes?: unknown }) =>
     apiFetch<Attachment>(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/attachments/`, {
       method: 'POST', body: JSON.stringify(data),
@@ -167,8 +191,10 @@ export const api = {
   },
 
   // Time entries
-  listTimeEntries: (slug: string, projectId: string, issueSeqId: number) =>
-    apiFetch<TimeEntry[]>(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/time-entries/`),
+  listTimeEntries: async (slug: string, projectId: string, issueSeqId: number) => {
+    const data = await apiFetch<{results: TimeEntry[]}>(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/time-entries/`);
+    return data.results;
+  },
   createTimeEntry: (slug: string, projectId: string, issueSeqId: number, data: { duration_seconds: number; description?: string }) =>
     apiFetch<TimeEntry>(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/time-entries/`, {
       method: 'POST', body: JSON.stringify(data),

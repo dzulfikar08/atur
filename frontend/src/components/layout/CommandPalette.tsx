@@ -18,7 +18,7 @@ import {
   Settings,
   Plus,
   LayoutDashboard,
-} from 'lucide-react';
+} from '@/lib/icons';
 
 export default function CommandPalette() {
   const [open, setOpen] = useState(false);

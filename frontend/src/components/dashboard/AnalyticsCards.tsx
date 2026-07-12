@@ -7,7 +7,7 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
-} from 'lucide-react';
+} from '@/lib/icons';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api, type AnalyticsOverview } from '@/lib/api';

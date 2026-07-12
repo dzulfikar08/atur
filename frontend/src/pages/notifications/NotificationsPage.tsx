@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Bell, Check, Archive, Eye, EyeOff } from 'lucide-react';
+import { Bell, Check, Archive, Eye, EyeOff } from '@/lib/icons';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 

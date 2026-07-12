@@ -8,7 +8,7 @@ import {
   Network,
   MessageSquare,
   Calendar,
-} from 'lucide-react'
+} from '@/lib/icons'
 import {
   Dialog,
   DialogContent,

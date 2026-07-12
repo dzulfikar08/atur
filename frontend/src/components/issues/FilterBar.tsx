@@ -6,7 +6,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Filter, X, ArrowUpDown, Columns3, Package } from 'lucide-react';
+import { Filter, X, ArrowUpDown, Columns3, Package } from '@/lib/icons';
 
 export interface FilterState {
   stateId: string;

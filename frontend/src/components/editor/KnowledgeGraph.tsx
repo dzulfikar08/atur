@@ -18,7 +18,7 @@ import '@xyflow/react/dist/style.css';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch, type Page } from '@/lib/api';
 import { useThemeStore } from '@/stores/theme';
-import { FileText, PenTool, Network } from 'lucide-react';
+import { FileText, PenTool, Network } from '@/lib/icons';
 import { Button } from '@/components/ui/button';
 
 // ---------------------------------------------------------------------------

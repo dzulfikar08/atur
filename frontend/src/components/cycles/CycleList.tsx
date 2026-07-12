@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { format, parseISO, compareDesc } from "date-fns";
-import { CalendarDays, ArrowRight } from "lucide-react";
+import { CalendarDays, ArrowRight } from '@/lib/icons';
 import { apiFetch } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

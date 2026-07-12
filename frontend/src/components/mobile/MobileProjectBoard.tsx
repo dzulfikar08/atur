@@ -9,7 +9,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Plus, SlidersHorizontal, Timer } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, SlidersHorizontal, Timer } from '@/lib/icons';
 import MobileIssueCard from './MobileIssueCard';
 import BottomSheet from './BottomSheet';
 import PullToRefreshIndicator from './PullToRefreshIndicator';

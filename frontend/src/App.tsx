@@ -1,7 +1,12 @@
-import { lazy, Suspense } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import AppShell from '@/components/layout/AppShell';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
+import { useAuthStore } from '@/stores/auth';
+import { useWorkspaceStore } from '@/stores/workspace';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+
 
 // Lazy-loaded page components
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage'));
@@ -35,12 +40,49 @@ function PageLoader() {
   );
 }
 
+function RootRoute() {
+  const navigate = useNavigate();
+  const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+  const initialized = useAuthStore(s => s.initialized);
+  const fetchUser = useAuthStore(s => s.fetchUser);
+  const workspaces = useWorkspaceStore(s => s.workspaces);
+  const setWorkspaces = useWorkspaceStore(s => s.setWorkspaces);
+
+  useEffect(() => {
+    if (!initialized) {
+      fetchUser();
+    }
+  }, [initialized, fetchUser]);
+
+  useQuery({
+    queryKey: ['workspaces'],
+    queryFn: async () => {
+      const data = await api.listWorkspaces();
+      setWorkspaces(data);
+      return data;
+    },
+    enabled: isAuthenticated,
+  });
+
+  useEffect(() => {
+    if (initialized && isAuthenticated && workspaces.length > 0) {
+      navigate(`/${workspaces[0].slug}`, { replace: true });
+    }
+  }, [initialized, isAuthenticated, workspaces, navigate]);
+
+  if (!initialized) return <PageLoader />;
+  if (!isAuthenticated) return <LandingPage />;
+
+  return <PageLoader />;
+}
+
 export default function App() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
-        {/* Landing page — public, no AppShell */}
-        <Route path="/" element={<LandingPage />} />
+        {/* Root route — auth-aware: shows LandingPage or redirects to workspace */}
+        <Route path="/" element={<RootRoute />} />
+        <Route path="/dashboard" element={<RootRoute />} />
 
         {/* Public routes */}
         <Route path="/auth/login" element={<LoginPage />} />

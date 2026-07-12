@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { User, Key, Plus, Trash2, Copy } from "lucide-react";
+import { User, Key, Plus, Trash2, Copy } from '@/lib/icons';
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -27,7 +27,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useThemeStore } from "@/stores/theme";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { useNavigate, useParams } from "react-router-dom";
-import { Building2, Check } from "lucide-react";
+import { Building2, Check } from '@/lib/icons';
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 

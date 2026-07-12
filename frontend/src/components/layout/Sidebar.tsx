@@ -11,7 +11,7 @@ import {
   ChevronDown,
   Puzzle,
   Shield,
-} from 'lucide-react';
+} from '@/lib/icons';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Plus, ArrowLeft } from "lucide-react";
+import { Plus, ArrowLeft } from '@/lib/icons';
 import { Button } from "@/components/ui/button";
 import CycleList from "@/components/cycles/CycleList";
 import CreateCycleDialog from "@/components/cycles/CreateCycleDialog";

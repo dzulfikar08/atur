@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { ArrowLeft, Plus, Package, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Package, Trash2 } from '@/lib/icons';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 

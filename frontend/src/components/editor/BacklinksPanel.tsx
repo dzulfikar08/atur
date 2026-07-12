@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
-import { FileText, ArrowRight } from 'lucide-react';
+import { FileText, ArrowRight } from '@/lib/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 
 interface Page {

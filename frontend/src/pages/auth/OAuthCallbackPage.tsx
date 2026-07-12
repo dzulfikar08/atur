@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2 } from '@/lib/icons';
 
 import { useAuthStore } from "@/stores/auth";
 

@@ -6,6 +6,7 @@ members = [
     "crates/tasks",
     "crates/collab",
     "crates/tui",
+    "crates/atur-worker",
 ]
 resolver = "2"
 

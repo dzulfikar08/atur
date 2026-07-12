@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Calendar, MessageSquare, Clock, Link2, GitBranch, Trash2, X, Activity, Paperclip, Upload, FileIcon, Download, Timer, Package } from "lucide-react";
+import { ArrowLeft, Calendar, MessageSquare, Clock, Link2, GitBranch, Trash2, X, Activity, Paperclip, Upload, FileIcon, Download, Timer, Package } from '@/lib/icons';
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 

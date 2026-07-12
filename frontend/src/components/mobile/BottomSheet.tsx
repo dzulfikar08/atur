@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { X } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 import { hapticLight } from '@/lib/haptics';
 

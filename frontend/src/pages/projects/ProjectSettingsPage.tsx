@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Settings, Users, Tag, Columns3, Plus, Trash2,
-} from 'lucide-react';
+} from '@/lib/icons';
 
 const STATE_GROUPS = [
   { value: 'backlog', label: 'Backlog', color: '#6b7280' },
