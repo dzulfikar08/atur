@@ -245,8 +245,8 @@ add_comment(
 
 ### Registration (reference only)
 
-**Claude Code**: `claude mcp add atur --transport http http://localhost:8080/mcp -s user -H "X-API-Key: pk_live_4c5102a0b5d94e13b6feefecdf80394d"`
-**Cursor** (`.cursor/mcp.json`): `{ "mcpServers": { "atur": { "url": "http://localhost:8080/mcp", "transport": "http", "headers": { "X-API-Key": "pk_live_4c5102a0b5d94e13b6feefecdf80394d" } } } }`
+**Claude Code**: `claude mcp add atur --transport http http://localhost:8080/mcp -s user -H "X-API-Key: pk_live_<REPLACE_WITH_REAL_KEY>"`
+**Cursor** (`.cursor/mcp.json`): `{ "mcpServers": { "atur": { "url": "http://localhost:8080/mcp", "transport": "http", "headers": { "X-API-Key": "pk_live_<REPLACE_WITH_REAL_KEY>" } } } }`
 **Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`): `{ "mcpServers": { "atur": { "url": "http://localhost:8080/mcp" } } }`
 
 ### Worker Build (atur-worker crate)

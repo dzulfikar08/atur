@@ -21,7 +21,7 @@ function setSessionCookie(c: C, token: string) {
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
     secure: isHttps(c),
-    sameSite: 'Lax',
+    sameSite: 'Strict',
     path: '/',
     maxAge: SESSION_MAX_AGE,
   })
@@ -31,19 +31,13 @@ function clearSessionCookie(c: C) {
   setCookie(c, SESSION_COOKIE, '', {
     httpOnly: true,
     secure: isHttps(c),
-    sameSite: 'Lax',
+    sameSite: 'Strict',
     path: '/',
     maxAge: 0,
   })
 }
 
 export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
-  .post('/email-check', async (c) => {
-    const db = getDb(c.env.DB)
-    const { email } = await c.req.json()
-    const dbUser = await authService.emailCheck(db, email)
-    return c.json({ exists: !!dbUser })
-  })
   .post('/register', async (c) => {
     const db = getDb(c.env.DB)
     const body = authService.registerSchema.parse(await c.req.json())
