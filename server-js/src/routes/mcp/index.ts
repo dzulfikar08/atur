@@ -5,7 +5,7 @@ import { authMiddleware } from '../../middleware/auth'
 import { paginationParams, paginatedResponse, nowISO } from '../../lib/pagination'
 import { v4 as uuid } from 'uuid'
 import { HTTPException } from 'hono/http-exception'
-import { eq, and, desc, isNull, like, or } from 'drizzle-orm'
+import { eq, and, desc, isNull, like, or, inArray } from 'drizzle-orm'
 import * as schema from '../../db/schema'
 
 interface JsonRpcRequest {
@@ -73,31 +73,59 @@ const TOOLS = [
   { name: 'remove_issue_relation', description: 'Remove a relation', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, workspace: { type: 'string' }, relation_id: { type: 'string' } }, required: ['project_id', 'workspace', 'relation_id'] } },
 ]
 
-async function getWorkspaceId(db: ReturnType<typeof getDb>, slug: string) {
-  const [ws] = await db.select({ id: schema.workspaces.id }).from(schema.workspaces).where(and(eq(schema.workspaces.slug, slug), isNull(schema.workspaces.deletedAt))).limit(1)
+async function getWorkspaceId(db: ReturnType<typeof getDb>, slug: string, userId?: string) {
+  const [ws] = await db.select({ id: schema.workspaces.id, ownerId: schema.workspaces.ownerId }).from(schema.workspaces).where(and(eq(schema.workspaces.slug, slug), isNull(schema.workspaces.deletedAt))).limit(1)
   if (!ws) throw new HTTPException(404, { message: `Workspace "${slug}" not found` })
+  if (userId) {
+    const ok = ws.ownerId === userId || await isWorkspaceMember(db, ws.id, userId)
+    if (!ok) throw new HTTPException(403, { message: 'Not a member of this workspace' })
+  }
   return ws.id
 }
 
-async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: string, params: Record<string, unknown>): Promise<unknown> {
+async function isWorkspaceMember(db: ReturnType<typeof getDb>, workspaceId: string, userId: string): Promise<boolean> {
+  const [m] = await db.select({ id: schema.workspaceMembers.id }).from(schema.workspaceMembers)
+    .where(and(eq(schema.workspaceMembers.workspaceId, workspaceId), eq(schema.workspaceMembers.memberId, userId), eq(schema.workspaceMembers.isActive, 1), isNull(schema.workspaceMembers.deletedAt)))
+    .limit(1)
+  return !!m
+}
+
+// Gate project-scoped tools: resolve project -> workspace, then require the
+// user be that workspace's owner or an active member.
+async function assertProjectAccess(db: ReturnType<typeof getDb>, projectId: string, userId: string) {
+  const [proj] = await db.select({ workspaceId: schema.projects.workspaceId }).from(schema.projects).where(eq(schema.projects.id, projectId)).limit(1)
+  if (!proj) throw new HTTPException(404, { message: 'Project not found' })
+  const [ws] = await db.select({ ownerId: schema.workspaces.ownerId }).from(schema.workspaces).where(eq(schema.workspaces.id, proj.workspaceId)).limit(1)
+  if (!ws) throw new HTTPException(404, { message: 'Workspace not found' })
+  const ok = ws.ownerId === userId || await isWorkspaceMember(db, proj.workspaceId, userId)
+  if (!ok) throw new HTTPException(403, { message: 'Not a member of this workspace' })
+}
+
+async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: string, params: Record<string, unknown>, userId: string): Promise<unknown> {
   switch (toolName) {
     case 'list_workspaces': {
-      const rows = await db.select().from(schema.workspaces).where(isNull(schema.workspaces.deletedAt))
+      // Only workspaces the user owns or is an active member of.
+      const memberRows = await db.select({ wsId: schema.workspaceMembers.workspaceId }).from(schema.workspaceMembers)
+        .where(and(eq(schema.workspaceMembers.memberId, userId), eq(schema.workspaceMembers.isActive, 1), isNull(schema.workspaceMembers.deletedAt)))
+      const memberWsIds = memberRows.map((r) => r.wsId)
+      const rows = memberWsIds.length
+        ? await db.select().from(schema.workspaces).where(and(isNull(schema.workspaces.deletedAt), or(eq(schema.workspaces.ownerId, userId), inArray(schema.workspaces.id, memberWsIds))))
+        : await db.select().from(schema.workspaces).where(and(isNull(schema.workspaces.deletedAt), eq(schema.workspaces.ownerId, userId)))
       return rows
     }
     case 'list_projects': {
-      const workspaceId = await getWorkspaceId(db, params.workspace as string)
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
       const rows = await db.select().from(schema.projects).where(and(eq(schema.projects.workspaceId, workspaceId), isNull(schema.projects.deletedAt)))
       return rows
     }
     case 'get_project': {
-      const workspaceId = await getWorkspaceId(db, params.workspace as string)
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
       const [project] = await db.select().from(schema.projects).where(and(eq(schema.projects.id, params.project_id as string), eq(schema.projects.workspaceId, workspaceId), isNull(schema.projects.deletedAt))).limit(1)
       if (!project) throw new HTTPException(404, { message: 'Project not found' })
       return project
     }
     case 'create_project': {
-      const workspaceId = await getWorkspaceId(db, params.workspace as string)
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
       const id = uuid()
       const now = nowISO()
       await db.insert(schema.projects).values({
@@ -112,7 +140,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return db.select().from(schema.projects).where(eq(schema.projects.id, id)).limit(1)
     }
     case 'list_issues': {
-      const workspaceId = await getWorkspaceId(db, params.workspace as string)
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
       const conditions = [eq(schema.issues.projectId, params.project_id as string), eq(schema.issues.workspaceId, workspaceId), isNull(schema.issues.deletedAt)]
       if (params.state) conditions.push(eq(schema.issues.stateId, params.state as string))
       const limit = Math.min(Number(params.limit) || 50, 100)
@@ -121,7 +149,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return rows
     }
     case 'create_issue': {
-      const workspaceId = await getWorkspaceId(db, params.workspace as string)
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
       const projectId = params.project_id as string
       const [maxSeq] = await db.select({ seq: schema.issues.sequenceId }).from(schema.issues).where(eq(schema.issues.projectId, projectId)).orderBy(desc(schema.issues.sequenceId)).limit(1)
       const seq = (maxSeq?.seq ?? 0) + 1
@@ -152,7 +180,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return db.select().from(schema.issues).where(eq(schema.issues.id, id)).limit(1)
     }
     case 'update_issue': {
-      const workspaceId = await getWorkspaceId(db, params.workspace as string)
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
       const updates: Record<string, unknown> = { updatedAt: nowISO() }
       if (params.state_id !== undefined) updates.stateId = params.state_id
       if (params.priority !== undefined) updates.priority = params.priority
@@ -166,13 +194,13 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return issue
     }
     case 'search_issues': {
-      const workspaceId = await getWorkspaceId(db, params.workspace as string)
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
       const q = `%${params.query as string}%`
       const rows = await db.select().from(schema.issues).where(and(eq(schema.issues.workspaceId, workspaceId), isNull(schema.issues.deletedAt), or(like(schema.issues.name, q), like(schema.issues.descriptionStripped, q)))).limit(Math.min(Number(params.limit) || 50, 100))
       return rows
     }
     case 'delete_issue': {
-      const workspaceId = await getWorkspaceId(db, params.workspace as string)
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
       const now = nowISO()
       await db.update(schema.issues).set({ deletedAt: now, updatedAt: now }).where(and(eq(schema.issues.id, params.issue_id as string), eq(schema.issues.projectId, params.project_id as string), eq(schema.issues.workspaceId, workspaceId)))
       return { success: true }
@@ -185,7 +213,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
         commentHtml: params.comment_html as string,
         access: (params.access as string) ?? 'internal',
         issueId: params.issue_id as string,
-        actorId: params.actor_id as string,
+        actorId: userId,
         createdAt: now,
         updatedAt: now,
       })
@@ -196,20 +224,22 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return rows
     }
     case 'list_states': {
+      await assertProjectAccess(db, params.project_id as string, userId)
       const rows = await db.select().from(schema.states).where(and(eq(schema.states.projectId, params.project_id as string), isNull(schema.states.deletedAt))).orderBy(schema.states.sequence)
       return rows
     }
     case 'list_labels': {
-      const workspaceId = await getWorkspaceId(db, params.workspace as string)
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
       const rows = await db.select().from(schema.labels).where(and(eq(schema.labels.workspaceId, workspaceId), isNull(schema.labels.deletedAt))).orderBy(schema.labels.sortOrder)
       return rows
     }
     case 'list_members': {
+      await assertProjectAccess(db, params.project_id as string, userId)
       const rows = await db.select().from(schema.projectMembers).where(and(eq(schema.projectMembers.projectId, params.project_id as string), isNull(schema.projectMembers.deletedAt)))
       return rows
     }
     case 'list_workspace_members': {
-      const workspaceId = await getWorkspaceId(db, params.workspace as string)
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
       const rows = await db.select().from(schema.workspaceMembers).where(and(eq(schema.workspaceMembers.workspaceId, workspaceId), isNull(schema.workspaceMembers.deletedAt)))
       return rows
     }
@@ -220,11 +250,12 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return { success: true }
     }
     case 'list_sprints': {
+      await assertProjectAccess(db, params.project_id as string, userId)
       const rows = await db.select().from(schema.cycles).where(and(eq(schema.cycles.projectId, params.project_id as string), isNull(schema.cycles.deletedAt))).orderBy(desc(schema.cycles.startDate))
       return rows
     }
     case 'create_sprint': {
-      const workspaceId = await getWorkspaceId(db, params.workspace as string)
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
       const id = uuid()
       const now = nowISO()
       await db.insert(schema.cycles).values({
@@ -235,7 +266,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
         endDate: (params.end_date as string) ?? null,
         projectId: params.project_id as string,
         workspaceId,
-        ownedById: params.owned_by_id as string,
+        ownedById: userId,
         createdAt: now,
         updatedAt: now,
       })
@@ -268,6 +299,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return { success: true }
     }
     case 'get_sprint_progress': {
+      await assertProjectAccess(db, params.project_id as string, userId)
       const sprintId = params.sprint_id as string
       const total = await db.select().from(schema.cycleIssues).where(eq(schema.cycleIssues.cycleId, sprintId))
       const totalCount = total.length
@@ -283,6 +315,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return { total: totalCount, completed: completedCount, percentage: Math.round((completedCount / totalCount) * 100) }
     }
     case 'list_modules': {
+      await assertProjectAccess(db, params.project_id as string, userId)
       const rows = await db.select().from(schema.modules).where(and(eq(schema.modules.projectId, params.project_id as string), isNull(schema.modules.deletedAt))).orderBy(desc(schema.modules.createdAt))
       return rows
     }
@@ -305,7 +338,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return { success: true }
     }
     case 'list_pages': {
-      const workspaceId = await getWorkspaceId(db, params.workspace as string)
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
       const rows = await db.select().from(schema.pages).where(and(eq(schema.pages.workspaceId, workspaceId), isNull(schema.pages.deletedAt))).orderBy(desc(schema.pages.createdAt))
       return rows
     }
@@ -315,7 +348,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return page
     }
     case 'create_page': {
-      const workspaceId = await getWorkspaceId(db, params.workspace as string)
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
       const id = uuid()
       const now = nowISO()
       await db.insert(schema.pages).values({
@@ -324,7 +357,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
         descriptionHtml: (params.description_html as string) ?? null,
         access: (params.access as number) ?? 0,
         workspaceId,
-        ownedById: params.owned_by_id as string,
+        ownedById: userId,
         createdAt: now,
         updatedAt: now,
       })
@@ -393,7 +426,7 @@ export const mcpRoutes = new Hono<{ Bindings: Env }>({ strict: false })
           if (!params?.name) {
             return c.json(err(body.id, -32602, 'Missing tool name'), 400)
           }
-          const result = await handleTool(db, c.env, params.name, params.arguments || {})
+          const result = await handleTool(db, c.env, params.name, params.arguments || {}, c.get('user').sub)
           return c.json(ok(body.id, result))
         }
         default:

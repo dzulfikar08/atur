@@ -44,8 +44,10 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     return c.json({ id, issue_id: issue.id, asset: body.asset ?? null, attributes: body.attributes ?? null, created_at: now }, 201)
   })
   .delete('/attachments/:attachmentId', authMiddleware, async (c: C) => {
-    const db = getDb(c.env.DB)
-    await db.update(schema.issueAttachments).set({ deletedAt: nowISO(), updatedAt: nowISO() }).where(eq(schema.issueAttachments.id, c.req.param('attachmentId')!))
+    // Scope to the path issue so a caller can't delete another issue's
+    // attachment by guessing its id (IDOR).
+    const { db, issue } = await resolveIssue(c)
+    await db.update(schema.issueAttachments).set({ deletedAt: nowISO(), updatedAt: nowISO() }).where(and(eq(schema.issueAttachments.id, c.req.param('attachmentId')!), eq(schema.issueAttachments.issueId, issue.id)))
     return c.body(null, 204)
   })
 
@@ -87,8 +89,8 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     return c.json((await db.select().from(schema.issueRelations).where(eq(schema.issueRelations.id, id)).limit(1))[0], 201)
   })
   .delete('/relations/:relationId', authMiddleware, async (c: C) => {
-    const db = getDb(c.env.DB)
-    await db.update(schema.issueRelations).set({ deletedAt: nowISO(), updatedAt: nowISO() }).where(eq(schema.issueRelations.id, c.req.param('relationId')!))
+    const { db, issue } = await resolveIssue(c)
+    await db.update(schema.issueRelations).set({ deletedAt: nowISO(), updatedAt: nowISO() }).where(and(eq(schema.issueRelations.id, c.req.param('relationId')!), eq(schema.issueRelations.issueId, issue.id)))
     return c.body(null, 204)
   })
 
