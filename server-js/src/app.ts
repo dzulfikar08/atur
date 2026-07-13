@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { errorMiddleware } from './middleware/error'
 import { snakeCaseMiddleware } from './middleware/snakecase'
+import { authMiddleware } from './middleware/auth'
 import { healthRoutes } from './routes/health'
 import { authRoutes } from './routes/auth'
 import { workspaceRoutes } from './routes/workspaces'
@@ -39,6 +40,10 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.use('*', logger())
   app.use('*', snakeCaseMiddleware)
   app.use('*', errorMiddleware)
+
+  // Every /api/* route requires an authenticated session (cookie or bearer).
+  // /auth/* (login/register) and /health are mounted outside /api and stay public.
+  app.use('/api/*', authMiddleware)
 
   app.route('/health', healthRoutes)
   app.route('/auth', authRoutes)
