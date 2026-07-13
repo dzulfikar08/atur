@@ -53,7 +53,3 @@ export async function getProfile(db: DbClient, userId: string) {
   return { id: user.id, email: user.email, username: user.username }
 }
 
-export async function emailCheck(db: DbClient, email: string) {
-  const user = await usersRepo.findByEmail(db, email)
-  return user ?? null
-}
