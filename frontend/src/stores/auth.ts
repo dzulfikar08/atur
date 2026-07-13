@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { ApiError } from '@/lib/api';
 
 interface User {
   id: string;
@@ -27,34 +28,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   login: async (email, password) => {
     set({ loading: true });
-    const res = await fetch('/auth/sign-in', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ email, password }),
-    });
-    if (!res.ok) {
+    try {
+      const res = await fetch('/auth/sign-in', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) {
+        throw new ApiError(res.status, await res.text().catch(() => ''));
+      }
+      await get().fetchUser();
+    } finally {
       set({ loading: false });
-      throw new Error(await res.text());
     }
-    await get().fetchUser();
-    set({ loading: false });
   },
 
   register: async (email, password, username) => {
     set({ loading: true });
-    const res = await fetch('/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ email, password, username }),
-    });
-    if (!res.ok) {
+    try {
+      const res = await fetch('/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, password, username }),
+      });
+      if (!res.ok) {
+        throw new ApiError(res.status, await res.text().catch(() => ''));
+      }
+      await get().fetchUser();
+    } finally {
       set({ loading: false });
-      throw new Error(await res.text());
     }
-    await get().fetchUser();
-    set({ loading: false });
   },
 
   logout: async () => {

@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import AppShell from '@/components/layout/AppShell';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
+import CreateWorkspace from '@/components/onboarding/CreateWorkspace';
+import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useQuery } from '@tanstack/react-query';
@@ -54,7 +56,7 @@ function RootRoute() {
     }
   }, [initialized, fetchUser]);
 
-  useQuery({
+  const workspacesQuery = useQuery({
     queryKey: ['workspaces'],
     queryFn: async () => {
       const data = await api.listWorkspaces();
@@ -72,6 +74,23 @@ function RootRoute() {
 
   if (!initialized) return <PageLoader />;
   if (!isAuthenticated) return <LandingPage />;
+
+  // Authenticated but the workspaces query failed (e.g. transient auth issue) —
+  // retry instead of spinning forever.
+  if (workspacesQuery.isError) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-3">
+        <p className="text-muted-foreground">Couldn&apos;t load workspaces.</p>
+        <Button onClick={() => workspacesQuery.refetch()}>Retry</Button>
+      </div>
+    );
+  }
+
+  // Authenticated, query succeeded, but user has no workspace — onboard them.
+  // Without this a fresh user dead-ends on the spinner forever.
+  if (workspacesQuery.isSuccess && workspaces.length === 0) {
+    return <CreateWorkspace />;
+  }
 
   return <PageLoader />;
 }

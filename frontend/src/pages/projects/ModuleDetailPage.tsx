@@ -50,14 +50,14 @@ export default function ModuleDetailPage() {
 
   const { data: moduleIssues = [], isLoading: issuesLoading } = useQuery({
     queryKey: ['module-issues', slug, projectId, moduleId],
-    queryFn: () => apiFetch<ModuleIssue[]>(`/workspaces/${slug}/projects/${projectId}/modules/${moduleId}/issues/`)
+    queryFn: () => apiFetch<{ results: ModuleIssue[] }>(`/workspaces/${slug}/projects/${projectId}/modules/${moduleId}/issues/`).then((d) => d.results)
       .catch(() => []),
     enabled: !!slug && !!projectId && !!moduleId,
   });
 
   const { data: states = [] } = useQuery({
     queryKey: ['states', slug, projectId],
-    queryFn: () => apiFetch<{ id: string; name: string; color?: string }[]>(`/workspaces/${slug}/projects/${projectId}/states/`)
+    queryFn: () => apiFetch<{ results: { id: string; name: string; color?: string }[] }>(`/workspaces/${slug}/projects/${projectId}/states/`).then((d) => d.results)
       .catch(() => []),
     enabled: !!slug && !!projectId,
   });

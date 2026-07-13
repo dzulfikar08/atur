@@ -130,9 +130,9 @@ export default function CycleList({ slug, projectId }: CycleListProps) {
   const { data: cycles = [], isLoading } = useQuery({
     queryKey: ["cycles", slug, projectId],
     queryFn: () =>
-      apiFetch<Cycle[]>(
+      apiFetch<{ results: Cycle[] }>(
         `/workspaces/${slug}/projects/${projectId}/cycles/`
-      ),
+      ).then((d) => d.results),
     enabled: !!slug && !!projectId,
   });
 

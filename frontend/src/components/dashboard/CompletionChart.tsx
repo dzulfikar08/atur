@@ -79,11 +79,11 @@ export default function CompletionChart({ slug }: CompletionChartProps) {
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: 'hsl(var(--popover))',
-                  border: '1px solid hsl(var(--border))',
+                  backgroundColor: 'var(--popover)',
+                  border: '1px solid var(--border)',
                   borderRadius: '8px',
                   fontSize: '12px',
-                  color: 'hsl(var(--popover-foreground))',
+                  color: 'var(--popover-foreground)',
                 }}
                 labelFormatter={(label) => formatDate(String(label))}
               />

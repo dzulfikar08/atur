@@ -30,6 +30,7 @@ import CheckmarkSquare01Icon from '@hugeicons/core-free-icons/CheckmarkSquare01I
 import ArrowDown01Icon from '@hugeicons/core-free-icons/ArrowDown01Icon'
 import ArrowRight01Icon from '@hugeicons/core-free-icons/ArrowRight01Icon'
 import ArrowUp01Icon from '@hugeicons/core-free-icons/ArrowUp01Icon'
+import ArrowLeft01Icon from '@hugeicons/core-free-icons/ArrowLeft01Icon'
 import ArrowLeftDoubleIcon from '@hugeicons/core-free-icons/ArrowLeftDoubleIcon'
 import ArrowRightDoubleIcon from '@hugeicons/core-free-icons/ArrowRightDoubleIcon'
 import CircleIcon from '@hugeicons/core-free-icons/CircleIcon'
@@ -117,8 +118,8 @@ import ZapIcon from '@hugeicons/core-free-icons/ZapIcon'
 export const Activity = (props: IconProps) => <HugeiconsIcon icon={Activity01Icon} {...props} />
 export const AlertTriangle = (props: IconProps) => <HugeiconsIcon icon={Alert02Icon} {...props} />
 export const Archive = (props: IconProps) => <HugeiconsIcon icon={ArchiveIcon} {...props} />
-export const ArrowLeft = (props: IconProps) => <HugeiconsIcon icon={ArrowLeftDoubleIcon} {...props} />
-export const ArrowRight = (props: IconProps) => <HugeiconsIcon icon={ArrowRightDoubleIcon} {...props} />
+export const ArrowLeft = (props: IconProps) => <HugeiconsIcon icon={ArrowLeft01Icon} {...props} />
+export const ArrowRight = (props: IconProps) => <HugeiconsIcon icon={ArrowRight01Icon} {...props} />
 export const ArrowUpDown = (props: IconProps) => <HugeiconsIcon icon={ArrowUpDownIcon} {...props} />
 export const ArrowUpRight = (props: IconProps) => <HugeiconsIcon icon={ArrowUpRight01Icon} {...props} />
 export const BarChart3 = (props: IconProps) => <HugeiconsIcon icon={PresentationBarChart01Icon} {...props} />

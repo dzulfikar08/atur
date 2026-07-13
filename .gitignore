@@ -40,3 +40,6 @@ Thumbs.db
 frontend/ios/App/App/public/
 frontend/android/app/src/main/assets/public/
 .playwright-mcp/
+
+# Machine-local MCP config (contains live API key, localhost)
+.mcp.json

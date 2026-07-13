@@ -36,7 +36,8 @@ export default function ProjectsPage() {
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects", slug],
-    queryFn: () => apiFetch<any[]>(`/workspaces/${slug}/projects/`),
+    queryFn: () =>
+      apiFetch<{ results: any[] }>(`/workspaces/${slug}/projects/`).then((d) => d.results),
     enabled: !!slug,
   });
 

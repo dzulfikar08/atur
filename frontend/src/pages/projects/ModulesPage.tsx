@@ -52,7 +52,7 @@ export default function ModulesPage() {
 
   const { data: modules = [], isLoading } = useQuery({
     queryKey: ['modules', slug, projectId],
-    queryFn: () => apiFetch<Module[]>(`/workspaces/${slug}/projects/${projectId}/modules/`),
+    queryFn: () => apiFetch<{ results: Module[] }>(`/workspaces/${slug}/projects/${projectId}/modules/`).then((d) => d.results),
     enabled: !!slug && !!projectId,
   });
 
@@ -128,13 +128,19 @@ export default function ModulesPage() {
               <Button
                 className="w-full"
                 disabled={!name.trim() || createModule.isPending}
-                onClick={() => createModule.mutate({
-                  name,
-                  description: desc,
-                  status: 'planned',
-                  ...(startDate && { start_date: startDate }),
-                  ...(targetDate && { target_date: targetDate }),
-                })}
+                onClick={() => {
+                  if (startDate && targetDate && startDate > targetDate) {
+                    toast.error('Start date must be before target date');
+                    return;
+                  }
+                  createModule.mutate({
+                    name,
+                    description: desc,
+                    status: 'planned',
+                    ...(startDate && { start_date: startDate }),
+                    ...(targetDate && { target_date: targetDate }),
+                  });
+                }}
               >
                 Create Module
               </Button>

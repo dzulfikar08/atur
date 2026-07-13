@@ -25,7 +25,7 @@ export default function MobileDashboard({ slug, workspaceName }: MobileDashboard
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const { data: overview } = useQuery({
+  const { data: overview, isLoading: overviewLoading } = useQuery({
     queryKey: ['analytics-overview', slug],
     queryFn: () => api.analyticsOverview(slug),
   });
@@ -90,7 +90,11 @@ export default function MobileDashboard({ slug, workspaceName }: MobileDashboard
                   <Icon className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-lg font-bold leading-none">{value}</p>
+                  {overviewLoading ? (
+                    <div className="h-5 w-8 rounded bg-muted animate-pulse" />
+                  ) : (
+                    <p className="text-lg font-bold leading-none">{value}</p>
+                  )}
                   <p className="text-[10px] text-muted-foreground">{s.label}</p>
                 </div>
               </CardContent>

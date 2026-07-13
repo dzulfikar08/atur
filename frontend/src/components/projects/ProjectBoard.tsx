@@ -72,6 +72,14 @@ const STATE_COLORS: Record<string, string> = {
   cancelled: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
 };
 
+const PRIORITY_COLORS: Record<string, string> = {
+  urgent: "text-red-600 bg-red-50 dark:bg-red-950",
+  high: "text-orange-600 bg-orange-50 dark:bg-orange-950",
+  medium: "text-yellow-600 bg-yellow-50 dark:bg-yellow-950",
+  low: "text-blue-600 bg-blue-50 dark:bg-blue-950",
+  none: "text-muted-foreground bg-muted",
+};
+
 // --- Droppable Column ---
 function DroppableColumn({ state, stateIssues, children }: {
   state: State;
@@ -215,7 +223,6 @@ export default function ProjectBoard() {
     stateId: 'all',
     priority: 'all',
     moduleId: 'all',
-    groupBy: 'none',
     sortBy: 'created_at',
     sortDir: 'desc',
   });
@@ -400,7 +407,7 @@ export default function ProjectBoard() {
           `/workspaces/${slug}/projects/${projectId}/issues/${draggedIssue.sequence_id}/`,
           {
             method: "PATCH",
-            body: JSON.stringify({ state: newStateId }),
+            body: JSON.stringify({ state_id: newStateId }),
           }
         );
         qc.invalidateQueries({ queryKey: ["issues", slug, projectId] });
@@ -411,6 +418,24 @@ export default function ProjectBoard() {
       }
     },
     [issues, states, slug, projectId, qc]
+  );
+
+  // Inline PATCH helper for sheet-view cells: centralizes field name + error handling.
+  const patchIssue = useCallback(
+    async (seqId: number, patch: Record<string, unknown>) => {
+      if (!slug || !projectId) return;
+      try {
+        await apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${seqId}/`, {
+          method: "PATCH",
+          body: JSON.stringify(patch),
+        });
+        qc.invalidateQueries({ queryKey: ["issues", slug, projectId] });
+      } catch {
+        toast.error("Failed to update issue");
+        qc.invalidateQueries({ queryKey: ["issues", slug, projectId] });
+      }
+    },
+    [slug, projectId, qc]
   );
 
   if (issuesLoading) {
@@ -732,13 +757,6 @@ export default function ProjectBoard() {
               <tbody>
                 {filteredIssues.map((issue) => {
                   const st = states.find(s => s.id === issue.state_id);
-                  const priorityColors: Record<string, string> = {
-                    urgent: "text-red-600 bg-red-50 dark:bg-red-950",
-                    high: "text-orange-600 bg-orange-50 dark:bg-orange-950",
-                    medium: "text-yellow-600 bg-yellow-50 dark:bg-yellow-950",
-                    low: "text-blue-600 bg-blue-50 dark:bg-blue-950",
-                    none: "text-muted-foreground bg-muted",
-                  };
                   return (
                     <tr
                       key={issue.id}
@@ -762,7 +780,7 @@ export default function ProjectBoard() {
                         </span>
                       </td>
                       <td className="p-2">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${priorityColors[issue.priority || "none"] || priorityColors.none}`}>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${PRIORITY_COLORS[issue.priority || "none"] || PRIORITY_COLORS.none}`}>
                           {issue.priority || "none"}
                         </span>
                       </td>
@@ -838,13 +856,6 @@ export default function ProjectBoard() {
             <tbody>
               {filteredIssues.map((issue) => {
                 const st = states.find(s => s.id === issue.state_id);
-                const priorityColors: Record<string, string> = {
-                  urgent: "text-red-600 bg-red-50 dark:bg-red-950",
-                  high: "text-orange-600 bg-orange-50 dark:bg-orange-950",
-                  medium: "text-yellow-600 bg-yellow-50 dark:bg-yellow-950",
-                  low: "text-blue-600 bg-blue-50 dark:bg-blue-950",
-                  none: "text-muted-foreground bg-muted",
-                };
                 return (
                   <tr
                     key={issue.id}
@@ -858,11 +869,7 @@ export default function ProjectBoard() {
                         className="text-xs bg-transparent rounded px-1 py-0.5 w-full cursor-pointer"
                         style={{ color: st?.color || '#6b7280' }}
                         value={issue.state_id || ''}
-                        onChange={(e) => {
-                          apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issue.sequence_id}/`, {
-                            method: 'PATCH', body: JSON.stringify({ state: e.target.value }),
-                          }).then(() => qc.invalidateQueries({ queryKey: ['issues', slug, projectId] }));
-                        }}
+                        onChange={(e) => patchIssue(issue.sequence_id, { state_id: e.target.value })}
                       >
                         {states.map(s => (
                           <option key={s.id} value={s.id}>{s.name}</option>
@@ -871,13 +878,9 @@ export default function ProjectBoard() {
                     </td>
                     <td className="p-1" onClick={(e) => e.stopPropagation()}>
                       <select
-                        className={`text-xs rounded px-1 py-0.5 w-full cursor-pointer ${priorityColors[issue.priority || 'none']}`}
+                        className={`text-xs rounded px-1 py-0.5 w-full cursor-pointer ${PRIORITY_COLORS[issue.priority || 'none']}`}
                         value={issue.priority || 'none'}
-                        onChange={(e) => {
-                          apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issue.sequence_id}/`, {
-                            method: 'PATCH', body: JSON.stringify({ priority: e.target.value }),
-                          }).then(() => qc.invalidateQueries({ queryKey: ['issues', slug, projectId] }));
-                        }}
+                        onChange={(e) => patchIssue(issue.sequence_id, { priority: e.target.value })}
                       >
                         {['urgent', 'high', 'medium', 'low', 'none'].map(p => (
                           <option key={p} value={p}>{p}</option>
@@ -889,11 +892,7 @@ export default function ProjectBoard() {
                         type="date"
                         className="text-xs bg-transparent rounded px-1 py-0.5 w-full"
                         value={issue.start_date || ''}
-                        onChange={(e) => {
-                          apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issue.sequence_id}/`, {
-                            method: 'PATCH', body: JSON.stringify({ start_date: e.target.value || null }),
-                          }).then(() => qc.invalidateQueries({ queryKey: ['issues', slug, projectId] }));
-                        }}
+                        onChange={(e) => patchIssue(issue.sequence_id, { start_date: e.target.value || null })}
                       />
                     </td>
                     <td className="p-1" onClick={(e) => e.stopPropagation()}>
@@ -901,11 +900,7 @@ export default function ProjectBoard() {
                         type="date"
                         className="text-xs bg-transparent rounded px-1 py-0.5 w-full"
                         value={issue.target_date || ''}
-                        onChange={(e) => {
-                          apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issue.sequence_id}/`, {
-                            method: 'PATCH', body: JSON.stringify({ target_date: e.target.value || null }),
-                          }).then(() => qc.invalidateQueries({ queryKey: ['issues', slug, projectId] }));
-                        }}
+                        onChange={(e) => patchIssue(issue.sequence_id, { target_date: e.target.value || null })}
                       />
                     </td>
                   </tr>

@@ -46,19 +46,26 @@ export default function NotificationsPage() {
   const markRead = useMutation({
     mutationFn: ({ id, read }: { id: string; read: boolean }) =>
       apiFetch(`/notifications/${id}/`, { method: 'PATCH', body: JSON.stringify({ read }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+      qc.invalidateQueries({ queryKey: ['notifications-unread'] });
+    },
   });
 
   const archive = useMutation({
     mutationFn: (id: string) =>
       apiFetch(`/notifications/${id}/`, { method: 'PATCH', body: JSON.stringify({ archived: true }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+      qc.invalidateQueries({ queryKey: ['notifications-unread'] });
+    },
   });
 
   const markAllRead = useMutation({
     mutationFn: () => apiFetch('/notifications/mark-all-read/', { method: 'POST' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['notifications'] });
+      qc.invalidateQueries({ queryKey: ['notifications-unread'] });
       toast.success('All notifications marked as read');
     },
   });

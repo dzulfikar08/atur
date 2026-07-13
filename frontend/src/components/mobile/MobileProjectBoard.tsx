@@ -242,7 +242,7 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
           `/workspaces/${slug}/projects/${projectId}/issues/${draggedIssue.sequence_id}/`,
           {
             method: 'PATCH',
-            body: JSON.stringify({ state: newStateId }),
+            body: JSON.stringify({ state_id: newStateId }),
           }
         );
         qc.invalidateQueries({ queryKey: ['issues', slug, projectId] });

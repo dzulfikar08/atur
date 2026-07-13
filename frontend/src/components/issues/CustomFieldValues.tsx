@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type CustomField, type CustomFieldValue, type SelectOption } from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -74,6 +75,34 @@ function FieldInput({
 }) {
   const currentVal = value?.value_json ?? null;
   const options: SelectOption[] = field.settings?.options || [];
+  // Continuous (typed) fields debounce the PATCH; discrete fields commit immediately.
+  const isContinuous =
+    field.field_type === "text" ||
+    field.field_type === "url" ||
+    field.field_type === "number" ||
+    field.field_type === "date" ||
+    field.field_type === "user";
+  const [local, setLocal] = useState<unknown>(currentVal);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (isContinuous) setLocal(currentVal);
+  }, [currentVal, isContinuous]);
+
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    },
+    []
+  );
+
+  const schedule = (val: unknown) => {
+    setLocal(val);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => onChange(val), 500);
+  };
+
+  const display = isContinuous ? local : currentVal;
 
   switch (field.field_type) {
     case "text":
@@ -86,8 +115,8 @@ function FieldInput({
           </label>
           <Input
             type={field.field_type === "url" ? "url" : "text"}
-            value={(currentVal as string) || ""}
-            onChange={(e) => onChange(e.target.value || null)}
+            value={(display as string) || ""}
+            onChange={(e) => schedule(e.target.value || null)}
             placeholder={field.name}
             className="h-8 text-sm"
           />
@@ -103,10 +132,10 @@ function FieldInput({
           </label>
           <Input
             type="number"
-            value={(currentVal as number) ?? ""}
+            value={(display as number) ?? ""}
             onChange={(e) => {
               const v = e.target.value;
-              onChange(v === "" ? null : Number(v));
+              schedule(v === "" ? null : Number(v));
             }}
             placeholder={field.name}
             className="h-8 text-sm"
@@ -123,8 +152,8 @@ function FieldInput({
           </label>
           <Input
             type="date"
-            value={(currentVal as string) || ""}
-            onChange={(e) => onChange(e.target.value || null)}
+            value={(display as string) || ""}
+            onChange={(e) => schedule(e.target.value || null)}
             className="h-8 text-sm"
           />
         </div>
@@ -216,8 +245,8 @@ function FieldInput({
             {field.is_required && <span className="text-destructive ml-0.5">*</span>}
           </label>
           <Input
-            value={(currentVal as string) || ""}
-            onChange={(e) => onChange(e.target.value || null)}
+            value={(display as string) || ""}
+            onChange={(e) => schedule(e.target.value || null)}
             placeholder="User UUID"
             className="h-8 text-sm"
           />

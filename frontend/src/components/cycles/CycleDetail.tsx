@@ -177,9 +177,9 @@ export default function CycleDetail({
   const { data: cycleIssues = [], isLoading: ciLoading } = useQuery({
     queryKey: ["cycle-issues", slug, projectId, cycleId],
     queryFn: () =>
-      apiFetch<CycleIssue[]>(
+      apiFetch<{ results: CycleIssue[] }>(
         `/workspaces/${slug}/projects/${projectId}/cycles/${cycleId}/cycle-issues/`
-      ),
+      ).then((d) => d.results),
     enabled: !!slug && !!projectId && !!cycleId,
   });
 

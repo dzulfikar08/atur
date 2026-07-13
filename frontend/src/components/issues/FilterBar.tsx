@@ -6,13 +6,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Filter, X, ArrowUpDown, Columns3, Package } from '@/lib/icons';
+import { Filter, X, ArrowUpDown, Package } from '@/lib/icons';
 
 export interface FilterState {
   stateId: string;
   priority: string;
   moduleId: string;
-  groupBy: string;
   sortBy: string;
   sortDir: 'asc' | 'desc';
 }
@@ -25,11 +24,6 @@ interface FilterBarProps {
 }
 
 const PRIORITIES = ['urgent', 'high', 'medium', 'low', 'none'];
-const GROUP_OPTIONS = [
-  { value: 'none', label: 'No grouping' },
-  { value: 'state', label: 'State' },
-  { value: 'priority', label: 'Priority' },
-];
 const SORT_OPTIONS = [
   { value: 'created_at', label: 'Created' },
   { value: 'updated_at', label: 'Updated' },
@@ -41,7 +35,6 @@ export default function FilterBar({ filters, onChange, states, modules }: Filter
   const [stateOpen, setStateOpen] = useState(false);
   const [priorityOpen, setPriorityOpen] = useState(false);
   const [moduleOpen, setModuleOpen] = useState(false);
-  const [groupOpen, setGroupOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
 
   const activeCount = [filters.stateId !== 'all', filters.priority !== 'all', filters.moduleId !== 'all'].filter(Boolean).length;
@@ -159,32 +152,6 @@ export default function FilterBar({ filters, onChange, states, modules }: Filter
           </PopoverContent>
         </Popover>
       )}
-
-      {/* Group by */}
-      <Popover open={groupOpen} onOpenChange={setGroupOpen}>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
-            <Columns3 className="h-3 w-3" />
-            Group
-            {filters.groupBy !== 'none' && (
-              <Badge variant="secondary" className="h-4 px-1 text-[10px] ml-0.5">
-                {GROUP_OPTIONS.find(g => g.value === filters.groupBy)?.label}
-              </Badge>
-            )}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-40 p-1" align="start">
-          {GROUP_OPTIONS.map(g => (
-            <button
-              key={g.value}
-              className={`w-full text-left px-3 py-1.5 text-sm rounded-sm hover:bg-accent ${filters.groupBy === g.value ? 'bg-accent font-medium' : ''}`}
-              onClick={() => { update({ groupBy: g.value }); setGroupOpen(false); }}
-            >
-              {g.label}
-            </button>
-          ))}
-        </PopoverContent>
-      </Popover>
 
       {/* Sort */}
       <Popover open={sortOpen} onOpenChange={setSortOpen}>
