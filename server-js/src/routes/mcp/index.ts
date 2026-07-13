@@ -101,6 +101,40 @@ async function assertProjectAccess(db: ReturnType<typeof getDb>, projectId: stri
   if (!ok) throw new HTTPException(403, { message: 'Not a member of this workspace' })
 }
 
+// Entity-resolve helpers: map an entity id to its project/workspace, then
+// run the same owner-or-member check. Close IDOR on tools keyed only by id.
+async function assertIssueAccess(db: ReturnType<typeof getDb>, issueId: string, userId: string) {
+  const [iss] = await db.select({ projectId: schema.issues.projectId }).from(schema.issues).where(eq(schema.issues.id, issueId)).limit(1)
+  if (!iss) throw new HTTPException(404, { message: 'Issue not found' })
+  await assertProjectAccess(db, iss.projectId, userId)
+}
+
+async function assertCycleAccess(db: ReturnType<typeof getDb>, cycleId: string, userId: string) {
+  const [cyc] = await db.select({ projectId: schema.cycles.projectId }).from(schema.cycles).where(eq(schema.cycles.id, cycleId)).limit(1)
+  if (!cyc) throw new HTTPException(404, { message: 'Sprint not found' })
+  await assertProjectAccess(db, cyc.projectId, userId)
+}
+
+async function assertModuleAccess(db: ReturnType<typeof getDb>, moduleId: string, userId: string) {
+  const [mod] = await db.select({ projectId: schema.modules.projectId }).from(schema.modules).where(eq(schema.modules.id, moduleId)).limit(1)
+  if (!mod) throw new HTTPException(404, { message: 'Module not found' })
+  await assertProjectAccess(db, mod.projectId, userId)
+}
+
+async function assertPageAccess(db: ReturnType<typeof getDb>, pageId: string, userId: string) {
+  const [pg] = await db.select({ workspaceId: schema.pages.workspaceId }).from(schema.pages).where(eq(schema.pages.id, pageId)).limit(1)
+  if (!pg) throw new HTTPException(404, { message: 'Page not found' })
+  const [ws] = await db.select({ ownerId: schema.workspaces.ownerId }).from(schema.workspaces).where(eq(schema.workspaces.id, pg.workspaceId)).limit(1)
+  if (!ws) throw new HTTPException(404, { message: 'Workspace not found' })
+  if (ws.ownerId !== userId && !(await isWorkspaceMember(db, pg.workspaceId, userId))) throw new HTTPException(403, { message: 'Not a member of this workspace' })
+}
+
+async function assertRelationAccess(db: ReturnType<typeof getDb>, relationId: string, userId: string) {
+  const [rel] = await db.select({ issueId: schema.issueRelations.issueId }).from(schema.issueRelations).where(eq(schema.issueRelations.id, relationId)).limit(1)
+  if (!rel) throw new HTTPException(404, { message: 'Relation not found' })
+  await assertIssueAccess(db, rel.issueId, userId)
+}
+
 async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: string, params: Record<string, unknown>, userId: string): Promise<unknown> {
   switch (toolName) {
     case 'list_workspaces': {
@@ -189,6 +223,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return db.select().from(schema.issues).where(eq(schema.issues.id, params.issue_id as string)).limit(1)
     }
     case 'get_issue': {
+      await assertIssueAccess(db, params.issue_id as string, userId)
       const [issue] = await db.select().from(schema.issues).where(and(isNull(schema.issues.deletedAt), eq(schema.issues.id, params.issue_id as string))).limit(1)
       if (!issue) throw new HTTPException(404, { message: 'Issue not found' })
       return issue
@@ -206,6 +241,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return { success: true }
     }
     case 'add_comment': {
+      await assertIssueAccess(db, params.issue_id as string, userId)
       const id = uuid()
       const now = nowISO()
       await db.insert(schema.issueComments).values({
@@ -220,6 +256,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return db.select().from(schema.issueComments).where(eq(schema.issueComments.id, id)).limit(1)
     }
     case 'list_comments': {
+      await assertIssueAccess(db, params.issue_id as string, userId)
       const rows = await db.select().from(schema.issueComments).where(and(eq(schema.issueComments.issueId, params.issue_id as string), isNull(schema.issueComments.deletedAt))).orderBy(desc(schema.issueComments.createdAt))
       return rows
     }
@@ -244,6 +281,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return rows
     }
     case 'set_assignee': {
+      await assertIssueAccess(db, params.issue_id as string, userId)
       const id = uuid()
       const now = nowISO()
       await db.insert(schema.issueAssignees).values({ id, issueId: params.issue_id as string, assigneeId: params.assignee_id as string, createdAt: now, updatedAt: now })
@@ -273,11 +311,13 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return db.select().from(schema.cycles).where(eq(schema.cycles.id, id)).limit(1)
     }
     case 'get_sprint': {
+      await assertCycleAccess(db, params.sprint_id as string, userId)
       const [sprint] = await db.select().from(schema.cycles).where(and(eq(schema.cycles.id, params.sprint_id as string), isNull(schema.cycles.deletedAt))).limit(1)
       if (!sprint) throw new HTTPException(404, { message: 'Sprint not found' })
       return sprint
     }
     case 'update_sprint': {
+      await assertCycleAccess(db, params.sprint_id as string, userId)
       const updates: Record<string, unknown> = { updatedAt: nowISO() }
       if (params.name !== undefined) updates.name = params.name
       if (params.start_date !== undefined) updates.startDate = params.start_date
@@ -286,6 +326,8 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return db.select().from(schema.cycles).where(eq(schema.cycles.id, params.sprint_id as string)).limit(1)
     }
     case 'add_issue_to_sprint': {
+      await assertCycleAccess(db, params.sprint_id as string, userId)
+      await assertIssueAccess(db, params.issue_id as string, userId)
       const [existing] = await db.select().from(schema.cycleIssues).where(and(eq(schema.cycleIssues.cycleId, params.sprint_id as string), eq(schema.cycleIssues.issueId, params.issue_id as string))).limit(1)
       if (!existing) {
         const id = uuid()
@@ -295,6 +337,8 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return { success: true }
     }
     case 'remove_issue_from_sprint': {
+      await assertCycleAccess(db, params.sprint_id as string, userId)
+      await assertIssueAccess(db, params.issue_id as string, userId)
       await db.delete(schema.cycleIssues).where(and(eq(schema.cycleIssues.cycleId, params.sprint_id as string), eq(schema.cycleIssues.issueId, params.issue_id as string)))
       return { success: true }
     }
@@ -320,11 +364,14 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return rows
     }
     case 'get_module': {
+      await assertModuleAccess(db, params.module_id as string, userId)
       const [mod] = await db.select().from(schema.modules).where(and(eq(schema.modules.id, params.module_id as string), isNull(schema.modules.deletedAt))).limit(1)
       if (!mod) throw new HTTPException(404, { message: 'Module not found' })
       return mod
     }
     case 'add_issue_to_module': {
+      await assertModuleAccess(db, params.module_id as string, userId)
+      await assertIssueAccess(db, params.issue_id as string, userId)
       const [existing] = await db.select().from(schema.moduleIssues).where(and(eq(schema.moduleIssues.moduleId, params.module_id as string), eq(schema.moduleIssues.issueId, params.issue_id as string))).limit(1)
       if (!existing) {
         const id = uuid()
@@ -334,6 +381,8 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return { success: true }
     }
     case 'remove_issue_from_module': {
+      await assertModuleAccess(db, params.module_id as string, userId)
+      await assertIssueAccess(db, params.issue_id as string, userId)
       await db.delete(schema.moduleIssues).where(and(eq(schema.moduleIssues.moduleId, params.module_id as string), eq(schema.moduleIssues.issueId, params.issue_id as string)))
       return { success: true }
     }
@@ -343,6 +392,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return rows
     }
     case 'get_page': {
+      await assertPageAccess(db, params.page_id as string, userId)
       const [page] = await db.select().from(schema.pages).where(and(eq(schema.pages.id, params.page_id as string), isNull(schema.pages.deletedAt))).limit(1)
       if (!page) throw new HTTPException(404, { message: 'Page not found' })
       return page
@@ -364,6 +414,7 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return db.select().from(schema.pages).where(eq(schema.pages.id, id)).limit(1)
     }
     case 'update_page': {
+      await assertPageAccess(db, params.page_id as string, userId)
       const updates: Record<string, unknown> = { updatedAt: nowISO() }
       if (params.name !== undefined) updates.name = params.name
       if (params.description_html !== undefined) updates.descriptionHtml = params.description_html
@@ -374,6 +425,8 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return { message: 'Use POST /api/assets/upload endpoint. This is a placeholder.' }
     }
     case 'add_issue_relation': {
+      await assertIssueAccess(db, params.issue_id as string, userId)
+      await assertIssueAccess(db, params.related_issue_id as string, userId)
       const id = uuid()
       const now = nowISO()
       await db.insert(schema.issueRelations).values({
@@ -387,10 +440,12 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       return db.select().from(schema.issueRelations).where(eq(schema.issueRelations.id, id)).limit(1)
     }
     case 'list_issue_relations': {
+      await assertIssueAccess(db, params.issue_id as string, userId)
       const rows = await db.select().from(schema.issueRelations).where(and(eq(schema.issueRelations.issueId, params.issue_id as string), isNull(schema.issueRelations.deletedAt)))
       return rows
     }
     case 'remove_issue_relation': {
+      await assertRelationAccess(db, params.relation_id as string, userId)
       await db.update(schema.issueRelations).set({ deletedAt: nowISO(), updatedAt: nowISO() }).where(eq(schema.issueRelations.id, params.relation_id as string))
       return { success: true }
     }
