@@ -126,14 +126,14 @@ export default function IssueDetail() {
 
   const { data: comments = [], isLoading: commentsLoading } = useQuery({
     queryKey: ["comments", slug, projectId, issueId],
-    queryFn: () => apiFetch<Comment[]>(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/comments/`)
+    queryFn: () => apiFetch<{ results: Comment[] }>(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/comments/`).then((d) => d.results)
       .catch(() => []),
     enabled: !!slug && !!projectId && !!issueId,
   });
 
   const { data: states = [] } = useQuery({
     queryKey: ["states", slug, projectId],
-    queryFn: () => apiFetch<State[]>(`/workspaces/${slug}/projects/${projectId}/states/`)
+    queryFn: () => apiFetch<{ results: State[] }>(`/workspaces/${slug}/projects/${projectId}/states/`).then((d) => d.results)
       .catch(() => []),
     enabled: !!slug && !!projectId,
   });
@@ -157,6 +157,7 @@ export default function IssueDetail() {
       qc.invalidateQueries({ queryKey: ["issue", slug, projectId, issueId] });
       qc.invalidateQueries({ queryKey: ["issues", slug, projectId] });
     },
+    onError: () => toast.error("Failed to update issue"),
   });
 
   const commentMutation = useMutation({
@@ -181,7 +182,7 @@ export default function IssueDetail() {
 
   const { data: relations = [], isLoading: relationsLoading } = useQuery({
     queryKey: ["relations", slug, projectId, issueId],
-    queryFn: () => apiFetch<IssueRelation[]>(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/relations/`)
+    queryFn: () => apiFetch<{ results: IssueRelation[] }>(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/relations/`).then((d) => d.results)
       .catch(() => []),
     enabled: !!slug && !!projectId && !!issueId,
   });
@@ -242,7 +243,7 @@ export default function IssueDetail() {
   // --- Sub-issues ---
   const { data: subIssues = [], isLoading: subIssuesLoading } = useQuery({
     queryKey: ["sub-issues", slug, projectId, issueId],
-    queryFn: () => apiFetch<SubIssue[]>(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/sub-issues/`)
+    queryFn: () => apiFetch<{ results: SubIssue[] }>(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/sub-issues/`).then((d) => d.results)
       .catch(() => []),
     enabled: !!slug && !!projectId && !!issueId,
   });
@@ -267,9 +268,9 @@ export default function IssueDetail() {
   const { data: attachments = [], isLoading: attachmentsLoading } = useQuery({
     queryKey: ["attachments", slug, projectId, issueId],
     queryFn: () =>
-      apiFetch<{ id: string; issue_id: string; asset: string | null; attributes: { name?: string; size?: number; type?: string } | null; created_at: string | null }[]>(
+      apiFetch<{ results: { id: string; issue_id: string; asset: string | null; attributes: { name?: string; size?: number; type?: string } | null; created_at: string | null }[] }>(
         `/workspaces/${slug}/projects/${projectId}/issues/${issueId}/attachments/`
-      ),
+      ).then((d) => d.results),
     enabled: !!slug && !!projectId && !!issueId,
   });
 
@@ -319,9 +320,9 @@ export default function IssueDetail() {
   const { data: timeEntries = [], isLoading: timeEntriesLoading } = useQuery({
     queryKey: ["time-entries", slug, projectId, issueId],
     queryFn: () =>
-      apiFetch<{ id: string; duration_seconds: number; description: string | null; created_at: string | null }[]>(
+      apiFetch<{ results: { id: string; duration_seconds: number; description: string | null; created_at: string | null }[] }>(
         `/workspaces/${slug}/projects/${projectId}/issues/${issueId}/time-entries/`
-      ),
+      ).then((d) => d.results),
     enabled: !!slug && !!projectId && !!issueId,
   });
 

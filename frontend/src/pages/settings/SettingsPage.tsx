@@ -24,13 +24,13 @@ export default function SettingsPage() {
 
   const { data: members = [], isLoading: membersLoading } = useQuery({
     queryKey: ["members", slug],
-    queryFn: () => apiFetch<any[]>(`/workspaces/${slug}/members/`),
+    queryFn: () => apiFetch<{ results: any[] }>(`/workspaces/${slug}/members/`).then((d) => d.results),
     enabled: !!slug,
   });
 
   const { data: labels = [], isLoading: labelsLoading } = useQuery({
     queryKey: ["labels", slug],
-    queryFn: () => apiFetch<any[]>(`/workspaces/${slug}/projects/${projectId}/labels/`),
+    queryFn: () => apiFetch<{ results: any[] }>(`/workspaces/${slug}/projects/${projectId}/labels/`).then((d) => d.results),
     enabled: !!slug && !!projectId,
   });
 

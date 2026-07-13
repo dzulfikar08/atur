@@ -52,12 +52,6 @@ export default function CommandPalette() {
     enabled: !!slug && open,
   });
 
-  const { data: _searchResults } = useQuery({
-    queryKey: ['search', slug],
-    queryFn: () => api.search(slug!, ''),
-    enabled: false, // only search on demand via input
-  });
-
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput placeholder="Search issues, projects, or type a command..." />

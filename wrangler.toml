@@ -4,9 +4,11 @@ compatibility_date = "2026-04-08"
 compatibility_flags = ["nodejs_compat"]
 account_id = "b7e6f8457bd39fa37a7eea5249799754"
 
-[[routes]]
-pattern = "diatur.com/*"
-zone_id = "85af83477a97625830e3a172e1d04aed"
+# Cutover 2026-07-13: diatur.com now served by atur-hono (server-js/).
+# Re-add this block + redeploy to roll back to the WASM worker.
+# [[routes]]
+# pattern = "diatur.com/*"
+# zone_id = "85af83477a97625830e3a172e1d04aed"
 [build]
 command = "bash crates/atur-worker/build.sh"
 

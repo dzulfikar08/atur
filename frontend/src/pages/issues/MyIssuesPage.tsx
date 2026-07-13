@@ -2,7 +2,7 @@ import { useParams } from 'react-router-dom';
 import { useWindowSize } from '@/hooks/useWindowSize';
 import MobileIssueList from '@/components/mobile/MobileIssueList';
 import { useQuery } from '@tanstack/react-query';
-import { apiFetch, api, type Issue } from '@/lib/api';
+import { api, type Issue } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
@@ -19,18 +19,17 @@ function DesktopMyIssues({ slug }: { slug: string }) {
   const { data: allIssues = [], isLoading } = useQuery({
     queryKey: ['my-issues', slug, projects.map((p: any) => p.id).join(',')],
     queryFn: async () => {
-      const results: (Issue & { project_name?: string })[] = [];
-      for (const project of projects) {
-        try {
-          const issues = await apiFetch<{ results: Issue[] }>(
-            `/workspaces/${slug}/projects/${project.id}/issues/?limit=100`
-          ).then((r) => r.results);
-          for (const issue of issues) {
-            results.push({ ...issue, project_name: project.name });
+      const settled = await Promise.all(
+        projects.map(async (project) => {
+          try {
+            const issues = await api.listIssues(slug, project.id);
+            return issues.map((issue) => ({ ...issue, project_name: project.name }));
+          } catch {
+            return [] as (Issue & { project_name?: string })[];
           }
-        } catch {}
-      }
-      return results;
+        })
+      );
+      return settled.flat();
     },
     enabled: !!slug && projects.length > 0,
   });

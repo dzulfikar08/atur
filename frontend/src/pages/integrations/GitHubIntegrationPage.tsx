@@ -63,7 +63,7 @@ export default function GitHubIntegrationPage() {
   // Fetch projects for dropdown
   const { data: projects = [] } = useQuery({
     queryKey: ['projects', slug],
-    queryFn: () => apiFetch<Project[]>(`/workspaces/${slug}/projects/`),
+    queryFn: () => apiFetch<{ results: Project[] }>(`/workspaces/${slug}/projects/`).then((d) => d.results),
     enabled: !!slug,
   });
 
@@ -134,7 +134,7 @@ export default function GitHubIntegrationPage() {
       repo_name: repoName.trim(),
       access_token: accessToken.trim(),
     };
-    if (projectId) {
+    if (projectId && projectId !== '__none__') {
       body.project_id = projectId;
     }
     connectMutation.mutate(body as any);

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2 } from '@/lib/icons';
+import { Eye, EyeOff, Loader2 } from '@/lib/icons';
 
 import { useAuthStore } from "@/stores/auth";
 import { ApiError } from "@/lib/api";
@@ -33,7 +33,7 @@ const registerSchema = z
     display_name: z
       .string()
       .min(1, "Display name is required")
-      .max(100, "Display name is too long"),
+      .max(50, "Display name is too long"),
     email: z
       .string()
       .min(1, "Email is required")
@@ -58,6 +58,8 @@ export default function RegisterPage() {
   const register = useAuthStore((s) => s.register);
   const loading = useAuthStore((s) => s.loading);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -135,7 +137,7 @@ export default function RegisterPage() {
               className="space-y-4"
             >
               {error && (
-                <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                <div role="alert" className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                   {error}
                 </div>
               )}
@@ -183,14 +185,25 @@ export default function RegisterPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="password"
-                        placeholder="At least 8 characters"
-                        autoComplete="new-password"
-                        {...field}
-                      />
-                    </FormControl>
+                    <div className="relative">
+                      <FormControl>
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="At least 8 characters"
+                          autoComplete="new-password"
+                          className="pr-10"
+                          {...field}
+                        />
+                      </FormControl>
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((s) => !s)}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -202,14 +215,25 @@ export default function RegisterPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Confirm password</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="password"
-                        placeholder="Repeat your password"
-                        autoComplete="new-password"
-                        {...field}
-                      />
-                    </FormControl>
+                    <div className="relative">
+                      <FormControl>
+                        <Input
+                          type={showConfirm ? "text" : "password"}
+                          placeholder="Repeat your password"
+                          autoComplete="new-password"
+                          className="pr-10"
+                          {...field}
+                        />
+                      </FormControl>
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirm((s) => !s)}
+                        aria-label={showConfirm ? "Hide password" : "Show password"}
+                        className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                      >
+                        {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

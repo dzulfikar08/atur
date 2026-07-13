@@ -81,13 +81,13 @@ export default function MobileIssueDetail() {
 
   const { data: comments = [] } = useQuery({
     queryKey: ['comments', slug, projectId, issueSeqId],
-    queryFn: () => apiFetch<Comment[]>(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/comments/`).catch(() => []),
+    queryFn: () => apiFetch<{ results: Comment[] }>(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/comments/`).then((d) => d.results).catch(() => []),
     enabled: !!slug && !!projectId && !!issueSeqId,
   });
 
   const { data: states = [] } = useQuery({
     queryKey: ['states', slug, projectId],
-    queryFn: () => apiFetch<State[]>(`/workspaces/${slug}/projects/${projectId}/states/`).catch(() => []),
+    queryFn: () => apiFetch<{ results: State[] }>(`/workspaces/${slug}/projects/${projectId}/states/`).then((d) => d.results).catch(() => []),
     enabled: !!slug && !!projectId,
   });
 
@@ -121,7 +121,7 @@ export default function MobileIssueDetail() {
 
   const { data: relations = [] } = useQuery({
     queryKey: ['relations', slug, projectId, issueSeqId],
-    queryFn: () => apiFetch<IssueRelation[]>(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/relations/`).catch(() => []),
+    queryFn: () => apiFetch<{ results: IssueRelation[] }>(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/relations/`).then((d) => d.results).catch(() => []),
     enabled: !!slug && !!projectId && !!issueSeqId,
   });
 

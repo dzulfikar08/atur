@@ -118,7 +118,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <ScrollArea className="flex-1 px-2 py-2">
+      <ScrollArea className="flex-1 min-h-0 px-2 py-2">
         <nav className="flex flex-col gap-0.5">
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -130,7 +130,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 end={item.end}
                 className={({ isActive }) =>
                   cn(
-                    'flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium transition-colors',
+                    'flex items-center gap-3 rounded-md px-2.5 py-2.5 text-sm font-medium transition-colors',
                     isActive
                       ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                       : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
@@ -153,6 +153,8 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           variant="ghost"
           size="sm"
           onClick={onToggle}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!collapsed}
           className={cn(
             'w-full justify-center text-muted-foreground hover:text-sidebar-foreground',
             !collapsed && 'justify-start'
@@ -172,10 +174,12 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <Separator />
 
       {/* User section */}
-      <div className="flex items-center gap-2 px-3 py-3">
-        <Avatar className="h-8 w-8 shrink-0">
-          <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-        </Avatar>
+      <div className={cn('flex items-center gap-2 py-3', collapsed ? 'justify-center px-0' : 'px-3')}>
+        {!collapsed && (
+          <Avatar className="h-8 w-8 shrink-0">
+            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+          </Avatar>
+        )}
         {!collapsed && (
           <div className="flex flex-1 items-center justify-between min-w-0">
             <div className="min-w-0">
@@ -185,8 +189,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
               onClick={logout}
+              aria-label="Log out"
               title="Log out"
             >
               <LogOut className="h-4 w-4" />
@@ -197,8 +202,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive"
             onClick={logout}
+            aria-label="Log out"
             title="Log out"
           >
             <LogOut className="h-4 w-4" />
