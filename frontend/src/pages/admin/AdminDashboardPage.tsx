@@ -100,20 +100,20 @@ export default function AdminDashboardPage() {
 
   const { data: members = [], isLoading: membersLoading } = useQuery<Member[]>({
     queryKey: ['members', slug],
-    queryFn: () => apiFetch(`/workspaces/${slug}/members/`),
+    queryFn: () => apiFetch<{ results: Member[] }>(`/workspaces/${slug}/members/`).then((d) => d.results),
     enabled: !!slug,
   });
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
     queryKey: ['projects', slug],
-    queryFn: () => apiFetch(`/workspaces/${slug}/projects/`),
+    queryFn: () => apiFetch<{ results: Project[] }>(`/workspaces/${slug}/projects/`).then((d) => d.results),
     enabled: !!slug,
   });
 
   if (!slug) return null;
 
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Shield className="h-6 w-6" />

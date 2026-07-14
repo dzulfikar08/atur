@@ -230,7 +230,7 @@ function PageTreeItem({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
-              className="shrink-0 h-5 w-5 items-center justify-center rounded hover:bg-muted opacity-0 group-hover:opacity-100 hidden group-hover:flex"
+              className="shrink-0 h-5 w-5 flex items-center justify-center rounded hover:bg-muted opacity-100 md:opacity-0 md:group-hover:opacity-100"
               onClick={(e) => e.stopPropagation()}
             >
               <MoreHorizontal className="h-3 w-3" />
@@ -853,7 +853,7 @@ export default function PagesPage() {
   const showMobileEditor = !!pageId;
 
   return (
-    <div className="flex h-[calc(100vh-7.5rem)] -m-4 md:-m-6 lg:-m-8">
+    <div className="flex h-[calc(100dvh-7rem)] md:h-[calc(100dvh-3.5rem)] -m-4 md:-m-6 lg:-m-8">
       {/* Left sidebar — full width on mobile, fixed width on desktop */}
       <div
         className={cn(

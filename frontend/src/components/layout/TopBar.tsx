@@ -143,8 +143,30 @@ export default function TopBar() {
 
   return (
     <header className="flex h-14 items-center gap-3 border-b border-border bg-background px-4">
+      {/* Breadcrumb - left */}
+      <nav className="hidden items-center gap-1 text-sm md:flex min-w-0">
+        {breadcrumbs.map((crumb, i) => (
+          <span key={crumb.path} className="flex items-center gap-1">
+            {i > 0 && <span className="text-muted-foreground">/</span>}
+            <button
+              onClick={() => navigate(crumb.path)}
+              className={cn(
+                'rounded px-1.5 py-0.5 transition-colors hover:bg-muted truncate',
+                i === breadcrumbs.length - 1
+                  ? 'font-medium text-foreground'
+                  : 'text-muted-foreground'
+              )}
+            >
+              {crumb.label}
+            </button>
+          </span>
+        ))}
+      </nav>
+
+      {/* Right group: search + actions */}
+      <div className="ml-auto flex items-center gap-3">
       {/* Search */}
-      <div className="relative flex-1 max-w-md">
+      <div className="relative w-full max-w-md sm:w-64 lg:w-72">
         {searchOpen ? (
           <div className="space-y-2">
             <form
@@ -203,27 +225,7 @@ export default function TopBar() {
         )}
       </div>
 
-      {/* Breadcrumb */}
-      <nav className="hidden items-center gap-1 text-sm md:flex">
-        {breadcrumbs.map((crumb, i) => (
-          <span key={crumb.path} className="flex items-center gap-1">
-            {i > 0 && <span className="text-muted-foreground">/</span>}
-            <button
-              onClick={() => navigate(crumb.path)}
-              className={cn(
-                'rounded px-1.5 py-0.5 transition-colors hover:bg-muted',
-                i === breadcrumbs.length - 1
-                  ? 'font-medium text-foreground'
-                  : 'text-muted-foreground'
-              )}
-            >
-              {crumb.label}
-            </button>
-          </span>
-        ))}
-      </nav>
-
-      <div className="ml-auto flex items-center gap-1">
+      <div className="flex items-center gap-1">
         {/* Theme toggle */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -291,6 +293,7 @@ export default function TopBar() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      </div>
       </div>
     </header>
   );
