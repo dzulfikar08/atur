@@ -11,6 +11,8 @@ import {
   ChevronDown,
   Puzzle,
   Shield,
+  Timer,
+  Users,
 } from '@/lib/icons';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -34,7 +36,9 @@ interface SidebarProps {
 const navItems = [
   { to: '', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: 'projects', icon: FolderKanban, label: 'Projects' },
+  { to: 'crm', icon: Users, label: 'CRM' },
   { to: 'issues', icon: CircleDot, label: 'My Issues' },
+  { to: 'timesheet', icon: Timer, label: 'Timesheet' },
   { to: 'pages', icon: FileText, label: 'Pages' },
   { to: 'integrations/github', icon: Puzzle, label: 'Integrations' },
   { to: 'admin', icon: Shield, label: 'Admin' },

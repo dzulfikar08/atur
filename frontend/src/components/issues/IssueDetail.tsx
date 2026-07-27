@@ -35,6 +35,7 @@ interface Issue {
   created_at: string;
   updated_at: string;
   estimate_points: number | null;
+  external_source?: string | null;
   assignees: any[];
   labels: any[];
   project: string;
@@ -116,6 +117,7 @@ export default function IssueDetail() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [commentText, setCommentText] = useState("");
+  const [commentPublic, setCommentPublic] = useState(false);
   const [activeTab, setActiveTab] = useState<"comments" | "activity" | "attachments" | "time">("comments");
 
   const { data: issue, isLoading } = useQuery({
@@ -161,10 +163,10 @@ export default function IssueDetail() {
   });
 
   const commentMutation = useMutation({
-    mutationFn: (comment_html: string) =>
+    mutationFn: (vars: { comment_html: string; access?: string }) =>
       apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/comments/`, {
         method: "POST",
-        body: JSON.stringify({ comment_html }),
+        body: JSON.stringify({ comment_html: vars.comment_html, access: vars.access }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["comments", slug, projectId, issueId] });
@@ -748,18 +750,31 @@ export default function IssueDetail() {
                       onChange={(html) => setCommentText(html)}
                       onSubmit={() => {
                         if (commentText.replace(/<[^>]*>/g, '').trim() && !commentMutation.isPending) {
-                          commentMutation.mutate(commentText);
+                          commentMutation.mutate({ comment_html: commentText, access: commentPublic ? 'public' : 'internal' });
                         }
                       }}
                       placeholder="Add a comment..."
                     />
-                    <Button
-                      size="sm"
-                      disabled={!commentText.replace(/<[^>]*>/g, '').trim() || commentMutation.isPending}
-                      onClick={() => commentMutation.mutate(commentText)}
-                    >
-                      {commentMutation.isPending ? "Sending..." : "Comment"}
-                    </Button>
+                    <div className="flex items-center gap-3">
+                      {issue?.external_source === 'portal' && (
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={commentPublic}
+                            onChange={(e) => setCommentPublic(e.target.checked)}
+                            className="h-3.5 w-3.5"
+                          />
+                          Visible to customer
+                        </label>
+                      )}
+                      <Button
+                        size="sm"
+                        disabled={!commentText.replace(/<[^>]*>/g, '').trim() || commentMutation.isPending}
+                        onClick={() => commentMutation.mutate({ comment_html: commentText, access: commentPublic ? 'public' : 'internal' })}
+                      >
+                        {commentMutation.isPending ? "Sending..." : "Comment"}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </>

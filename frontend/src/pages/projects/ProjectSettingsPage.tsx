@@ -10,8 +10,9 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import {
-  ArrowLeft, Settings, Users, Tag, Columns3, Plus, Trash2,
+  ArrowLeft, Settings, Users, Tag, Columns3, Plus, Trash2, MessageSquare,
 } from '@/lib/icons';
+import FeedbackBoardSettings from '@/components/projects/FeedbackBoardSettings';
 
 const STATE_GROUPS = [
   { value: 'backlog', label: 'Backlog', color: '#6b7280' },
@@ -137,6 +138,7 @@ export default function ProjectSettingsPage() {
           <TabsTrigger value="states"><Columns3 className="h-3.5 w-3.5 mr-1.5" />States</TabsTrigger>
           <TabsTrigger value="labels"><Tag className="h-3.5 w-3.5 mr-1.5" />Labels</TabsTrigger>
           <TabsTrigger value="members"><Users className="h-3.5 w-3.5 mr-1.5" />Members</TabsTrigger>
+          <TabsTrigger value="feedback"><MessageSquare className="h-3.5 w-3.5 mr-1.5" />Feedback</TabsTrigger>
         </TabsList>
 
         {/* General */}
@@ -384,6 +386,11 @@ export default function ProjectSettingsPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Feedback board */}
+        <TabsContent value="feedback" className="mt-4 space-y-4">
+          <FeedbackBoardSettings slug={slug!} projectId={projectId!} states={states} labels={labels} />
         </TabsContent>
       </Tabs>
     </div>
