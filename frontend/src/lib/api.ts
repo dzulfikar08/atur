@@ -203,6 +203,57 @@ export const api = {
     apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/time-entries/${entryId}/`, {
       method: 'DELETE',
     }),
+  listTimesheet: (slug: string, params: { from?: string; to?: string; user_id?: string; project_id?: string }) => {
+    const qs = new URLSearchParams();
+    if (params.from) qs.set('from', params.from);
+    if (params.to) qs.set('to', params.to);
+    if (params.user_id) qs.set('user_id', params.user_id);
+    if (params.project_id) qs.set('project_id', params.project_id);
+    const query = qs.toString();
+    return apiFetch<TimesheetResponse>(`/workspaces/${slug}/timesheet/${query ? `?${query}` : ''}`);
+  },
+
+  // Feedback board admin config (per project)
+  getFeedbackBoard: (slug: string, projectId: string) =>
+    apiFetch<FeedbackBoardConfig>(`/workspaces/${slug}/projects/${projectId}/feedback-board/`),
+  saveFeedbackBoard: (slug: string, projectId: string, data: Partial<FeedbackBoardConfig>) =>
+    apiFetch<FeedbackBoardConfig>(`/workspaces/${slug}/projects/${projectId}/feedback-board/`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  deleteFeedbackBoard: (slug: string, projectId: string) =>
+    apiFetch<{ ok: boolean }>(`/workspaces/${slug}/projects/${projectId}/feedback-board/`, { method: 'DELETE' }),
+  // CRM contacts (leads + customers)
+  listContacts: async (slug: string, params?: { status?: string; search?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.search) qs.set('search', params.search);
+    const query = qs.toString();
+    return apiFetch<PaginatedResponse<Contact>>(`/workspaces/${slug}/contacts/${query ? `?${query}` : ''}`);
+  },
+  createContact: (slug: string, data: { email: string; name?: string; company?: string; phone?: string; source?: string }) =>
+    apiFetch<Contact>(`/workspaces/${slug}/contacts/`, { method: 'POST', body: JSON.stringify(data) }),
+  getContact: (slug: string, contactId: string) =>
+    apiFetch<ContactDetail>(`/workspaces/${slug}/contacts/${contactId}/`),
+  updateContact: (slug: string, contactId: string, data: Partial<Contact>) =>
+    apiFetch<Contact>(`/workspaces/${slug}/contacts/${contactId}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteContact: (slug: string, contactId: string) =>
+    apiFetch(`/workspaces/${slug}/contacts/${contactId}/`, { method: 'DELETE' }),
+
+  // CRM deals (a pipeline is just a project)
+  listDeals: async (slug: string, projectId: string, params?: { state_id?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.state_id) qs.set('state_id', params.state_id);
+    const query = qs.toString();
+    return apiFetch<PaginatedResponse<Deal>>(`/workspaces/${slug}/projects/${projectId}/deals/${query ? `?${query}` : ''}`);
+  },
+  createDeal: (slug: string, projectId: string, data: { name: string; customer_id?: string; amount_cents?: number; currency?: string; expected_close_at?: string; state_id?: string }) =>
+    apiFetch<Deal>(`/workspaces/${slug}/projects/${projectId}/deals/`, { method: 'POST', body: JSON.stringify(data) }),
+  updateDeal: (slug: string, projectId: string, issueId: string, data: Record<string, unknown>) =>
+    apiFetch<Deal>(`/workspaces/${slug}/projects/${projectId}/deals/${issueId}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  moveDealStage: (slug: string, projectId: string, issueId: string, stateId: string) =>
+    apiFetch(`/workspaces/${slug}/projects/${projectId}/deals/${issueId}/move/`, { method: 'POST', body: JSON.stringify({ state_id: stateId }) }),
+  listDealStats: (slug: string, projectId: string) =>
+    apiFetch<{ results: DealStat[] }>(`/workspaces/${slug}/projects/${projectId}/deals/stats/`).then(r => r.results),
 };
 
 // --- Types ---
@@ -276,6 +327,7 @@ export interface Issue {
   target_date: string | null;
   completed_at: string | null;
   estimate_points: number | null;
+  external_source?: string | null;
   module_ids?: string[];
 }
 
@@ -408,4 +460,97 @@ export interface TimeEntry {
   started_at: string;
   ended_at: string | null;
   created_at: string | null;
+}
+
+
+export interface TimesheetRow {
+  user_id: string;
+  issue_id: string;
+  issue_name: string;
+  sequence_id: number;
+  project_id: string;
+  user_name: string | null;
+  user_email: string | null;
+  total_seconds: number;
+  entry_count: number;
+}
+
+export interface TimesheetByUser {
+  user_id: string;
+  user_name: string | null;
+  total_seconds: number;
+}
+
+export interface TimesheetTotals {
+  total_seconds: number;
+  total_entries: number;
+  by_user: TimesheetByUser[];
+}
+
+export interface TimesheetResponse {
+  results: TimesheetRow[];
+  totals: TimesheetTotals;
+}
+
+export interface FeedbackBoardConfig {
+  enabled: boolean;
+  id?: string;
+  public_token?: string;
+  title?: string;
+  description?: string | null;
+  allow_submit?: boolean;
+  allow_voting?: boolean;
+  require_email?: boolean;
+  allow_comments?: boolean;
+  default_state_id?: string | null;
+  submit_label_id?: string | null;
+  brand_color?: string;
+  position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
+}
+
+export interface Contact {
+  id: string;
+  workspace_id: string;
+  user_id: string | null;
+  email: string | null;
+  name: string | null;
+  company: string | null;
+  phone: string | null;
+  status: string;
+  source: string | null;
+  session_token: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface Deal {
+  id: string;
+  issue_id: string;
+  customer_id: string | null;
+  workspace_id: string;
+  amount_cents: number;
+  currency: string;
+  expected_close_at: string | null;
+  sequence_id: number;
+  name: string;
+  state_id: string | null;
+  state_name: string | null;
+  state_color: string | null;
+  state_group: string | null;
+  priority: string | null;
+  sort_order: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface DealStat {
+  state_id: string | null;
+  total_cents: number;
+  count: number;
+}
+
+export interface ContactDetail {
+  contact: Contact;
+  deals: Deal[];
+  tickets: { id: string; issue_id: string; sequence_id: number; name: string; state_name: string | null; created_at: string | null }[];
 }

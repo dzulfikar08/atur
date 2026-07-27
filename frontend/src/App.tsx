@@ -32,7 +32,20 @@ const GitHubIntegrationPage = lazy(() => import('@/pages/integrations/GitHubInte
 const ClockifyIntegrationPage = lazy(() => import('@/pages/integrations/ClockifyIntegrationPage'));
 const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'));
 const NotificationsPage = lazy(() => import('@/pages/notifications/NotificationsPage'));
+const TimesheetPage = lazy(() => import('@/pages/timesheet/TimesheetPage'));
+const CrmPage = lazy(() => import('@/pages/crm/CrmPage'));
+const ContactsListPage = lazy(() => import('@/pages/crm/ContactsListPage'));
+const ContactDetailPage = lazy(() => import('@/pages/crm/ContactDetailPage'));
+const CrmPipelineListPage = lazy(() => import('@/pages/crm/PipelineListPage'));
+const CrmPipelineBoardPage = lazy(() => import('@/pages/crm/PipelineBoardPage'));
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
+const FeedbackPortalPage = lazy(() => import('@/pages/feedback/FeedbackPortalPage'));
+const PortalLoginPage = lazy(() => import('@/pages/portal/PortalLoginPage'));
+const PortalTicketsPage = lazy(() => import('@/pages/portal/PortalTicketsPage'));
+const PortalNewTicketPage = lazy(() => import('@/pages/portal/PortalNewTicketPage'));
+const PortalTicketDetailPage = lazy(() => import('@/pages/portal/PortalTicketDetailPage'));
+const PortalRouteGuard = lazy(() => import('@/components/portal/PortalRouteGuard'));
+const PortalLayout = lazy(() => import('@/components/portal/PortalLayout'));
 
 function PageLoader() {
   return (
@@ -104,9 +117,20 @@ export default function App() {
         <Route path="/dashboard" element={<RootRoute />} />
 
         {/* Public routes */}
+        <Route path="/feedback/:token" element={<FeedbackPortalPage />} />
         <Route path="/auth/login" element={<LoginPage />} />
         <Route path="/auth/register" element={<RegisterPage />} />
         <Route path="/auth/callback/:provider" element={<OAuthCallbackPage />} />
+
+        {/* Customer support portal (public OTP auth, workspace-scoped) */}
+        <Route path="/portal/:slug/login" element={<PortalLoginPage />} />
+        <Route path="/portal/:slug" element={<PortalRouteGuard />}>
+          <Route element={<PortalLayout />}>
+            <Route index element={<PortalTicketsPage />} />
+            <Route path="tickets/new" element={<PortalNewTicketPage />} />
+            <Route path="tickets/:seqId" element={<PortalTicketDetailPage />} />
+          </Route>
+        </Route>
 
         {/* Protected workspace routes with AppShell layout */}
         <Route
@@ -139,6 +163,12 @@ export default function App() {
           <Route path="/:slug/integrations/clockify" element={<ClockifyIntegrationPage />} />
           <Route path="/:slug/admin" element={<AdminDashboardPage />} />
           <Route path="/:slug/notifications" element={<NotificationsPage />} />
+          <Route path="/:slug/timesheet" element={<TimesheetPage />} />
+          <Route path="/:slug/crm" element={<CrmPage />} />
+          <Route path="/:slug/crm/contacts" element={<ContactsListPage />} />
+          <Route path="/:slug/crm/contacts/:id" element={<ContactDetailPage />} />
+          <Route path="/:slug/crm/pipelines" element={<CrmPipelineListPage />} />
+          <Route path="/:slug/crm/pipelines/:projectId" element={<CrmPipelineBoardPage />} />
           <Route path="/:slug/settings" element={<SettingsPage />} />
           <Route path="/:slug/me" element={<ProfilePage />} />
         </Route>

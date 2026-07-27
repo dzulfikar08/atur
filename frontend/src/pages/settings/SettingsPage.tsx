@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Settings, Users, Tag } from '@/lib/icons';
-import { useState } from "react";
+import { Settings, Users, Tag, Inbox } from '@/lib/icons';
+import { useState, useEffect } from "react";
 
 export default function SettingsPage() {
   const { slug, projectId } = useParams();
@@ -59,6 +59,39 @@ export default function SettingsPage() {
     onError: () => toast.error("Failed to create label"),
   });
 
+  // ── Support portal config ──
+  const [portalEnabled, setPortalEnabled] = useState(false);
+  const [portalProjectId, setPortalProjectId] = useState<string>("");
+
+  const { data: portalSettings } = useQuery({
+    queryKey: ["portal-settings", slug],
+    queryFn: () => apiFetch<any>(`/workspaces/${slug}/portal-settings/`),
+    enabled: !!slug,
+  });
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ["portal-projects", slug],
+    queryFn: () => apiFetch<{ results: any[] }>(`/workspaces/${slug}/projects/`).then((d) => d.results),
+    enabled: !!slug,
+  });
+
+  useEffect(() => {
+    if (portalSettings) {
+      setPortalEnabled(!!portalSettings.is_enabled);
+      setPortalProjectId(portalSettings.support_project_id || "");
+    }
+  }, [portalSettings]);
+
+  const savePortalMutation = useMutation({
+    mutationFn: (data: any) =>
+      apiFetch(`/workspaces/${slug}/portal-settings/`, { method: "PUT", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["portal-settings", slug] });
+      toast.success("Portal settings saved");
+    },
+    onError: () => toast.error("Failed to save portal settings"),
+  });
+
   if (wsLoading) {
     return <div className="flex items-center justify-center h-64"><div className="animate-pulse text-muted-foreground">Loading settings...</div></div>;
   }
@@ -82,6 +115,7 @@ export default function SettingsPage() {
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="members">Members</TabsTrigger>
           <TabsTrigger value="labels">Labels</TabsTrigger>
+          <TabsTrigger value="support">Support</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="mt-4 space-y-4">
@@ -189,6 +223,56 @@ export default function SettingsPage() {
                   ))}
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="support" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Inbox className="h-4 w-4" /> Support Portal
+              </CardTitle>
+              <CardDescription>
+                Let customers sign in with an email code and submit tickets at{' '}
+                <code>/portal/{slug}</code>. Tickets become issues in the selected project.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Enable customer portal</p>
+                  <p className="text-xs text-muted-foreground">Allow customers to sign in and submit tickets.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={portalEnabled}
+                  onChange={(e) => setPortalEnabled(e.target.checked)}
+                  className="h-4 w-4"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Support project</label>
+                <select
+                  value={portalProjectId}
+                  onChange={(e) => setPortalProjectId(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">Select a project…</option>
+                  {projects.map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                onClick={() => savePortalMutation.mutate({
+                  support_project_id: portalProjectId || null,
+                  is_enabled: portalEnabled,
+                })}
+                disabled={savePortalMutation.isPending}
+              >
+                Save Portal Settings
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
