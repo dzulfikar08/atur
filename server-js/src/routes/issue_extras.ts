@@ -3,7 +3,7 @@
 // issue row, then key all sub-resource queries on its UUID.
 // Backed by real tables: attachments, sub-issues (issues.parentId), relations,
 // modules (module_issues), activities (issue_activities).
-// Stubbed (no table in schema): custom-values, time-entries.
+// Stubbed (no table in schema): custom-values.
 import { Hono, type Context } from 'hono'
 import { and, eq, isNull, desc } from 'drizzle-orm'
 import type { Env } from '../lib/env'
@@ -14,6 +14,7 @@ import { v4 as uuid } from 'uuid'
 import { nowISO } from '../lib/pagination'
 import * as schema from '../db/schema'
 import * as issuesRepo from '../repositories/issues'
+import * as timeEntriesService from '../services/timeEntries'
 
 type C = Context<{ Bindings: Env }>
 
@@ -133,6 +134,33 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .get('/custom-values', authMiddleware, (c: C) => c.json([]))
   .post('/custom-values', authMiddleware, (c: C) => c.json({ ok: true }))
 
-  // ---- Time entries (no table — stub) ----
-  .get('/time-entries', authMiddleware, (c: C) => c.json({ results: [] }))
-  .post('/time-entries', authMiddleware, (c: C) => c.json({ results: [] }))
+  // ---- Time entries ----
+  .get('/time-entries', authMiddleware, async (c: C) => {
+    const { db, issue } = await resolveIssue(c)
+    const result = await timeEntriesService.list(db, issue, c)
+    return c.json(result)
+  })
+  .post('/time-entries', authMiddleware, async (c: C) => {
+    const { db, issue } = await resolveIssue(c)
+    const user = c.get('user')
+    const body = timeEntriesService.createTimeEntrySchema.parse(await c.req.json().catch(() => ({})))
+    const entry = await timeEntriesService.create(db, issue, user.sub, body)
+    // snake_case payload matching the frontend TimeEntry type.
+    return c.json({
+      id: entry!.id,
+      issue_id: entry!.issueId,
+      user_id: entry!.userId,
+      duration_seconds: entry!.durationSeconds,
+      description: entry!.description,
+      started_at: entry!.startedAt,
+      ended_at: entry!.endedAt,
+      created_at: entry!.createdAt,
+    }, 201)
+  })
+  .delete('/time-entries/:entryId', authMiddleware, async (c: C) => {
+    // Scope delete to the path issue so a caller can't delete another issue's
+    // entry by guessing its id (IDOR).
+    const { db, issue } = await resolveIssue(c)
+    await timeEntriesService.remove(db, issue, c.req.param('entryId')!)
+    return c.body(null, 204)
+  })
