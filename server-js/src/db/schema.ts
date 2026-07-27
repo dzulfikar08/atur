@@ -13,6 +13,7 @@ export const users = sqliteTable('users', {
   isSuperuser: integer('is_superuser').notNull().default(0),
   isEmailVerified: integer('is_email_verified').notNull().default(0),
   isBot: integer('is_bot').notNull().default(0),
+  isCustomer: integer('is_customer').notNull().default(0),
   createdAt: text('created_at'),
   updatedAt: text('updated_at'),
   deletedAt: text('deleted_at'),
@@ -614,3 +615,138 @@ export const apiKeys = sqliteTable('api_keys', {
   updatedAt: text('updated_at'),
   deletedAt: text('deleted_at'),
 })
+
+// ── CRM contacts + customer support portal ──
+// A customer is a workspace-scoped contact. Portal customers also have a
+// users row (is_customer=1, no password) so they can author issue_comments;
+// the session lives on customers.session_token (not users.token) so portal
+// customers cannot reach /api/*. A lead/prospect has user_id NULL — no auth
+// account. CRM identity key is (workspace, email).
+export const customers = sqliteTable('customers', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  email: text('email'),
+  name: text('name'),
+  company: text('company'),
+  phone: text('phone'),
+  status: text('status').notNull().default('active'),
+  source: text('source'),
+  sessionToken: text('session_token'),
+  createdAt: text('created_at'),
+  updatedAt: text('updated_at'),
+}, (table) => [
+  uniqueIndex('uq_customers_workspace_user').on(table.workspaceId, table.userId),
+  uniqueIndex('uq_customers_workspace_email').on(table.workspaceId, table.email),
+  index('idx_customers_session_token').on(table.sessionToken),
+])
+
+// Per-workspace portal config: which project receives tickets + enabled flag.
+export const portalSettings = sqliteTable('portal_settings', {
+  workspaceId: text('workspace_id').primaryKey().references(() => workspaces.id, { onDelete: 'cascade' }),
+  supportProjectId: text('support_project_id').references(() => projects.id, { onDelete: 'set null' }),
+  isEnabled: integer('is_enabled').notNull().default(0),
+  createdAt: text('created_at'),
+  updatedAt: text('updated_at'),
+})
+
+// 1:1 link between a portal ticket and the underlying issue.
+export const supportTickets = sqliteTable('support_tickets', {
+  id: text('id').primaryKey(),
+  issueId: text('issue_id').notNull().unique().references(() => issues.id, { onDelete: 'cascade' }),
+  customerId: text('customer_id').notNull().references(() => customers.id, { onDelete: 'cascade' }),
+  workspaceId: text('workspace_id').notNull(),
+  createdAt: text('created_at'),
+}, (table) => [
+  index('idx_support_tickets_customer').on(table.customerId),
+])
+
+// ── Time tracking ──
+// Time entries logged against an issue. Mirror of the legacy Rust entity
+// (crates/db/src/entities/time_entries.rs). clockifyId reserved for a future
+// Clockify sync; unused now.
+export const timeEntries = sqliteTable('time_entries', {
+  id: text('id').primaryKey(),
+  issueId: text('issue_id').notNull().references(() => issues.id, { onDelete: 'cascade' }),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  durationSeconds: integer('duration_seconds').notNull(),
+  description: text('description'),
+  startedAt: text('started_at').notNull(),
+  endedAt: text('ended_at'),
+  clockifyId: text('clockify_id'),
+  createdAt: text('created_at'),
+  updatedAt: text('updated_at'),
+  deletedAt: text('deleted_at'),
+}, (table) => [
+  index('idx_time_entries_issue').on(table.issueId),
+  index('idx_time_entries_workspace').on(table.workspaceId),
+  index('idx_time_entries_user').on(table.userId),
+])
+
+// ── Feedback portal + embeddable widget ──
+// Public feedback boards keyed by an unguessable token. Submissions land as
+// issues (external_source='feedback') inside the linked project. Anonymous,
+// token-based access only — no customer accounts (unlike the support portal).
+export const feedbackBoards = sqliteTable('feedback_boards', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  workspaceId: text('workspace_id').notNull(),
+  publicToken: text('public_token').notNull().unique(),
+  slug: text('slug'),
+  title: text('title').notNull(),
+  description: text('description'),
+  allowSubmit: integer('allow_submit').notNull().default(1),
+  allowVoting: integer('allow_voting').notNull().default(1),
+  requireEmail: integer('require_email').notNull().default(0),
+  allowComments: integer('allow_comments').notNull().default(1),
+  defaultStateId: text('default_state_id'),
+  submitLabelId: text('submit_label_id'),
+  brandColor: text('brand_color').notNull().default('#6366f1'),
+  position: text('position').notNull().default('bottom-right'),
+  createdAt: text('created_at'),
+  updatedAt: text('updated_at'),
+}, (table) => [
+  uniqueIndex('uq_feedback_boards_token').on(table.publicToken),
+  index('idx_feedback_boards_project').on(table.projectId),
+])
+
+// One row per (issue, voter_hash). Toggle = insert/delete. Upvote-only.
+export const feedbackVotes = sqliteTable('feedback_votes', {
+  id: text('id').primaryKey(),
+  issueId: text('issue_id').notNull().references(() => issues.id, { onDelete: 'cascade' }),
+  voterHash: text('voter_hash').notNull(),
+  createdAt: text('created_at'),
+}, (table) => [
+  uniqueIndex('uq_feedback_votes').on(table.issueId, table.voterHash),
+  index('idx_feedback_votes_issue').on(table.issueId),
+])
+
+// Public-origin author metadata, kept off the issues row itself.
+export const feedbackMeta = sqliteTable('feedback_meta', {
+  issueId: text('issue_id').primaryKey().references(() => issues.id, { onDelete: 'cascade' }),
+  authorEmail: text('author_email'),
+  authorName: text('author_name'),
+  source: text('source'),
+  createdAt: text('created_at'),
+})
+
+// ── CRM deals pipeline ──
+// A deal IS an issue (issue_id 1:1): the pipeline is the issue's project, the
+// stage is the issue's state. Typed amount_cents enables SUM-by-state rollups
+// for pipeline totals. customer_id nullable + ON DELETE SET NULL keeps deal
+// history when a contact is removed.
+export const deals = sqliteTable('deals', {
+  id: text('id').primaryKey(),
+  issueId: text('issue_id').notNull().unique().references(() => issues.id, { onDelete: 'cascade' }),
+  customerId: text('customer_id').references(() => customers.id, { onDelete: 'set null' }),
+  workspaceId: text('workspace_id').notNull(),
+  amountCents: integer('amount_cents').notNull().default(0),
+  currency: text('currency').notNull().default('USD'),
+  expectedCloseAt: text('expected_close_at'),
+  createdAt: text('created_at'),
+  updatedAt: text('updated_at'),
+}, (table) => [
+  index('idx_deals_customer').on(table.customerId),
+  index('idx_deals_workspace').on(table.workspaceId),
+])
