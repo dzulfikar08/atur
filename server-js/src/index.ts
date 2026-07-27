@@ -21,7 +21,9 @@ export default {
       pathname.startsWith('/api/') ||
       pathname === '/health' ||
       pathname === '/readiness' ||
-      pathname.startsWith('/mcp')
+      pathname.startsWith('/mcp') ||
+      pathname === '/widget.js' || // embeddable feedback widget (application/javascript)
+      pathname.startsWith('/public/') // public feedback board API (token-keyed, no session)
     const isAuthApi = pathname.startsWith('/auth/') && method !== 'GET'
 
     if (isApiPath || isAuthApi) {

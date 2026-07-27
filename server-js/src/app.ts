@@ -25,12 +25,20 @@ import { exportRoutes } from './routes/exports'
 import { importRoutes } from './routes/imports'
 import { searchRoutes } from './routes/search'
 import { analyticsRoutes } from './routes/analytics'
+import { timesheetRoutes } from './routes/timesheet'
 import { assetRoutes } from './routes/assets'
 import { commentRoutes } from './routes/comments'
 import { issueExtrasRoutes } from './routes/issue_extras'
 import { relationRoutes } from './routes/relations'
 import { userRoutes } from './routes/users'
 import { mcpRoutes } from './routes/mcp/index'
+import { portalRoutes } from './routes/portal'
+import { portalSettingsRoutes } from './routes/portal_settings'
+import { contactsRoutes } from './routes/contacts'
+import { dealsRoutes } from './routes/deals'
+import { feedbackRoutes } from './routes/feedback'
+import { feedbackAdminRoutes } from './routes/feedback_admin'
+import { widgetRoutes } from './routes/widget'
 import type { Env } from './lib/env'
 
 export function createApp(): Hono<{ Bindings: Env }> {
@@ -49,10 +57,23 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route('/auth', authRoutes)
   app.route('/mcp', mcpRoutes)
 
+  // Customer support portal — public OTP auth + ticket routes. Mounted outside
+  // /api/* so the global authMiddleware does NOT gate it; portal sessions are
+  // isolated in the portal-session cookie (customers.session_token).
+  app.route('/portal', portalRoutes)
+
+  // Embeddable feedback widget script (served as application/javascript).
+  app.route('/widget.js', widgetRoutes)
+  // Public feedback board API — token-keyed, no session.
+  app.route('/public/feedback/:token', feedbackRoutes)
+
   app.route('/api/users', userRoutes)
 
   app.route('/api/workspaces', workspaceRoutes)
   app.route('/api/workspaces/:slug/projects', projectRoutes)
+  app.route('/api/workspaces/:slug/portal-settings', portalSettingsRoutes)
+  app.route('/api/workspaces/:slug/contacts', contactsRoutes)
+  app.route('/api/workspaces/:slug/projects/:projectId/deals', dealsRoutes)
   app.route('/api/workspaces/:slug/projects/:projectId/issues', issueRoutes)
   app.route('/api/workspaces/:slug/projects/:projectId/cycles', cycleRoutes)
   app.route('/api/workspaces/:slug/projects/:projectId/modules', moduleRoutes)
@@ -72,10 +93,13 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route('/api/search', searchRoutes)
   app.route('/api/workspaces/:slug/search', searchRoutes)
   app.route('/api/workspaces/:slug/analytics', analyticsRoutes)
+  app.route('/api/workspaces/:slug/timesheet', timesheetRoutes)
   app.route('/api/assets', assetRoutes)
   app.route('/api/workspaces/:slug/projects/:projectId/issues/:issueId/comments', commentRoutes)
   app.route('/api/workspaces/:slug/projects/:projectId/issues/:issueId', issueExtrasRoutes)
   app.route('/api/workspaces/:slug/projects/:projectId/issue-relations', relationRoutes)
+  // Feedback board admin config (authed). Scoped under a project.
+  app.route('/api/workspaces/:slug/projects/:projectId/feedback-board', feedbackAdminRoutes)
 
   return app
 }

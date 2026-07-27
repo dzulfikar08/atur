@@ -7,6 +7,9 @@ import { v4 as uuid } from 'uuid'
 import { HTTPException } from 'hono/http-exception'
 import { eq, and, desc, isNull, like, or, inArray } from 'drizzle-orm'
 import * as schema from '../../db/schema'
+import * as customersRepo from '../../repositories/customers'
+import * as dealsRepo from '../../repositories/deals'
+import * as crmService from '../../services/crm'
 
 interface JsonRpcRequest {
   jsonrpc: string
@@ -71,6 +74,17 @@ const TOOLS = [
   { name: 'add_issue_relation', description: 'Add a relation between issues', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, workspace: { type: 'string' }, issue_id: { type: 'string' }, related_issue_id: { type: 'string' }, relation_type: { type: 'string', enum: ['blocks', 'blocked_by', 'relates_to', 'duplicates'] } }, required: ['project_id', 'workspace', 'issue_id', 'related_issue_id', 'relation_type'] } },
   { name: 'list_issue_relations', description: 'List relations for an issue', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, workspace: { type: 'string' }, issue_id: { type: 'string' } }, required: ['project_id', 'workspace', 'issue_id'] } },
   { name: 'remove_issue_relation', description: 'Remove a relation', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, workspace: { type: 'string' }, relation_id: { type: 'string' } }, required: ['project_id', 'workspace', 'relation_id'] } },
+  { name: 'list_time_entries', description: 'List time entries logged on an issue', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, workspace: { type: 'string' }, issue_id: { type: 'string' } }, required: ['project_id', 'workspace', 'issue_id'] } },
+  { name: 'create_time_entry', description: 'Log time on an issue (duration in seconds)', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, workspace: { type: 'string' }, issue_id: { type: 'string' }, duration_seconds: { type: 'integer', description: 'Seconds spent' }, description: { type: 'string' } }, required: ['project_id', 'workspace', 'issue_id', 'duration_seconds'] } },
+  { name: 'delete_time_entry', description: 'Delete a time entry on an issue', inputSchema: { type: 'object', properties: { project_id: { type: 'string' }, workspace: { type: 'string' }, issue_id: { type: 'string' }, entry_id: { type: 'string' } }, required: ['project_id', 'workspace', 'issue_id', 'entry_id'] } },
+  { name: 'list_contacts', description: 'List CRM contacts (leads + customers) in a workspace', inputSchema: { type: 'object', properties: { workspace: { type: 'string' }, status: { type: 'string', enum: ['lead', 'active', 'churned'] }, search: { type: 'string' }, limit: { type: 'integer' }, offset: { type: 'integer' } }, required: ['workspace'] } },
+  { name: 'create_contact', description: 'Create a CRM lead/contact (no auth account)', inputSchema: { type: 'object', properties: { workspace: { type: 'string' }, email: { type: 'string' }, name: { type: 'string' }, company: { type: 'string' }, phone: { type: 'string' }, source: { type: 'string' } }, required: ['workspace', 'email'] } },
+  { name: 'get_contact', description: 'Get a contact with its deals + tickets', inputSchema: { type: 'object', properties: { workspace: { type: 'string' }, contact_id: { type: 'string' } }, required: ['workspace', 'contact_id'] } },
+  { name: 'update_contact', description: 'Update a contact (name/company/phone/status/source/email)', inputSchema: { type: 'object', properties: { workspace: { type: 'string' }, contact_id: { type: 'string' }, name: { type: 'string' }, company: { type: 'string' }, phone: { type: 'string' }, status: { type: 'string', enum: ['lead', 'active', 'churned'] }, source: { type: 'string' }, email: { type: 'string' } }, required: ['workspace', 'contact_id'] } },
+  { name: 'create_deal', description: 'Create a deal in a sales pipeline (issue + deals side row)', inputSchema: { type: 'object', properties: { workspace: { type: 'string' }, project_id: { type: 'string' }, name: { type: 'string' }, customer_id: { type: 'string' }, amount_cents: { type: 'integer' }, currency: { type: 'string' }, expected_close_at: { type: 'string' }, state_id: { type: 'string' } }, required: ['workspace', 'project_id', 'name'] } },
+  { name: 'list_deals', description: 'List deals in a pipeline (project)', inputSchema: { type: 'object', properties: { workspace: { type: 'string' }, project_id: { type: 'string' }, state_id: { type: 'string' }, limit: { type: 'integer' }, offset: { type: 'integer' } }, required: ['workspace', 'project_id'] } },
+  { name: 'move_deal_stage', description: 'Move a deal to a new pipeline stage (issue state)', inputSchema: { type: 'object', properties: { workspace: { type: 'string' }, project_id: { type: 'string' }, issue_id: { type: 'string' }, state_id: { type: 'string' } }, required: ['workspace', 'project_id', 'issue_id', 'state_id'] } },
+  { name: 'update_deal', description: 'Update a deal (amount/currency/close/customer/name)', inputSchema: { type: 'object', properties: { workspace: { type: 'string' }, project_id: { type: 'string' }, issue_id: { type: 'string' }, name: { type: 'string' }, amount_cents: { type: 'integer' }, currency: { type: 'string' }, expected_close_at: { type: 'string' }, customer_id: { type: 'string' } }, required: ['workspace', 'project_id', 'issue_id'] } },
 ]
 
 async function getWorkspaceId(db: ReturnType<typeof getDb>, slug: string, userId?: string) {
@@ -448,6 +462,110 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
       await assertRelationAccess(db, params.relation_id as string, userId)
       await db.update(schema.issueRelations).set({ deletedAt: nowISO(), updatedAt: nowISO() }).where(eq(schema.issueRelations.id, params.relation_id as string))
       return { success: true }
+    }
+    case 'list_time_entries': {
+      await assertIssueAccess(db, params.issue_id as string, userId)
+      const rows = await db.select().from(schema.timeEntries).where(and(eq(schema.timeEntries.issueId, params.issue_id as string), isNull(schema.timeEntries.deletedAt))).orderBy(desc(schema.timeEntries.startedAt))
+      return rows
+    }
+    case 'create_time_entry': {
+      await assertIssueAccess(db, params.issue_id as string, userId)
+      const [iss] = await db.select({ workspaceId: schema.issues.workspaceId }).from(schema.issues).where(eq(schema.issues.id, params.issue_id as string)).limit(1)
+      const id = uuid()
+      const now = nowISO()
+      await db.insert(schema.timeEntries).values({
+        id,
+        issueId: params.issue_id as string,
+        workspaceId: iss!.workspaceId,
+        userId,
+        durationSeconds: params.duration_seconds as number,
+        description: (params.description as string) ?? null,
+        startedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      return db.select().from(schema.timeEntries).where(eq(schema.timeEntries.id, id)).limit(1)
+    }
+    case 'delete_time_entry': {
+      // Scoped to the path issue (IDOR): a caller can only delete entries that
+      // belong to an issue they can already access.
+      await assertIssueAccess(db, params.issue_id as string, userId)
+      await db.update(schema.timeEntries).set({ deletedAt: nowISO(), updatedAt: nowISO() }).where(and(eq(schema.timeEntries.id, params.entry_id as string), eq(schema.timeEntries.issueId, params.issue_id as string)))
+      return { success: true }
+    }
+    case 'list_contacts': {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
+      const limit = Math.min(Number(params.limit) || 50, 100)
+      const offset = Number(params.offset) || 0
+      const { rows, total } = await customersRepo.listContacts(db, workspaceId, {
+        status: params.status as 'lead' | 'active' | 'churned' | undefined,
+        search: params.search as string | undefined,
+        offset,
+        limit,
+      })
+      return { results: rows, total }
+    }
+    case 'create_contact': {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
+      return customersRepo.createLead(db, workspaceId, {
+        email: params.email as string,
+        name: (params.name as string) ?? null,
+        company: (params.company as string) ?? null,
+        phone: (params.phone as string) ?? null,
+        source: (params.source as string) ?? null,
+      })
+    }
+    case 'get_contact': {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
+      return crmService.getContact(db, workspaceId, params.contact_id as string)
+    }
+    case 'update_contact': {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
+      return crmService.updateContact(db, workspaceId, params.contact_id as string, {
+        name: params.name as string | undefined,
+        company: params.company as string | undefined,
+        phone: params.phone as string | undefined,
+        status: params.status as 'lead' | 'active' | 'churned' | undefined,
+        source: params.source as string | undefined,
+        email: params.email as string | undefined,
+      })
+    }
+    case 'create_deal': {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId)
+      await assertProjectAccess(db, params.project_id as string, userId)
+      return crmService.createDeal(db, workspaceId, params.project_id as string, {
+        name: params.name as string,
+        customer_id: params.customer_id as string | undefined,
+        amount_cents: params.amount_cents as number | undefined,
+        currency: params.currency as string | undefined,
+        expected_close_at: params.expected_close_at as string | undefined,
+        state_id: params.state_id as string | undefined,
+      }, userId)
+    }
+    case 'list_deals': {
+      await assertProjectAccess(db, params.project_id as string, userId)
+      const limit = Math.min(Number(params.limit) || 50, 100)
+      const offset = Number(params.offset) || 0
+      const { rows, total } = await dealsRepo.listByProject(db, params.project_id as string, {
+        stateId: params.state_id as string | undefined,
+        offset,
+        limit,
+      })
+      return { results: rows, total }
+    }
+    case 'move_deal_stage': {
+      await assertProjectAccess(db, params.project_id as string, userId)
+      return crmService.moveDealStage(db, params.project_id as string, params.issue_id as string, params.state_id as string)
+    }
+    case 'update_deal': {
+      await assertProjectAccess(db, params.project_id as string, userId)
+      return crmService.updateDeal(db, params.project_id as string, params.issue_id as string, {
+        name: params.name as string | undefined,
+        amount_cents: params.amount_cents as number | undefined,
+        currency: params.currency as string | undefined,
+        expected_close_at: (params.expected_close_at as string | null) ?? undefined,
+        customer_id: (params.customer_id as string | null) ?? undefined,
+      })
     }
     default:
       throw new HTTPException(400, { message: `Unknown tool: ${toolName}` })
