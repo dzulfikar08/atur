@@ -12,6 +12,7 @@ import {
   Settings,
   LogOut,
   Building2,
+  Users,
 } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
@@ -27,6 +28,7 @@ const mainTabs = [
 
 const moreItems = [
   { to: 'pages', icon: FileText, label: 'Pages' },
+  { to: 'crm', icon: Users, label: 'CRM' },
   { to: 'integrations/github', icon: Puzzle, label: 'Integrations' },
   { to: 'admin', icon: Shield, label: 'Admin' },
   { to: 'settings', icon: Settings, label: 'Settings' },
