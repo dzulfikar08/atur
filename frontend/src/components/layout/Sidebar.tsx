@@ -1,4 +1,5 @@
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
+import { useState } from 'react';
 import {
   LayoutDashboard,
   FolderKanban,
@@ -13,6 +14,7 @@ import {
   Shield,
   Timer,
   Users,
+  Plus,
 } from '@/lib/icons';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -22,10 +24,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import CreateWorkspaceDialog from '@/components/layout/CreateWorkspaceDialog';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -51,6 +55,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { workspaces, currentSlug, setCurrentSlug } = useWorkspaceStore();
+  const [createOpen, setCreateOpen] = useState(false);
 
   const basePath = `/${slug ?? ''}`;
 
@@ -64,7 +69,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   return (
     <aside
       className={cn(
-        'flex h-screen flex-col border-r border-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-in-out',
+        'relative flex h-screen flex-col border-r border-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-in-out',
         collapsed ? 'w-[68px]' : 'w-[250px]'
       )}
     >
@@ -117,6 +122,14 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 No workspaces
               </div>
             )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="cursor-pointer text-muted-foreground"
+              onClick={() => setCreateOpen(true)}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              <span>Create workspace</span>
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -151,29 +164,22 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </nav>
       </ScrollArea>
 
-      {/* Collapse toggle */}
-      <div className="px-2 py-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onToggle}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-expanded={!collapsed}
-          className={cn(
-            'w-full justify-center text-muted-foreground hover:text-sidebar-foreground',
-            !collapsed && 'justify-start'
-          )}
-        >
-          {collapsed ? (
-            <ChevronsRight className="h-4 w-4" />
-          ) : (
-            <>
-              <ChevronsLeft className="h-4 w-4" />
-              <span className="ml-2 text-xs">Collapse</span>
-            </>
-          )}
-        </Button>
-      </div>
+      {/* Collapse toggle — floats on right border */}
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={onToggle}
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        aria-expanded={!collapsed}
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        className="absolute top-1/2 right-0 z-40 h-6 w-6 -translate-y-1/2 translate-x-1/2 rounded-full border border-border bg-background p-0 text-muted-foreground shadow-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+      >
+        {collapsed ? (
+          <ChevronsRight className="h-3.5 w-3.5" />
+        ) : (
+          <ChevronsLeft className="h-3.5 w-3.5" />
+        )}
+      </Button>
 
       <Separator />
 
@@ -215,6 +221,8 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           </Button>
         )}
       </div>
+
+      <CreateWorkspaceDialog open={createOpen} onOpenChange={setCreateOpen} />
     </aside>
   );
 }
