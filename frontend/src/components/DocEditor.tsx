@@ -29,6 +29,7 @@ import { useCallback, useState, useEffect } from 'react'
 import * as Y from 'yjs'
 import tippy, { type Instance as TippyInstance } from 'tippy.js'
 import { Markdown } from 'tiptap-markdown'
+import { enhanceCodeBlocks } from '@/lib/codeBlocks'
 import {
   Bold,
   Italic,
@@ -184,6 +185,7 @@ function DocEditorInner({ ydoc, connected }: { ydoc: Y.Doc; connected: boolean }
     onUpdate: ({ editor }) => {
       const text = editor.getText()
       setWordCount(text ? text.split(/\s+/).filter(Boolean).length : 0)
+      enhanceCodeBlocks(editor.view.dom as HTMLElement, { highlight: false })
     },
   })
 
@@ -192,6 +194,11 @@ function DocEditorInner({ ydoc, connected }: { ydoc: Y.Doc; connected: boolean }
       const text = editor.getText()
       setWordCount(text ? text.split(/\s+/).filter(Boolean).length : 0)
     }
+  }, [editor])
+
+  useEffect(() => {
+    if (!editor) return
+    enhanceCodeBlocks(editor.view.dom as HTMLElement, { highlight: false })
   }, [editor])
 
   const toggleMarkdown = useCallback(() => {
