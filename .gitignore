@@ -43,3 +43,6 @@ frontend/android/app/src/main/assets/public/
 
 # Machine-local MCP config (contains live API key, localhost)
 .mcp.json
+
+# Machine-local tool status cache (statusline usage stats)
+status-cache.json
