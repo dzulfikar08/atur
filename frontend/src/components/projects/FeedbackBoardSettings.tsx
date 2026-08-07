@@ -218,6 +218,18 @@ export default function FeedbackBoardSettings({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <ol className="ml-4 list-decimal space-y-1 text-sm text-muted-foreground">
+            <li>Copy the snippet below.</li>
+            <li>Paste it in your site HTML, just before <code>&lt;/body&gt;</code>.</li>
+            <li>The feedback bubble appears in the corner — click it to open the board.</li>
+          </ol>
+          <p className="text-xs text-muted-foreground">
+            Move the bubble with <code>data-atur-position</code> (&ldquo;bottom-left&rdquo;, &ldquo;top-right&rdquo;, &ldquo;top-left&rdquo;).
+            Preview it first: open <code>examples/feedback-widget-demo.html</code> in this repo, paste your token, and click <strong>Load widget</strong>.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Prefer a plain link? Share <strong>Open board</strong> below — no embed needed.
+          </p>
           <pre className="overflow-x-auto rounded-md border border-border bg-muted/50 p-3 text-xs">
             <code>{snippet}</code>
           </pre>
