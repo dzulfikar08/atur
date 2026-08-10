@@ -20,16 +20,18 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { User, Key, Plus, Trash2, Copy } from '@/lib/icons';
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useThemeStore } from "@/stores/theme";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useNavigate, useParams } from "react-router-dom";
 import { Building2, Check } from '@/lib/icons';
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
+import { useAuthStore } from "@/stores/auth";
 
 const createKeySchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -42,7 +44,8 @@ export default function ProfilePage() {
   const qc = useQueryClient();
   const { theme, setTheme } = useThemeStore();
   const { i18n } = useTranslation();
-  const { workspaces, currentSlug, setCurrentSlug } = useWorkspaceStore();
+  const { data: workspaces = [] } = useWorkspaces();
+  const { currentSlug, setCurrentSlug } = useWorkspaceStore();
   const navigate = useNavigate();
   const params = useParams<{ slug: string }>();
   const activeSlug = params.slug || currentSlug;
@@ -58,6 +61,30 @@ export default function ProfilePage() {
     queryKey: ["apiKeys"],
     queryFn: () => apiFetch<any[]>("/users/me/api-keys/"),
   });
+
+  const [dispName, setDispName] = useState("");
+  const [username, setUsername] = useState("");
+
+  useEffect(() => {
+    if (user) {
+      setDispName(user.display_name || "");
+      setUsername(user.username || "");
+    }
+  }, [user]);
+
+  const updateProfileMutation = useMutation({
+    mutationFn: (data: { display_name?: string; username?: string }) =>
+      apiFetch("/users/me/", { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["me"] });
+      useAuthStore.getState().fetchUser();
+      toast.success("Profile updated");
+    },
+    onError: () => toast.error("Failed to update profile"),
+  });
+
+  const nameChanged = dispName !== (user?.display_name || "");
+  const usernameChanged = username !== (user?.username || "");
 
 
   const form = useForm<CreateKeyForm>({
@@ -104,8 +131,8 @@ export default function ProfilePage() {
             <CardTitle>Profile</CardTitle>
             <CardDescription>Your account information</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4 mb-4">
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-4">
               <Avatar className="h-16 w-16">
                 <AvatarFallback className="text-xl">
                   {(user?.display_name || user?.username || "U").charAt(0)}
@@ -116,6 +143,26 @@ export default function ProfilePage() {
                 <p className="text-sm text-muted-foreground">{user?.email}</p>
               </div>
             </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Display name</label>
+              <Input value={dispName} onChange={(e) => setDispName(e.target.value)} placeholder="Your name" />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Username</label>
+              <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username" />
+              <p className="text-xs text-muted-foreground mt-1">Used to sign in. Must be unique.</p>
+            </div>
+            <Button
+              onClick={() => {
+                const payload: Record<string, string> = {};
+                if (nameChanged) payload.display_name = dispName;
+                if (usernameChanged) payload.username = username;
+                updateProfileMutation.mutate(payload);
+              }}
+              disabled={updateProfileMutation.isPending || (!nameChanged && !usernameChanged) || !username.trim()}
+            >
+              {updateProfileMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
           </CardContent>
         </Card>
 
@@ -147,10 +194,14 @@ export default function ProfilePage() {
                       }}
                     >
                       <div className={cn(
-                        'h-8 w-8 rounded-lg flex items-center justify-center text-xs font-semibold shrink-0',
+                        'h-8 w-8 rounded-lg overflow-hidden flex items-center justify-center text-xs font-semibold shrink-0',
                         isActive ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
                       )}>
-                        {ws.name[0].toUpperCase()}
+                        {ws.logo ? (
+                          <img src={ws.logo} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          ws.name[0].toUpperCase()
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{ws.name}</p>
