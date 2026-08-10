@@ -1,6 +1,7 @@
 import { eq, and, isNull, desc } from 'drizzle-orm'
 import type { DbClient } from '../db/index'
 import { issueComments } from '../db/schema'
+import * as activitiesRepo from './activities'
 import { v4 as uuid } from 'uuid'
 import { nowISO } from '../lib/pagination'
 
@@ -39,7 +40,18 @@ export async function create(
     createdAt: now,
     updatedAt: now,
   })
-  return findById(db, id)
+  const comment = await findById(db, id)
+  // Surface a trail event only for customer-visible (public) comments; internal
+  // staff notes stay out of the activity log.
+  if (comment && (data.access ?? 'internal') === 'public') {
+    await activitiesRepo.create(db, {
+      verb: 'commented',
+      issueId: data.issueId,
+      issueCommentId: comment.id,
+      actorId: data.actorId,
+    })
+  }
+  return comment
 }
 
 export async function update(db: DbClient, id: string, data: { commentHtml?: string; access?: string }) {

@@ -124,7 +124,23 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   // ---- Activities ----
   .get('/activities', authMiddleware, async (c: C) => {
     const { db, issue } = await resolveIssue(c)
-    const rows = await db.select().from(schema.issueActivities)
+    // Join users so each event can be attributed to an actor (name + customer/staff).
+    const rows = await db.select({
+      id: schema.issueActivities.id,
+      verb: schema.issueActivities.verb,
+      field: schema.issueActivities.field,
+      oldValue: schema.issueActivities.oldValue,
+      newValue: schema.issueActivities.newValue,
+      issueId: schema.issueActivities.issueId,
+      issueCommentId: schema.issueActivities.issueCommentId,
+      actorId: schema.issueActivities.actorId,
+      actorName: schema.users.displayName,
+      actorEmail: schema.users.email,
+      isCustomer: schema.users.isCustomer,
+      createdAt: schema.issueActivities.createdAt,
+    })
+      .from(schema.issueActivities)
+      .leftJoin(schema.users, eq(schema.users.id, schema.issueActivities.actorId))
       .where(and(eq(schema.issueActivities.issueId, issue.id), isNull(schema.issueActivities.deletedAt)))
       .orderBy(desc(schema.issueActivities.createdAt))
     return c.json({ results: rows })
