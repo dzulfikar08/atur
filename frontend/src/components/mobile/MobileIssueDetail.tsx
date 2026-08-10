@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ArrowLeft, MessageSquare, Calendar, Clock, Link2, Plus, X, Trash2 } from '@/lib/icons';
 import BottomSheet from './BottomSheet';
+import CommentContent from '@/components/editor/CommentContent';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -40,6 +41,7 @@ interface Issue {
 interface Comment {
   id: string;
   comment_stripped: string;
+  comment_html: string;
   created_at: string;
   actor_detail?: { display_name: string };
 }
@@ -211,8 +213,8 @@ export default function MobileIssueDetail() {
         <h1 className="text-base font-semibold leading-tight">{issue.name}</h1>
 
         {/* Description */}
-        {issue.description_stripped ? (
-          <p className="text-sm text-foreground/80 whitespace-pre-wrap">{issue.description_stripped}</p>
+        {issue.description_html ? (
+          <div className="text-sm"><CommentContent html={issue.description_html} /></div>
         ) : (
           <p className="text-sm text-muted-foreground italic">No description</p>
         )}
@@ -288,7 +290,7 @@ export default function MobileIssueDetail() {
                     {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
                   </span>
                 </div>
-                <p className="text-sm mt-0.5">{c.comment_stripped}</p>
+                <div className="mt-0.5"><CommentContent html={c.comment_html} /></div>
               </div>
             </div>
           ))}

@@ -609,6 +609,61 @@
   color: #6b7280;
 }
 
+/* ==========================================
+   Markdown Viewer (.md-viewer) — rendered comment / description HTML
+   Mirrors .tiptap styles for read-only content. Code blocks handled above.
+   ========================================== */
+.md-viewer { line-height: 1.7; }
+.md-viewer h1 { font-size: 1.5em; font-weight: 700; margin: 0.6em 0 0.3em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.3em; }
+.md-viewer h2 { font-size: 1.3em; font-weight: 600; margin: 0.6em 0 0.3em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.25em; }
+.md-viewer h3 { font-size: 1.1em; font-weight: 600; margin: 0.6em 0 0.3em; }
+.md-viewer h4 { font-size: 1em; font-weight: 600; margin: 0.5em 0 0.25em; }
+.dark .md-viewer h1,
+.dark .md-viewer h2 { border-bottom-color: #374151; }
+.md-viewer p { margin: 0.5em 0; }
+.md-viewer ul, .md-viewer ol { padding-left: 1.5em; margin: 0.4em 0; }
+.md-viewer li { margin: 0.25em 0; }
+.md-viewer li > p { margin: 0; }
+.md-viewer a { color: #0969da; text-decoration: underline; word-break: break-word; }
+.md-viewer a:hover { color: #0860ca; }
+.dark .md-viewer a { color: #4493f8; }
+.dark .md-viewer a:hover { color: #66a6ff; }
+.md-viewer strong { font-weight: 700; }
+.md-viewer em { font-style: italic; }
+.md-viewer s, .md-viewer del { text-decoration: line-through; }
+.md-viewer u { text-decoration: underline; }
+.md-viewer sup { font-size: 0.75em; vertical-align: super; }
+.md-viewer sub { font-size: 0.75em; vertical-align: sub; }
+
+/* Task Lists (Checkboxes) */
+.md-viewer ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+.md-viewer ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5em; margin: 0.35em 0; }
+.md-viewer ul[data-type="taskList"] li > label { flex-shrink: 0; margin-top: 0.25em; user-select: none; }
+.md-viewer ul[data-type="taskList"] li > label input[type="checkbox"] { width: 16px; height: 16px; accent-color: #3b82f6; margin: 0; }
+.md-viewer ul[data-type="taskList"] li > div { flex: 1; }
+.md-viewer ul[data-type="taskList"] li[data-checked="true"] > div > p { text-decoration: line-through; color: #9ca3af; }
+
+/* Blockquote */
+.md-viewer blockquote { border-left: 3px solid #d1d5db; padding-left: 1em; color: #6b7280; margin: 0.5em 0; font-style: italic; }
+.dark .md-viewer blockquote { border-left-color: #4b5563; color: #9ca3af; }
+
+/* Horizontal Rule */
+.md-viewer hr { border: none; border-top: 2px solid #e5e7eb; margin: 1.2em 0; }
+.dark .md-viewer hr { border-top-color: #374151; }
+
+/* Images */
+.md-viewer img { max-width: 100%; height: auto; border-radius: 6px; margin: 0.5em 0; }
+
+/* Tables */
+.md-viewer table { border-collapse: collapse; width: 100%; margin: 0.75em 0; border-radius: 6px; border: 1px solid #d1d5db; display: block; overflow-x: auto; }
+.dark .md-viewer table { border-color: #4b5563; }
+.md-viewer table td, .md-viewer table th { border: 1px solid #d1d5db; padding: 0.5em 0.75em; min-width: 80px; vertical-align: top; }
+.dark .md-viewer table td, .dark .md-viewer table th { border-color: #4b5563; }
+.md-viewer table th { background: #f9fafb; font-weight: 600; text-align: left; }
+.dark .md-viewer table th { background: #1f2937; }
+.md-viewer table td { background: white; }
+.dark .md-viewer table td { background: #111827; }
+
 .status-dot {
   width: 8px;
   height: 8px;
