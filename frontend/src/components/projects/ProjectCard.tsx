@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FolderKanban, MoreHorizontal } from '@/lib/icons';
+import { FolderKanban, MoreHorizontal, Pencil } from '@/lib/icons';
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,9 +24,10 @@ interface ProjectCardProps {
   };
   slug: string;
   onDelete?: (id: string) => void;
+  onEdit?: (project: ProjectCardProps["project"]) => void;
 }
 
-export default function ProjectCard({ project, slug, onDelete }: ProjectCardProps) {
+export default function ProjectCard({ project, slug, onDelete, onEdit }: ProjectCardProps) {
   const navigate = useNavigate();
 
   return (
@@ -54,6 +55,11 @@ export default function ProjectCard({ project, slug, onDelete }: ProjectCardProp
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/${slug}/projects/${project.id}`); }}>
               Open
             </DropdownMenuItem>
+            {onEdit && (
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(project); }}>
+                <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+              </DropdownMenuItem>
+            )}
             {onDelete && (
               <DropdownMenuItem
                 className="text-destructive"
