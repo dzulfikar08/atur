@@ -8,6 +8,10 @@ export async function findByEmail(db: DbClient, email: string) {
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1)
   return user
 }
+export async function findByUsername(db: DbClient, username: string) {
+  const [user] = await db.select().from(users).where(eq(users.username, username)).limit(1)
+  return user
+}
 
 export async function findById(db: DbClient, id: string) {
   const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1)

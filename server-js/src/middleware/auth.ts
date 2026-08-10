@@ -12,7 +12,7 @@ declare module 'hono' {
   }
 }
 
-function extractToken(c: Context<{ Bindings: Env }>): string | null {
+export function extractToken(c: Context<{ Bindings: Env }>): string | null {
   const authHeader = c.req.header('Authorization')
   if (authHeader?.startsWith('Bearer ')) {
     return authHeader.slice(7)

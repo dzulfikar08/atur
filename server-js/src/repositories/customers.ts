@@ -3,6 +3,7 @@ import type { DbClient } from '../db/index'
 import * as schema from '../db/schema'
 import { v4 as uuid } from 'uuid'
 import { nowISO } from '../lib/pagination'
+import * as usersRepo from './users'
 
 export interface CustomerRow {
   id: string
@@ -45,6 +46,19 @@ export async function findBySessionToken(db: DbClient, token: string): Promise<C
       eq(schema.customers.sessionToken, token),
       isNull(schema.users.deletedAt),
     ))
+    .limit(1)
+  return row ?? null
+}
+
+
+// Asset-authz lookup: is this id a portal customer? Returns the workspace so a
+// main-app requester can be checked for membership. Direct select (no user join)
+// so it resolves leads (user_id NULL) too.
+export async function findById(db: DbClient, id: string): Promise<{ id: string; workspaceId: string } | null> {
+  const [row] = await db
+    .select({ id: schema.customers.id, workspaceId: schema.customers.workspaceId })
+    .from(schema.customers)
+    .where(eq(schema.customers.id, id))
     .limit(1)
   return row ?? null
 }
@@ -95,22 +109,27 @@ export async function ensure(db: DbClient, workspaceId: string, opts: { email: s
     return existing
   }
 
-  const userId = uuid()
   const now = nowISO()
-  await db.insert(schema.users).values({
-    id: userId,
-    email: opts.email,
-    username: deriveUsername(opts.email),
-    displayName: opts.name ?? null,
-    userTimezone: 'UTC',
-    isActive: 1,
-    isSuperuser: 0,
-    isEmailVerified: 1,
-    isBot: 0,
-    isCustomer: 1,
-    createdAt: now,
-    updatedAt: now,
-  })
+  // Reuse an existing users row (member/admin/invited) if one already exists
+  // for this email — users.email is UNIQUE, so a blind insert collides.
+  const existingUser = await usersRepo.findByEmail(db, opts.email)
+  const userId = existingUser?.id ?? uuid()
+  if (!existingUser) {
+    await db.insert(schema.users).values({
+      id: userId,
+      email: opts.email,
+      username: deriveUsername(opts.email),
+      displayName: opts.name ?? null,
+      userTimezone: 'UTC',
+      isActive: 1,
+      isSuperuser: 0,
+      isEmailVerified: 1,
+      isBot: 0,
+      isCustomer: 1,
+      createdAt: now,
+      updatedAt: now,
+    })
+  }
 
   const customerId = uuid()
   await db.insert(schema.customers).values({

@@ -7,6 +7,8 @@ import { authMiddleware } from '../middleware/auth'
 import * as schema from '../db/schema'
 import { v4 as uuid } from 'uuid'
 import { nowISO } from '../lib/pagination'
+import { HTTPException } from 'hono/http-exception'
+import * as usersRepo from '../repositories/users'
 
 async function sha256Hex(input: string): Promise<string> {
   const data = new TextEncoder().encode(input)
@@ -54,6 +56,23 @@ async function serveMe(c: Context<{ Bindings: Env }>) {
 export const userRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .get('/me', authMiddleware, serveMe)
   .get('/me/', authMiddleware, serveMe)
+  .patch('/me', authMiddleware, async (c) => {
+    const db = getDb(c.env.DB)
+    const userId = c.get('user').sub
+    const body = (await c.req.json().catch(() => ({}))) as { display_name?: string; username?: string; avatar?: string }
+    const patch: Record<string, unknown> = {}
+    if (typeof body.display_name === 'string' && body.display_name.trim()) patch.displayName = body.display_name.trim()
+    if (typeof body.username === 'string' && body.username.trim()) {
+      const username = body.username.trim()
+      const clash = await usersRepo.findByUsername(db, username)
+      if (clash && clash.id !== userId) throw new HTTPException(409, { message: 'Username already taken' })
+      patch.username = username
+    }
+    if (typeof body.avatar === 'string') patch.avatar = body.avatar || null
+    if (Object.keys(patch).length === 0) throw new HTTPException(400, { message: 'No fields to update' })
+    await usersRepo.updateUser(db, userId, patch)
+    return serveMe(c)
+  })
   .get('/me/workspaces', authMiddleware, async (c) => {
     const db = getDb(c.env.DB)
     const userId = c.get('user').sub
