@@ -43,6 +43,19 @@ export interface PortalAssignee {
   display_name: string | null;
   avatar: string | null;
 }
+export interface PortalActivity {
+  id: string;
+  verb: string | null;
+  field: string | null;
+  old_value: string | null;
+  new_value: string | null;
+  issue_comment_id: string | null;
+  actor_id: string | null;
+  actor_name: string | null;
+  actor_email: string | null;
+  is_customer: number | null;
+  created_at: string | null;
+}
 
 export interface TicketDetail {
   ticket: TicketSummary;
@@ -55,6 +68,7 @@ export interface TicketDetail {
   };
   assignees: PortalAssignee[];
   comments: PortalComment[];
+  activities: PortalActivity[];
 }
 
 async function portalFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -102,6 +116,12 @@ export const portalApi = {
 
   getTicket: (slug: string, seqId: number) =>
     portalFetch<TicketDetail>(`/${slug}/tickets/${seqId}`),
+
+  updateTicket: (slug: string, seqId: number, data: { name?: string; description_html?: string; priority?: string }) =>
+    portalFetch<TicketDetail>(`/${slug}/tickets/${seqId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
 
   createTicket: (slug: string, data: { name: string; description_html?: string; priority?: string }) =>
     portalFetch<TicketDetail['issue']>(`/${slug}/tickets`, {

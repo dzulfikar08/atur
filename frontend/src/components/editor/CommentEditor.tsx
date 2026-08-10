@@ -34,9 +34,10 @@ interface CommentEditorProps {
   onSubmit?: () => void
   placeholder?: string
   compact?: boolean
+  uploadUrl?: string
 }
 
-export default function CommentEditor({ value, onChange, onSubmit, placeholder, compact: _compact }: CommentEditorProps) {
+export default function CommentEditor({ value, onChange, onSubmit, placeholder, compact: _compact, uploadUrl = '/api/assets/upload/' }: CommentEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const editor = useEditor({
@@ -101,7 +102,7 @@ export default function CommentEditor({ value, onChange, onSubmit, placeholder, 
     const formData = new FormData()
     formData.append('file', file)
     try {
-      const res = await fetch('/api/assets/upload/', {
+      const res = await fetch(uploadUrl, {
         method: 'POST',
         body: formData,
       })
@@ -112,7 +113,7 @@ export default function CommentEditor({ value, onChange, onSubmit, placeholder, 
     } catch (err) {
       console.error('Image upload failed:', err)
     }
-  }, [editor])
+  }, [editor, uploadUrl])
 
   const handleImageUpload = useCallback(() => {
     fileInputRef.current?.click()
