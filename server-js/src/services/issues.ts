@@ -5,6 +5,8 @@ import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { DbClient } from '../db/index'
 import * as schema from '../db/schema'
 import * as issuesRepo from '../repositories/issues'
+import * as statesRepo from '../repositories/states'
+import * as activitiesRepo from '../repositories/activities'
 import { paginatedResponse } from '../lib/pagination'
 
 export const createIssueSchema = z.object({
@@ -61,8 +63,15 @@ export async function create(
       await issuesRepo.addAssignee(db, issue.id, assigneeId)
     }
   }
+  // First trail entry: who created this issue.
+  await activitiesRepo.create(db, {
+    verb: 'created',
+    issueId: issue.id,
+    actorId: createdById,
+  })
 
   return enrichIssue(db, issue)
+
 }
 
 export async function getById(db: DbClient, issueId: string) {
@@ -99,18 +108,61 @@ export async function list(
 export async function update(
   db: DbClient,
   issueId: string,
-  data: z.infer<typeof updateIssueSchema>
+  data: z.infer<typeof updateIssueSchema>,
+  actorId?: string
 ) {
   const issue = await issuesRepo.findById(db, issueId)
   if (!issue) throw new HTTPException(404, { message: 'Issue not found' })
 
+  // Track only fields whose value actually changed so the activity trail
+  // records real edits, not no-op PATCHes.
   const updateData: Record<string, unknown> = {}
-  if (data.name !== undefined) updateData.name = data.name
-  if (data.description_html !== undefined) updateData.descriptionHtml = data.description_html
-  if (data.priority !== undefined) updateData.priority = data.priority
-  if (data.state_id !== undefined) updateData.stateId = data.state_id
+  const events: { field: string; oldValue: string | null; newValue: string | null }[] = []
+
+  if (data.name !== undefined && data.name !== issue.name) {
+    updateData.name = data.name
+    events.push({ field: 'name', oldValue: issue.name ?? null, newValue: data.name })
+  }
+  if (data.description_html !== undefined && data.description_html !== issue.descriptionHtml) {
+    updateData.descriptionHtml = data.description_html
+    // Skip the HTML blobs — only flag that the description changed.
+    events.push({ field: 'description_html', oldValue: null, newValue: null })
+  }
+  if (data.priority !== undefined && data.priority !== issue.priority) {
+    updateData.priority = data.priority
+    events.push({ field: 'priority', oldValue: issue.priority ?? null, newValue: data.priority })
+  }
+  if (data.state_id !== undefined && data.state_id !== issue.stateId) {
+    updateData.stateId = data.state_id
+    events.push({ field: 'state', oldValue: null, newValue: null }) // names resolved below
+  }
 
   const updated = await issuesRepo.update(db, issueId, updateData)
+
+  // State changes are stored by id; resolve human-readable names for the trail.
+  if (events.some((e) => e.field === 'state')) {
+    const [oldState, newState] = await Promise.all([
+      issue.stateId ? statesRepo.findById(db, issue.stateId) : Promise.resolve(undefined),
+      data.state_id ? statesRepo.findById(db, data.state_id) : Promise.resolve(undefined),
+    ])
+    for (const e of events) {
+      if (e.field === 'state') {
+        e.oldValue = oldState?.name ?? null
+        e.newValue = newState?.name ?? null
+      }
+    }
+  }
+
+  for (const e of events) {
+    await activitiesRepo.create(db, {
+      verb: 'updated',
+      field: e.field,
+      oldValue: e.oldValue,
+      newValue: e.newValue,
+      issueId,
+      actorId: actorId ?? null,
+    })
+  }
 
   if (data.label_ids !== undefined) {
     const currentLabels = await issuesRepo.listLabels(db, issueId)
