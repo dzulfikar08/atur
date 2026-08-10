@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, api, type Module } from "@/lib/api";
@@ -83,7 +83,11 @@ interface IssueActivity {
   field: string | null;
   old_value: string | null;
   new_value: string | null;
+  issue_comment_id: string | null;
   actor_id: string | null;
+  actor_name: string | null;
+  actor_email: string | null;
+  is_customer: number | null;
   created_at: string | null;
 }
 
@@ -104,6 +108,54 @@ const PRIORITY_LABELS: Record<string, string> = {
   high: "High",
   urgent: "Urgent",
 };
+// Render a single activity row as inline JSX. Handles creation, comments, and
+// field changes (with priority/value formatting), attributing each to an actor.
+function renderActivityText(a: IssueActivity): ReactNode {
+  const actor = a.actor_name || a.actor_email || (a.is_customer ? "Customer" : "Someone");
+  const fieldLabel = FIELD_LABELS[a.field || ""] || a.field || "a field";
+  const formatVal = (v: string | null) => {
+    if (!v) return "—";
+    if (a.field === "priority") return PRIORITY_LABELS[v] || v;
+    return v;
+  };
+  if (a.verb === "created") {
+    return (
+      <>
+        {actor} <span className="font-medium text-foreground">created</span> this issue
+      </>
+    );
+  }
+  if (a.verb === "commented") {
+    return (
+      <>
+        {actor} <span className="font-medium text-foreground">added a comment</span>
+      </>
+    );
+  }
+  if (a.verb === "updated" && a.field === "description_html") {
+    return (
+      <>
+        {actor} updated the <span className="font-medium text-foreground">description</span>
+      </>
+    );
+  }
+  if (a.verb === "updated") {
+    return (
+      <>
+        {actor} changed <span className="font-medium text-foreground">{fieldLabel}</span>
+        {" from "}
+        <span className="font-mono text-xs bg-muted px-1 rounded">{formatVal(a.old_value)}</span>
+        {" to "}
+        <span className="font-mono text-xs bg-muted px-1 rounded">{formatVal(a.new_value)}</span>
+      </>
+    );
+  }
+  return (
+    <>
+      {actor} {a.verb}
+    </>
+  );
+}
 
 const RELATION_TYPE_LABELS: Record<string, { label: string; color: string }> = {
   blocks: { label: "Blocks", color: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300" },
@@ -788,33 +840,19 @@ export default function IssueDetail() {
                   <p className="text-sm text-muted-foreground italic py-4">No activity yet</p>
                 ) : (
                   <div className="space-y-1">
-                    {activities.map((a) => {
-                      const fieldLabel = FIELD_LABELS[a.field || ""] || a.field || "Unknown";
-                      const formatVal = (v: string | null) => {
-                        if (!v) return "—";
-                        if (a.field === "priority") return PRIORITY_LABELS[v] || v;
-                        return v;
-                      };
-                      return (
-                        <div key={a.id} className="flex items-start gap-3 py-2 text-sm">
-                          <div className="h-2 w-2 rounded-full bg-muted-foreground/30 mt-1.5 shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <span className="text-muted-foreground">
-                              <span className="font-medium text-foreground">{fieldLabel}</span>
-                              {" changed from "}
-                              <span className="font-mono text-xs bg-muted px-1 rounded">{formatVal(a.old_value)}</span>
-                              {" to "}
-                              <span className="font-mono text-xs bg-muted px-1 rounded">{formatVal(a.new_value)}</span>
+                    {activities.map((a) => (
+                      <div key={a.id} className="flex items-start gap-3 py-2 text-sm">
+                        <div className="h-2 w-2 rounded-full bg-muted-foreground/30 mt-1.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-muted-foreground">{renderActivityText(a)}</span>
+                          {a.created_at && (
+                            <span className="text-xs text-muted-foreground ml-2">
+                              {formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}
                             </span>
-                            {a.created_at && (
-                              <span className="text-xs text-muted-foreground ml-2">
-                                {formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}
-                              </span>
-                            )}
-                          </div>
+                          )}
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
                 )}
               </>
