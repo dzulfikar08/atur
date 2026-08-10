@@ -13,12 +13,12 @@ import {
 } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Search } from '@/lib/icons';
+import { Plus, Search, Pencil } from '@/lib/icons';
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const createProjectSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -28,11 +28,19 @@ const createProjectSchema = z.object({
 
 type CreateProjectForm = z.infer<typeof createProjectSchema>;
 
+const editProjectSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  description: z.string().optional(),
+});
+
+type EditProjectForm = z.infer<typeof editProjectSchema>;
+
 export default function ProjectsPage() {
   const { slug } = useParams();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<any>(null);
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects", slug],
@@ -59,6 +67,31 @@ export default function ProjectsPage() {
       toast.success("Project created");
     },
     onError: () => toast.error("Failed to create project"),
+  });
+
+  const editForm = useForm<EditProjectForm>({
+    resolver: zodResolver(editProjectSchema),
+    defaultValues: { name: "", description: "" },
+  });
+
+  useEffect(() => {
+    if (editing) {
+      editForm.reset({ name: editing.name ?? "", description: editing.description ?? "" });
+    }
+  }, [editing, editForm]);
+
+  const editMutation = useMutation({
+    mutationFn: (data: EditProjectForm) =>
+      apiFetch(`/workspaces/${slug}/projects/${editing.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["projects", slug] });
+      setEditing(null);
+      toast.success("Project updated");
+    },
+    onError: () => toast.error("Failed to update project"),
   });
 
   const deleteMutation = useMutation({
@@ -134,6 +167,43 @@ export default function ProjectsPage() {
             </Form>
           </DialogContent>
         </Dialog>
+        <Dialog open={!!editing} onOpenChange={(o) => { if (!o) setEditing(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Project</DialogTitle>
+            </DialogHeader>
+            <Form {...editForm}>
+              <form onSubmit={editForm.handleSubmit((d) => editMutation.mutate(d))} className="space-y-4">
+                <FormField
+                  control={editForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Name</FormLabel>
+                      <FormControl><Input placeholder="Project name" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description</FormLabel>
+                      <FormControl><Textarea placeholder="Optional description" rows={3} {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button type="submit" className="w-full" disabled={editMutation.isPending}>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  {editMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="relative mb-6">
@@ -167,6 +237,7 @@ export default function ProjectsPage() {
               project={project}
               slug={slug!}
               onDelete={(id) => deleteMutation.mutate(id)}
+              onEdit={(p) => setEditing(p)}
             />
           ))}
         </div>
