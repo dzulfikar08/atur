@@ -11,8 +11,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { api, apiFetch } from '@/lib/api';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { apiFetch } from '@/lib/api';
+import { useQueryClient } from '@tanstack/react-query';
 
 function toSlug(name: string): string {
   return name
@@ -34,7 +34,7 @@ interface Props {
 // after a refetch.
 export default function CreateWorkspaceDialog({ open, onOpenChange }: Props) {
   const navigate = useNavigate();
-  const setWorkspaces = useWorkspaceStore((s) => s.setWorkspaces);
+  const qc = useQueryClient();
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
@@ -62,10 +62,8 @@ export default function CreateWorkspaceDialog({ open, onOpenChange }: Props) {
         method: 'POST',
         body: JSON.stringify({ name: name.trim(), slug: finalSlug }),
       });
-      // RootRoute owns the ['workspaces'] query (mounted only at "/"), so from
-      // inside a workspace we refresh the shared store directly.
-      const workspaces = await api.listWorkspaces();
-      setWorkspaces(workspaces);
+      // Refresh the shared ['workspaces'] cache (fed to switchers via useWorkspaces).
+      qc.invalidateQueries({ queryKey: ['workspaces'] });
       toast.success('Workspace created');
       reset();
       onOpenChange(false);

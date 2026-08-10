@@ -17,6 +17,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspaces } from '@/hooks/useWorkspaces';
 import BottomSheet from '@/components/mobile/BottomSheet';
 
 const mainTabs = [
@@ -40,7 +41,8 @@ export default function BottomNav() {
   const [moreOpen, setMoreOpen] = useState(false);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
-  const { workspaces, currentSlug, setCurrentSlug } = useWorkspaceStore();
+  const { data: workspaces = [] } = useWorkspaces();
+  const { currentSlug, setCurrentSlug } = useWorkspaceStore();
 
   const activeSlug = currentSlug ?? slug;
 
@@ -110,8 +112,12 @@ export default function BottomNav() {
                         : 'hover:bg-muted/50'
                     )}
                   >
-                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-semibold">
-                      {ws.name[0].toUpperCase()}
+                    <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg bg-primary text-primary-foreground text-xs font-semibold">
+                      {ws.logo ? (
+                        <img src={ws.logo} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        ws.name[0].toUpperCase()
+                      )}
                     </div>
                     <span className="flex-1">{ws.name}</span>
                     {isActive && (

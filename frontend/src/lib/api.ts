@@ -262,6 +262,7 @@ export interface Workspace {
   id: string;
   name: string;
   slug: string;
+  logo?: string | null;
 }
 
 export interface AnalyticsOverview {

@@ -18,6 +18,7 @@ import {
 } from '@/lib/icons';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspaces } from '@/hooks/useWorkspaces';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -54,7 +55,8 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
-  const { workspaces, currentSlug, setCurrentSlug } = useWorkspaceStore();
+  const { data: workspaces = [] } = useWorkspaces();
+  const { currentSlug, setCurrentSlug } = useWorkspaceStore();
   const [createOpen, setCreateOpen] = useState(false);
 
   const basePath = `/${slug ?? ''}`;
@@ -84,7 +86,15 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 collapsed && 'justify-center px-0'
               )}
             >
-              <img src="/logo-128.png" alt="" className="h-7 w-7 shrink-0 rounded-md" />
+              {(() => {
+                const cws = workspaces.find((w) => w.slug === (currentSlug ?? slug));
+                if (cws?.logo) return <img src={cws.logo} alt="" className="h-7 w-7 shrink-0 rounded-md object-cover" />;
+                return (
+                  <div className="h-7 w-7 shrink-0 rounded-md bg-primary text-primary-foreground flex items-center justify-center text-xs font-semibold">
+                    {(cws?.name || 'W').charAt(0).toUpperCase()}
+                  </div>
+                );
+              })()}
               {!collapsed && (
                 <>
                   <span className="flex-1 truncate text-sm font-medium text-left">
@@ -111,8 +121,12 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   ws.slug === currentSlug && 'bg-accent'
                 )}
               >
-                <div className="mr-2 flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground">
-                  <span className="text-xs font-semibold">{ws.name[0].toUpperCase()}</span>
+                <div className="mr-2 flex h-6 w-6 items-center justify-center overflow-hidden rounded bg-primary text-primary-foreground">
+                  {ws.logo ? (
+                    <img src={ws.logo} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-xs font-semibold">{ws.name[0].toUpperCase()}</span>
+                  )}
                 </div>
                 <span className="flex-1">{ws.name}</span>
               </DropdownMenuItem>

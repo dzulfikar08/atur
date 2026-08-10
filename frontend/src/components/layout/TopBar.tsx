@@ -143,6 +143,9 @@ export default function TopBar() {
 
   return (
     <header className="flex h-14 items-center gap-3 border-b border-border bg-background px-4">
+      <button onClick={() => slug && navigate(`/${slug}`)} className="shrink-0 rounded-md" aria-label="Atur home">
+        <img src="/logo-128.png" alt="Atur" className="h-7 w-7 rounded-md" />
+      </button>
       {/* Breadcrumb - left */}
       <nav className="hidden items-center gap-1 text-sm md:flex min-w-0">
         {breadcrumbs.map((crumb, i) => (
