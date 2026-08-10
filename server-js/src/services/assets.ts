@@ -56,6 +56,7 @@ export async function getAsset(db: DbClient, env: Env, id: string) {
   }
 
   return {
+    asset,
     body: object.body,
     contentType: asset.contentType ?? 'application/octet-stream',
     size: object.size,
