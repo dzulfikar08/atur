@@ -5,6 +5,7 @@ import { getDb } from '../db/index'
 import { paginationParams } from '../lib/pagination'
 import * as workspaceRepo from '../repositories/workspaces'
 import * as portalService from '../services/portal'
+import * as assetsService from '../services/assets'
 import { portalAuthMiddleware, setPortalCookie, clearPortalCookie } from '../middleware/portalAuth'
 
 export const portalRoutes = new Hono<{ Bindings: Env }>({ strict: false })
@@ -102,6 +103,18 @@ portalRoutes.get('/:slug/tickets/:seqId', portalAuthMiddleware, async (c) => {
   const result = await portalService.getTicket(db, customer, seqId)
   return c.json(result)
 })
+portalRoutes.patch('/:slug/tickets/:seqId', portalAuthMiddleware, async (c) => {
+  const db = getDb(c.env.DB)
+  const workspace = await resolveWorkspace(c)
+  const customer = c.get('customer')
+  if (customer.workspaceId !== workspace.id) {
+    throw new HTTPException(403, { message: 'Wrong workspace' })
+  }
+  const seqId = Number(c.req.param('seqId')!)
+  const body = portalService.updateTicketSchema.parse(await c.req.json())
+  const result = await portalService.updateTicket(db, customer, seqId, body)
+  return c.json(result)
+})
 
 portalRoutes.post('/:slug/tickets/:seqId/comments', portalAuthMiddleware, async (c) => {
   const db = getDb(c.env.DB)
@@ -114,4 +127,24 @@ portalRoutes.post('/:slug/tickets/:seqId/comments', portalAuthMiddleware, async 
   const body = portalService.addCommentSchema.parse(await c.req.json())
   const comment = await portalService.addTicketComment(db, customer, seqId, body)
   return c.json(comment, 201)
+})
+
+// ── Assets (portal-authenticated) ──
+// Customers upload attachments (e.g. images pasted/dropped into the rich-text
+// editor). Stored in R2 like main-app uploads; the authenticated GET /api/assets/:id
+// endpoint serves them back (auth-checked: the owning customer or workspace staff).
+portalRoutes.post('/:slug/assets/upload', portalAuthMiddleware, async (c) => {
+  const db = getDb(c.env.DB)
+  const workspace = await resolveWorkspace(c)
+  const customer = c.get('customer')
+  if (customer.workspaceId !== workspace.id) {
+    throw new HTTPException(403, { message: 'Wrong workspace' })
+  }
+  const formData = await c.req.formData()
+  const file = formData.get('file')
+  if (!file || !(file instanceof File)) {
+    throw new HTTPException(400, { message: 'File is required' })
+  }
+  const result = await assetsService.upload(db, c.env, customer.id, file)
+  return c.json(result, 201)
 })
