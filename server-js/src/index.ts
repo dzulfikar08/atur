@@ -26,7 +26,16 @@ export default {
       pathname.startsWith('/public/') // public feedback board API (token-keyed, no session)
     const isAuthApi = pathname.startsWith('/auth/') && method !== 'GET'
 
-    if (isApiPath || isAuthApi) {
+    // Portal: the same /portal/:slug/... paths serve BOTH the customer-facing
+    // SPA pages (browser GET navigations) and the JSON API (fetch GET/POST —
+    // e.g. /portal/:slug/tickets/:seqId is a page AND an API GET). Split on
+    // Sec-Fetch-Mode so XHR/fetch reaches the app while page loads hit the SPA.
+    const accept = request.headers.get('accept')?.toLowerCase() ?? ''
+    const isDocumentNav =
+      request.headers.get('sec-fetch-mode') === 'navigate' || accept.startsWith('text/html')
+    const isPortalApi = pathname.startsWith('/portal/') && method !== 'OPTIONS' && !isDocumentNav
+
+    if (isApiPath || isAuthApi || isPortalApi) {
       return app.fetch(request, env, ctx)
     }
 

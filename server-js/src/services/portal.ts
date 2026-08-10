@@ -9,6 +9,7 @@ import * as commentsRepo from '../repositories/comments'
 import * as customersRepo from '../repositories/customers'
 import * as portalSettingsRepo from '../repositories/portalSettings'
 import * as supportTicketsRepo from '../repositories/supportTickets'
+import * as activitiesRepo from '../repositories/activities'
 import { generateToken } from '../lib/token'
 import type { Env } from '../lib/env'
 import { genOtp, hashOtp, sendOtpEmail, OTP_TTL_SECONDS, OTP_RATE_WINDOW_SECONDS, OTP_RATE_MAX } from './email'
@@ -29,6 +30,11 @@ export const createTicketSchema = z.object({
 })
 export const addCommentSchema = z.object({
   comment_html: z.string().min(1).max(20000),
+})
+export const updateTicketSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  description_html: z.string().max(20000).optional(),
+  priority: z.enum(['high', 'medium', 'low', 'urgent', 'none']).optional(),
 })
 
 export interface PortalCustomer {
@@ -142,6 +148,12 @@ export async function createTicket(
     customerId: customer.id,
     workspaceId: customer.workspaceId,
   })
+  // Record the creation as the first entry in the ticket's activity trail.
+  await activitiesRepo.create(db, {
+    verb: 'created',
+    issueId: issue.id,
+    actorId: customer.userId,
+  })
 
   return issue
 }
@@ -169,7 +181,8 @@ export async function getTicket(db: DbClient, customer: PortalCustomer, seqId: n
   const issue = await issuesRepo.findById(db, ticket.issueId)
   const assignees = await issuesRepo.listAssignees(db, ticket.issueId)
   const comments = await listPublicComments(db, ticket.issueId)
-  return { ticket, issue, assignees, comments }
+  const activities = await activitiesRepo.listByIssue(db, ticket.issueId)
+  return { ticket, issue, assignees, comments, activities }
 }
 
 export async function addTicketComment(
@@ -185,6 +198,23 @@ export async function addTicketComment(
     issueId: ticket.issueId,
     actorId: customer.userId,
   })
+}
+export async function updateTicket(
+  db: DbClient,
+  customer: PortalCustomer,
+  seqId: number,
+  data: z.infer<typeof updateTicketSchema>
+) {
+  const ticket = await resolveOwnTicket(db, customer, seqId)
+  // Customers may refine their own request (title, body, priority). State
+  // changes are a support-side action and surface only in the activity trail.
+  // Routing through issuesService.update records the field-change activities.
+  await issuesService.update(db, ticket.issueId, {
+    name: data.name,
+    description_html: data.description_html,
+    priority: data.priority,
+  }, customer.userId)
+  return getTicket(db, customer, seqId)
 }
 
 // Portal-visible thread: only comments explicitly marked public.
