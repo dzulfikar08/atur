@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type Contact } from '@/lib/api';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -26,9 +26,14 @@ export default function ContactsListPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
 
+  const isAll = slug === 'all';
+
   const { data, isLoading } = useQuery({
     queryKey: ['contacts', slug, search, status],
-    queryFn: () => api.listContacts(slug!, { search: search || undefined, status: status || undefined }),
+    queryFn: () =>
+      isAll
+        ? api.listAllContacts({ search: search || undefined, status: status || undefined })
+        : api.listContacts(slug!, { search: search || undefined, status: status || undefined }),
     enabled: !!slug,
   });
 
@@ -48,9 +53,11 @@ export default function ContactsListPage() {
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">Contacts</h1>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm"><Plus className="h-4 w-4 mr-1" /> New Lead</Button>
-          </DialogTrigger>
+          {!isAll && (
+            <DialogTrigger asChild>
+              <Button size="sm"><Plus className="h-4 w-4 mr-1" /> New Lead</Button>
+            </DialogTrigger>
+          )}
           <DialogContent>
             <DialogHeader><DialogTitle>New contact</DialogTitle></DialogHeader>
             <div className="space-y-3">
@@ -113,13 +120,14 @@ export default function ContactsListPage() {
                   <th className="text-left p-3 font-medium">Email</th>
                   <th className="text-left p-3 font-medium">Company</th>
                   <th className="text-left p-3 font-medium">Status</th>
+                  {isAll && <th className="text-left p-3 font-medium">Workspace</th>}
                 </tr>
               </thead>
               <tbody>
-                {data?.results.map((c: Contact) => (
+                {data?.results.map((c: any) => (
                   <tr key={c.id} className="border-t hover:bg-muted/30">
                     <td className="p-3">
-                      <Link to={`/${slug}/crm/contacts/${c.id}`} className="font-medium hover:underline">
+                      <Link to={`/${c.workspace_slug || slug}/crm/contacts/${c.id}`} className="font-medium hover:underline">
                         {c.name || c.email || '—'}
                       </Link>
                     </td>
@@ -128,10 +136,11 @@ export default function ContactsListPage() {
                     <td className="p-3">
                       <Badge variant="secondary" className={STATUS_COLORS[c.status] || ''}>{c.status}</Badge>
                     </td>
+                    {isAll && <td className="p-3 text-muted-foreground">{c.workspace_name || '—'}</td>}
                   </tr>
                 ))}
                 {data?.results.length === 0 && (
-                  <tr><td colSpan={4} className="p-6 text-center text-muted-foreground">No contacts yet.</td></tr>
+                  <tr><td colSpan={isAll ? 5 : 4} className="p-6 text-center text-muted-foreground">No contacts yet.</td></tr>
                 )}
               </tbody>
             </table>

@@ -25,21 +25,25 @@ export default function MobileDashboard({ slug, workspaceName }: MobileDashboard
   const navigate = useNavigate();
   const qc = useQueryClient();
 
+  const isAll = slug === 'all';
+
   const { data: overview, isLoading: overviewLoading } = useQuery({
     queryKey: ['analytics-overview', slug],
-    queryFn: () => api.analyticsOverview(slug),
+    queryFn: () => (isAll ? api.allAnalyticsOverview() : api.analyticsOverview(slug)),
   });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects', slug],
     queryFn: () => api.listProjects(slug),
+    enabled: !isAll,
   });
 
   const firstProjectId = projects?.[0]?.id;
 
   const { data: recentIssues = [] } = useQuery({
-    queryKey: ['recent-issues-mobile', slug, firstProjectId],
-    queryFn: async () => {
+    queryKey: ['recent-issues-mobile', slug, isAll ? 'all' : firstProjectId],
+    queryFn: async (): Promise<Issue[]> => {
+      if (isAll) return api.listAllIssues({ limit: 5 });
       if (!firstProjectId) return [];
       const all: Issue[] = [];
       const slice = (projects ?? []).slice(0, 3);
@@ -47,13 +51,13 @@ export default function MobileDashboard({ slug, workspaceName }: MobileDashboard
       for (const pi of results) all.push(...pi);
       return all.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5);
     },
-    enabled: !!firstProjectId,
+    enabled: isAll || !!firstProjectId,
   });
 
   const { data: states = [] } = useQuery({
     queryKey: ['states', slug, firstProjectId],
     queryFn: () => api.listStates(slug!, firstProjectId!),
-    enabled: !!slug && !!firstProjectId,
+    enabled: !isAll && !!slug && !!firstProjectId,
   });
 
   const { pullDistance, isRefreshing, progress, pullHandlers } = usePullToRefresh({
@@ -140,7 +144,7 @@ export default function MobileDashboard({ slug, workspaceName }: MobileDashboard
               <MobileIssueCard
                 key={issue.id}
                 issue={issue as any}
-                slug={slug}
+                slug={(issue as any).workspace_slug || slug}
                 states={states}
               />
             ))

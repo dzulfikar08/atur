@@ -78,9 +78,10 @@ function SprintItem({ sprint }: { sprint: SprintData }) {
 }
 
 export default function SprintProgress({ slug }: SprintProgressProps) {
+  const isAll = slug === 'all';
   const { data, isLoading } = useQuery({
     queryKey: ['sprint-analytics', slug],
-    queryFn: () => api.sprintAnalytics(slug),
+    queryFn: () => (isAll ? api.allSprintAnalytics() : api.sprintAnalytics(slug)),
   });
 
   const sprints: SprintData[] = data ?? [];

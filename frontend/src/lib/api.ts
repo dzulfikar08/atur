@@ -254,6 +254,41 @@ export const api = {
     apiFetch(`/workspaces/${slug}/projects/${projectId}/deals/${issueId}/move/`, { method: 'POST', body: JSON.stringify({ state_id: stateId }) }),
   listDealStats: (slug: string, projectId: string) =>
     apiFetch<{ results: DealStat[] }>(`/workspaces/${slug}/projects/${projectId}/deals/stats/`).then(r => r.results),
+
+  // --- Cross-workspace ("All Workspaces") endpoints — /api/me/* ---
+  listAllIssues: async (params?: { state?: string; priority?: string; search?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.state) qs.set('state', params.state);
+    if (params?.priority) qs.set('priority', params.priority);
+    if (params?.search) qs.set('search', params.search);
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const query = qs.toString();
+    const data = await apiFetch<{ results: AllIssue[]; total: number }>(`/me/issues/${query ? `?${query}` : ''}`);
+    return data.results;
+  },
+  listAllProjects: async () => {
+    const data = await apiFetch<{ results: AllProject[] }>(`/me/projects/`);
+    return data.results;
+  },
+  listAllPages: async () => {
+    const data = await apiFetch<{ results: AllPage[] }>(`/me/pages/`);
+    return data.results;
+  },
+  listAllContacts: async (params?: { status?: string; search?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.search) qs.set('search', params.search);
+    const query = qs.toString();
+    return apiFetch<PaginatedResponse<AllContact>>(`/me/contacts/${query ? `?${query}` : ''}`);
+  },
+  allAnalyticsOverview: () =>
+    apiFetch<AnalyticsOverview>(`/me/analytics/overview`),
+  allCompletionTrend: () =>
+    apiFetch<{ trend: CompletionTrendPoint[] }>(`/me/analytics/completion-trend`)
+      .then(r => r.trend),
+  allSprintAnalytics: () =>
+    apiFetch<{ active_sprints: SprintData[] }>(`/me/analytics/sprints`)
+      .then(r => r.active_sprints),
 };
 
 // --- Types ---
@@ -523,6 +558,31 @@ export interface Contact {
   created_at: string | null;
   updated_at: string | null;
 }
+
+// Cross-workspace row variants — base type + parent workspace/project context
+// so the "All Workspaces" views can group rows and build nav links into each
+// row's own workspace.
+export type AllIssue = Issue & {
+  project_name: string;
+  project_identifier: string | null;
+  workspace_slug: string;
+  workspace_name: string;
+};
+export type AllProject = Project & {
+  identifier?: string | null;
+  emoji?: string | null;
+  workspace_slug: string;
+  workspace_name: string;
+};
+export type AllPage = Page & {
+  workspace_slug: string;
+  workspace_name: string;
+};
+export type AllContact = Contact & {
+  username?: string | null;
+  workspace_slug: string;
+  workspace_name: string;
+};
 
 export interface Deal {
   id: string;

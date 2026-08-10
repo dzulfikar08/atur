@@ -39,6 +39,7 @@ import { dealsRoutes } from './routes/deals'
 import { feedbackRoutes } from './routes/feedback'
 import { feedbackAdminRoutes } from './routes/feedback_admin'
 import { widgetRoutes } from './routes/widget'
+import { meRoutes } from './routes/me'
 import type { Env } from './lib/env'
 
 export function createApp(): Hono<{ Bindings: Env }> {
@@ -93,6 +94,7 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route('/api/search', searchRoutes)
   app.route('/api/workspaces/:slug/search', searchRoutes)
   app.route('/api/workspaces/:slug/analytics', analyticsRoutes)
+  app.route('/api/me', meRoutes)
   app.route('/api/workspaces/:slug/timesheet', timesheetRoutes)
   app.route('/api/assets', assetRoutes)
   app.route('/api/workspaces/:slug/projects/:projectId/issues/:issueId/comments', commentRoutes)

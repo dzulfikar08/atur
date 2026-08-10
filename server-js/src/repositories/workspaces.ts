@@ -45,6 +45,23 @@ export async function listByUser(db: DbClient, userId: string, offset: number, l
   return { rows, total: count }
 }
 
+
+// All workspace IDs a user can see — owned or a member of. Used by the
+// cross-workspace ("All Workspaces") /api/me/* endpoints to scope inArray() filters.
+export async function listIdsByUser(db: DbClient, userId: string): Promise<string[]> {
+  const memberIds = db.select({ workspaceId: schema.workspaceMembers.workspaceId })
+    .from(schema.workspaceMembers)
+    .where(and(
+      eq(schema.workspaceMembers.memberId, userId),
+      isNull(schema.workspaceMembers.deletedAt),
+    ))
+  const rows = await db.select({ id: schema.workspaces.id }).from(schema.workspaces)
+    .where(and(
+      isNull(schema.workspaces.deletedAt),
+      or(eq(schema.workspaces.ownerId, userId), inArray(schema.workspaces.id, memberIds)),
+    ))
+  return rows.map(r => r.id)
+}
 export async function create(db: DbClient, data: {
   name: string
   slug: string

@@ -15,6 +15,7 @@ import {
   Timer,
   Users,
   Plus,
+  Layers,
 } from '@/lib/icons';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -59,6 +60,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { currentSlug, setCurrentSlug } = useWorkspaceStore();
   const [createOpen, setCreateOpen] = useState(false);
 
+  const activeSlug = currentSlug ?? slug;
+  const isAll = activeSlug === 'all';
+
   const basePath = `/${slug ?? ''}`;
 
   const initials = user?.display_name
@@ -87,7 +91,14 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               )}
             >
               {(() => {
-                const cws = workspaces.find((w) => w.slug === (currentSlug ?? slug));
+                if (isAll) {
+                  return (
+                    <div className="h-7 w-7 shrink-0 rounded-md bg-primary text-primary-foreground flex items-center justify-center">
+                      <Layers className="h-4 w-4" />
+                    </div>
+                  );
+                }
+                const cws = workspaces.find((w) => w.slug === activeSlug);
                 if (cws?.logo) return <img src={cws.logo} alt="" className="h-7 w-7 shrink-0 rounded-md object-cover" />;
                 return (
                   <div className="h-7 w-7 shrink-0 rounded-md bg-primary text-primary-foreground flex items-center justify-center text-xs font-semibold">
@@ -98,10 +109,12 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               {!collapsed && (
                 <>
                   <span className="flex-1 truncate text-sm font-medium text-left">
-                    {workspaces.find((w) => w.slug === (currentSlug ?? slug))?.name ??
-                      currentSlug ??
-                      slug ??
-                      'Workspace'}
+                    {isAll
+                      ? 'All Workspaces'
+                      : (workspaces.find((w) => w.slug === activeSlug)?.name ??
+                        currentSlug ??
+                        slug ??
+                        'Workspace')}
                   </span>
                   <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </>
@@ -109,6 +122,19 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuItem
+              className={cn('cursor-pointer', isAll && 'bg-accent')}
+              onClick={() => {
+                setCurrentSlug('all');
+                navigate('/all');
+              }}
+            >
+              <div className="mr-2 flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground">
+                <Layers className="h-3.5 w-3.5" />
+              </div>
+              <span className="flex-1">All Workspaces</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             {workspaces.map((ws) => (
               <DropdownMenuItem
                 key={ws.id}

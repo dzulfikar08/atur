@@ -5,9 +5,11 @@ import { Card, CardContent } from '@/components/ui/card';
 
 export default function PipelineListPage() {
   const { slug } = useParams();
+  const isAll = slug === 'all';
+
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects', slug],
-    queryFn: () => api.listProjects(slug!),
+    queryFn: () => (isAll ? api.listAllProjects() : api.listProjects(slug!)),
     enabled: !!slug,
   });
 
@@ -20,8 +22,8 @@ export default function PipelineListPage() {
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {projects.map((p) => (
-          <Link key={p.id} to={`/${slug}/crm/pipelines/${p.id}`}>
+        {projects.map((p: any) => (
+          <Link key={p.id} to={`/${p.workspace_slug || slug}/crm/pipelines/${p.id}`}>
             <Card className="hover:shadow-md transition-shadow">
               <CardContent className="p-4">
                 <p className="font-medium">{p.name}</p>

@@ -7,31 +7,39 @@ import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 
+type MyIssueRow = Issue & {
+  project_name?: string;
+  workspace_slug?: string;
+  workspace_name?: string;
+};
+
 function DesktopMyIssues({ slug }: { slug: string }) {
   const navigate = useNavigate();
+  const isAll = slug === 'all';
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects', slug],
     queryFn: () => api.listProjects(slug!),
-    enabled: !!slug,
+    enabled: !!slug && !isAll,
   });
 
   const { data: allIssues = [], isLoading } = useQuery({
-    queryKey: ['my-issues', slug, projects.map((p: any) => p.id).join(',')],
-    queryFn: async () => {
+    queryKey: ['my-issues', slug, isAll ? 'all' : projects.map((p: any) => p.id).join(',')],
+    queryFn: async (): Promise<MyIssueRow[]> => {
+      if (isAll) return api.listAllIssues();
       const settled = await Promise.all(
         projects.map(async (project) => {
           try {
             const issues = await api.listIssues(slug, project.id);
             return issues.map((issue) => ({ ...issue, project_name: project.name }));
           } catch {
-            return [] as (Issue & { project_name?: string })[];
+            return [] as MyIssueRow[];
           }
         })
       );
       return settled.flat();
     },
-    enabled: !!slug && projects.length > 0,
+    enabled: !!slug && (isAll || projects.length > 0),
   });
 
   if (isLoading) {
@@ -55,6 +63,7 @@ function DesktopMyIssues({ slug }: { slug: string }) {
                 <th className="text-left p-2 font-medium text-muted-foreground">ID</th>
                 <th className="text-left p-2 font-medium text-muted-foreground">Title</th>
                 <th className="text-left p-2 font-medium text-muted-foreground hidden sm:table-cell">Project</th>
+                {isAll && <th className="text-left p-2 font-medium text-muted-foreground hidden md:table-cell">Workspace</th>}
                 <th className="text-left p-2 font-medium text-muted-foreground">Priority</th>
                 <th className="text-left p-2 font-medium text-muted-foreground hidden md:table-cell">Updated</th>
               </tr>
@@ -64,11 +73,12 @@ function DesktopMyIssues({ slug }: { slug: string }) {
                 <tr
                   key={issue.id}
                   className="border-t hover:bg-muted/30 cursor-pointer"
-                  onClick={() => navigate(`/${slug}/projects/${issue.project_id}/issues/${issue.sequence_id}`)}
+                  onClick={() => navigate(`/${isAll ? issue.workspace_slug : slug}/projects/${issue.project_id}/issues/${issue.sequence_id}`)}
                 >
                   <td className="p-2 text-muted-foreground">{String(issue.sequence_id).padStart(4, '0')}</td>
                   <td className="p-2 font-medium">{issue.name}</td>
                   <td className="p-2 text-muted-foreground hidden sm:table-cell">{issue.project_name}</td>
+                  {isAll && <td className="p-2 text-muted-foreground hidden md:table-cell">{issue.workspace_name}</td>}
                   <td className="p-2"><Badge variant="outline" className="text-xs">{issue.priority || 'none'}</Badge></td>
                   <td className="p-2 text-muted-foreground text-xs hidden md:table-cell">
                     {formatDistanceToNow(new Date(issue.updated_at), { addSuffix: true })}
