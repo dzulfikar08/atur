@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Settings, Users, Tag, Inbox } from '@/lib/icons';
-import { useState, useEffect } from "react";
+import { Settings, Users, Tag, Inbox, Trash2, AlertTriangle, Upload } from '@/lib/icons';
+import { useState, useEffect, useRef } from "react";
 
 export default function SettingsPage() {
   const { slug, projectId } = useParams();
@@ -43,6 +44,7 @@ export default function SettingsPage() {
       apiFetch(`/workspaces/${slug}/`, { method: "PATCH", body: JSON.stringify(data) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["workspace", slug] });
+      qc.invalidateQueries({ queryKey: ["workspaces"] });
       toast.success("Workspace updated");
     },
     onError: () => toast.error("Failed to update workspace"),
@@ -57,6 +59,56 @@ export default function SettingsPage() {
       toast.success("Label created");
     },
     onError: () => toast.error("Failed to create label"),
+  });
+
+  // ── Invite members ──
+  const [inviteEmail, setInviteEmail] = useState("");
+  const inviteMutation = useMutation({
+    mutationFn: (data: { email: string }) =>
+      apiFetch(`/workspaces/${slug}/members/invite`, { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["members", slug] });
+      setInviteEmail("");
+      toast.success("Member invited");
+    },
+    onError: () => toast.error("Failed to invite member"),
+  });
+
+  // ── Workspace logo upload ──
+  const navigate = useNavigate();
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const uploadLogo = async (file: File) => {
+    setUploadingLogo(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/assets/upload/", { method: "POST", body: fd, credentials: "include" });
+      if (!res.ok) throw new Error("upload failed");
+      const uploaded = await res.json();
+      await apiFetch(`/workspaces/${slug}/`, { method: "PATCH", body: JSON.stringify({ logo: uploaded.url }) });
+      qc.invalidateQueries({ queryKey: ["workspace", slug] });
+      qc.invalidateQueries({ queryKey: ["workspaces"] });
+      toast.success("Icon updated");
+    } catch {
+      toast.error("Failed to upload icon");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  // ── Delete workspace (danger zone) ──
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmSlug, setConfirmSlug] = useState("");
+  const deleteWsMutation = useMutation({
+    mutationFn: () => apiFetch(`/workspaces/${slug}/`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["workspaces"] });
+      qc.invalidateQueries({ queryKey: ["workspace", slug] });
+      toast.success("Workspace deleted");
+      navigate("/");
+    },
+    onError: () => toast.error("Failed to delete workspace"),
   });
 
   // ── Support portal config ──
@@ -116,6 +168,7 @@ export default function SettingsPage() {
           <TabsTrigger value="members">Members</TabsTrigger>
           <TabsTrigger value="labels">Labels</TabsTrigger>
           <TabsTrigger value="support">Support</TabsTrigger>
+          <TabsTrigger value="danger" className="text-destructive">Danger</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="mt-4 space-y-4">
@@ -125,6 +178,30 @@ export default function SettingsPage() {
               <CardDescription>Update workspace name and details</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 rounded-lg border flex items-center justify-center overflow-hidden bg-muted">
+                  {workspace?.logo ? (
+                    <img src={workspace.logo} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-xl font-semibold text-muted-foreground">
+                      {(workspace?.name || "W").charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.target.value = ""; }}
+                  />
+                  <Button variant="outline" size="sm" onClick={() => logoInputRef.current?.click()} disabled={uploadingLogo}>
+                    <Upload className="h-4 w-4 mr-1" /> {uploadingLogo ? "Uploading…" : "Upload icon"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-1">PNG or JPG. Shown in the workspace switcher.</p>
+                </div>
+              </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">Workspace Name</label>
                 <Input
@@ -156,6 +233,21 @@ export default function SettingsPage() {
               <CardDescription>{members.length} members in this workspace</CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="flex flex-wrap gap-2 mb-4">
+                <Input
+                  placeholder="Invite by email"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  onClick={() => inviteMutation.mutate({ email: inviteEmail })}
+                  disabled={!inviteEmail.trim() || inviteMutation.isPending}
+                >
+                  Invite
+                </Button>
+              </div>
               {membersLoading ? (
                 <div className="animate-pulse text-sm text-muted-foreground">Loading...</div>
               ) : (
@@ -273,10 +365,59 @@ export default function SettingsPage() {
               >
                 Save Portal Settings
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => window.open(`/portal/${slug}`, "_blank")}
+              >
+                Open Portal
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="danger" className="mt-4 space-y-4">
+          <Card className="border-destructive/40">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-destructive">
+                <AlertTriangle className="h-4 w-4" /> Danger Zone
+              </CardTitle>
+              <CardDescription>Irreversible actions. Proceed with caution.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between rounded-md border border-destructive/40 p-4">
+                <div>
+                  <p className="text-sm font-medium">Delete this workspace</p>
+                  <p className="text-xs text-muted-foreground">All projects, issues, and members will be removed.</p>
+                </div>
+                <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
+                  <Trash2 className="h-4 w-4 mr-1" /> Delete
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+      <Dialog open={deleteOpen} onOpenChange={(o) => { setDeleteOpen(o); if (!o) setConfirmSlug(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete workspace</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This permanently deletes <strong>{workspace?.name}</strong> and all its data. Type the workspace slug <code>{slug}</code> to confirm.
+          </p>
+          <Input value={confirmSlug} onChange={(e) => setConfirmSlug(e.target.value)} placeholder={slug} />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={confirmSlug !== slug || deleteWsMutation.isPending}
+              onClick={() => deleteWsMutation.mutate()}
+            >
+              {deleteWsMutation.isPending ? "Deleting…" : "Delete workspace"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
