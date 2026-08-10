@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, api } from "@/lib/api";
 import ProjectCard from "@/components/projects/ProjectCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,10 +42,14 @@ export default function ProjectsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
 
+  const isAll = slug === "all";
+
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects", slug],
     queryFn: () =>
-      apiFetch<{ results: any[] }>(`/workspaces/${slug}/projects/`).then((d) => d.results),
+      isAll
+        ? api.listAllProjects()
+        : apiFetch<{ results: any[] }>(`/workspaces/${slug}/projects/`).then((d) => d.results),
     enabled: !!slug,
   });
 
@@ -116,11 +120,13 @@ export default function ProjectsPage() {
           <p className="text-sm text-muted-foreground mt-1">{projects.length} projects</p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" /> New Project
-            </Button>
-          </DialogTrigger>
+          {!isAll && (
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" /> New Project
+              </Button>
+            </DialogTrigger>
+          )}
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create Project</DialogTitle>
@@ -225,9 +231,11 @@ export default function ProjectsPage() {
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <p className="text-muted-foreground mb-2">No projects found</p>
-          <Button variant="outline" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" /> Create your first project
-          </Button>
+          {!isAll && (
+            <Button variant="outline" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Create your first project
+            </Button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -235,9 +243,11 @@ export default function ProjectsPage() {
             <ProjectCard
               key={project.id}
               project={project}
-              slug={slug!}
-              onDelete={(id) => deleteMutation.mutate(id)}
-              onEdit={(p) => setEditing(p)}
+              slug={isAll ? project.workspace_slug : slug!}
+              {...(!isAll && {
+                onDelete: (id: string) => deleteMutation.mutate(id),
+                onEdit: (p: any) => setEditing(p),
+              })}
             />
           ))}
         </div>

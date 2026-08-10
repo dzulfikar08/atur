@@ -257,7 +257,7 @@ async function enrichIssue(db: DbClient, issue: NonNullable<Awaited<ReturnType<t
   }
 }
 
-async function enrichIssues(
+export async function enrichIssues(
   db: DbClient,
   issueList: NonNullable<Awaited<ReturnType<typeof issuesRepo.findById>>>[]
 ) {

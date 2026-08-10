@@ -31,9 +31,10 @@ function CompletionChartSkeleton() {
 }
 
 export default function CompletionChart({ slug }: CompletionChartProps) {
+  const isAll = slug === 'all';
   const { data, isLoading } = useQuery({
     queryKey: ['completion-trend', slug],
-    queryFn: () => api.completionTrend(slug),
+    queryFn: () => (isAll ? api.allCompletionTrend() : api.completionTrend(slug)),
   });
 
   if (isLoading) return <CompletionChartSkeleton />;

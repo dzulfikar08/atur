@@ -101,9 +101,10 @@ function AnalyticsCardSkeleton() {
 }
 
 export default function AnalyticsCards({ slug }: AnalyticsCardsProps) {
+  const isAll = slug === 'all';
   const { data, isLoading } = useQuery({
     queryKey: ['analytics-overview', slug],
-    queryFn: () => api.analyticsOverview(slug),
+    queryFn: () => (isAll ? api.allAnalyticsOverview() : api.analyticsOverview(slug)),
   });
 
   if (isLoading) {

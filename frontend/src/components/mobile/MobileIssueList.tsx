@@ -26,6 +26,8 @@ interface Issue {
   created_at: string;
   updated_at: string;
   project_name?: string;
+  workspace_slug?: string;
+  workspace_name?: string;
 }
 
 interface MobileIssueListProps {
@@ -43,10 +45,12 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
   const [newIssueName, setNewIssueName] = useState('');
   const [newIssueDesc, setNewIssueDesc] = useState('');
 
+  const isAll = slug === 'all';
+
   const { data: projects = [] } = useQuery({
     queryKey: ['projects', slug],
     queryFn: () => api.listProjects(slug),
-    enabled: !!slug && !projectId,
+    enabled: !!slug && !projectId && !isAll,
   });
 
   const { data: states = [] } = useQuery({
@@ -56,8 +60,9 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
   });
 
   const { data: allIssues = [], isLoading } = useQuery({
-    queryKey: ['mobile-issues', slug, projectId, projects.map((p) => p.id).join(',')],
-    queryFn: async () => {
+    queryKey: ['mobile-issues', slug, projectId, isAll ? 'all' : projects.map((p) => p.id).join(',')],
+    queryFn: async (): Promise<Issue[]> => {
+      if (isAll) return api.listAllIssues();
       if (projectId) {
         const issues = await api.listIssues(slug!, projectId);
         return issues.map((i: any) => ({ ...i }));
@@ -75,7 +80,7 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
       }
       return results;
     },
-    enabled: !!slug && (projectId ? true : projects.length > 0),
+    enabled: !!slug && (isAll || (projectId ? true : projects.length > 0)),
   });
 
   const createMutation = useMutation({
@@ -174,7 +179,7 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
             <MobileIssueCard
               key={issue.id}
               issue={issue}
-              slug={slug}
+              slug={issue.workspace_slug || slug}
               projectId={projectId || issue.project_id}
               states={states}
             />

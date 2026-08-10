@@ -13,6 +13,7 @@ import {
   LogOut,
   Building2,
   Users,
+  Layers,
 } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
@@ -95,6 +96,27 @@ export default function BottomNav() {
               Workspace
             </div>
             <div className="space-y-1">
+              <button
+                onClick={() => {
+                  setCurrentSlug('all');
+                  navigate('/all');
+                  setMoreOpen(false);
+                }}
+                className={cn(
+                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm transition-colors',
+                  activeSlug === 'all'
+                    ? 'bg-primary/10 text-primary font-medium'
+                    : 'hover:bg-muted/50'
+                )}
+              >
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                  <Layers className="h-3.5 w-3.5" />
+                </div>
+                <span className="flex-1">All Workspaces</span>
+                {activeSlug === 'all' && (
+                  <div className="h-2 w-2 rounded-full bg-primary" />
+                )}
+              </button>
               {workspaces.map((ws) => {
                 const isActive = ws.slug === activeSlug;
                 return (

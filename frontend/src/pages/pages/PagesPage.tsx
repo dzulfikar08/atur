@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetch, type Page } from '@/lib/api';
+import { apiFetch, api, type Page } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -138,7 +138,7 @@ function PageTreeItem({
   const isPinned = pinned.includes(node.page.id);
 
   const deleteMutation = useMutation({
-    mutationFn: () => deletePage(slug, node.page.id),
+    mutationFn: () => deletePage((node.page as any).workspace_slug || slug, node.page.id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pages', slug] });
       toast.success('Page deleted');
@@ -168,7 +168,7 @@ function PageTreeItem({
             : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
         )}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
-        onClick={() => navigate(`/${slug}/pages/${node.page.id}`)}
+        onClick={() => navigate(`/${(node.page as any).workspace_slug || slug}/pages/${node.page.id}`)}
       >
         {/* Expand/collapse toggle */}
         {hasChildren ? (
@@ -240,7 +240,7 @@ function PageTreeItem({
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation();
-                navigate(`/${slug}/pages/${node.page.id}`);
+                navigate(`/${(node.page as any).workspace_slug || slug}/pages/${node.page.id}`);
               }}
             >
               <Pencil className="h-3.5 w-3.5 mr-2" />
@@ -380,10 +380,11 @@ function PageSidebar({
 }) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const { favorites, pinned, recent, removeFavorite, removePin } = usePagesStore();
+  const isAll = slug === 'all';
 
   const { data: pages = [], isLoading } = useQuery({
     queryKey: ['pages', slug],
-    queryFn: () => listPages(slug),
+    queryFn: () => (isAll ? api.listAllPages() : listPages(slug)),
     enabled: !!slug,
   });
 
@@ -449,23 +450,25 @@ function PageSidebar({
       {/* Header */}
       <div className="flex items-center justify-between border-b px-3 py-3">
         <h2 className="text-sm font-semibold">Pages</h2>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7">
-              <Plus className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem onClick={() => onCreatePage(false)}>
-              <FilePlus className="h-4 w-4 mr-2" />
-              New Page
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onCreatePage(true)}>
-              <PenTool className="h-4 w-4 mr-2" />
-              New Drawing
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {!isAll && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={() => onCreatePage(false)}>
+                <FilePlus className="h-4 w-4 mr-2" />
+                New Page
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onCreatePage(true)}>
+                <PenTool className="h-4 w-4 mr-2" />
+                New Drawing
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {/* Search */}
@@ -494,8 +497,9 @@ function PageSidebar({
         </Button>
       </div>
 
-      {/* Quick access sections (only when not searching) */}
-      {!searchQuery && hasQuickAccessSections && (
+      {/* Quick access sections (only when not searching, and not in All mode —
+          pinned/favorites are local-store IDs without workspace context) */}
+      {!searchQuery && hasQuickAccessSections && !isAll && (
         <div className="border-b px-1 py-1">
           {/* Pinned */}
           {pinnedPages.length > 0 && (
@@ -882,6 +886,15 @@ export default function PagesPage() {
             <MobileBackButton slug={slug!} />
             <PageEditor slug={slug} pageId={pageId} />
           </>
+        ) : slug === 'all' ? (
+          <div className="flex flex-1 items-center justify-center p-8 text-center">
+            <div className="max-w-sm space-y-2">
+              <h2 className="text-xl font-semibold">All Pages</h2>
+              <p className="text-sm text-muted-foreground">
+                Pages across all your workspaces. Pick one from the list to open it in its workspace.
+              </p>
+            </div>
+          </div>
         ) : (
           <WelcomeState onCreatePage={handleCreatePage} />
         )}

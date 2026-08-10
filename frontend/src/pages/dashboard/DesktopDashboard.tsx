@@ -44,16 +44,20 @@ function RecentIssuesSkeleton() {
 }
 
 function RecentIssues({ slug }: { slug: string }) {
+  const isAll = slug === 'all';
+
   const { data: projects, isLoading: projectsLoading } = useQuery({
     queryKey: ['projects', slug],
     queryFn: () => api.listProjects(slug),
+    enabled: !isAll,
   });
 
   const firstProjectId = projects?.[0]?.id;
 
   const { data: issues, isLoading: issuesLoading } = useQuery({
-    queryKey: ['recent-issues', slug, firstProjectId],
-    queryFn: async () => {
+    queryKey: ['recent-issues', slug, isAll ? 'all' : firstProjectId],
+    queryFn: async (): Promise<Issue[]> => {
+      if (isAll) return api.listAllIssues({ limit: 5 });
       if (!firstProjectId) return [];
       const allIssues: Issue[] = [];
       const projectSlice = (projects ?? []).slice(0, 3);
@@ -67,7 +71,7 @@ function RecentIssues({ slug }: { slug: string }) {
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 5);
     },
-    enabled: !!firstProjectId,
+    enabled: isAll || !!firstProjectId,
   });
 
   const isLoading = projectsLoading || issuesLoading;
@@ -134,7 +138,10 @@ export default function DesktopDashboard() {
   const currentSlug = useWorkspaceStore((s) => s.currentSlug);
   const effectiveSlug = slug ?? currentSlug;
 
-  const workspaceName = workspaces.find((w) => w.slug === effectiveSlug)?.name ?? effectiveSlug ?? 'Workspace';
+  const isAll = effectiveSlug === 'all';
+  const workspaceName = isAll
+    ? 'All Workspaces'
+    : (workspaces.find((w) => w.slug === effectiveSlug)?.name ?? effectiveSlug ?? 'Workspace');
 
   if (!effectiveSlug) {
     return (
