@@ -5,9 +5,7 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import CreateWorkspace from '@/components/onboarding/CreateWorkspace';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/auth';
-import { useWorkspaceStore } from '@/stores/workspace';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { useWorkspaces } from '@/hooks/useWorkspaces';
 
 
 // Lazy-loaded page components
@@ -60,8 +58,8 @@ function RootRoute() {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated);
   const initialized = useAuthStore(s => s.initialized);
   const fetchUser = useAuthStore(s => s.fetchUser);
-  const workspaces = useWorkspaceStore(s => s.workspaces);
-  const setWorkspaces = useWorkspaceStore(s => s.setWorkspaces);
+  const workspacesQuery = useWorkspaces({ enabled: isAuthenticated });
+  const workspaces = workspacesQuery.data ?? [];
 
   useEffect(() => {
     if (!initialized) {
@@ -69,15 +67,6 @@ function RootRoute() {
     }
   }, [initialized, fetchUser]);
 
-  const workspacesQuery = useQuery({
-    queryKey: ['workspaces'],
-    queryFn: async () => {
-      const data = await api.listWorkspaces();
-      setWorkspaces(data);
-      return data;
-    },
-    enabled: isAuthenticated,
-  });
 
   useEffect(() => {
     if (initialized && isAuthenticated && workspaces.length > 0) {

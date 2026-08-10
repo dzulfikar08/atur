@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { api, type Issue } from '@/lib/api';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspaces } from '@/hooks/useWorkspaces';
 import { cn } from '@/lib/utils';
 
 const priorityColors: Record<string, string> = {
@@ -129,7 +130,7 @@ function RecentIssues({ slug }: { slug: string }) {
 
 export default function DesktopDashboard() {
   const { slug } = useParams<{ slug: string }>();
-  const workspaces = useWorkspaceStore((s) => s.workspaces);
+  const { data: workspaces = [] } = useWorkspaces();
   const currentSlug = useWorkspaceStore((s) => s.currentSlug);
   const effectiveSlug = slug ?? currentSlug;
 
