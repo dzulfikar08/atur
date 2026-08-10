@@ -40,10 +40,7 @@ export default function CommentContent({ html }: CommentContentProps) {
   return (
     <div
       ref={ref}
-      className="md-viewer prose prose-sm max-w-none dark:prose-invert text-sm
-        prose-headings:mb-1 prose-headings:mt-2
-        prose-p:my-1 prose-img:rounded-md prose-img:max-w-full
-        prose-a:text-primary prose-a:underline"
+      className="md-viewer max-w-none text-sm"
       dangerouslySetInnerHTML={{ __html: clean }}
     />
   );
