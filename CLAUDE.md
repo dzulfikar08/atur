@@ -12,7 +12,7 @@ Atur tools are prefixed `mcp__atur__`. ALWAYS pass `workspace` (slug) AND `proje
 
 **Step 1: Discover the workspace and project.**
 ```
-list_workspaces → get the slug (e.g. "rustred", "opexmx", "plane-pmo")
+list_workspaces → get the slug (e.g. "opexmx", "voltrus", "cloudagni")
 list_projects(workspace="<slug>") → get project UUIDs
 ```
 Always do these FIRST in any session involving Atur. Cache the slug + project_id in your context for the rest of the conversation.
@@ -28,16 +28,20 @@ State UUIDs are needed for `update_issue` (changing status). Label UUIDs are nee
 
 ### Known Workspaces
 
-| Name | Slug | Description |
-|------|------|-------------|
-| Plane PMO | `plane-pmo` | General PMO |
-| OpexMX | `opexmx` | OpexMX project |
-| Agni | `agni` | Agni project |
-| Voltrus | `voltrus` | Voltrus project |
-| RevKlik | `revklik` | RevKlik project |
-| RustRED | `rustred` | RustRED / Rust-Red |
+| Name | Slug |
+|------|------|
+| OpexMX | `opexmx` |
+| Voltrus | `voltrus` |
+| Cowculator | `cowculator` |
+| E-Pondok | `e-pondok` |
+| Revklik | `revklik` |
+| Waqtu | `waqtu` |
+| CloudAgni | `cloudagni` |
+| JoyoDigitama | `joyodigitama` |
+| WeLoveOurBaby | `weloveourbaby` |
+| BriefOK | `briefok` |
 
-> **IMPORTANT**: These slugs were accurate as of 2026-05-24. If `list_workspaces` returns different results, trust the live data.
+> **IMPORTANT**: Slugs verified 2026-08-11 (all owned by `ab39f025…` / dzulfikar). If `list_workspaces` returns different results, trust the live data.
 
 ### Common Workflows
 
@@ -184,9 +188,9 @@ update_issue(state_id=need_review)
 
 1. **Always pass `workspace` and `project_id`** — tools fail or use wrong context without them.
 2. **`description_html` accepts HTML** — use `<h3>`, `<h4>`, `<ul><li>`, `<p>`, `<strong>`, `<code>`, `<table>` tags. Do NOT pass markdown.
-3. **IDs are UUIDs** — workspace slugs are short strings (e.g. `rustred`), but project_id, issue_id, state_id, label_id, sprint_id are all UUIDs like `73bcddf0-f5fa-4340-bbb3-40b12e98c6a6`.
+3. **IDs are UUIDs** — workspace slugs are short strings (e.g. `opexmx`), but project_id, issue_id, state_id, label_id, sprint_id are all UUIDs like `73bcddf0-f5fa-4340-bbb3-40b12e98c6a6`.
 4. **Batch parallel calls** — `list_states`, `list_labels`, `list_issues` can all be called in parallel when you need setup data.
-5. **Get issue details with `get_issue`** — use `sequence_id` (the human-readable number like RRD-35) OR `issue_id` (UUID). Both work.
+5. **Get issue details with `get_issue`** — use `sequence_id` (the human-readable number, e.g. 35) OR `issue_id` (UUID). Both work.
 6. **Issue relations are bidirectional** — `blocks` means "this issue blocks the related one". `blocked_by` means "this issue is blocked by the related one".
 7. **No blank descriptions** — every issue must follow the Description Standard template above.
 8. **Always add comments** when changing state — document WHAT changed and WHY (e.g. "Development complete, files changed: X, Y").
