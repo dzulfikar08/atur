@@ -591,8 +591,27 @@ export const mcpRoutes = new Hono<{ Bindings: Env }>({ strict: false })
 
     try {
       switch (body.method) {
+        case 'initialize': {
+          return c.json({
+            jsonrpc: '2.0',
+            id: body.id,
+            result: {
+              protocolVersion: '2024-11-05',
+              capabilities: { tools: {} },
+              serverInfo: { name: 'atur-mcp', version: '1.0.0' },
+            },
+          })
+        }
+        case 'notifications/initialized': {
+          // Client-to-server notification: no response body.
+          return c.body(null, 202)
+        }
+        case 'ping': {
+          return c.json({ jsonrpc: '2.0', id: body.id, result: {} })
+        }
         case 'tools/list': {
-          return c.json(ok(body.id, { tools: TOOLS }))
+          // MCP spec: result is { tools: [...] } directly, NOT content-wrapped.
+          return c.json({ jsonrpc: '2.0', id: body.id, result: { tools: TOOLS } })
         }
         case 'tools/call': {
           const params = body.params as { name?: string; arguments?: Record<string, unknown> } | undefined

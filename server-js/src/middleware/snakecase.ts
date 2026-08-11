@@ -24,6 +24,9 @@ function convert(obj: unknown): unknown {
 
 export async function snakeCaseMiddleware(c: Context, next: Next) {
   await next()
+  // MCP JSON-RPC responses must keep camelCase keys (protocolVersion,
+  // serverInfo, inputSchema) per spec — never snake_case them.
+  if (c.req.path.startsWith('/mcp')) return
   const ct = c.res.headers.get('Content-Type') || ''
   if (!ct.includes('application/json')) return
   const text = await c.res.text()
