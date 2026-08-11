@@ -574,6 +574,14 @@ async function handleTool(db: ReturnType<typeof getDb>, env: Env, toolName: stri
 
 export const mcpRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .get('/', (c) => {
+    // The MCP Streamable HTTP transport probes GET with Accept: text/event-stream
+    // to open a server→client stream. We are stateless (no streaming), so respond
+    // 405 — the client then falls back to plain POST request/response. Returning
+    // 200 JSON here violates the spec and breaks the SDK handshake.
+    const accept = c.req.header('Accept') || ''
+    if (accept.includes('text/event-stream')) {
+      return c.body(null, 405)
+    }
     return c.json({
       name: 'atur-mcp',
       version: '1.0.0',
