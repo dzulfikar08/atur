@@ -598,6 +598,35 @@ export default function LandingPage() {
 
       <Separator />
 
+      {/* ── MCP / AI editor ── */}
+      <section className="relative py-24 sm:py-32 overflow-hidden">
+        <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
+          <div className="mx-auto max-w-2xl text-center">
+            <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Bot className="h-6 w-6" />
+            </div>
+            <h2 className="text-3xl font-bold tracking-tight sm:text-5xl">
+              Bring Atur into your AI editor
+            </h2>
+            <p className="mt-5 text-lg text-muted-foreground">
+              Atur speaks MCP. Connect Claude Code or Cursor and manage issues, sprints, CRM, and
+              timesheets without leaving your editor.
+            </p>
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+              <Button size="lg" onClick={() => navigate('/auth/login')} className="px-8 h-12 text-base">
+                Connect Atur
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Then open <strong>AI / MCP</strong> in the sidebar for setup commands.
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <Separator />
+
       {/* ── Footer ── */}
       <footer className="py-10">
         <div className="mx-auto max-w-7xl px-5 sm:px-8">

@@ -11,6 +11,7 @@ import {
   LogOut,
   ChevronDown,
   Puzzle,
+  Bot,
   Shield,
   Timer,
   Users,
@@ -47,6 +48,7 @@ const navItems = [
   { to: 'timesheet', icon: Timer, label: 'Timesheet' },
   { to: 'pages', icon: FileText, label: 'Pages' },
   { to: 'integrations/github', icon: Puzzle, label: 'Integrations' },
+  { to: 'integrations/mcp', icon: Bot, label: 'AI / MCP' },
   { to: 'admin', icon: Shield, label: 'Admin' },
   { to: 'settings', icon: Settings, label: 'Settings' },
 ];

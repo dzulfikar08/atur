@@ -8,6 +8,7 @@ import {
   Menu,
   FileText,
   Puzzle,
+  Bot,
   Shield,
   Settings,
   LogOut,
@@ -32,6 +33,7 @@ const moreItems = [
   { to: 'pages', icon: FileText, label: 'Pages' },
   { to: 'crm', icon: Users, label: 'CRM' },
   { to: 'integrations/github', icon: Puzzle, label: 'Integrations' },
+  { to: 'integrations/mcp', icon: Bot, label: 'AI / MCP' },
   { to: 'admin', icon: Shield, label: 'Admin' },
   { to: 'settings', icon: Settings, label: 'Settings' },
 ];
