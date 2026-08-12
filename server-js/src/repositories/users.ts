@@ -37,7 +37,7 @@ export async function findByToken(db: DbClient, token: string) {
 
 export async function createUser(
   db: DbClient,
-  data: { email: string; username: string; passwordHash: string; token: string }
+  data: { email: string; username: string; passwordHash: string | null; token: string }
 ) {
   const id = uuid()
   const now = nowISO()
