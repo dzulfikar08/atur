@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { apiOrigin, authHeaders } from "@/lib/native";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,7 +84,7 @@ export default function SettingsPage() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/assets/upload/", { method: "POST", body: fd, credentials: "include" });
+      const res = await fetch(`${apiOrigin || ''}/api/assets/upload/`, { method: "POST", body: fd, credentials: "include", headers: { ...authHeaders() } });
       if (!res.ok) throw new Error("upload failed");
       const uploaded = await res.json();
       await apiFetch(`/workspaces/${slug}/`, { method: "PATCH", body: JSON.stringify({ logo: uploaded.url }) });

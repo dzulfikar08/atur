@@ -1,4 +1,6 @@
-const API_BASE = '/api';
+import { apiOrigin, authHeaders } from './native';
+
+const API_BASE = apiOrigin ? `${apiOrigin}/api` : '/api';
 
 export class ApiError extends Error {
   status: number;
@@ -12,7 +14,7 @@ export class ApiError extends Error {
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...options?.headers },
     ...options,
   });
   if (!res.ok) {
@@ -181,9 +183,10 @@ export const api = {
   uploadFile: async (file: File): Promise<{ id: string; asset: string }> => {
     const form = new FormData();
     form.append('file', file);
-    const res = await fetch('/api/assets/upload/', {
+    const res = await fetch(`${apiOrigin || ''}/api/assets/upload/`, {
       method: 'POST',
       credentials: 'include',
+      headers: { ...authHeaders() },
       body: form,
     });
     if (!res.ok) throw new Error('Upload failed');

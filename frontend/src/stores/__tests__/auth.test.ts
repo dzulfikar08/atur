@@ -82,7 +82,7 @@ describe('useAuthStore', () => {
 
     expect(useAuthStore.getState().loading).toBe(true);
 
-    resolveFetch!({ ok: true } as Response);
+    resolveFetch!({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
 
     // fetchUser will also be called after login succeeds
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
