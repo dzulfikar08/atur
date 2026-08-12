@@ -60,7 +60,7 @@ function extractWikilinks(pages: Page[]): Map<string, string[]> {
     let match: RegExpExecArray | null;
     const regex = new RegExp(wikilinkRegex.source, wikilinkRegex.flags);
     while ((match = regex.exec(text)) !== null) {
-      links.push(match[1]);
+      links.push(match[1]!);
     }
     if (links.length > 0) {
       linkMap.set(page.id, links);
@@ -127,8 +127,8 @@ function computeForceLayout(
     // Repulsion between all nodes
     for (let i = 0; i < simNodes.length; i++) {
       for (let j = i + 1; j < simNodes.length; j++) {
-        const a = simNodes[i];
-        const b = simNodes[j];
+        const a = simNodes[i]!;
+        const b = simNodes[j]!;
         const dx = a.x - b.x;
         const dy = a.y - b.y;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;

@@ -44,7 +44,7 @@ export const kanbanTemplate: DrawingTemplate = {
         // Column header
         editor.createShape({
           type: 'geo',
-          x: colX[i] + 10,
+          x: colX[i]! + 10,
           y: 110,
           props: {
             geo: 'rectangle',
@@ -68,10 +68,10 @@ export const kanbanTemplate: DrawingTemplate = {
           ['Deploy v1.0', 'Post-release review'],
         ]
 
-        notes[i].forEach((text, j) => {
+        notes[i]!.forEach((text, j) => {
           editor.createShape({
             type: 'note',
-            x: colX[i] + 20,
+          x: colX[i]! + 20,
             y: 180 + j * 120,
             props: {
               richText: toRichText(text),

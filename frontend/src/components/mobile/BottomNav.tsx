@@ -12,6 +12,7 @@ import {
   Shield,
   Settings,
   LogOut,
+  Plus,
   Building2,
   Users,
   Layers,
@@ -21,6 +22,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useWorkspaces } from '@/hooks/useWorkspaces';
 import BottomSheet from '@/components/mobile/BottomSheet';
+import CreateWorkspaceDialog from '@/components/layout/CreateWorkspaceDialog';
 
 const mainTabs = [
   { to: '', icon: LayoutDashboard, label: 'Home' },
@@ -46,6 +48,7 @@ export default function BottomNav() {
   const logout = useAuthStore((s) => s.logout);
   const { data: workspaces = [] } = useWorkspaces();
   const { currentSlug, setCurrentSlug } = useWorkspaceStore();
+  const [createWsOpen, setCreateWsOpen] = useState(false);
 
   const activeSlug = currentSlug ?? slug;
 
@@ -140,7 +143,7 @@ export default function BottomNav() {
                       {ws.logo ? (
                         <img src={ws.logo} alt="" className="h-full w-full object-cover" />
                       ) : (
-                        ws.name[0].toUpperCase()
+                        (ws.name[0] ?? '').toUpperCase()
                       )}
                     </div>
                     <span className="flex-1">{ws.name}</span>
@@ -153,6 +156,19 @@ export default function BottomNav() {
             </div>
           </div>
         )}
+        {/* Create workspace */}
+        <button
+          onClick={() => {
+            setMoreOpen(false);
+            setCreateWsOpen(true);
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-muted-foreground hover:bg-muted/50 transition-colors mb-4"
+        >
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-dashed border-border">
+            <Plus className="h-3.5 w-3.5" />
+          </div>
+          <span className="flex-1">Create workspace</span>
+        </button>
 
         {/* Nav items */}
         <div className="space-y-0.5">
@@ -207,6 +223,7 @@ export default function BottomNav() {
           </button>
         </div>
       </BottomSheet>
+      <CreateWorkspaceDialog open={createWsOpen} onOpenChange={setCreateWsOpen} />
     </>
   );
 }

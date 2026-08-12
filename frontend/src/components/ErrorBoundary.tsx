@@ -11,13 +11,13 @@ interface State {
 }
 
 export default class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null, componentStack: '' };
+  override state: State = { error: null, componentStack: '' };
 
   static getDerivedStateFromError(error: Error): Partial<State> {
     return { error };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo) {
+  override componentDidCatch(error: Error, info: ErrorInfo) {
     this.setState({ componentStack: info.componentStack ?? '' });
     console.error(
       `[ErrorBoundary:${this.props.name ?? 'unknown'}]`,
@@ -30,7 +30,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     this.setState({ error: null, componentStack: '' });
   };
 
-  render() {
+  override render() {
     if (this.state.error) {
       return (
         <div
@@ -41,7 +41,12 @@ export default class ErrorBoundary extends Component<Props, State> {
             Something went wrong{this.props.name ? ` in ${this.props.name}` : ''}.
           </p>
           <p className="text-sm">{this.state.error.message}</p>
-          {import.meta.env.DEV && this.state.componentStack && (
+          {this.state.error.stack && (
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-[11px] leading-tight text-destructive/80">
+              {this.state.error.stack}
+            </pre>
+          )}
+          {this.state.componentStack && (
             <pre className="max-h-48 overflow-auto whitespace-pre-wrap text-[11px] leading-tight text-muted-foreground">
               {this.state.componentStack}
             </pre>

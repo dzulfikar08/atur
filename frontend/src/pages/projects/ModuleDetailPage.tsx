@@ -116,7 +116,7 @@ export default function ModuleDetailPage() {
         </Button>
         <Package className="h-5 w-5 text-muted-foreground" />
         <h1 className="text-xl font-bold">{mod.name}</h1>
-        <Badge className={`${sc.bg} ${sc.text}`}>{mod.status}</Badge>
+        <Badge className={`${sc?.bg ?? ''} ${sc?.text ?? ''}`}>{mod.status}</Badge>
       </div>
 
       {mod.description && (

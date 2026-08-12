@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, type TimesheetRow } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Card } from '@/components/ui/card';
 import {
   Select,
@@ -121,11 +121,11 @@ export default function TimesheetPage() {
       <Card className="p-3 flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
           <label className="text-xs text-muted-foreground">From</label>
-          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 w-40" />
+          <DatePicker value={from || null} onChange={(v) => setFrom(v || "")} className="w-40" />
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs text-muted-foreground">To</label>
-          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 w-40" />
+          <DatePicker value={to || null} onChange={(v) => setTo(v || "")} className="w-40" />
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs text-muted-foreground">Member</label>

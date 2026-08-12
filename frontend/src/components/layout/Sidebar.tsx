@@ -153,7 +153,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   {ws.logo ? (
                     <img src={ws.logo} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <span className="text-xs font-semibold">{ws.name[0].toUpperCase()}</span>
+                    <span className="text-xs font-semibold">{(ws.name[0] ?? '').toUpperCase()}</span>
                   )}
                 </div>
                 <span className="flex-1">{ws.name}</span>

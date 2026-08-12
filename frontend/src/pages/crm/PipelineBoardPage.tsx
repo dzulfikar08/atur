@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, type Deal, type State } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus } from '@/lib/icons';
@@ -118,6 +119,7 @@ export default function PipelineBoardPage() {
       g[sid].push(d);
     }
     return g;
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- deals/states are react-query results (referentially stable unless refetched)
   }, [deals, states]);
 
   const moveMut = useMutation({
@@ -204,7 +206,7 @@ export default function PipelineBoardPage() {
               </div>
               <div>
                 <label className="text-sm font-medium">Expected close</label>
-                <Input type="date" value={form.expected_close_at} onChange={(e) => setForm({ ...form, expected_close_at: e.target.value })} />
+                <DatePicker value={form.expected_close_at || null} onChange={(v) => setForm({ ...form, expected_close_at: v || "" })} />
               </div>
               <Button className="w-full" disabled={!form.name || createMut.isPending} onClick={() => createMut.mutate()}>
                 {createMut.isPending ? 'Creating…' : 'Create deal'}

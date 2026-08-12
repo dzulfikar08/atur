@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, api, type Issue, type State, type Module } from "@/lib/api";
 import FilterBar, { type FilterState } from "@/components/issues/FilterBar";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -888,19 +889,15 @@ export default function ProjectBoard() {
                       </select>
                     </td>
                     <td className="p-1" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="date"
-                        className="text-xs bg-transparent rounded px-1 py-0.5 w-full"
-                        value={issue.start_date || ''}
-                        onChange={(e) => patchIssue(issue.sequence_id, { start_date: e.target.value || null })}
+                      <DatePicker
+                        value={issue.start_date}
+                        onChange={(v) => patchIssue(issue.sequence_id, { start_date: v })}
                       />
                     </td>
                     <td className="p-1" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="date"
-                        className="text-xs bg-transparent rounded px-1 py-0.5 w-full"
-                        value={issue.target_date || ''}
-                        onChange={(e) => patchIssue(issue.sequence_id, { target_date: e.target.value || null })}
+                      <DatePicker
+                        value={issue.target_date}
+                        onChange={(v) => patchIssue(issue.sequence_id, { target_date: v })}
                       />
                     </td>
                   </tr>

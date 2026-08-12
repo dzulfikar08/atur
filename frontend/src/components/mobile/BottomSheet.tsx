@@ -26,6 +26,7 @@ export default function BottomSheet({ open, onClose, title, children }: BottomSh
       return () => window.clearTimeout(t);
     }
     document.body.style.overflow = '';
+    return undefined;
   }, [open]);
 
   useEffect(() => {
@@ -40,13 +41,13 @@ export default function BottomSheet({ open, onClose, title, children }: BottomSh
   if (!open) return null;
 
   function handleTouchStart(e: React.TouchEvent) {
-    startY.current = e.touches[0].clientY;
+    startY.current = e.touches[0]?.clientY ?? 0;
     setDragging(true);
   }
 
   function handleTouchMove(e: React.TouchEvent) {
     if (!dragging) return;
-    const diff = e.touches[0].clientY - startY.current;
+    const diff = (e.touches[0]?.clientY ?? 0) - startY.current;
     if (diff > 0) setDragY(diff);
   }
 
