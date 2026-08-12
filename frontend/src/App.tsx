@@ -69,11 +69,12 @@ function RootRoute() {
   }, [initialized, fetchUser]);
 
 
+  const firstSlug = workspaces[0]?.slug;
   useEffect(() => {
-    if (initialized && isAuthenticated && workspaces.length > 0) {
-      navigate(`/${workspaces[0].slug}`, { replace: true });
+    if (initialized && isAuthenticated && firstSlug) {
+      navigate(`/${firstSlug}`, { replace: true });
     }
-  }, [initialized, isAuthenticated, workspaces, navigate]);
+  }, [initialized, isAuthenticated, firstSlug, navigate]);
 
   if (!initialized) return <PageLoader />;
   if (!isAuthenticated) return <LandingPage />;

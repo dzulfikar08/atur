@@ -7,7 +7,7 @@ const CHECK_SVG =
 
 function languageOf(code: HTMLElement): string {
   const m = code.className.match(/(?:^|\s)language-([\w+-]+)/);
-  return m ? m[1] : '';
+  return m?.[1] ?? '';
 }
 
 function addCopyButton(pre: HTMLPreElement): void {

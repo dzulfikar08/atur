@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type CustomField, type CustomFieldValue, type SelectOption } from "@/lib/api";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Select,
   SelectContent,
@@ -150,11 +151,9 @@ function FieldInput({
             {field.name}
             {field.is_required && <span className="text-destructive ml-0.5">*</span>}
           </label>
-          <Input
-            type="date"
-            value={(display as string) || ""}
-            onChange={(e) => schedule(e.target.value || null)}
-            className="h-8 text-sm"
+          <DatePicker
+            value={(display as string) || null}
+            onChange={(v) => schedule(v)}
           />
         </div>
       );

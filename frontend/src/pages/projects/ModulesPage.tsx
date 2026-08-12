@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -118,11 +119,11 @@ export default function ModulesPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-medium mb-1 block">Start Date</label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  <DatePicker value={startDate || null} onChange={(v) => setStartDate(v || "")} />
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">Target Date</label>
-                  <Input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+                  <DatePicker value={targetDate || null} onChange={(v) => setTargetDate(v || "")} />
                 </div>
               </div>
               <Button
@@ -193,7 +194,7 @@ export default function ModulesPage() {
                     </Button>
                   </div>
 
-                  <Badge className={`${sc.bg} ${sc.text} text-xs`}>{m.status}</Badge>
+                  <Badge className={`${sc?.bg ?? ''} ${sc?.text ?? ''} text-xs`}>{m.status}</Badge>
 
                   {(m.start_date || m.target_date) && (
                     <div className="flex gap-3 text-xs text-muted-foreground">

@@ -7,6 +7,7 @@ import * as schema from '../db/schema'
 import * as issuesRepo from '../repositories/issues'
 import * as statesRepo from '../repositories/states'
 import * as activitiesRepo from '../repositories/activities'
+import * as feedbackRepo from '../repositories/feedback'
 import { paginatedResponse } from '../lib/pagination'
 
 export const createIssueSchema = z.object({
@@ -14,6 +15,9 @@ export const createIssueSchema = z.object({
   description_html: z.string().optional(),
   priority: z.enum(['high', 'medium', 'low', 'urgent', 'none']).optional().default('none'),
   state_id: z.string().uuid().optional(),
+  start_date: z.string().optional(),
+  target_date: z.string().optional(),
+  estimate_points: z.number().nullable().optional(),
   label_ids: z.array(z.string().uuid()).optional(),
   assignee_ids: z.array(z.string().uuid()).optional(),
 })
@@ -23,6 +27,9 @@ export const updateIssueSchema = z.object({
   description_html: z.string().optional(),
   priority: z.enum(['high', 'medium', 'low', 'urgent', 'none']).optional(),
   state_id: z.string().uuid().optional(),
+  start_date: z.string().nullable().optional(),
+  target_date: z.string().nullable().optional(),
+  estimate_points: z.number().nullable().optional(),
   label_ids: z.array(z.string().uuid()).optional(),
   assignee_ids: z.array(z.string().uuid()).optional(),
 })
@@ -40,6 +47,12 @@ export async function create(
 
   const sequenceId = await issuesRepo.getNextSequence(db, projectId)
 
+  // Default state: caller choice → project default → project's isDefault state.
+  let stateId = data.state_id ?? project.defaultStateId ?? undefined
+  if (!stateId) {
+    stateId = (await feedbackRepo.pickDefaultStateId(db, projectId)) ?? undefined
+  }
+
   const issue = await issuesRepo.create(db, {
     id: uuid(),
     name: data.name,
@@ -48,7 +61,10 @@ export async function create(
     workspaceId: project.workspaceId,
     priority: data.priority,
     descriptionHtml: data.description_html,
-    stateId: data.state_id,
+    stateId,
+    startDate: data.start_date,
+    targetDate: data.target_date,
+    estimatePoints: data.estimate_points ?? null,
     createdById,
   })
 
@@ -135,6 +151,18 @@ export async function update(
   if (data.state_id !== undefined && data.state_id !== issue.stateId) {
     updateData.stateId = data.state_id
     events.push({ field: 'state', oldValue: null, newValue: null }) // names resolved below
+  }
+  if (data.start_date !== undefined && data.start_date !== issue.startDate) {
+    updateData.startDate = data.start_date
+    events.push({ field: 'start_date', oldValue: issue.startDate ?? null, newValue: data.start_date })
+  }
+  if (data.target_date !== undefined && data.target_date !== issue.targetDate) {
+    updateData.targetDate = data.target_date
+    events.push({ field: 'target_date', oldValue: issue.targetDate ?? null, newValue: data.target_date })
+  }
+  if (data.estimate_points !== undefined && data.estimate_points !== issue.estimatePoints) {
+    updateData.estimatePoints = data.estimate_points
+    events.push({ field: 'estimate_points', oldValue: issue.estimatePoints != null ? String(issue.estimatePoints) : null, newValue: data.estimate_points != null ? String(data.estimate_points) : null })
   }
 
   const updated = await issuesRepo.update(db, issueId, updateData)

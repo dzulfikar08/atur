@@ -51,6 +51,15 @@ export default function TopBar() {
     enabled: !!slug && searchOpen,
   });
 
+  // Projects for this workspace — used to resolve project UUIDs in the breadcrumb
+  // (e.g. /:slug/projects/<uuid>/issues) to a readable identifier/name.
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects', slug],
+    queryFn: () => apiFetch<{ results: { id: string; name: string; identifier: string }[] }>(`/workspaces/${slug}/projects/`).then((r) => r.results),
+    enabled: !!slug,
+  });
+  const projectById = new Map(projects.map((p) => [p.id, p]));
+
   const pagesById = useCallback(() => {
     const map = new Map<string, Page>();
     for (const p of pages) {
@@ -97,7 +106,7 @@ export default function TopBar() {
   const handleSearch = () => {
     if (!searchQuery.trim() || !slug) return;
     if (filteredPages.length > 0) {
-      goToPage(filteredPages[0]);
+      goToPage(filteredPages[0]!);
     } else {
       toast.error('No matching pages');
     }
@@ -126,10 +135,19 @@ export default function TopBar() {
 
   const breadcrumbs = [
     { label: slug ?? 'Workspace', path: `/${slug}` },
-    ...pathSegments.map((segment, i) => ({
-      label: routeLabels[segment] ?? segment,
-      path: `/${slug}/${pathSegments.slice(0, i + 1).join('/')}`,
-    })),
+    ...pathSegments.map((segment, i) => {
+      // A project UUID segment (the one right after "projects") is unreadable —
+      // show the project's identifier (or name) instead.
+      let label = routeLabels[segment] ?? segment;
+      if (pathSegments[i - 1] === 'projects') {
+        const p = projectById.get(segment);
+        if (p) label = p.identifier || p.name;
+      }
+      return {
+        label,
+        path: `/${slug}/${pathSegments.slice(0, i + 1).join('/')}`,
+      };
+    }),
   ];
 
   const initials = user?.display_name

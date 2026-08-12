@@ -14,7 +14,7 @@ export class FeedbackApiError extends Error {
 
 async function fbFetch<T>(token: string, path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}/${token}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
     ...options,
   });
   if (!res.ok) {

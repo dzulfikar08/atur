@@ -200,7 +200,7 @@ export default function ProfilePage() {
                         {ws.logo ? (
                           <img src={ws.logo} alt="" className="h-full w-full object-cover" />
                         ) : (
-                          ws.name[0].toUpperCase()
+                          (ws.name[0] ?? '').toUpperCase()
                         )}
                       </div>
                       <div className="flex-1 min-w-0">

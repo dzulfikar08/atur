@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/sonner';
 import '@/i18n';
 import '@/index.css';
 import App from './App';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 
 const queryClient = new QueryClient({
@@ -25,10 +26,12 @@ const reactRoot = createRoot(rootEl, {
 } as any);
 
 reactRoot.render(
-  <QueryClientProvider client={queryClient}>
-    <BrowserRouter>
-      <Toaster />
-      <App />
-    </BrowserRouter>
-  </QueryClientProvider>
+  <ErrorBoundary name="root">
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Toaster />
+        <App />
+      </BrowserRouter>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );

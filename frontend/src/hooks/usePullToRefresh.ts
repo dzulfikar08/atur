@@ -56,7 +56,7 @@ export default function usePullToRefresh({
       }
 
       canPull.current = true;
-      startY.current = e.touches[0].clientY;
+      startY.current = e.touches[0]?.clientY ?? 0;
       setIsPulling(true);
     },
     [isTouchDevice],
@@ -66,7 +66,7 @@ export default function usePullToRefresh({
     (e: React.TouchEvent) => {
       if (!isTouchDevice() || !canPull.current || isRefreshing) return;
 
-      const diff = e.touches[0].clientY - startY.current;
+      const diff = (e.touches[0]?.clientY ?? 0) - startY.current;
 
       // Only care about downward pulls
       if (diff <= 0) {

@@ -8,6 +8,7 @@ import CommentContent from "@/components/editor/CommentContent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Calendar, MessageSquare, Clock, Link2, GitBranch, Trash2, X, Activity, Paperclip, Upload, FileIcon, Download, Timer, Package } from '@/lib/icons';
+import { ArrowLeft, Calendar, MessageSquare, Clock, Link2, GitBranch, Trash2, X, Activity, Paperclip, Upload, FileIcon, Download, Timer, Package, Pencil, Check } from '@/lib/icons';
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
@@ -40,6 +41,7 @@ interface Issue {
   labels: any[];
   project: string;
   project_detail?: { name: string; identifier: string };
+  state?: { id: string; name: string; color: string | null; group: string } | null;
 }
 
 interface Comment {
@@ -55,6 +57,7 @@ interface Comment {
 interface State {
   id: string;
   name: string;
+  color: string | null;
   group: string;
 }
 
@@ -107,6 +110,16 @@ const PRIORITY_LABELS: Record<string, string> = {
   medium: "Medium",
   high: "High",
   urgent: "Urgent",
+};
+
+// Tailwind bg classes — kept as a lookup so the select trigger and items stay
+// in sync. Matches the FilterBar priority palette.
+const PRIORITY_DOT: Record<string, string> = {
+  urgent: "bg-red-500",
+  high: "bg-orange-500",
+  medium: "bg-yellow-500",
+  low: "bg-blue-500",
+  none: "bg-gray-400",
 };
 // Render a single activity row as inline JSX. Handles creation, comments, and
 // field changes (with priority/value formatting), attributing each to an actor.
@@ -171,6 +184,10 @@ export default function IssueDetail() {
   const [commentText, setCommentText] = useState("");
   const [commentPublic, setCommentPublic] = useState(false);
   const [activeTab, setActiveTab] = useState<"comments" | "activity" | "attachments" | "time">("comments");
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descDraft, setDescDraft] = useState("");
 
   const { data: issue, isLoading } = useQuery({
     queryKey: ["issue", slug, projectId, issueId],
@@ -213,6 +230,26 @@ export default function IssueDetail() {
     },
     onError: () => toast.error("Failed to update issue"),
   });
+  function startEditTitle() {
+    setTitleDraft(issue?.name ?? "");
+    setEditingTitle(true);
+  }
+  function saveTitle() {
+    const name = titleDraft.trim();
+    if (!issue) { setEditingTitle(false); return; }
+    if (name && name !== issue.name) updateMutation.mutate({ name });
+    setEditingTitle(false);
+  }
+  function startEditDesc() {
+    setDescDraft(issue?.description_html ?? "");
+    setEditingDesc(true);
+  }
+  function saveDesc() {
+    if (!issue) { setEditingDesc(false); return; }
+    const html = descDraft === "<p></p>" ? "" : descDraft;
+    if (html !== (issue.description_html ?? "")) updateMutation.mutate({ description_html: html });
+    setEditingDesc(false);
+  }
 
   const commentMutation = useMutation({
     mutationFn: (vars: { comment_html: string; access?: string }) =>
@@ -482,14 +519,55 @@ export default function IssueDetail() {
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
         {/* Main content */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
-          <h1 className="text-xl font-semibold mb-4">{issue.name}</h1>
-
-          {issue.description_stripped ? (
-            <div className="text-sm text-foreground whitespace-pre-wrap mb-6 max-w-none">
-              {issue.description_stripped}
+          {editingTitle ? (
+            <div className="flex items-center gap-2 mb-4">
+              <Input
+                autoFocus
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveTitle();
+                  if (e.key === "Escape") setEditingTitle(false);
+                }}
+                className="text-xl font-semibold h-auto py-1 flex-1"
+              />
+              <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={saveTitle} aria-label="Save title">
+                <Check className="h-4 w-4" />
+              </Button>
+              <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => setEditingTitle(false)} aria-label="Cancel">
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           ) : (
-            <p className="text-muted-foreground text-sm mb-6 italic">No description provided</p>
+            <div className="flex items-center gap-1 mb-4 group">
+              <h1 className="text-xl font-semibold">{issue.name}</h1>
+              <Button size="icon" variant="ghost" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={startEditTitle} aria-label="Edit title">
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+
+          {editingDesc ? (
+            <div className="mb-6">
+              <CommentEditor value={descDraft} onChange={setDescDraft} placeholder="Add a description..." />
+              <div className="flex items-center gap-2 mt-2">
+                <Button size="sm" onClick={saveDesc}>Save</Button>
+                <Button size="sm" variant="ghost" onClick={() => setEditingDesc(false)}>Cancel</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-6 group">
+              {issue.description_html ? (
+                <div className="text-sm text-foreground max-w-none prose prose-sm">
+                  <CommentContent html={issue.description_html} />
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-sm italic">No description provided</p>
+              )}
+              <Button size="sm" variant="ghost" className="h-6 mt-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={startEditDesc}>
+                <Pencil className="h-3 w-3 mr-1" /> Edit
+              </Button>
+            </div>
           )}
 
           {/* Relations Section */}
@@ -873,7 +951,7 @@ export default function IssueDetail() {
                         const files = e.target.files;
                         if (!files) return;
                         for (let i = 0; i < files.length; i++) {
-                          uploadMutation.mutate(files[i]);
+                          uploadMutation.mutate(files[i]!);
                         }
                         e.target.value = "";
                       }}
@@ -1077,14 +1155,19 @@ export default function IssueDetail() {
             <label className="text-xs font-medium text-muted-foreground mb-1 block">State</label>
             <Select
               value={issue.state_id || ""}
-              onValueChange={(v) => updateMutation.mutate({ state: v })}
+              onValueChange={(v) => updateMutation.mutate({ state_id: v })}
             >
               <SelectTrigger className="h-8 text-sm">
                 <SelectValue placeholder="Set state" />
               </SelectTrigger>
               <SelectContent>
                 {states.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  <SelectItem key={s.id} value={s.id}>
+                    <span className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color || "#9ca3af" }} />
+                      {s.name}
+                    </span>
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -1101,7 +1184,12 @@ export default function IssueDetail() {
               </SelectTrigger>
               <SelectContent>
                 {["none", "low", "medium", "high", "urgent"].map((p) => (
-                  <SelectItem key={p} value={p}>{p}</SelectItem>
+                  <SelectItem key={p} value={p}>
+                    <span className="flex items-center gap-2 capitalize">
+                      <span className={`h-2 w-2 rounded-full ${PRIORITY_DOT[p]}`} />
+                      {PRIORITY_LABELS[p]}
+                    </span>
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -1129,11 +1217,9 @@ export default function IssueDetail() {
             <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
               <Calendar className="h-3 w-3" /> Start Date
             </label>
-            <Input
-              type="date"
-              className="h-8 text-sm"
-              value={issue.start_date || ""}
-              onChange={(e) => updateMutation.mutate({ start_date: e.target.value || null })}
+            <DatePicker
+              value={issue.start_date}
+              onChange={(v) => updateMutation.mutate({ start_date: v })}
             />
           </div>
 
@@ -1141,11 +1227,9 @@ export default function IssueDetail() {
             <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
               <Calendar className="h-3 w-3" /> Target Date
             </label>
-            <Input
-              type="date"
-              className="h-8 text-sm"
-              value={issue.target_date || ""}
-              onChange={(e) => updateMutation.mutate({ target_date: e.target.value || null })}
+            <DatePicker
+              value={issue.target_date}
+              onChange={(v) => updateMutation.mutate({ target_date: v })}
             />
           </div>
 

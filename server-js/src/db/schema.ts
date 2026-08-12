@@ -218,6 +218,7 @@ export const issues = sqliteTable('issues', {
   parentId: text('parent_id').references((): any => issues.id, { onDelete: 'cascade' }),
   stateId: text('state_id').references(() => states.id, { onDelete: 'cascade' }),
   estimatePointId: text('estimate_point_id'),
+  estimatePoints: integer('estimate_points'),
   typeId: text('type_id'),
   projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   workspaceId: text('workspace_id').notNull(),

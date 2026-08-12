@@ -164,7 +164,7 @@ export function TldrawBlockView({ node, updateAttributes, deleteNode }: NodeView
       {/* Fullscreen modal */}
       {fullscreenOpen && (
         <TldrawFullscreenModal
-          initialData={dataAttr}
+          initialData={dataAttr ?? ''}
           onSave={handleFullscreenSave}
           onClose={() => setFullscreenOpen(false)}
         />

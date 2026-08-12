@@ -91,6 +91,9 @@ export async function create(
     stateId?: string
     createdById?: string
     sortOrder?: number
+    startDate?: string
+    targetDate?: string
+    estimatePoints?: number | null
   }
 ) {
   const now = nowISO()
@@ -105,6 +108,9 @@ export async function create(
     stateId: data.stateId ?? null,
     createdById: data.createdById ?? null,
     sortOrder: data.sortOrder ?? 65535.0,
+    startDate: data.startDate ?? null,
+    targetDate: data.targetDate ?? null,
+    estimatePoints: data.estimatePoints ?? null,
     createdAt: now,
     updatedAt: now,
   })
@@ -133,6 +139,7 @@ export async function update(
     sortOrder?: number
     startDate?: string
     targetDate?: string
+    estimatePoints?: number | null
     archivedAt?: string
     isDraft?: number
     descriptionJson?: string

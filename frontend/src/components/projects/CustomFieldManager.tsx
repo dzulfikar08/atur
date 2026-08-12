@@ -188,7 +188,7 @@ function FieldForm({
 
   const updateOption = (idx: number, value: string) => {
     const updated = [...options];
-    updated[idx] = { ...updated[idx], value };
+    updated[idx] = { ...updated[idx]!, value };
     setOptions(updated);
   };
 
