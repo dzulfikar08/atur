@@ -6,7 +6,7 @@ import PullToRefreshIndicator from './PullToRefreshIndicator';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Search, SlidersHorizontal } from '@/lib/icons';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -44,6 +44,7 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
   const [search, setSearch] = useState('');
   const [newIssueName, setNewIssueName] = useState('');
   const [newIssueDesc, setNewIssueDesc] = useState('');
+  const [newIssueState, setNewIssueState] = useState('');
 
   const isAll = slug === 'all';
 
@@ -58,6 +59,11 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
     queryFn: () => api.listStates(slug!, projectId!),
     enabled: !!slug && !!projectId,
   });
+
+  const backlogStateId = states.find((s) => s.group === 'backlog')?.id ?? states[0]?.id ?? '';
+  useEffect(() => {
+    if (!newIssueState && backlogStateId) setNewIssueState(backlogStateId);
+  }, [backlogStateId, newIssueState]);
 
   const { data: allIssues = [], isLoading } = useQuery({
     queryKey: ['mobile-issues', slug, projectId, isAll ? 'all' : projects.map((p) => p.id).join(',')],
@@ -84,7 +90,7 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; description_html?: string }) =>
+    mutationFn: (data: { name: string; description_html?: string; state_id?: string }) =>
       apiFetch(`/workspaces/${slug}/projects/${projectId}/issues`, {
         method: 'POST',
         body: JSON.stringify(data),
@@ -94,6 +100,7 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
       setCreateOpen(false);
       setNewIssueName('');
       setNewIssueDesc('');
+      setNewIssueState(backlogStateId);
       toast.success('Issue created');
     },
     onError: () => toast.error('Failed to create issue'),
@@ -234,10 +241,21 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
             value={newIssueDesc}
             onChange={(e) => setNewIssueDesc(e.target.value)}
           />
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">State</label>
+            <Select value={newIssueState} onValueChange={setNewIssueState}>
+              <SelectTrigger><SelectValue placeholder="Backlog" /></SelectTrigger>
+              <SelectContent>
+                {states.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Button
             className="w-full"
             disabled={!newIssueName.trim() || createMutation.isPending}
-            onClick={() => createMutation.mutate({ name: newIssueName, description_html: newIssueDesc || undefined })}
+            onClick={() => createMutation.mutate({ name: newIssueName, description_html: newIssueDesc || undefined, state_id: newIssueState || undefined })}
           >
             {createMutation.isPending ? 'Creating...' : 'Create Issue'}
           </Button>

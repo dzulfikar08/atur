@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiFetch, type Issue, type State } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
@@ -144,6 +144,7 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newState, setNewState] = useState('');
   const [activeIssueId, setActiveIssueId] = useState<string | null>(null);
 
   const sensors = useSensors(
@@ -165,8 +166,13 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
     enabled: !!slug && !!projectId,
   });
 
+  const backlogStateId = states.find((s) => s.group === 'backlog')?.id ?? states[0]?.id ?? '';
+  useEffect(() => {
+    if (!newState && backlogStateId) setNewState(backlogStateId);
+  }, [backlogStateId, newState]);
+
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; description_html?: string }) =>
+    mutationFn: (data: { name: string; description_html?: string; state_id?: string }) =>
       apiFetch(`/workspaces/${slug}/projects/${projectId}/issues`, {
         method: 'POST', body: JSON.stringify(data),
       }),
@@ -175,6 +181,7 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
       setCreateOpen(false);
       setNewName('');
       setNewDesc('');
+      setNewState(backlogStateId);
       toast.success('Issue created');
     },
     onError: () => toast.error('Failed to create issue'),
@@ -371,8 +378,19 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
           <div className="space-y-3">
             <Input placeholder="Issue title" value={newName} onChange={(e) => setNewName(e.target.value)} />
             <Textarea placeholder="Description (optional)" rows={3} value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">State</label>
+              <Select value={newState} onValueChange={setNewState}>
+                <SelectTrigger><SelectValue placeholder="Backlog" /></SelectTrigger>
+                <SelectContent>
+                  {states.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Button className="w-full" disabled={!newName.trim() || createMutation.isPending}
-              onClick={() => createMutation.mutate({ name: newName, description_html: newDesc || undefined })}>
+              onClick={() => createMutation.mutate({ name: newName, description_html: newDesc || undefined, state_id: newState || undefined })}>
               {createMutation.isPending ? 'Creating...' : 'Create Issue'}
             </Button>
           </div>

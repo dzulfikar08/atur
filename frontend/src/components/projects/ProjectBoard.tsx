@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, api, type Issue, type State, type Module } from "@/lib/api";
@@ -61,6 +61,7 @@ const createIssueSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description_html: z.string().optional(),
   priority: z.string().optional(),
+  state_id: z.string().optional(),
 });
 
 type CreateIssueForm = z.infer<typeof createIssueSchema>;
@@ -307,8 +308,15 @@ export default function ProjectBoard() {
 
   const form = useForm<CreateIssueForm>({
     resolver: zodResolver(createIssueSchema),
-    defaultValues: { name: "", description_html: "", priority: "none" },
+    defaultValues: { name: "", description_html: "", priority: "none", state_id: "" },
   });
+
+  const backlogStateId = states.find((s) => s.group === "backlog")?.id ?? states[0]?.id ?? "";
+  useEffect(() => {
+    if (!form.getValues("state_id") && backlogStateId) {
+      form.setValue("state_id", backlogStateId);
+    }
+  }, [backlogStateId, form]);
 
   const createMutation = useMutation({
     mutationFn: (data: CreateIssueForm & { parent_id?: string | null; module_ids?: string[] }) =>
@@ -321,6 +329,7 @@ export default function ProjectBoard() {
       setCreateOpen(false);
       form.reset();
       setSelectedParent(null);
+      form.setValue("state_id", backlogStateId);
       setParentSearch("");
       setSelectedModuleIds([]);
       toast.success("Issue created");
@@ -549,7 +558,7 @@ export default function ProjectBoard() {
               <DialogTitle>Create Issue</DialogTitle>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit((d) => createMutation.mutate({ ...d, parent_id: selectedParent?.id || null, module_ids: selectedModuleIds.length > 0 ? selectedModuleIds : undefined }))} className="space-y-4">
+              <form onSubmit={form.handleSubmit((d) => createMutation.mutate({ ...d, state_id: d.state_id || undefined, parent_id: selectedParent?.id || null, module_ids: selectedModuleIds.length > 0 ? selectedModuleIds : undefined }))} className="space-y-4">
                 <FormField
                   control={form.control}
                   name="name"
@@ -632,6 +641,28 @@ export default function ProjectBoard() {
                     </>
                   )}
                 </div>
+                <FormField
+                  control={form.control}
+                  name="state_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>State</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Backlog" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {states.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="priority"
@@ -820,7 +851,7 @@ export default function ProjectBoard() {
                         const fd = new FormData(e.currentTarget);
                         const name = fd.get("quick-add") as string;
                         if (name.trim()) {
-                          createMutation.mutate({ name: name.trim(), description_html: "", priority: "none" });
+                          createMutation.mutate({ name: name.trim(), description_html: "", priority: "none", state_id: backlogStateId || undefined });
                           e.currentTarget.reset();
                         }
                       }}
