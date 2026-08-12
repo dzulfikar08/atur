@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { ApiError } from '@/lib/api';
+import { authHeaders, clearSessionToken, setSessionToken } from '@/lib/native';
 
 interface User {
   id: string;
@@ -31,13 +32,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const res = await fetch('/auth/sign-in', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         credentials: 'include',
         body: JSON.stringify({ email, password }),
       });
       if (!res.ok) {
         throw new ApiError(res.status, await res.text().catch(() => ''));
       }
+      const data = await res.json().catch(() => null);
+      if (data?.session_token) setSessionToken(data.session_token);
       await get().fetchUser();
     } finally {
       set({ loading: false });
@@ -49,13 +52,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const res = await fetch('/auth/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         credentials: 'include',
         body: JSON.stringify({ email, password, username }),
       });
       if (!res.ok) {
         throw new ApiError(res.status, await res.text().catch(() => ''));
       }
+      const data = await res.json().catch(() => null);
+      if (data?.session_token) setSessionToken(data.session_token);
       await get().fetchUser();
     } finally {
       set({ loading: false });
@@ -63,13 +68,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
-    await fetch('/auth/sign-out', { method: 'POST', credentials: 'include' });
+    await fetch('/auth/sign-out', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { ...authHeaders() },
+    });
+    clearSessionToken();
     set({ user: null, isAuthenticated: false });
   },
 
   fetchUser: async () => {
     try {
-      const res = await fetch('/api/users/me/', { credentials: 'include' });
+      const res = await fetch('/api/users/me/', { credentials: 'include', headers: { ...authHeaders() } });
       if (res.ok) {
         const user = await res.json();
         set({ user, isAuthenticated: true, initialized: true });

@@ -6,6 +6,9 @@ import '@/i18n';
 import '@/index.css';
 import App from './App';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { initNativePlatform } from '@/lib/native';
+
+initNativePlatform();
 
 
 const queryClient = new QueryClient({

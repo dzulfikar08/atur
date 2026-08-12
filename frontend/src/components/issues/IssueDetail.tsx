@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, api, type Module } from "@/lib/api";
+import { resolveApiUrl, authHeaders } from "@/lib/native";
 import CustomFieldValues from "@/components/issues/CustomFieldValues";
 import CommentEditor from "@/components/editor/CommentEditor";
 import CommentContent from "@/components/editor/CommentContent";
@@ -369,9 +370,10 @@ export default function IssueDetail() {
     mutationFn: async (file: File) => {
       const form = new FormData();
       form.append("file", file);
-      const uploadRes = await fetch("/api/assets/upload/", {
+      const uploadRes = await fetch(resolveApiUrl("/api/assets/upload/"), {
         method: "POST",
         credentials: "include",
+        headers: { ...authHeaders() },
         body: form,
       });
       if (!uploadRes.ok) throw new Error("Upload failed");
@@ -991,7 +993,7 @@ export default function IssueDetail() {
                           {isImage ? (
                             <div className="h-10 w-10 rounded bg-muted flex items-center justify-center shrink-0 overflow-hidden">
                               {att.asset ? (
-                                <img src={att.asset} alt={name} className="h-10 w-10 object-cover" />
+                                <img src={resolveApiUrl(att.asset)} alt={name} className="h-10 w-10 object-cover" />
                               ) : (
                                 <FileIcon className="h-4 w-4 text-muted-foreground" />
                               )}
@@ -1011,7 +1013,7 @@ export default function IssueDetail() {
                           <div className="flex items-center gap-1 shrink-0">
                             {att.asset && (
                               <a
-                                href={att.asset}
+                                href={resolveApiUrl(att.asset)}
                                 download={name}
                                 target="_blank"
                                 rel="noopener noreferrer"

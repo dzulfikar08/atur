@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as Y from 'yjs'
+import { isNative, resolveWsUrl } from '@/lib/native'
 
 const WS_PROTOCOL = {
   STEP1: 0x00,
@@ -16,7 +17,9 @@ export function useCollab(pageId: string) {
     const doc = new Y.Doc()
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/live/collaboration/${pageId}`
+    const wsUrl = isNative()
+      ? resolveWsUrl(`/live/collaboration/${pageId}`)
+      : `${protocol}//${window.location.host}/live/collaboration/${pageId}`
     const ws = new WebSocket(wsUrl)
     ws.binaryType = 'arraybuffer'
     wsRef.current = ws
