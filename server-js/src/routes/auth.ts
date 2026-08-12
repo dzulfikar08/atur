@@ -1,5 +1,6 @@
 import { Hono, type Context } from 'hono'
 import { getCookie, setCookie } from 'hono/cookie'
+import { HTTPException } from 'hono/http-exception'
 import type { Env } from '../lib/env'
 import { getDb } from '../db/index'
 import { authMiddleware } from '../middleware/auth'
@@ -69,6 +70,23 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   })
   .post('/magic-link', async (c) => {
     return c.json({ message: 'Not implemented' }, 501)
+  })
+  .post('/otp/request', async (c) => {
+    const kv = c.env.RATE_LIMIT
+    if (!kv) throw new HTTPException(500, { message: 'KV namespace not configured' })
+    const db = getDb(c.env.DB)
+    const body = authService.requestOtpSchema.parse(await c.req.json())
+    const result = await authService.requestLoginOtp(db, kv, c.env, body)
+    return c.json(result)
+  })
+  .post('/otp/verify', async (c) => {
+    const kv = c.env.RATE_LIMIT
+    if (!kv) throw new HTTPException(500, { message: 'KV namespace not configured' })
+    const db = getDb(c.env.DB)
+    const body = authService.verifyOtpSchema.parse(await c.req.json())
+    const result = await authService.verifyLoginOtp(db, kv, body)
+    setSessionCookie(c, result.token)
+    return c.json({ session_token: result.token, user: result.user })
   })
   .get('/get-csrf-token', (c) => {
     return c.json({ csrf_token: 'stub' })

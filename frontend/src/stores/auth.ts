@@ -17,6 +17,8 @@ interface AuthState {
   initialized: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, username: string) => Promise<void>;
+  requestOtp: (email: string) => Promise<{ dev_code?: string }>;
+  verifyOtp: (email: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
   fetchUser: () => Promise<void>;
 }
@@ -89,5 +91,34 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {
       set({ user: null, isAuthenticated: false, initialized: true });
     }
+  },
+
+  requestOtp: async (email) => {
+    const res = await fetch('/auth/otp/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      credentials: 'include',
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) {
+      throw new ApiError(res.status, await res.text().catch(() => ''));
+    }
+    const data = await res.json().catch(() => ({}));
+    return { dev_code: data?.dev_code };
+  },
+
+  verifyOtp: async (email, code) => {
+    const res = await fetch('/auth/otp/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      credentials: 'include',
+      body: JSON.stringify({ email, code }),
+    });
+    if (!res.ok) {
+      throw new ApiError(res.status, await res.text().catch(() => ''));
+    }
+    const data = await res.json().catch(() => null);
+    if (data?.session_token) setSessionToken(data.session_token);
+    await get().fetchUser();
   },
 }));

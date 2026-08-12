@@ -104,4 +104,47 @@ describe('useAuthStore', () => {
     await expect(useAuthStore.getState().login('test@example.com', 'wrong')).rejects.toThrow('Invalid credentials');
     expect(useAuthStore.getState().loading).toBe(false);
   });
+
+  it('requestOtp posts to /auth/otp/request and surfaces dev_code', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ ok: true, dev_code: '123456' }),
+    } as Response);
+
+    const res = await useAuthStore.getState().requestOtp('test@example.com');
+
+    expect(res.dev_code).toBe('123456');
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/auth/otp/request',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('verifyOtp stores the session token and loads the user on success', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    // First call = verify response; second = fetchUser (/api/users/me/).
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ session_token: 'tok-123', user: { id: '1' } }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: '1', email: 'a@b.c', display_name: 'X', username: 'x', avatar_url: null }),
+      } as Response);
+
+    await useAuthStore.getState().verifyOtp('test@example.com', '123456');
+
+    expect(setItem).toHaveBeenCalledWith('atur.session_token', 'tok-123');
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
+  });
+
+  it('verifyOtp throws on non-ok response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      text: () => Promise.resolve('Code invalid or expired'),
+    } as Response);
+
+    await expect(useAuthStore.getState().verifyOtp('test@example.com', '000000')).rejects.toThrow('Code invalid or expired');
+  });
 });
