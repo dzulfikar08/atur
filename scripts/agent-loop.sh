@@ -190,16 +190,27 @@ agent_verdict() { # <agent output> → echo APPROVED|CHANGES_NEEDED|""
 }
 
 # --- MCP JSON-RPC client ---------------------------------------------------
-mcp() { # mcp <tool> <json-args>  → stdout: raw JSON-RPC result
+mcp() { # mcp <tool> <json-args>  → stdout: raw JSON-RPC result ("" on failure)
+  # Retries transient failures; never exits non-zero so `set -e` can't kill the
+  # supervisor on a blip. Callers that need the result guard with `|| echo ""`.
   local tool="$1" args="$2"
   local payload
   payload=$(printf '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"%s","arguments":%s}}' "$tool" "$args")
-  curl -fsS --max-time 30 \
-    -H "Content-Type: application/json" \
-    -H "Accept: application/json, text/event-stream" \
-    -H "X-API-Key: $API_KEY" \
-    -d "$payload" \
-    "$API_URL"
+  local try out
+  for try in 1 2; do
+    if out=$(curl -fsS --max-time 30 \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json, text/event-stream" \
+      -H "X-API-Key: $API_KEY" \
+      -d "$payload" \
+      "$API_URL" 2>/dev/null); then
+      printf '%s' "$out"
+      return 0
+    fi
+    sleep 2
+  done
+  warn "mcp $tool failed after 2 tries (tool=$tool)"
+  return 0
 }
 
 # Extract a top-level string from the JSON-RPC `result.content[0].text` blob.
@@ -214,11 +225,12 @@ jtext() { # <jq-program> [json]
 
 # --- pure jq helpers (pipe JSON array/object in, or pass as $2) ------------
 # Both accept the JSON via stdin OR as the second argument (matching jtext),
-# so call sites can use either style.
-state_id_for()  { if [[ -n "${2:-}" ]]; then jq -r --arg n "$1" 'map(select(.name == $n) | .id) | first' <<<"$2" 2>/dev/null; else jq -r --arg n "$1" 'map(select(.name == $n) | .id) | first' 2>/dev/null; fi; }
-member_id_for() { if [[ -n "${2:-}" ]]; then jq -r --arg e "$1" 'map(select(.email == $e) | .id) | first' <<<"$2" 2>/dev/null; else jq -r --arg e "$1" 'map(select(.email == $e) | .id) | first' 2>/dev/null; fi; }
+# so call sites can use either style. `// empty` turns a non-match into "" so
+# callers can test with [[ -n ]].
+state_id_for()  { if [[ -n "${2:-}" ]]; then jq -r --arg n "$1" 'map(select(.name == $n) | .id) | first // empty' <<<"$2" 2>/dev/null; else jq -r --arg n "$1" 'map(select(.name == $n) | .id) | first // empty' 2>/dev/null; fi; }
+member_id_for() { if [[ -n "${2:-}" ]]; then jq -r --arg e "$1" 'map(select(.email == $e) | .id) | first // empty' <<<"$2" 2>/dev/null; else jq -r --arg e "$1" 'map(select(.email == $e) | .id) | first // empty' 2>/dev/null; fi; }
 # label_id_for <name> → resolves from the GLOBAL LABELS_JSON (set at boot).
-label_id_for()  { jq -r --arg n "$1" 'map(select(.name == $n) | .id) | first' <<<"$LABELS_JSON" 2>/dev/null; }
+label_id_for()  { jq -r --arg n "$1" 'map(select(.name == $n) | .id) | first // empty' <<<"$LABELS_JSON" 2>/dev/null; }
 
 tmux_running() { tmux has-session -t "atur/$1" 2>/dev/null; }
 
