@@ -287,7 +287,7 @@ is_completed() { # <project_id> <issue_id>
 
 # --- state machine transitions ---------------------------------------------
 mark_in_progress()        { mcp update_issue "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"state_id\":\"$(state_id "$1" inprogress)\"}" >/dev/null; }
-mark_need_review()        { mcp update_issue "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"state_id\":\"$(state_id "$1" needreview)\"}" >/dev/null; }
+mark_need_review()        { mcp update_issue "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"state_id\":\"${3:-$(state_id "$1" needreview)}\"}" >/dev/null; }
 mark_need_confirmation()  { mcp update_issue "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"state_id\":\"$(state_id "$1" needconfirm)\"}" >/dev/null; }
 mark_done()               { mcp update_issue "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"state_id\":\"$(state_id "$1" done)\"}" >/dev/null; }
 
@@ -341,11 +341,22 @@ agent_final_text() { # <agent output> → last meaningful line/block of text
 # the attempt fails (run_attempt retries with feedback in the issue comments).
 run_review() { # <project_id> <issue_id> <seq> <name> → 0 if ALL reviewers approved
   log "review  $3: starting code review (${REVIEWERS} parallel reviewer(s))"
-  if [[ -z "$(state_id "$1" needreview)" ]]; then
+
+  # Resolve the 'Need Review' state fresh (not from the poll-time cache, which
+  # can be empty after a transient MCP failure) so the gate isn't skipped.
+  local nr
+  nr=$(state_id "$1" needreview)
+  if [[ -z "$nr" ]]; then
+    local st_json st_text
+    st_json=$(mcp list_states "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\"}" 2>/dev/null || echo '{"result":{"content":[{"type":"text","text":"[]"}]}}')
+    st_text=$(jtext '.result.content[0].text' "$st_json")
+    nr=$(state_id_for 'Need Review' "$st_text")
+  fi
+  if [[ -z "$nr" ]]; then
     warn "review  $3: project has no 'Need Review' state — skipping review gate, marking Done"
     return 0
   fi
-  mark_need_review "$1" "$2"
+  mark_need_review "$1" "$2" "$nr"
   comment "$1" "$2" "<p><strong>Development complete.</strong> Requesting code review (${REVIEWERS} reviewers). (agent-loop)</p>"
 
   local i
