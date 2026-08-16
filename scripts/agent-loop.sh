@@ -290,7 +290,13 @@ mark_in_progress()        { mcp update_issue "{\"project_id\":\"$1\",\"workspace
 mark_need_review()        { mcp update_issue "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"state_id\":\"$(state_id "$1" needreview)\"}" >/dev/null; }
 mark_need_confirmation()  { mcp update_issue "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"state_id\":\"$(state_id "$1" needconfirm)\"}" >/dev/null; }
 mark_done()               { mcp update_issue "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"state_id\":\"$(state_id "$1" done)\"}" >/dev/null; }
-comment()                 { mcp add_comment "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"comment_html\":\"$3\"}" >/dev/null; }
+
+# Escape a string for embedding inside a JSON string literal (for comment_html
+# etc). Handles quotes, backslashes, newlines, and control chars so agent
+# output can't break the payload.
+json_escape() { printf '%s' "$1" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read())[1:-1])' 2>/dev/null || printf '%s' "$1"; }
+
+comment() { mcp add_comment "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"comment_html\":\"$(json_escape "$3")\"}" >/dev/null; }
 
 # Current state role of an issue ("" if it doesn't match a known role).
 issue_role() { # <project_id> <issue_id> → echoes inprogress|needreview|needconfirm|done|queue|""
@@ -308,6 +314,24 @@ issue_role() { # <project_id> <issue_id> → echoes inprogress|needreview|needco
   n=$(jtext '.result.content[0].text | fromjson | .state.name' "$raw")
   [[ "$n" == "Backlog" || "$n" == "Todo" || "$g" == "unstarted" ]] && { echo "queue"; return 0; }
   echo ""
+}
+
+# Extract the human-readable final text from agent output (any agent shape).
+agent_final_text() { # <agent output> → last meaningful line/block of text
+  local out="$1"
+  case "$AGENT" in
+    cmd)
+      # NDJSON result frame → finalText; fall back to any text frame.
+      echo "$out" | jq -r 'select(.type=="result") | .finalText // empty' 2>/dev/null | tail -1
+      ;;
+    claude)
+      echo "$out" | jq -r '.result // empty' 2>/dev/null | tail -1
+      ;;
+    opencode)
+      echo "$out" | jq -r 'select(.type=="text" and .part.type=="text") | .part.text' 2>/dev/null | tail -1
+      ;;
+    *) echo "$out" ;;
+  esac
 }
 
 # --- code-review gate -------------------------------------------------------
@@ -368,13 +392,14 @@ short justification on the same line." review
   local all_approved=1
   local feedback=""
   for out_file in "${review_files[@]}"; do
-    local out verdict
+    local out verdict txt
     out=$(cat "$out_file")
     verdict=$(agent_verdict "$out")
+    txt=$(agent_final_text "$out")
     log "review  $3: reviewer verdict: ${verdict:-none}"
     if [[ "$verdict" != "APPROVED" ]]; then
       all_approved=0
-      feedback+="• ${out}"$'\n'
+      feedback+="• ${txt:-$out}"$'\n'
     fi
     rm -f "$out_file"
   done
