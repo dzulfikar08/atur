@@ -60,6 +60,12 @@ export const api = {
     const data = await apiFetch<{results: State[]}>(`/workspaces/${slug}/projects/${projectId}/states/`);
     return data.results;
   },
+  deleteIssue: (slug: string, projectId: string, seqId: number | string) =>
+    apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${seqId}/`, { method: 'DELETE' }),
+  updateComment: (slug: string, projectId: string, seqId: number | string, commentId: string, data: { comment_html: string; access?: string }) =>
+    apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${seqId}/comments/${commentId}/`, {
+      method: 'PATCH', body: JSON.stringify(data),
+    }),
   search: (slug: string, query: string) =>
     apiFetch<SearchResult>(`/workspaces/${slug}/search/?q=${encodeURIComponent(query)}`),
 

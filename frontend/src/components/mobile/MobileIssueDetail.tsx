@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
@@ -6,13 +6,22 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { ArrowLeft, MessageSquare, Calendar, Clock, Link2, Plus, X, Trash2 } from '@/lib/icons';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { ArrowLeft, MessageSquare, Calendar, Clock, Link2, Plus, X, Trash2, Pencil } from '@/lib/icons';
 import BottomSheet from './BottomSheet';
 import CommentContent from '@/components/editor/CommentContent';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { hapticMedium } from '@/lib/haptics';
+import { useAuthStore } from '@/stores/auth';
 
 const STATE_COLORS: Record<string, string> = {
   backlog: 'bg-gray-100 text-gray-700',
@@ -43,6 +52,7 @@ interface Comment {
   comment_stripped: string;
   comment_html: string;
   created_at: string;
+  actor_id?: string;
   actor_detail?: { display_name: string };
 }
 
@@ -71,7 +81,11 @@ export default function MobileIssueDetail() {
   const { slug, projectId, issueSeqId } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
   const [commentText, setCommentText] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editCommentText, setEditCommentText] = useState('');
+  const [commentSort, setCommentSort] = useState<'newest' | 'oldest'>('newest');
   const [stateSheetOpen, setStateSheetOpen] = useState(false);
   const [prioritySheetOpen, setPrioritySheetOpen] = useState(false);
 
@@ -86,6 +100,15 @@ export default function MobileIssueDetail() {
     queryFn: () => apiFetch<{ results: Comment[] }>(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/comments/`).then((d) => d.results).catch(() => []),
     enabled: !!slug && !!projectId && !!issueSeqId,
   });
+
+  const sortedComments = useMemo(() => {
+    const list = [...comments];
+    list.sort((a, b) => {
+      const t = (v: string) => new Date(v).getTime();
+      return commentSort === 'oldest' ? t(a.created_at) - t(b.created_at) : t(b.created_at) - t(a.created_at);
+    });
+    return list;
+  }, [comments, commentSort]);
 
   const { data: states = [] } = useQuery({
     queryKey: ['states', slug, projectId],
@@ -103,6 +126,22 @@ export default function MobileIssueDetail() {
     },
   });
 
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
+  const deleteIssueMutation = useMutation({
+    mutationFn: () =>
+      apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['issues', slug, projectId] });
+      qc.invalidateQueries({ queryKey: ['my-issues'] });
+      toast.success('Issue deleted');
+      navigate(`/${slug}/projects/${projectId}`);
+    },
+    onError: () => toast.error('Failed to delete issue'),
+  });
+
   const commentMutation = useMutation({
     mutationFn: (comment_html: string) =>
       apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/comments/`, {
@@ -114,6 +153,25 @@ export default function MobileIssueDetail() {
       toast.success('Comment added');
     },
   });
+
+  const editCommentMutation = useMutation({
+    mutationFn: ({ commentId, comment_html }: { commentId: string; comment_html: string }) =>
+      apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/comments/${commentId}/`, {
+        method: 'PATCH', body: JSON.stringify({ comment_html }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['comments', slug, projectId, issueSeqId] });
+      setEditingCommentId(null);
+      setEditCommentText('');
+      toast.success('Comment updated');
+    },
+    onError: () => toast.error('Failed to update comment'),
+  });
+
+  const startEditComment = (c: Comment) => {
+    setEditingCommentId(c.id);
+    setEditCommentText(c.comment_html);
+  };
 
   // --- Relations ---
   const [relationSheetOpen, setRelationSheetOpen] = useState(false);
@@ -193,6 +251,13 @@ export default function MobileIssueDetail() {
             {issue.project_detail?.identifier || 'PROJ'}-{String(issue.sequence_id).padStart(4, '0')}
           </span>
           <div className="flex-1" />
+          <button
+            onClick={() => setConfirmDeleteOpen(true)}
+            className="flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-destructive"
+            aria-label="Delete issue"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
           {/* Tap to change state */}
           <button onClick={() => setStateSheetOpen(true)}>
             <Badge className={cn('text-[10px]', STATE_COLORS[group])} variant="secondary">
@@ -272,11 +337,21 @@ export default function MobileIssueDetail() {
 
         {/* Comments */}
         <div className="space-y-3">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-            <MessageSquare className="h-3 w-3" /> Comments ({comments.length})
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <MessageSquare className="h-3 w-3" /> Comments ({comments.length})
+            </h3>
+            <button
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground rounded px-1 py-0.5"
+              onClick={() => setCommentSort(commentSort === 'newest' ? 'oldest' : 'newest')}
+            >
+              {commentSort === 'newest' ? 'Newest first' : 'Earliest first'}
+            </button>
+          </div>
 
-          {comments.map((c) => (
+          {sortedComments.map((c) => {
+            const isMine = c.actor_id === currentUser?.id;
+            return (
             <div key={c.id} className="flex gap-2">
               <Avatar className="h-7 w-7 shrink-0">
                 <AvatarFallback className="text-[10px]">
@@ -289,11 +364,45 @@ export default function MobileIssueDetail() {
                   <span className="text-[10px] text-muted-foreground">
                     {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
                   </span>
+                  {isMine && editingCommentId !== c.id && (
+                    <button
+                      className="ml-auto p-1 rounded text-muted-foreground hover:text-foreground"
+                      onClick={() => startEditComment(c)}
+                      aria-label="Edit comment"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  )}
                 </div>
-                <div className="mt-0.5"><CommentContent html={c.comment_html} /></div>
+                {editingCommentId === c.id ? (
+                  <div className="mt-1.5 space-y-2">
+                    <Textarea
+                      value={editCommentText}
+                      onChange={(e) => setEditCommentText(e.target.value)}
+                      className="text-sm"
+                      rows={3}
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        className="h-8"
+                        disabled={!editCommentText.trim() || editCommentMutation.isPending}
+                        onClick={() => editCommentMutation.mutate({ commentId: c.id, comment_html: editCommentText })}
+                      >
+                        {editCommentMutation.isPending ? 'Saving...' : 'Save'}
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-8" onClick={() => { setEditingCommentId(null); setEditCommentText(''); }}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-0.5"><CommentContent html={c.comment_html} /></div>
+                )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -424,6 +533,27 @@ export default function MobileIssueDetail() {
           )}
         </div>
       </BottomSheet>
+
+      <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete issue?</DialogTitle>
+            <DialogDescription>
+              This will permanently delete{" "}
+              {issue.project_detail?.identifier || 'PROJ'}-{String(issue.sequence_id).padStart(4, '0')}{" "}
+              "{issue.name}" and all of its data. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeleteOpen(false)} disabled={deleteIssueMutation.isPending}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => deleteIssueMutation.mutate()} disabled={deleteIssueMutation.isPending}>
+              {deleteIssueMutation.isPending ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

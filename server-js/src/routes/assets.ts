@@ -83,6 +83,22 @@ export const assetRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     }
     // Internal asset requested by a main-app user: allowed.
 
+    // On-the-fly image optimization: when the client asks for a resized or
+    // reformatted variant (?w=, ?format=webp), hand the image to Cloudflare's
+    // edge Image Resizing via the header instead of serving the raw R2 bytes.
+    // Works on any plan; the worker simply delegates the transform to the edge.
+    const wants = c.req.query()
+    const imgParams: string[] = []
+    if (wants.w) imgParams.push(`width=${Math.min(Number(wants.w) || 0, 4000)}`)
+    if (wants.h) imgParams.push(`height=${Math.min(Number(wants.h) || 0, 4000)}`)
+    if (wants.fit && ['scale-down', 'contain', 'cover', 'crop', 'pad'].includes(wants.fit)) imgParams.push(`fit=${wants.fit}`)
+    if (wants.q) imgParams.push(`quality=${Math.min(Math.max(Number(wants.q) || 0, 1), 100)}`)
+    const format = wants.format === 'webp' || wants.format === 'avif' ? wants.format : 'webp'
+    if (imgParams.length > 0 && (result.contentType || '').startsWith('image/')) {
+      const options = [...imgParams, `format=${format}`].join(',')
+      c.header('Cloudflare-Image-Resizing', options)
+    }
+
     c.header('Content-Type', result.contentType)
     c.header('Content-Length', result.size?.toString() || '0')
     return c.body(result.body as ReadableStream)

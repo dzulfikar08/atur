@@ -25,10 +25,11 @@ id = "767d9b9dfa0e4f79a70f7f3c3e205f69"
 
 # Outbound email for the support portal OTP. verified_address must be an address
 # you've verified in the Cloudflare dashboard (Email → Routing → Settings).
-# Set EMAIL_FROM to the same bare address (var below, or `wrangler secret`).
+# Set EMAIL_FROM to the same bare address (var below, or `wrangler secret`),
+# e.g. `wrangler secret put EMAIL_FROM` → noreply@diatur.com.
 [[send_email]]
 name = "SEND_EMAIL"
-verified_address = "support@diatur.com"
+verified_address = "noreply@diatur.com"
 
 [observability]
 enabled = true
