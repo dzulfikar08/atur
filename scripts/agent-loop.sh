@@ -561,16 +561,22 @@ Definition of Done (all must hold):
 
 Work autonomously. Post your findings as comments on the issue."
 
-    local cmdline
+    local cmdline prompt_file
     # cmd resumes its most recent headless session in the cwd, so retries keep
     # the previous attempt's context. Other agents get a fresh session.
+    # The prompt is passed via a temp FILE (read with $(cat ...)) instead of
+    # being inlined into the shell command — a multi-line prompt with
+    # quotes/parens would mangle the tmux shell string, and tmux sessions don't
+    # inherit client-side exported env vars (only the server's env).
+    prompt_file="$(mktemp -t "atur-prompt-$seq-XXXXXX")"
+    printf '%s' "$prompt" > "$prompt_file"
     if [[ "$AGENT" == "cmd" && "$attempt" -gt 1 ]]; then
-      cmdline="cmd -p --continue \"$prompt\" --yolo --max-turns 100; tmux wait-for -S atur:$seq"
+      cmdline="cmd -p \"\$(cat $prompt_file)\" --continue --yolo --max-turns 100; tmux wait-for -S atur:$seq"
     else
-      cmdline="agent_headless \"$prompt\" work; tmux wait-for -S atur:$seq"
+      cmdline="agent_headless \"\$(cat $prompt_file)\" work; tmux wait-for -S atur:$seq"
     fi
     tmux new-session -d -s "$session" -c "$REPO_DIR" "$cmdline" 2>/dev/null || \
-    tmux new-session -d -s "$session" -c "$REPO_DIR" "agent_headless '$prompt' work; tmux wait-for -S atur:$seq"
+    tmux new-session -d -s "$session" -c "$REPO_DIR" "agent_headless \"\$(cat $prompt_file)\" work; tmux wait-for -S atur:$seq"
     log "start  $seq: spawned tmux session $session (attempt $attempt)"
   fi
 
@@ -585,6 +591,8 @@ Work autonomously. Post your findings as comments on the issue."
     warn "timeout $seq: attempt $attempt exceeded ${timeout}min — killing session"
     tmux kill-session -t "$session" 2>/dev/null || true
   fi
+  # Prompt file is no longer needed once the session has exited.
+  rm -f "${prompt_file:-}"
 
   # Commit the agent's work so reviewers inspect committed code, not the
   # working tree. (The agent already wrote files in $REPO_DIR.)
