@@ -26,6 +26,9 @@ data/search/
 .env
 .env.*
 
+# Command Code local preferences
+.commandcode/
+
 # IDE
 .idea/
 .vscode/

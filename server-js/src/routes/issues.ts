@@ -50,6 +50,15 @@ export const issueRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     return c.json(result)
   })
 
+  .get('/:issueId/sub-issues', async (c) => {
+    const db = getDb(c.env.DB)
+    const projectId = c.req.param('projectId')!
+    const issue = await issuesRepo.resolveIssue(db, projectId, c.req.param('issueId')!)
+    if (!issue) throw new HTTPException(404, { message: 'Issue not found' })
+    const result = await issuesService.listSubIssues(db, issue.id)
+    return c.json(result)
+  })
+
   .patch('/:issueId', authMiddleware, async (c) => {
     const db = getDb(c.env.DB)
     const projectId = c.req.param('projectId')!
