@@ -212,9 +212,11 @@ jtext() { # <jq-program> [json]
   fi
 }
 
-# --- pure jq helpers (pipe JSON array/object in, get answer out) -----------
-state_id_for()  { jq -r --arg n "$1" 'map(select(.name == $n) | .id) | first' ; }
-member_id_for() { jq -r --arg e "$1" 'map(select(.email == $e) | .id) | first'; }
+# --- pure jq helpers (pipe JSON array/object in, or pass as $2) ------------
+# Both accept the JSON via stdin OR as the second argument (matching jtext),
+# so call sites can use either style.
+state_id_for()  { if [[ -n "${2:-}" ]]; then jq -r --arg n "$1" 'map(select(.name == $n) | .id) | first' <<<"$2" 2>/dev/null; else jq -r --arg n "$1" 'map(select(.name == $n) | .id) | first' 2>/dev/null; fi; }
+member_id_for() { if [[ -n "${2:-}" ]]; then jq -r --arg e "$1" 'map(select(.email == $e) | .id) | first' <<<"$2" 2>/dev/null; else jq -r --arg e "$1" 'map(select(.email == $e) | .id) | first' 2>/dev/null; fi; }
 # label_id_for <name> → resolves from the GLOBAL LABELS_JSON (set at boot).
 label_id_for()  { jq -r --arg n "$1" 'map(select(.name == $n) | .id) | first' <<<"$LABELS_JSON" 2>/dev/null; }
 
@@ -223,12 +225,14 @@ tmux_running() { tmux has-session -t "atur/$1" 2>/dev/null; }
 # --- queue discovery (REST + MCP) -----------------------------------------
 # The REST list route supports ?labels= (server-side filter) and returns
 # enriched issues with .labels and .state {id,name,group}. The MCP list_issues
-# cannot filter by label, so the queue comes from REST; everything we write
-# goes through the authenticated MCP API. The REST list route is public read.
+# cannot filter by label, so the queue comes from REST. The REST list route is
+# auth'd (X-API-Key) — same key as the MCP server.
 rest_list_issues() { # <project_id> [label_name] → JSON array of enriched issues
   local base="${API_URL%/mcp}"
   local label="${2:-$LABEL}"
+  # The REST list route requires auth (returns 401 without a valid token).
   curl -fsS --max-time 30 \
+    -H "X-API-Key: $API_KEY" \
     "$base/api/workspaces/$WORKSPACE/projects/$1/issues?labels=$label" 2>/dev/null \
     || echo "[]"
 }
@@ -662,7 +666,7 @@ main() {
       # then worked individually). Idempotent — see break_down_issue.
       local bd_list
       bd_list=$(rest_list_issues "$pid" "$BREAKDOWN_LABEL" 2>/dev/null || echo "[]")
-      while IFS='|' read -r bd_group bd_name bd_id bd_seq; do
+      while IFS=$'\t' read -r bd_group bd_name bd_id bd_seq; do
         [[ -n "$bd_id" ]] || continue
         if [[ "$bd_name" == "Backlog" || "$bd_name" == "Todo" || "$bd_group" == "unstarted" ]]; then
           log "poll  $pid: breaking down feature '$bd_name' ($bd_id)"
@@ -677,7 +681,7 @@ main() {
       # issue with .labels and .state{id,name,group} — no per-issue lookups.
       # Queue = Backlog or Todo (by state name; Todo is group "started" in the
       # Hono backend, group "unstarted" in the Rust backend).
-      while IFS='|' read -r group state_name issue_id issue_name seq; do
+      while IFS=$'\t' read -r group state_name issue_id issue_name seq; do
         [[ -n "$issue_id" ]] || continue
         if [[ "$state_name" == "Backlog" || "$state_name" == "Todo" || "$group" == "unstarted" ]]; then
           log "queue  $issue_id: $issue_name (state=$state_name group=$group)"
@@ -691,7 +695,7 @@ main() {
 
     # Drain: work the queue up to the concurrency limit.
     local running=0
-    for item in "${queue[@]}"; do
+    for item in ${queue[@]+"${queue[@]}"}; do
       if (( running >= MAX_CONCURRENCY )); then break; fi
       IFS='|' read -r pid issue_id issue_name seq <<<"$item"
       # Per-session context: project name for the prompt.
