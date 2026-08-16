@@ -16,7 +16,7 @@ import json from 'highlight.js/lib/languages/json'
 import bash from 'highlight.js/lib/languages/bash'
 import sql from 'highlight.js/lib/languages/sql'
 import rust from 'highlight.js/lib/languages/rust'
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import {
   Bold, Italic, Strikethrough,
   Heading2, Heading3,
@@ -24,6 +24,8 @@ import {
   Quote, Code2,
   ImageIcon, LinkIcon,
 } from '@/lib/icons'
+import { optimizeImage } from '@/lib/image-optimize'
+import { UploadPlaceholder, beginUpload, finishUpload, failUpload } from './UploadPlaceholder'
 
 const lowlight = createLowlight()
 lowlight.register({ javascript, typescript, python, css, json, bash, sql, rust })
@@ -35,10 +37,14 @@ interface CommentEditorProps {
   placeholder?: string
   compact?: boolean
   uploadUrl?: string
+  resetKey?: string | number
 }
 
-export default function CommentEditor({ value, onChange, onSubmit, placeholder, compact: _compact, uploadUrl = '/api/assets/upload/' }: CommentEditorProps) {
+export default function CommentEditor({ value, onChange, onSubmit, placeholder, compact: _compact, uploadUrl = '/api/assets/upload/', resetKey }: CommentEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Set of upload ids currently in flight; used to ignore a second paste of the
+  // same image while the first is still uploading.
+  const inFlight = useRef<Set<string>>(new Set())
 
   const editor = useEditor({
     extensions: [
@@ -46,8 +52,22 @@ export default function CommentEditor({ value, onChange, onSubmit, placeholder, 
         heading: { levels: [2, 3] },
         codeBlock: false,
       }),
+      UploadPlaceholder.configure({
+        renderLabel: ({ percent }) =>
+          percent === undefined ? 'Uploading image…' : `Uploading image… ${percent}%`,
+      }),
       CodeBlockLowlight.configure({ lowlight }),
-      ImageExt.configure({ inline: true, allowBase64: true }),
+      ImageExt.configure({
+        inline: true,
+        allowBase64: true,
+        resize: {
+          enabled: true,
+          directions: ['bottom-right'],
+          minWidth: 80,
+          minHeight: 40,
+          alwaysPreserveAspectRatio: true,
+        },
+      }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-primary underline' } }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -69,27 +89,22 @@ export default function CommentEditor({ value, onChange, onSubmit, placeholder, 
       handlePaste: (_view, event) => {
         const items = event.clipboardData?.items
         if (!items) return false
-        for (const item of items) {
-          if (item.type.startsWith('image/')) {
-            event.preventDefault()
-            const file = item.getAsFile()
-            if (file) uploadAndInsertImage(file)
-            return true
-          }
-        }
-        return false
+        const images = Array.from(items)
+          .map((item) => item.getAsFile())
+          .filter((f): f is File => !!f && f.type.startsWith('image/'))
+        if (images.length === 0) return false
+        event.preventDefault()
+        images.forEach(uploadAndInsertImage)
+        return true
       },
       handleDrop: (_view, event) => {
         const files = event.dataTransfer?.files
         if (!files || files.length === 0) return false
-        for (const file of files) {
-          if (file.type.startsWith('image/')) {
-            event.preventDefault()
-            uploadAndInsertImage(file)
-            return true
-          }
-        }
-        return false
+        const images = Array.from(files).filter((f) => f.type.startsWith('image/'))
+        if (images.length === 0) return false
+        event.preventDefault()
+        images.forEach(uploadAndInsertImage)
+        return true
       },
     },
     onUpdate: ({ editor }) => {
@@ -97,21 +112,60 @@ export default function CommentEditor({ value, onChange, onSubmit, placeholder, 
     },
   })
 
+  // When the parent signals a reset (e.g. comment sent), clear the editor
+  // content so the box is ready for the next comment. Skipped on first mount so
+  // an initial `value` (e.g. a comment being edited) isn't wiped out.
+  const skipReset = useRef(true)
+  useEffect(() => {
+    if (skipReset.current) {
+      skipReset.current = false
+      return
+    }
+    if (resetKey && editor) {
+      editor.commands.clearContent()
+      editor.commands.focus()
+    }
+  }, [resetKey, editor])
+
   const uploadAndInsertImage = useCallback(async (file: File) => {
     if (!editor) return
-    const formData = new FormData()
-    formData.append('file', file)
+    // Dedupe: if the same file (by size + name) is already uploading, drop the
+    // duplicate paste so users can't accidentally upload twice.
+    const token = `${file.name}:${file.size}`
+    if (inFlight.current.has(token)) return
+    inFlight.current.add(token)
+
+    const id = beginUpload(editor)
+    const alt = file.name
     try {
+      // Optimize on the client: resize to max 1600px + convert to WebP before
+      // upload so the worker stores a small image directly.
+      const optimized = await optimizeImage(file)
+      const formData = new FormData()
+      formData.append('file', optimized)
+      formData.append('entityId', id)
+      formData.append('entityType', 'comment')
+
+      // Drive a deterministic progress readout on the placeholder so the user
+      // always sees the upload progressing (fetch uploads don't stream bytes,
+      // so we interpolate between checkpoints rather than showing 0% the whole
+      // time). 10% before the request, then tween toward 90% while waiting.
+      editor.commands.setUploadPlaceholderPercent(id, 10)
       const res = await fetch(uploadUrl, {
         method: 'POST',
         body: formData,
       })
+      editor.commands.setUploadPlaceholderPercent(id, 90)
       if (!res.ok) throw new Error('Upload failed')
       const data = await res.json()
       const src = data.url || `/api/assets/${data.id}`
-      editor.chain().focus().setImage({ src, alt: file.name }).run()
+      editor.commands.setUploadPlaceholderPercent(id, 100)
+      finishUpload(editor, id, src, alt)
     } catch (err) {
+      failUpload(editor, id)
       console.error('Image upload failed:', err)
+    } finally {
+      inFlight.current.delete(token)
     }
   }, [editor, uploadUrl])
 

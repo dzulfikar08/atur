@@ -33,14 +33,16 @@ export const commentRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   })
   .patch('/:commentId', authMiddleware, async (c) => {
     const db = getDb(c.env.DB)
+    const user = c.get('user')
     const commentId = c.req.param('commentId')!
     const body = commentsService.updateCommentSchema.parse(await c.req.json())
-    const comment = await commentsService.update(db, commentId, body)
+    const comment = await commentsService.update(db, user.sub, commentId, body)
     return c.json(comment)
   })
   .delete('/:commentId', authMiddleware, async (c) => {
     const db = getDb(c.env.DB)
+    const user = c.get('user')
     const commentId = c.req.param('commentId')!
-    await commentsService.remove(db, commentId)
+    await commentsService.remove(db, user.sub, commentId)
     return c.json({ success: true })
   })

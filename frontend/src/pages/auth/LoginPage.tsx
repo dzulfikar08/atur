@@ -19,6 +19,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
 import {
   Form,
@@ -298,16 +303,25 @@ function OtpLogin() {
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="otp-code">Verification code</Label>
-            <Input
+            <InputOTP
               id="otp-code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="123456"
+              maxLength={6}
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              onKeyDown={(e) => e.key === "Enter" && verify()}
+              onChange={setCode}
+              onComplete={verify}
               autoFocus
-            />
+              className="justify-center"
+              containerClassName="w-full justify-center"
+            >
+              <InputOTPGroup>
+                <InputOTPSlot index={0} />
+                <InputOTPSlot index={1} />
+                <InputOTPSlot index={2} />
+                <InputOTPSlot index={3} />
+                <InputOTPSlot index={4} />
+                <InputOTPSlot index={5} />
+              </InputOTPGroup>
+            </InputOTP>
             <p className="text-xs text-muted-foreground">
               Sent to {email}.{" "}
               <button

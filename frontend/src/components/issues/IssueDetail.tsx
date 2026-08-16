@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, useMemo, type ReactNode } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, api, type Module } from "@/lib/api";
@@ -13,15 +13,24 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Calendar, MessageSquare, Clock, Link2, GitBranch, Trash2, X, Activity, Paperclip, Upload, FileIcon, Download, Timer, Package, Pencil, Check } from '@/lib/icons';
+import { ArrowLeft, Calendar, MessageSquare, Clock, Link2, GitBranch, Trash2, X, Activity, Paperclip, Upload, FileIcon, Download, Timer, Package, Pencil, Check, ArrowUpDown } from '@/lib/icons';
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { useAuthStore } from "@/stores/auth";
 
 interface Issue {
   id: string;
@@ -52,6 +61,7 @@ interface Comment {
   created_at: string;
   updated_at: string;
   actor: string;
+  actor_id?: string;
   actor_detail?: { display_name: string; avatar: string };
 }
 
@@ -182,8 +192,13 @@ export default function IssueDetail() {
   const { slug, projectId, issueSeqId: issueId } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
   const [commentText, setCommentText] = useState("");
   const [commentPublic, setCommentPublic] = useState(false);
+  const [commentResetKey, setCommentResetKey] = useState(0);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editCommentText, setEditCommentText] = useState("");
+  const [commentSort, setCommentSort] = useState<"newest" | "oldest">("newest");
   const [activeTab, setActiveTab] = useState<"comments" | "activity" | "attachments" | "time">("comments");
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
@@ -202,6 +217,15 @@ export default function IssueDetail() {
       .catch(() => []),
     enabled: !!slug && !!projectId && !!issueId,
   });
+
+  const sortedComments = useMemo(() => {
+    const list = [...comments];
+    list.sort((a, b) => {
+      const t = (v: string) => new Date(v).getTime();
+      return commentSort === "oldest" ? t(a.created_at) - t(b.created_at) : t(b.created_at) - t(a.created_at);
+    });
+    return list;
+  }, [comments, commentSort]);
 
   const { data: states = [] } = useQuery({
     queryKey: ["states", slug, projectId],
@@ -230,6 +254,22 @@ export default function IssueDetail() {
       qc.invalidateQueries({ queryKey: ["issues", slug, projectId] });
     },
     onError: () => toast.error("Failed to update issue"),
+  });
+
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
+  const deleteIssueMutation = useMutation({
+    mutationFn: () =>
+      apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["issues", slug, projectId] });
+      qc.invalidateQueries({ queryKey: ["my-issues"] });
+      toast.success("Issue deleted");
+      navigate(`/${slug}/projects/${projectId}`);
+    },
+    onError: () => toast.error("Failed to delete issue"),
   });
   function startEditTitle() {
     setTitleDraft(issue?.name ?? "");
@@ -261,10 +301,29 @@ export default function IssueDetail() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["comments", slug, projectId, issueId] });
       setCommentText("");
+      setCommentResetKey((k) => k + 1);
       toast.success("Comment added");
     },
     onError: () => toast.error("Failed to add comment"),
   });
+
+  const editCommentMutation = useMutation({
+    mutationFn: ({ commentId, comment_html }: { commentId: string; comment_html: string }) =>
+      api.updateComment(slug!, projectId!, Number(issueId!), commentId, { comment_html }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["comments", slug, projectId, issueId] });
+      qc.invalidateQueries({ queryKey: ["activities", slug, projectId, issueId] });
+      setEditingCommentId(null);
+      setEditCommentText("");
+      toast.success("Comment updated");
+    },
+    onError: () => toast.error("Failed to update comment"),
+  });
+
+  function startEditComment(c: Comment) {
+    setEditingCommentId(c.id);
+    setEditCommentText(c.comment_html);
+  }
 
   // --- Relations ---
   const [relationSearch, setRelationSearch] = useState("");
@@ -516,7 +575,39 @@ export default function IssueDetail() {
         <span className="text-sm text-muted-foreground">
           {issue.project_detail?.identifier || "PROJ"}-{String(issue.sequence_id).padStart(4, "0")}
         </span>
+        <div className="ml-auto flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+            onClick={() => setConfirmDeleteOpen(true)}
+            aria-label="Delete issue"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
+
+      <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete issue?</DialogTitle>
+            <DialogDescription>
+              This will permanently delete{" "}
+              {issue.project_detail?.identifier || "PROJ"}-{String(issue.sequence_id).padStart(4, "0")}{" "}
+              "{issue.name}" and all of its data. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeleteOpen(false)} disabled={deleteIssueMutation.isPending}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => deleteIssueMutation.mutate()} disabled={deleteIssueMutation.isPending}>
+              {deleteIssueMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
         {/* Main content */}
@@ -847,32 +938,7 @@ export default function IssueDetail() {
 
             {activeTab === "comments" && (
               <>
-                {commentsLoading ? (
-                  <div className="animate-pulse text-sm text-muted-foreground">Loading comments...</div>
-                ) : (
-                  <div className="space-y-4">
-                    {comments.map((c) => (
-                      <div key={c.id} className="flex gap-3">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback className="text-xs">
-                            {c.actor_detail?.display_name?.charAt(0) || "U"}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-medium">{c.actor_detail?.display_name || "User"}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
-                            </span>
-                          </div>
-                          <div className="text-sm"><CommentContent html={c.comment_html} /></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex gap-3 mt-4">
+                <div className="flex gap-3">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="text-xs">Y</AvatarFallback>
                   </Avatar>
@@ -886,6 +952,7 @@ export default function IssueDetail() {
                         }
                       }}
                       placeholder="Add a comment..."
+                      resetKey={commentResetKey}
                     />
                     <div className="flex items-center gap-3">
                       {issue?.external_source === 'portal' && (
@@ -909,6 +976,77 @@ export default function IssueDetail() {
                     </div>
                   </div>
                 </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">{sortedComments.length} comments</span>
+                  <button
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground rounded px-1.5 py-0.5"
+                    onClick={() => setCommentSort(commentSort === "newest" ? "oldest" : "newest")}
+                    title="Toggle comment order"
+                  >
+                    <ArrowUpDown className="h-3 w-3" />
+                    {commentSort === "newest" ? "Newest first" : "Earliest first"}
+                  </button>
+                </div>
+                {commentsLoading ? (
+                  <div className="animate-pulse text-sm text-muted-foreground">Loading comments...</div>
+                ) : (
+                  <div className="space-y-4">
+                    {sortedComments.map((c) => {
+                      const isMine = c.actor_id === currentUser?.id;
+                      return (
+                      <div key={c.id} className="flex gap-3 group">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="text-xs">
+                            {c.actor_detail?.display_name?.charAt(0) || "U"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-medium">{c.actor_detail?.display_name || "User"}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
+                            </span>
+                            {isMine && editingCommentId !== c.id && (
+                              <button
+                                className="ml-auto p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                                onClick={() => startEditComment(c)}
+                                aria-label="Edit comment"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                          {editingCommentId === c.id ? (
+                            <div className="space-y-2">
+                              <CommentEditor
+                                value={editCommentText}
+                                onChange={setEditCommentText}
+                                placeholder="Edit comment..."
+                                resetKey={editingCommentId}
+                              />
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  disabled={!editCommentText.replace(/<[^>]*>/g, '').trim() || editCommentMutation.isPending}
+                                  onClick={() => editCommentMutation.mutate({ commentId: c.id, comment_html: editCommentText })}
+                                >
+                                  {editCommentMutation.isPending ? "Saving..." : "Save"}
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => { setEditingCommentId(null); setEditCommentText(""); }}>
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-sm"><CommentContent html={c.comment_html} /></div>
+                          )}
+                        </div>
+                      </div>
+                      );
+                    })}
+                  </div>
+                )}
               </>
             )}
 
