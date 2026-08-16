@@ -128,6 +128,27 @@ export async function list(
   })
   if (!project) throw new HTTPException(404, { message: 'Project not found' })
 
+  // The REST contract filters by label NAME (e.g. ?labels=agent-ready); the
+  // repo filters by label UUID, so resolve names → IDs first.
+  if (opts.labels && opts.labels.length > 0) {
+    const labelRows = await db
+      .select({ id: schema.labels.id })
+      .from(schema.labels)
+      .where(
+        and(
+          inArray(schema.labels.name, opts.labels),
+          eq(schema.labels.workspaceId, project.workspaceId),
+          isNull(schema.labels.deletedAt),
+        ),
+      )
+    const labelIds = labelRows.map((l) => l.id)
+    if (labelIds.length === 0) {
+      // No matching label → no issues can match.
+      return paginatedResponse([], 0, opts.offset, opts.limit)
+    }
+    opts = { ...opts, labels: labelIds }
+  }
+
   const { data, total } = await issuesRepo.listByProject(db, projectId, opts)
 
   const enriched = await enrichIssues(db, data)

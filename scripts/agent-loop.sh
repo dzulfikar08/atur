@@ -669,9 +669,9 @@ main() {
           break_down_issue "$pid" "$bd_id" "$bd_seq" "$bd_name" || warn "poll  $pid: breakdown of $bd_id failed"
         fi
       done < <(echo "$bd_list" | jq -r '
-        .data[]? |
+        .results[]? |
         select(.state.name == "Backlog" or .state.name == "Todo" or .state.group == "unstarted") |
-        [.state.group, .state.name, .id, .sequenceId] | @tsv' 2>/dev/null)
+        [.state.group, .state.name, .id, .sequence_id] | @tsv' 2>/dev/null)
 
       # The REST list already filters by the opt-in label and enriches each
       # issue with .labels and .state{id,name,group} — no per-issue lookups.
@@ -684,9 +684,9 @@ main() {
           queue+=("$pid|$issue_id|$issue_name|$seq")
         fi
       done < <(rest_list_issues "$pid" | jq -r '
-        .data[]? |
+        .results[]? |
         select(.state.name == "Backlog" or .state.name == "Todo" or .state.group == "unstarted") |
-        [.state.group, .state.name, .id, .name, .sequenceId] | @tsv' 2>/dev/null)
+        [.state.group, .state.name, .id, .name, .sequence_id] | @tsv' 2>/dev/null)
     done
 
     # Drain: work the queue up to the concurrency limit.
