@@ -20,6 +20,7 @@ export const createIssueSchema = z.object({
   estimate_points: z.number().nullable().optional(),
   label_ids: z.array(z.string().uuid()).optional(),
   assignee_ids: z.array(z.string().uuid()).optional(),
+  parent_id: z.string().uuid().nullable().optional(),
 })
 
 export const updateIssueSchema = z.object({
@@ -65,6 +66,7 @@ export async function create(
     startDate: data.start_date,
     targetDate: data.target_date,
     estimatePoints: data.estimate_points ?? null,
+    parentId: data.parent_id ?? null,
     createdById,
   })
 
@@ -85,6 +87,18 @@ export async function create(
     issueId: issue.id,
     actorId: createdById,
   })
+  if (data.parent_id) {
+    const [parent] = await db.select({ name: schema.issues.name }).from(schema.issues)
+      .where(and(eq(schema.issues.id, data.parent_id), isNull(schema.issues.deletedAt))).limit(1)
+    await activitiesRepo.create(db, {
+      verb: 'updated',
+      field: 'parent',
+      oldValue: null,
+      newValue: parent?.name ?? data.parent_id,
+      issueId: issue.id,
+      actorId: createdById ?? null,
+    })
+  }
 
   return enrichIssue(db, issue)
 
@@ -119,6 +133,12 @@ export async function list(
   const enriched = await enrichIssues(db, data)
 
   return paginatedResponse(enriched, total, opts.offset, opts.limit)
+}
+
+export async function listSubIssues(db: DbClient, parentId: string) {
+  const data = await issuesRepo.listByParent(db, parentId)
+  const enriched = await enrichIssues(db, data)
+  return { results: enriched }
 }
 
 export async function update(

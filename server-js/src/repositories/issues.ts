@@ -78,6 +78,18 @@ export async function listByProject(
   return { data: rows, total: countRow.total }
 }
 
+export async function listByParent(
+  db: DbClient,
+  parentId: string
+) {
+  const rows = await db
+    .select()
+    .from(issues)
+    .where(and(eq(issues.parentId, parentId), isNull(issues.deletedAt)))
+    .orderBy(desc(issues.sequenceId))
+  return rows
+}
+
 export async function create(
   db: DbClient,
   data: {
@@ -94,6 +106,7 @@ export async function create(
     startDate?: string
     targetDate?: string
     estimatePoints?: number | null
+    parentId?: string | null
   }
 ) {
   const now = nowISO()
@@ -111,6 +124,7 @@ export async function create(
     startDate: data.startDate ?? null,
     targetDate: data.targetDate ?? null,
     estimatePoints: data.estimatePoints ?? null,
+    parentId: data.parentId ?? null,
     createdAt: now,
     updatedAt: now,
   })
