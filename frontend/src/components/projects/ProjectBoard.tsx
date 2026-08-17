@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, api, type Issue, type State, type Module } from "@/lib/api";
 import FilterBar, { type FilterState } from "@/components/issues/FilterBar";
@@ -220,7 +220,17 @@ export default function ProjectBoard() {
   const { slug, projectId } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [view, setView] = useState<"board" | "list" | "sheet" | "calendar" | "gantt">("board");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const viewParam = searchParams.get("view");
+  const view = (["board", "list", "sheet", "calendar", "gantt"].includes(viewParam ?? "")
+    ? viewParam
+    : "board") as "board" | "list" | "sheet" | "calendar" | "gantt";
+  const setView = (v: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (v === "board") params.delete("view");
+    else params.set("view", v);
+    setSearchParams(params, { replace: true });
+  };
   const [filters, setFilters] = useState<FilterState>({
     stateId: 'all',
     priority: 'all',
@@ -460,7 +470,7 @@ export default function ProjectBoard() {
     <div className="flex flex-col h-full">
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b">
         <div className="flex flex-wrap items-center gap-2">
-          <Tabs value={view} onValueChange={(v) => setView(v as any)}>
+          <Tabs value={view} onValueChange={setView}>
             <TabsList className="h-8">
               <TabsTrigger value="board" className="text-xs px-2">
                 <Columns3 className="h-3 w-3 mr-1" /> Board
