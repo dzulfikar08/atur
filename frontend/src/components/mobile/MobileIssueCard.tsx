@@ -13,6 +13,10 @@ interface MobileIssueCardProps {
     updated_at: string;
     project_id?: string;
     project_name?: string;
+    workspace_name?: string;
+    state?: { id: string; name: string; color?: string; group: string } | null;
+    labels?: { id: string; name: string; color?: string }[];
+    assignees?: { id: string; email?: string; username?: string; display_name?: string; avatar?: string | null }[];
   };
   slug: string;
   projectId?: string;
@@ -38,7 +42,7 @@ const PRIORITY_DOTS: Record<string, string> = {
 
 export default function MobileIssueCard({ issue, slug, projectId, states }: MobileIssueCardProps) {
   const navigate = useNavigate();
-  const state = states?.find((s) => s.id === issue.state_id);
+  const state = issue.state ?? states?.find((s) => s.id === issue.state_id) ?? null;
   const group = state?.group || 'backlog';
 
   const targetProjectId = projectId || issue.project_id;
@@ -84,7 +88,25 @@ export default function MobileIssueCard({ issue, slug, projectId, states }: Mobi
                 {issue.project_name}
               </span>
             )}
+            {issue.workspace_name && (
+              <span className="text-[10px] text-muted-foreground/70 truncate">
+                {issue.workspace_name}
+              </span>
+            )}
           </div>
+
+          {issue.labels && issue.labels.length > 0 && (
+            <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+              {issue.labels.slice(0, 2).map((l) => (
+                <Badge key={l.id} variant="outline" className="text-[9px] h-4 px-1.5" style={{ borderColor: l.color || undefined }}>
+                  {l.name}
+                </Badge>
+              ))}
+              {issue.labels.length > 2 && (
+                <span className="text-[10px] text-muted-foreground">+{issue.labels.length - 2}</span>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </button>

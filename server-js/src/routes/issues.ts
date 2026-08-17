@@ -66,7 +66,7 @@ export const issueRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     if (!issue) throw new HTTPException(404, { message: 'Issue not found' })
     const body = issuesService.updateIssueSchema.parse(await c.req.json())
     const user = c.get('user')
-    const result = await issuesService.update(db, issue.id, body, user.sub)
+    const result = await issuesService.update(db, issue.id, body, user.sub, c.env, user.displayName)
     return c.json(result)
   })
 

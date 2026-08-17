@@ -28,6 +28,7 @@ export async function findByToken(db: DbClient, token: string) {
       displayName: users.displayName,
       avatar: users.avatar,
       isActive: users.isActive,
+      sessionExpiresAt: users.sessionExpiresAt,
     })
     .from(users)
     .where(and(eq(users.token, token), eq(users.isActive, 1), isNull(users.deletedAt)))
@@ -37,7 +38,7 @@ export async function findByToken(db: DbClient, token: string) {
 
 export async function createUser(
   db: DbClient,
-  data: { email: string; username: string; passwordHash: string | null; token: string }
+  data: { email: string; username: string; passwordHash: string | null; token: string; sessionExpiresAt?: string | null }
 ) {
   const id = uuid()
   const now = nowISO()
@@ -47,6 +48,7 @@ export async function createUser(
     username: data.username,
     passwordHash: data.passwordHash,
     token: data.token,
+    sessionExpiresAt: data.sessionExpiresAt ?? null,
     userTimezone: 'UTC',
     isActive: 1,
     isSuperuser: 0,
@@ -67,6 +69,6 @@ export async function updateUser(db: DbClient, id: string, data: Partial<typeof 
 export async function clearToken(db: DbClient, token: string) {
   await db
     .update(users)
-    .set({ token: null, updatedAt: nowISO() })
+    .set({ token: null, sessionExpiresAt: null, updatedAt: nowISO() })
     .where(eq(users.token, token))
 }

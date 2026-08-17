@@ -34,6 +34,11 @@ verified_address = "noreply@diatur.com"
 [observability]
 enabled = true
 
+# Daily 08:00 UTC cron → scheduled() handler sends due-date reminder emails to
+# issue followers. Each recipient's local day (users.user_timezone) dedupes sends.
+[triggers]
+crons = ["0 8 * * *"]
+
 [assets]
 directory = "../static-app"
 not_found_handling = "single-page-application"

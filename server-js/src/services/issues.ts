@@ -8,6 +8,9 @@ import * as issuesRepo from '../repositories/issues'
 import * as statesRepo from '../repositories/states'
 import * as activitiesRepo from '../repositories/activities'
 import * as feedbackRepo from '../repositories/feedback'
+import * as subscribersRepo from '../repositories/subscribers'
+import { notifyMentioned, resolveMentionsInHtml } from './issue_notifications'
+import type { Env } from '../lib/env'
 import { paginatedResponse } from '../lib/pagination'
 
 export const createIssueSchema = z.object({
@@ -79,8 +82,12 @@ export async function create(
   if (data.assignee_ids && data.assignee_ids.length > 0) {
     for (const assigneeId of data.assignee_ids) {
       await issuesRepo.addAssignee(db, issue.id, assigneeId)
+      // Assignees auto-follow so they see later comments/activity.
+      await subscribersRepo.autoFollow(db, issue.id, assigneeId)
     }
   }
+  // The creator auto-follows their own issue.
+  if (createdById) await subscribersRepo.autoFollow(db, issue.id, createdById)
   // First trail entry: who created this issue.
   await activitiesRepo.create(db, {
     verb: 'created',
@@ -166,7 +173,9 @@ export async function update(
   db: DbClient,
   issueId: string,
   data: z.infer<typeof updateIssueSchema>,
-  actorId?: string
+  actorId?: string,
+  env?: Env,
+  actorName?: string | null
 ) {
   const issue = await issuesRepo.findById(db, issueId)
   if (!issue) throw new HTTPException(404, { message: 'Issue not found' })
@@ -175,6 +184,8 @@ export async function update(
   // records real edits, not no-op PATCHes.
   const updateData: Record<string, unknown> = {}
   const events: { field: string; oldValue: string | null; newValue: string | null }[] = []
+  const descriptionChanged =
+    data.description_html !== undefined && data.description_html !== issue.descriptionHtml
 
   if (data.name !== undefined && data.name !== issue.name) {
     updateData.name = data.name
@@ -252,6 +263,22 @@ export async function update(
     }
     for (const assigneeId of data.assignee_ids) {
       await issuesRepo.addAssignee(db, issueId, assigneeId)
+      // Assignees auto-follow so they see later comments/activity.
+      await subscribersRepo.autoFollow(db, issueId, assigneeId)
+    }
+  }
+
+  // Mentions in the description: notify newly-mentioned users (and followers).
+  if (descriptionChanged && env && actorId) {
+    const { mentionedIds } = await resolveMentionsInHtml(db, issue.workspaceId, data.description_html)
+    if (mentionedIds.length > 0) {
+      await notifyMentioned(db, env, issue, {
+        actorId,
+        actorName,
+        mentionedIds,
+        source: 'description',
+        contentSnippet: data.description_html,
+      })
     }
   }
 
@@ -280,6 +307,7 @@ export async function addAssignee(db: DbClient, issueId: string, assigneeId: str
   const issue = await issuesRepo.findById(db, issueId)
   if (!issue) throw new HTTPException(404, { message: 'Issue not found' })
   await issuesRepo.addAssignee(db, issueId, assigneeId)
+  await subscribersRepo.autoFollow(db, issueId, assigneeId)
 }
 
 export async function removeAssignee(db: DbClient, issueId: string, assigneeId: string) {
@@ -300,6 +328,7 @@ export async function setAssignees(db: DbClient, issueId: string, assigneeIds: s
   }
   for (const assigneeId of assigneeIds) {
     await issuesRepo.addAssignee(db, issueId, assigneeId)
+    await subscribersRepo.autoFollow(db, issueId, assigneeId)
   }
 }
 

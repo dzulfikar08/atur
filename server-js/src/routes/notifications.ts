@@ -19,6 +19,18 @@ export const notificationRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const count = await notificationService.unreadCount(db, user.sub)
     return c.json({ count })
   })
+  .get('/preferences', authMiddleware, async (c) => {
+    const db = getDb(c.env.DB)
+    const user = c.get('user')
+    return c.json(await notificationService.getPreferences(db, user.sub))
+  })
+  .patch('/preferences', authMiddleware, async (c) => {
+    const db = getDb(c.env.DB)
+    const user = c.get('user')
+    const body = await c.req.json().catch(() => ({})) as { notification_type?: string; email_enabled?: boolean }
+    const result = await notificationService.updatePreferences(db, user.sub, body)
+    return c.json(result)
+  })
   .patch('/:id', authMiddleware, async (c) => {
     const db = getDb(c.env.DB)
     const user = c.get('user')

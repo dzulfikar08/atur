@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import CommentEditor from '@/components/editor/CommentEditor';
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { ArrowLeft, MessageSquare, Calendar, Clock, Link2, Plus, X, Trash2, Pencil } from '@/lib/icons';
+import { ArrowLeft, MessageSquare, Calendar, Clock, Link2, Plus, X, Trash2, Pencil, User, Bell } from '@/lib/icons';
 import BottomSheet from './BottomSheet';
 import CommentContent from '@/components/editor/CommentContent';
 import { toast } from 'sonner';
@@ -44,6 +44,7 @@ interface Issue {
   parent_id: string | null;
   created_at: string;
   updated_at: string;
+  assignees?: { id: string; email?: string | null; username?: string | null; display_name?: string | null; avatar?: string | null }[];
   project_detail?: { name: string; identifier: string };
 }
 
@@ -88,6 +89,7 @@ export default function MobileIssueDetail() {
   const [commentSort, setCommentSort] = useState<'newest' | 'oldest'>('newest');
   const [stateSheetOpen, setStateSheetOpen] = useState(false);
   const [prioritySheetOpen, setPrioritySheetOpen] = useState(false);
+  const [assigneeSheetOpen, setAssigneeSheetOpen] = useState(false);
 
   const { data: issue, isLoading } = useQuery({
     queryKey: ['issue', slug, projectId, issueSeqId],
@@ -125,6 +127,91 @@ export default function MobileIssueDetail() {
       qc.invalidateQueries({ queryKey: ['issue', slug, projectId, issueSeqId] });
     },
   });
+
+  // --- Assignees ---
+  const { data: members = [] } = useQuery({
+    queryKey: ['project-members', slug, projectId],
+    queryFn: () =>
+      apiFetch<{ results: { memberId: string; username?: string | null; email?: string | null; displayName?: string | null; avatar?: string | null }[] }>(
+        `/workspaces/${slug}/projects/${projectId}/members/`
+      ).then((d) => d.results).catch(() => []),
+    enabled: !!slug && !!projectId,
+  });
+
+  const currentAssigneeIds = new Set((issue?.assignees ?? []).map((a) => a.id));
+
+  const addAssigneeMutation = useMutation({
+    mutationFn: (assigneeId: string) =>
+      api.addAssignee(slug!, projectId!, Number(issueSeqId!), assigneeId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['issue', slug, projectId, issueSeqId] });
+      qc.invalidateQueries({ queryKey: ['issues', slug, projectId] });
+      qc.invalidateQueries({ queryKey: ['my-issues'] });
+      toast.success('Assignee added');
+    },
+    onError: () => toast.error('Failed to assign user'),
+  });
+
+  const removeAssigneeMutation = useMutation({
+    mutationFn: (assigneeId: string) =>
+      api.removeAssignee(slug!, projectId!, Number(issueSeqId!), assigneeId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['issue', slug, projectId, issueSeqId] });
+      qc.invalidateQueries({ queryKey: ['issues', slug, projectId] });
+      qc.invalidateQueries({ queryKey: ['my-issues'] });
+      toast.success('Assignee removed');
+    },
+    onError: () => toast.error('Failed to unassign user'),
+  });
+
+  const toggleAssignee = (assigneeId: string) => {
+    if (currentAssigneeIds.has(assigneeId)) {
+      removeAssigneeMutation.mutate(assigneeId);
+    } else {
+      addAssigneeMutation.mutate(assigneeId);
+    }
+  };
+
+  // --- Followers ---
+  const { data: subscribersData } = useQuery({
+    queryKey: ['subscribers', slug, projectId, issueSeqId],
+    queryFn: () =>
+      api.listSubscribers(slug!, projectId!, issueSeqId!).catch(() => ({ results: [] })),
+    enabled: !!slug && !!projectId && !!issueSeqId,
+  });
+  const subscribed = (subscribersData?.results ?? []).some((s) => s.user?.id === currentUser?.id);
+  const followerCount = (subscribersData?.results ?? []).length;
+
+  const followMutation = useMutation({
+    mutationFn: () => api.followIssue(slug!, projectId!, issueSeqId!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['subscribers', slug, projectId, issueSeqId] });
+      toast.success("You'll get notified about activity on this issue");
+    },
+    onError: () => toast.error('Failed to follow issue'),
+  });
+
+  const unfollowMutation = useMutation({
+    mutationFn: () => api.unfollowIssue(slug!, projectId!, issueSeqId!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['subscribers', slug, projectId, issueSeqId] });
+      toast.success('Unfollowed — you\'ll no longer get notified');
+    },
+    onError: () => toast.error('Failed to unfollow issue'),
+  });
+
+  // Workspace members in the shape the mention picker expects.
+  const mentionMembers = useMemo(
+    () =>
+      members.map((m) => ({
+        id: m.memberId,
+        username: m.username || m.email?.split('@')[0] || m.memberId.slice(0, 8),
+        display_name: m.displayName,
+        email: m.email,
+        avatar: m.avatar,
+      })),
+    [members]
+  );
 
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
@@ -296,6 +383,59 @@ export default function MobileIssueDetail() {
           </div>
         </div>
 
+        {/* Assignees */}
+        <div className="flex items-center gap-2">
+          <button
+            className="flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/50 transition-colors"
+            onClick={() => setAssigneeSheetOpen(true)}
+          >
+            <User className="h-3 w-3" />
+            {(issue.assignees ?? []).length === 0 ? (
+              <span>Assignees</span>
+            ) : (
+              <span className="flex -space-x-1.5">
+                {(issue.assignees ?? []).slice(0, 3).map((a) => (
+                  <span
+                    key={a.id}
+                    className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] font-medium text-muted-foreground"
+                  >
+                    {(a.display_name || a.email || a.username || '?').charAt(0).toUpperCase()}
+                  </span>
+                ))}
+                {(issue.assignees ?? []).length > 3 && (
+                  <span className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] text-muted-foreground">
+                    +{(issue.assignees ?? []).length - 3}
+                  </span>
+                )}
+              </span>
+            )}
+          </button>
+          {currentUser && !currentAssigneeIds.has(currentUser.id) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => addAssigneeMutation.mutate(currentUser.id)}
+              disabled={addAssigneeMutation.isPending}
+            >
+              <User className="h-3 w-3" /> Assign to me
+            </Button>
+          )}
+          <Button
+            variant={subscribed ? "secondary" : "outline"}
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={() => (subscribed ? unfollowMutation.mutate() : followMutation.mutate())}
+            disabled={followMutation.isPending || unfollowMutation.isPending}
+          >
+            <Bell className="h-3 w-3" />
+            {subscribed ? "Following" : "Follow"}
+            {followerCount > 0 && (
+              <span className="text-muted-foreground text-[10px]">{followerCount}</span>
+            )}
+          </Button>
+        </div>
+
         {/* Divider */}
         <div className="border-t" />
 
@@ -376,17 +516,18 @@ export default function MobileIssueDetail() {
                 </div>
                 {editingCommentId === c.id ? (
                   <div className="mt-1.5 space-y-2">
-                    <Textarea
+                    <CommentEditor
                       value={editCommentText}
-                      onChange={(e) => setEditCommentText(e.target.value)}
-                      className="text-sm"
-                      rows={3}
+                      onChange={setEditCommentText}
+                      placeholder="Edit comment..."
+                      resetKey={editingCommentId}
+                      members={mentionMembers}
                     />
                     <div className="flex items-center gap-2">
                       <Button
                         size="sm"
                         className="h-8"
-                        disabled={!editCommentText.trim() || editCommentMutation.isPending}
+                        disabled={!editCommentText.replace(/<[^>]*>/g, '').trim() || editCommentMutation.isPending}
                         onClick={() => editCommentMutation.mutate({ commentId: c.id, comment_html: editCommentText })}
                       >
                         {editCommentMutation.isPending ? 'Saving...' : 'Save'}
@@ -408,21 +549,27 @@ export default function MobileIssueDetail() {
 
       {/* Floating comment bar */}
       <div className="shrink-0 border-t bg-background p-3 safe-area-bottom">
-        <div className="flex items-center gap-2">
-          <Textarea
-            placeholder="Add a comment..."
-            className="flex-1 min-h-[36px] max-h-[72px] text-sm resize-none"
-            rows={1}
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-          />
+        <div className="flex items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <CommentEditor
+              value={commentText}
+              onChange={setCommentText}
+              placeholder="Add a comment..."
+              onSubmit={() => {
+                if (commentText.replace(/<[^>]*>/g, '').trim() && !commentMutation.isPending) {
+                  commentMutation.mutate(commentText);
+                }
+              }}
+              members={mentionMembers}
+            />
+          </div>
           <Button
             size="sm"
             className="h-9 shrink-0"
-            disabled={!commentText.trim() || commentMutation.isPending}
+            disabled={!commentText.replace(/<[^>]*>/g, '').trim() || commentMutation.isPending}
             onClick={() => commentMutation.mutate(commentText)}
           >
-            Send
+            {commentMutation.isPending ? '...' : 'Send'}
           </Button>
         </div>
       </div>
@@ -470,6 +617,45 @@ export default function MobileIssueDetail() {
               {p === issue.priority && <span className="text-xs ml-auto">Current</span>}
             </button>
           ))}
+        </div>
+      </BottomSheet>
+
+      {/* Assignee sheet */}
+      <BottomSheet open={assigneeSheetOpen} onClose={() => setAssigneeSheetOpen(false)} title="Assignees">
+        <div className="space-y-1">
+          {members.map((m) => {
+            const isAssigned = currentAssigneeIds.has(m.memberId);
+            return (
+              <button
+                key={m.memberId}
+                className={cn(
+                  'w-full text-left p-3 rounded-lg text-sm flex items-center gap-2 transition-colors',
+                  isAssigned ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/50'
+                )}
+                onClick={() => {
+                  hapticMedium();
+                  toggleAssignee(m.memberId);
+                }}
+              >
+                <span className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
+                  {(m.displayName || m.username || m.email || '?').charAt(0).toUpperCase()}
+                </span>
+                <span className="flex-1 truncate">{m.displayName || m.username || m.email}</span>
+                {isAssigned && <span className="text-xs ml-auto">Assigned</span>}
+              </button>
+            );
+          })}
+          {currentUser && !currentAssigneeIds.has(currentUser.id) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full h-8 text-xs gap-1"
+              onClick={() => { hapticMedium(); addAssigneeMutation.mutate(currentUser.id); }}
+              disabled={addAssigneeMutation.isPending}
+            >
+              <User className="h-3 w-3" /> Assign to me
+            </Button>
+          )}
         </div>
       </BottomSheet>
 

@@ -24,25 +24,17 @@ export interface SendResult {
   devCode?: string
 }
 
-// Send the OTP via the Cloudflare Email `send_email` binding. When the binding
-// is absent (e.g. local `wrangler dev` without it) the code is logged and
-// returned so the flow is exercisable without a live mail setup.
-export async function sendOtpEmail(env: Env, to: string, code: string): Promise<SendResult> {
-  // Envelope sender must equal the binding's verified_address.
-  const fromAddr = env.EMAIL_FROM || 'noreply@diatur.com'
+export interface NotificationEmail {
+  subject: string
+  text: string
+  html: string
+}
 
-  if (!env.SEND_EMAIL) {
-    console.log(`[portal] dev OTP (SEND_EMAIL binding absent) → ${to}: ${code}`)
-    return { sent: false, devCode: code }
-  }
-
-  const subject = `Your Atur verification code: ${code}`
-  const text = `Your Atur verification code is ${code}.\n\nThis code expires in 10 minutes. If you didn't request it, you can safely ignore this email.`
-  const html = otpEmailHtml(code)
-
-  // Minimal RFC822 MIME; CRLF line separators.
+// Build a multipart/alternative (text + html) RFC822 message for the Cloudflare
+// Email binding. Envelope sender must equal the binding's verified_address.
+function buildRawEmail(fromAddr: string, to: string, subject: string, text: string, html: string): string {
   const boundary = `atur-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  const raw = [
+  return [
     `From: Atur <${fromAddr}>`,
     `To: ${to}`,
     `Subject: ${subject}`,
@@ -61,6 +53,24 @@ export async function sendOtpEmail(env: Env, to: string, code: string): Promise<
     html,
     `--${boundary}--`,
   ].join('\r\n')
+}
+
+// Send the OTP via the Cloudflare Email `send_email` binding. When the binding
+// is absent (e.g. local `wrangler dev` without it) the code is logged and
+// returned so the flow is exercisable without a live mail setup.
+export async function sendOtpEmail(env: Env, to: string, code: string): Promise<SendResult> {
+  // Envelope sender must equal the binding's verified_address.
+  const fromAddr = env.EMAIL_FROM || 'noreply@diatur.com'
+
+  if (!env.SEND_EMAIL) {
+    console.log(`[portal] dev OTP (SEND_EMAIL binding absent) → ${to}: ${code}`)
+    return { sent: false, devCode: code }
+  }
+
+  const subject = `Your Atur verification code: ${code}`
+  const text = `Your Atur verification code is ${code}.\n\nThis code expires in 10 minutes. If you didn't request it, you can safely ignore this email.`
+  const html = otpEmailHtml(code)
+  const raw = buildRawEmail(fromAddr, to, subject, text, html)
 
   try {
     const msg = new EmailMessage(fromAddr, to, raw)
@@ -71,6 +81,60 @@ export async function sendOtpEmail(env: Env, to: string, code: string): Promise<
       message: `Email send failed: ${err instanceof Error ? err.message : String(err)}`,
     })
   }
+}
+
+// Generic notification email (comment alerts, mentions, due-date reminders).
+// Logs and skips when the binding is absent (local dev) — the caller decides
+// whether that's a hard failure; notification dispatch treats it as non-fatal.
+export async function sendNotificationEmail(env: Env, to: string, email: NotificationEmail): Promise<SendResult> {
+  const fromAddr = env.EMAIL_FROM || 'noreply@diatur.com'
+
+  if (!env.SEND_EMAIL) {
+    console.log(`[notify] dev email (SEND_EMAIL binding absent) → ${to}: ${email.subject}`)
+    return { sent: false }
+  }
+
+  const raw = buildRawEmail(fromAddr, to, email.subject, email.text, email.html)
+
+  try {
+    const msg = new EmailMessage(fromAddr, to, raw)
+    await env.SEND_EMAIL.send(msg)
+    return { sent: true }
+  } catch (err) {
+    console.error(`[notify] email send failed → ${to}:`, err)
+    return { sent: false }
+  }
+}
+
+// Shared styled layout for notification emails. bodyHtml is the inner content;
+// cta renders a button linking back to the app.
+export function notificationEmailHtml(opts: { title: string; bodyHtml: string; ctaText?: string; ctaUrl?: string }): string {
+  const cta = opts.ctaText && opts.ctaUrl
+    ? `<p style="margin:24px 0 0;"><a href="${opts.ctaUrl}" style="display:inline-block;padding:10px 20px;background:#3b82f6;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">${opts.ctaText}</a></p>`
+    : ''
+
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${opts.title}</title></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:32px 16px;">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #ececec;">
+<tr><td style="background:#3b82f6;padding:24px 32px;color:#ffffff;">
+<h1 style="margin:0;font-size:20px;font-weight:700;letter-spacing:-0.3px;">Atur</h1>
+</td></tr>
+<tr><td style="padding:32px;">
+<p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">${opts.bodyHtml}</p>
+${cta}
+</td></tr>
+<tr><td style="padding:16px 32px;background:#f9fafb;color:#6b7280;font-size:12px;text-align:center;line-height:1.5;">
+You received this email because you follow this issue or were mentioned on Atur.
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`
 }
 
 // The code is rendered as a single contiguous text node — CSS letter-spacing

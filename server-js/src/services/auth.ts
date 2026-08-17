@@ -6,6 +6,7 @@ import { rateLimit } from '../lib/rateLimit'
 import type { Env } from '../lib/env'
 import { genOtp, hashOtp, sendOtpEmail, OTP_TTL_SECONDS, OTP_RATE_WINDOW_SECONDS, OTP_RATE_MAX } from './email'
 import * as usersRepo from '../repositories/users'
+import { SESSION_TTL_SECONDS, sessionExpiryISO } from '../lib/session'
 import { HTTPException } from 'hono/http-exception'
 
 export const registerSchema = z.object({
@@ -31,6 +32,7 @@ export async function register(db: DbClient, data: z.infer<typeof registerSchema
     username: data.username,
     passwordHash,
     token,
+    sessionExpiresAt: sessionExpiryISO(),
   })
   if (!user) throw new HTTPException(500, { message: 'Failed to create user' })
   return { user: { id: user.id, email: user.email, username: user.username }, token }
@@ -46,7 +48,7 @@ export async function login(db: DbClient, data: z.infer<typeof loginSchema>) {
     throw new HTTPException(401, { message: 'Invalid email or password' })
   }
   const token = generateToken()
-  await usersRepo.updateUser(db, user.id, { token })
+  await usersRepo.updateUser(db, user.id, { token, sessionExpiresAt: sessionExpiryISO() })
   return { user: { id: user.id, email: user.email, username: user.username }, token }
 }
 
@@ -166,13 +168,14 @@ export async function verifyLoginOtp(
       username,
       passwordHash: null,
       token: generateToken(),
+      sessionExpiresAt: sessionExpiryISO(),
     })
     if (!created) throw new HTTPException(500, { message: 'Failed to create user' })
     userId = created.id
   }
 
   const token = generateToken()
-  await usersRepo.updateUser(db, userId, { token, isEmailVerified: 1 })
+  await usersRepo.updateUser(db, userId, { token, isEmailVerified: 1, sessionExpiresAt: sessionExpiryISO() })
   return { user: { id: userId, email: data.email, username }, token }
 }
 

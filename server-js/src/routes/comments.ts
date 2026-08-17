@@ -28,7 +28,7 @@ export const commentRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const user = c.get('user')
     const issueId = await resolveIssueId(c)
     const body = commentsService.createCommentSchema.parse(await c.req.json())
-    const comment = await commentsService.create(db, user.sub, issueId, body)
+    const comment = await commentsService.create(db, c.env, user.sub, issueId, body, user)
     return c.json(comment, 201)
   })
   .patch('/:commentId', authMiddleware, async (c) => {

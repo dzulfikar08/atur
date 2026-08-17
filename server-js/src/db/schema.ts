@@ -8,6 +8,11 @@ export const users = sqliteTable('users', {
   passwordHash: text('password_hash'),
   avatar: text('avatar'),
   token: text('token'),
+  // Session validity: ISO instant when users.token stops being accepted.
+  // Set to now+SESSION_TTL_SECONDS on login/register/OTP; a sliding window is
+  // enforced by authMiddleware (extends on activity). NULL = treat as always
+  // valid (legacy rows from before this column existed).
+  sessionExpiresAt: text('session_expires_at'),
   userTimezone: text('user_timezone').default('UTC'),
   isActive: integer('is_active').notNull().default(1),
   isSuperuser: integer('is_superuser').notNull().default(0),
@@ -305,7 +310,22 @@ export const issueSubscribers = sqliteTable('issue_subscribers', {
   createdAt: text('created_at'),
   updatedAt: text('updated_at'),
   deletedAt: text('deleted_at'),
-})
+}, (table) => [
+  uniqueIndex('uq_issue_subscribers_issue_user').on(table.issueId, table.subscriberId),
+])
+
+export const issueReminders = sqliteTable('issue_reminders', {
+  id: text('id').primaryKey(),
+  issueId: text('issue_id').notNull().references(() => issues.id, { onDelete: 'cascade' }),
+  // The date the reminder fired for (YYYY-MM-DD in the recipient's timezone) —
+  // dedupes so a due-date email goes out once per issue per day.
+  reminderDate: text('reminder_date').notNull(),
+  reminderType: text('reminder_type').notNull().default('target_date'),
+  createdAt: text('created_at'),
+  updatedAt: text('updated_at'),
+}, (table) => [
+  index('idx_issue_reminders_issue').on(table.issueId),
+])
 
 export const issueAttachments = sqliteTable('issue_attachments', {
   id: text('id').primaryKey(),
