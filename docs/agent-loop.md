@@ -166,6 +166,12 @@ session. Pin the session id per issue and retries always continue the right
 conversation. The JSON result frame also exposes per-run `usage` for token
 metering.
 
+**Token metering** — every `cmd` run (work attempts + each reviewer) reports
+its usage in the JSON result frame. The loop extracts it, accumulates per
+issue, and logs `tok <seq>: TOTAL in=… out=…` when the issue is marked Done.
+Per-attempt and per-review lines are logged as `tok` as they happen, so a run's
+cost is fully attributable per issue.
+
 The prompt tells the agent exactly what to read and what's expected, so a
 session never needs the whole feature or whole repo in context — it pulls what
 it needs via MCP and the filesystem.
