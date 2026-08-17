@@ -1,135 +1,238 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Atur Feedback Widget — Demo Host</title>
-  <style>
-    :root { color-scheme: light; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      color: #0f172a; background: #f8fafc;
-    }
-    .wrap { max-width: 760px; margin: 0 auto; padding: 48px 20px 120px; }
-    h1 { font-size: 28px; margin: 0 0 4px; }
-    .muted { color: #64748b; }
-    .card {
-      background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 20px 0;
-    }
-    label { display:block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
-    input[type=text], select {
-      width: 100%; padding: 8px 10px; font-size: 14px; border: 1px solid #cbd5e1;
-      border-radius: 8px; background: #fff;
-    }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
-    .row > div { flex: 1; min-width: 180px; }
-    button {
-      background: #6366f1; color: #fff; border: 0; border-radius: 8px; padding: 9px 14px;
-      font-size: 14px; font-weight: 600; cursor: pointer;
-    }
-    button.ghost { background: #e2e8f0; color: #0f172a; }
-    code { background: #eef2ff; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
-    pre { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 8px; overflow:auto; font-size: 12px; }
-    .fake h2 { margin-top: 0; }
-    .fake p { color: #475569; }
-    .ok { color: #16a34a; font-weight: 600; }
-    .err { color: #dc2626; font-weight: 600; }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <h1>Atur Feedback Widget — Demo Host</h1>
-    <p class="muted">A fake "customer website" to preview the bubble before adding it to a real site.</p>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Atur Feedback Widget — Demo Host</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          16px/1.6 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        color: #0f172a;
+        background: #f8fafc;
+      }
+      .wrap {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 48px 20px 120px;
+      }
+      h1 {
+        font-size: 28px;
+        margin: 0 0 4px;
+      }
+      .muted {
+        color: #64748b;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 20px;
+        margin: 20px 0;
+      }
+      label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        margin: 12px 0 4px;
+      }
+      input[type="text"],
+      select {
+        width: 100%;
+        padding: 8px 10px;
+        font-size: 14px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        background: #fff;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: end;
+      }
+      .row > div {
+        flex: 1;
+        min-width: 180px;
+      }
+      button {
+        background: #6366f1;
+        color: #fff;
+        border: 0;
+        border-radius: 8px;
+        padding: 9px 14px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.ghost {
+        background: #e2e8f0;
+        color: #0f172a;
+      }
+      code {
+        background: #eef2ff;
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 13px;
+      }
+      pre {
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 12px;
+        border-radius: 8px;
+        overflow: auto;
+        font-size: 12px;
+      }
+      .fake h2 {
+        margin-top: 0;
+      }
+      .fake p {
+        color: #475569;
+      }
+      .ok {
+        color: #16a34a;
+        font-weight: 600;
+      }
+      .err {
+        color: #dc2626;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Atur Feedback Widget — Demo Host</h1>
+      <p class="muted">
+        A fake "customer website" to preview the bubble before adding it to a real site.
+      </p>
 
-    <div class="card">
-      <div class="row">
-        <div>
-          <label>Origin</label>
-          <select id="origin">
-            <option value="http://localhost:8787">Local dev (localhost:8787)</option>
-            <option value="https://diatur.com" selected>Production (diatur.com)</option>
-          </select>
+      <div class="card">
+        <div class="row">
+          <div>
+            <label>Origin</label>
+            <select id="origin">
+              <option value="http://localhost:8787">Local dev (localhost:8787)</option>
+              <option value="https://app.diatur.com" selected>Production (app.diatur.com)</option>
+            </select>
+          </div>
+          <div>
+            <label>Public token</label>
+            <input id="token" type="text" placeholder="pk_fb_..." />
+          </div>
         </div>
-        <div>
-          <label>Public token</label>
-          <input id="token" type="text" placeholder="pk_fb_..." />
+        <div class="row" style="margin-top: 12px">
+          <div>
+            <label>Position (optional)</label>
+            <select id="pos">
+              <option value="">use board default</option>
+              <option value="bottom-right">bottom-right</option>
+              <option value="bottom-left">bottom-left</option>
+              <option value="top-right">top-right</option>
+              <option value="top-left">top-left</option>
+            </select>
+          </div>
+          <div style="flex: 0">
+            <label>&nbsp;</label>
+            <button onclick="load()">Load widget</button>
+            <button class="ghost" onclick="unload()">Remove</button>
+          </div>
         </div>
+        <p id="status" class="muted" style="margin-top: 12px"></p>
+        <pre id="snippet"></pre>
       </div>
-      <div class="row" style="margin-top:12px">
-        <div>
-          <label>Position (optional)</label>
-          <select id="pos">
-            <option value="">use board default</option>
-            <option value="bottom-right">bottom-right</option>
-            <option value="bottom-left">bottom-left</option>
-            <option value="top-right">top-right</option>
-            <option value="top-left">top-left</option>
-          </select>
-        </div>
-        <div style="flex:0">
-          <label>&nbsp;</label>
-          <button onclick="load()">Load widget</button>
-          <button class="ghost" onclick="unload()">Remove</button>
-        </div>
+
+      <div class="card fake">
+        <h2>Your product page</h2>
+        <p>
+          This is what a customer's site looks like. Load the widget above — a feedback bubble
+          appears in the corner. Click it to open the board.
+        </p>
+        <p>
+          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt
+          ut labore et dolore magna aliqua.
+        </p>
+        <p>
+          Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+          commodo consequat.
+        </p>
       </div>
-      <p id="status" class="muted" style="margin-top:12px"></p>
-      <pre id="snippet"></pre>
     </div>
 
-    <div class="card fake">
-      <h2>Your product page</h2>
-      <p>This is what a customer's site looks like. Load the widget above — a feedback bubble appears in the corner. Click it to open the board.</p>
-      <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
-      <p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
-    </div>
-  </div>
+    <script>
+      function buildSnippet() {
+        var origin = document.getElementById("origin").value;
+        var token = document.getElementById("token").value.trim();
+        var pos = document.getElementById("pos").value;
+        var attrs =
+          'src="' +
+          origin +
+          '/widget.js" data-atur-token="' +
+          token +
+          '"' +
+          (pos ? ' data-atur-position="' + pos + '"' : "") +
+          " async";
+        return "<script " + attrs + "><\/script>";
+      }
+      function refreshSnippet() {
+        document.getElementById("snippet").textContent = buildSnippet();
+      }
+      ["origin", "token", "pos"].forEach(function (id) {
+        document.getElementById(id).addEventListener("input", refreshSnippet);
+      });
+      refreshSnippet();
 
-  <script>
-    function buildSnippet() {
-      var origin = document.getElementById('origin').value;
-      var token = document.getElementById('token').value.trim();
-      var pos = document.getElementById('pos').value;
-      var attrs = 'src="' + origin + '/widget.js" data-atur-token="' + token + '"' + (pos ? ' data-atur-position="' + pos + '"' : '') + ' async';
-      return '<script ' + attrs + '><\/script>';
-    }
-    function refreshSnippet() { document.getElementById('snippet').textContent = buildSnippet(); }
-    ['origin', 'token', 'pos'].forEach(function (id) {
-      document.getElementById(id).addEventListener('input', refreshSnippet);
-    });
-    refreshSnippet();
+      function setStatus(msg, cls) {
+        var s = document.getElementById("status");
+        s.textContent = msg;
+        s.className = cls || "muted";
+      }
 
-    function setStatus(msg, cls) {
-      var s = document.getElementById('status');
-      s.textContent = msg;
-      s.className = cls || 'muted';
-    }
+      function unload() {
+        delete window.__aturFeedbackWidget;
+        var old = document.querySelector("script[data-atur-demo]");
+        if (old) old.remove();
+        var host = document.querySelector("[data-atur-widget]");
+        if (host) host.remove();
+        setStatus("Widget removed.");
+      }
 
-    function unload() {
-      delete window.__aturFeedbackWidget;
-      var old = document.querySelector('script[data-atur-demo]');
-      if (old) old.remove();
-      var host = document.querySelector('[data-atur-widget]');
-      if (host) host.remove();
-      setStatus('Widget removed.');
-    }
-
-    function load() {
-      unload();
-      var token = document.getElementById('token').value.trim();
-      if (!token) { setStatus('Enter a public token first (pk_fb_...).', 'err'); return; }
-      var origin = document.getElementById('origin').value;
-      var pos = document.getElementById('pos').value;
-      var s = document.createElement('script');
-      s.setAttribute('data-atur-demo', '');
-      s.src = origin + '/widget.js';
-      s.setAttribute('data-atur-token', token);
-      if (pos) s.setAttribute('data-atur-position', pos);
-      s.async = true;
-      s.onerror = function () { setStatus('Could not load ' + s.src + '. Is the worker running at that origin?', 'err'); };
-      s.onload = function () { setStatus('Widget loaded — look for the bubble in the corner. (If you do not see it, the token may be invalid.)', 'ok'); };
-      document.body.appendChild(s);
-    }
-  </script>
-</body>
+      function load() {
+        unload();
+        var token = document.getElementById("token").value.trim();
+        if (!token) {
+          setStatus("Enter a public token first (pk_fb_...).", "err");
+          return;
+        }
+        var origin = document.getElementById("origin").value;
+        var pos = document.getElementById("pos").value;
+        var s = document.createElement("script");
+        s.setAttribute("data-atur-demo", "");
+        s.src = origin + "/widget.js";
+        s.setAttribute("data-atur-token", token);
+        if (pos) s.setAttribute("data-atur-position", pos);
+        s.async = true;
+        s.onerror = function () {
+          setStatus("Could not load " + s.src + ". Is the worker running at that origin?", "err");
+        };
+        s.onload = function () {
+          setStatus(
+            "Widget loaded — look for the bubble in the corner. (If you do not see it, the token may be invalid.)",
+            "ok",
+          );
+        };
+        document.body.appendChild(s);
+      }
+    </script>
+  </body>
 </html>

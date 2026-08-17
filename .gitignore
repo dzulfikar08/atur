@@ -1,48 +1,31 @@
-# Rust
-target/
-**/*.rs.bk
-
-# Node
-frontend/node_modules/
-frontend/dist/
-
-# Build output
-static/
-static-app/
-static-editor/
-build/
-
-# Wrangler local dev state
-.wrangler/
-wrangler.local.toml
-
-# Database
-data/*.db
-data/*.db-shm
-data/*.db-wal
-data/search/
-
-# Environment
+node_modules
+.astro
+dist
+.wrangler
+.dev.vars
+*.log
+.DS_Store
 .env
 .env.*
+!.env.example
+!.env.mobile.example
+coverage
 
-# Command Code local preferences
-.commandcode/
+# generated CF types
+worker-configuration.d.ts
 
-# IDE
-.idea/
-.vscode/
+# editor
+.vscode
+.idea
 *.swp
 *.swo
 
-# OS
-.DS_Store
-Thumbs.db
+# capacitor native projects (regenerated via `cap add`)
+ios/
+android/
 
-# Capacitor
-frontend/ios/App/App/public/
-frontend/android/app/src/main/assets/public/
-.playwright-mcp/
+# Command Code local preferences
+.commandcode/
 
 # Machine-local MCP config (contains live API key, localhost)
 .mcp.json

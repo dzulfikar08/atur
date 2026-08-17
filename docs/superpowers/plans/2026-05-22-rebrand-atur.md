@@ -13,6 +13,7 @@
 ### Task 1: Replace favicon with Atur signal nodes logo
 
 **Files:**
+
 - Overwrite: `frontend/public/favicon.svg`
 
 - [ ] **Step 1: Write the new favicon SVG**
@@ -43,6 +44,7 @@ git commit -m "brand: replace Plane PMO favicon with Atur signal nodes logo"
 ### Task 2: Update index.html title
 
 **Files:**
+
 - Modify: `frontend/index.html`
 
 - [ ] **Step 1: Replace the title**
@@ -71,6 +73,7 @@ git commit -m "brand: update page title to Atur"
 ### Task 3: Update Sidebar brand mark
 
 **Files:**
+
 - Modify: `frontend/src/components/layout/Sidebar.tsx`
 
 The sidebar workspace switcher shows a letter initial in a colored square. Keep the workspace initial logic but ensure the fallback shows "A" for Atur (instead of "W" for Workspace).
@@ -80,13 +83,17 @@ The sidebar workspace switcher shows a letter initial in a colored square. Keep 
 In `Sidebar.tsx` line 78, the workspace switcher button shows:
 
 ```tsx
-{(currentSlug ?? slug)?.[0]?.toUpperCase() ?? 'W'}
+{
+  (currentSlug ?? slug)?.[0]?.toUpperCase() ?? "W";
+}
 ```
 
 Change to:
 
 ```tsx
-{(currentSlug ?? slug)?.[0]?.toUpperCase() ?? 'A'}
+{
+  (currentSlug ?? slug)?.[0]?.toUpperCase() ?? "A";
+}
 ```
 
 - [ ] **Step 2: Commit**
@@ -101,6 +108,7 @@ git commit -m "brand: update sidebar fallback initial to Atur"
 ### Task 4: Update Landing Page branding
 
 **Files:**
+
 - Modify: `frontend/src/pages/LandingPage.tsx`
 
 Replace all occurrences of "Plane PMO" and related branding with "Atur".
@@ -108,12 +116,15 @@ Replace all occurrences of "Plane PMO" and related branding with "Atur".
 - [ ] **Step 1: Update document title (line 71)**
 
 Change:
+
 ```tsx
-document.title = 'Plane PMO — Project Management, Refined';
+document.title = "Plane PMO — Project Management, Refined";
 ```
+
 to:
+
 ```tsx
-document.title = 'Atur — Organize Everything';
+document.title = "Atur — Organize Everything";
 ```
 
 - [ ] **Step 2: Update hero heading (line 138)**
@@ -148,6 +159,7 @@ git commit -m "brand: update landing page to Atur"
 ### Task 5: Update Auth pages branding
 
 **Files:**
+
 - Modify: `frontend/src/pages/auth/LoginPage.tsx`
 - Modify: `frontend/src/pages/auth/RegisterPage.tsx`
 - Modify: `frontend/src/pages/auth/OAuthCallbackPage.tsx`
@@ -178,15 +190,19 @@ git commit -m "brand: update auth pages to Atur"
 ### Task 6: Update Settings page branding
 
 **Files:**
+
 - Modify: `frontend/src/pages/settings/ProfilePage.tsx`
 
 - [ ] **Step 1: Update brand reference (line 172)**
 
 Change:
+
 ```tsx
 <CardDescription>Customize how Plane PMO looks</CardDescription>
 ```
+
 to:
+
 ```tsx
 <CardDescription>Customize how Atur looks</CardDescription>
 ```
@@ -203,6 +219,7 @@ git commit -m "brand: update settings page to Atur"
 ### Task 7: Update Vite PWA config and Capacitor
 
 **Files:**
+
 - Modify: `frontend/vite.config.ts`
 - Modify: `frontend/capacitor.config.ts`
 
@@ -243,6 +260,7 @@ Expected: successful build
 - [ ] **Step 4: Verify visually**
 
 Start the dev server (`npm run dev`), check:
+
 - Browser tab title shows "Atur"
 - Favicon shows the signal nodes logo
 - Landing page says "Atur"

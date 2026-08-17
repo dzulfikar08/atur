@@ -1,0 +1,77 @@
+import { Hono } from "hono";
+import { and, eq, isNull } from "drizzle-orm";
+import type { Env } from "../lib/env";
+import { getDb } from "../db/index";
+import { authMiddleware } from "../middleware/auth";
+import * as cyclesService from "../services/cycles";
+import * as schema from "../db/schema";
+
+export const cycleRoutes = new Hono<{ Bindings: Env }>({ strict: false })
+  .get("/", async (c) => {
+    const db = getDb(c.env.DB);
+    const projectId = c.req.param("projectId")!;
+    const result = await cyclesService.list(db, projectId, c);
+    return c.json(result);
+  })
+  .post("/", authMiddleware, async (c) => {
+    const db = getDb(c.env.DB);
+    const projectId = c.req.param("projectId")!;
+    const workspaceSlug = c.req.param("slug")!;
+    const user = c.get("user");
+    const body = cyclesService.createCycleSchema.parse(await c.req.json());
+    const result = await cyclesService.create(db, body, projectId, workspaceSlug, user.sub);
+    return c.json(result, 201);
+  })
+  .get("/:cycleId", async (c) => {
+    const db = getDb(c.env.DB);
+    const cycleId = c.req.param("cycleId")!;
+    const result = await cyclesService.getById(db, cycleId);
+    return c.json(result);
+  })
+  .patch("/:cycleId", authMiddleware, async (c) => {
+    const db = getDb(c.env.DB);
+    const cycleId = c.req.param("cycleId")!;
+    const body = cyclesService.updateCycleSchema.parse(await c.req.json());
+    const result = await cyclesService.update(db, cycleId, body);
+    return c.json(result);
+  })
+  .delete("/:cycleId", authMiddleware, async (c) => {
+    const db = getDb(c.env.DB);
+    const cycleId = c.req.param("cycleId")!;
+    await cyclesService.remove(db, cycleId);
+    return c.json({ success: true });
+  })
+  .post("/:cycleId/issues", authMiddleware, async (c) => {
+    const db = getDb(c.env.DB);
+    const cycleId = c.req.param("cycleId")!;
+    const body = cyclesService.addIssueSchema.parse(await c.req.json());
+    await cyclesService.addIssue(db, cycleId, body);
+    return c.json({ success: true }, 201);
+  })
+  .get("/:cycleId/issues", async (c) => {
+    const db = getDb(c.env.DB);
+    const cycleId = c.req.param("cycleId")!;
+    const rows = await db
+      .select()
+      .from(schema.issues)
+      .innerJoin(schema.cycleIssues, eq(schema.cycleIssues.issueId, schema.issues.id))
+      .where(and(eq(schema.cycleIssues.cycleId, cycleId), isNull(schema.issues.deletedAt)));
+    return c.json({ results: rows.map((r) => r.issues) });
+  })
+  .get("/:cycleId/cycle-issues", async (c) => {
+    const db = getDb(c.env.DB);
+    const cycleId = c.req.param("cycleId")!;
+    const rows = await db
+      .select()
+      .from(schema.issues)
+      .innerJoin(schema.cycleIssues, eq(schema.cycleIssues.issueId, schema.issues.id))
+      .where(and(eq(schema.cycleIssues.cycleId, cycleId), isNull(schema.issues.deletedAt)));
+    return c.json({ results: rows.map((r) => r.issues) });
+  })
+  .delete("/:cycleId/issues/:issueId", authMiddleware, async (c) => {
+    const db = getDb(c.env.DB);
+    const cycleId = c.req.param("cycleId")!;
+    const issueId = c.req.param("issueId")!;
+    await cyclesService.removeIssue(db, cycleId, issueId);
+    return c.json({ success: true });
+  });

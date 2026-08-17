@@ -1,0 +1,22 @@
+{
+  "appId": "com.planepmo.app",
+  "appName": "Atur",
+  "webDir": "dist/client",
+  "server": {
+    "androidScheme": "https"
+  },
+  "ios": {
+    "contentInset": "automatic"
+  },
+  "plugins": {
+    "StatusBar": {
+      "style": "dark",
+      "backgroundColor": "#ffffff"
+    },
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#ffffff",
+      "androidScaleType": "CENTER_CROP"
+    }
+  }
+}

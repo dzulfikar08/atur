@@ -1,0 +1,30 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const APP_URL = "https://app.diatur.com";
+---
+
+<BaseLayout
+  title="Support — Atur"
+  description="Get help with Atur: documentation, the support portal, and direct contact."
+  canonical="/support"
+>
+  <div class="legal">
+    <h1>Support</h1>
+    <div class="prose">
+      <p>
+        Need a hand? The fastest way to get help is through the in-app support
+        portal — open Atur and start a ticket from the
+        <strong> Support</strong> section.
+      </p>
+      <p>
+        <a href={APP_URL + "/auth/login"} class="btn-primary">Open the app →</a>
+      </p>
+      <p>
+        Prefer email? Write to
+        <a href="mailto:support@diatur.com"> support@diatur.com</a> and our team
+        will get back to you within one business day.
+      </p>
+    </div>
+  </div>
+</BaseLayout>
