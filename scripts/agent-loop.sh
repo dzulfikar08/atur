@@ -35,6 +35,8 @@
 #   ATUR_MAX_ATTEMPTS                       (default 3)
 #   ATUR_REVIEWERS      parallel review agents per review gate (default 2);
 #                       ALL must approve for the issue to be marked Done.
+#   ATUR_MAX_TURNS_WORK token budget per work session (default 50)
+#   ATUR_MAX_TURNS_REVIEW  token budget per reviewer session (default 20)
 #   ATUR_REPO_DIR       repo for agent sessions (defaults to this repo root)
 #   ATUR_AGENT_EMAIL    assignee email for the agent user (default "agent@diatur.com")
 #   ATUR_DRY_RUN        1 = log only, never spawn (default 0)
@@ -68,6 +70,9 @@ BREAKDOWN_LABEL="${ATUR_BREAKDOWN_LABEL:-agent-breakdown}"
 MAX_CONCURRENCY="${ATUR_MAX_CONCURRENCY:-2}"
 MAX_ATTEMPTS="${ATUR_MAX_ATTEMPTS:-3}"
 REVIEWERS="${ATUR_REVIEWERS:-2}"
+# Token budget cap per headless session (work agents get more, reviewers fewer).
+MAX_TURNS_WORK="${ATUR_MAX_TURNS_WORK:-50}"
+MAX_TURNS_REVIEW="${ATUR_MAX_TURNS_REVIEW:-20}"
 REPO_DIR="${ATUR_REPO_DIR:-$REPO_ROOT}"
 AGENT_EMAIL="${ATUR_AGENT_EMAIL:-agent@diatur.com}"
 DRY_RUN="${ATUR_DRY_RUN:-0}"
@@ -145,9 +150,9 @@ agent_headless() { # <prompt> <review|work> → runs the agent, echoes final tex
   case "$AGENT" in
     cmd)
       if [[ "$mode" == "review" ]]; then
-        cmd -p "$prompt" --output-format json --yolo --max-turns 50 2>&1 || true
+        cmd -p "$prompt" --output-format json --yolo --max-turns "$MAX_TURNS_REVIEW" 2>&1 || true
       else
-        cmd -p "$prompt" --yolo --max-turns 100 2>&1 || true
+        cmd -p "$prompt" --yolo --max-turns "$MAX_TURNS_WORK" 2>&1 || true
       fi
       ;;
     claude)
@@ -279,12 +284,6 @@ claim_issue() { # <project_id> <issue_id> <agent_member_id>
   mcp set_assignee "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"assignee_id\":\"$3\"}" >/dev/null
 }
 
-is_completed() { # <project_id> <issue_id>
-  local raw
-  raw=$(mcp get_issue "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\"}")
-  [[ "$(jtext '.result.content[0].text | fromjson | .stateId' "$raw")" == "$(state_id "$1" done)" ]]
-}
-
 # --- state machine transitions ---------------------------------------------
 mark_in_progress()        { mcp update_issue "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"state_id\":\"$(state_id "$1" inprogress)\"}" >/dev/null; }
 mark_need_review()        { mcp update_issue "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"state_id\":\"${3:-$(state_id "$1" needreview)}\"}" >/dev/null; }
@@ -299,11 +298,14 @@ json_escape() { printf '%s' "$1" | python3 -c 'import json,sys; print(json.dumps
 comment() { mcp add_comment "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"comment_html\":\"$(json_escape "$3")\"}" >/dev/null; }
 
 # Current state role of an issue ("" if it doesn't match a known role).
-issue_role() { # <project_id> <issue_id> → echoes inprogress|needreview|needconfirm|done|queue|""
+# Fetches the issue ONCE and classifies it; the stateId + completed check are
+# both derived from the same response to avoid a second get_issue call.
+issue_role() { # <project_id> <issue_id> → echoes inprogress|needreview|needconfirm|done|queue|"" (also sets ISSUE_STATE_ID)
   local raw role
   raw=$(mcp get_issue "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\"}")
   local sid
   sid=$(jtext '.result.content[0].text | fromjson | .stateId' "$raw")
+  ISSUE_STATE_ID="$sid"
   local k
   for k in inprogress needreview needconfirm done; do
     if [[ -n "$sid" && "$sid" == "$(state_id "$1" "$k")" ]]; then echo "$k"; return 0; fi
@@ -582,7 +584,7 @@ Work autonomously. Post your findings as comments on the issue."
     prompt_file="$(mktemp -t "atur-prompt-$seq-XXXXXX")"
     printf '%s' "$prompt" > "$prompt_file"
     if [[ "$AGENT" == "cmd" && "$attempt" -gt 1 ]]; then
-      cmdline="cmd -p \"\$(cat $prompt_file)\" --continue --yolo --max-turns 100; tmux wait-for -S atur:$seq"
+      cmdline="cmd -p \"\$(cat $prompt_file)\" --continue --yolo --max-turns $MAX_TURNS_WORK; tmux wait-for -S atur:$seq"
     else
       cmdline="agent_headless \"\$(cat $prompt_file)\" work; tmux wait-for -S atur:$seq"
     fi
@@ -613,8 +615,10 @@ Work autonomously. Post your findings as comments on the issue."
 
   # If the agent parked the issue in Need Confirmation, pause: no review, no
   # retry, no attempt burn — a human must move it back to a queue state (or
-  # Done) before the loop touches it again.
+  # Done) before the loop touches it again. The single issue_role call below
+  # also classifies "already done" (no separate is_completed get_issue call).
   local role
+  ISSUE_STATE_ID=""
   role=$(issue_role "$project_id" "$issue_id")
   if [[ "$role" == "needconfirm" ]]; then
     log "pause $seq: agent requested human confirmation — parked (no retry)"
@@ -623,7 +627,7 @@ Work autonomously. Post your findings as comments on the issue."
   fi
 
   # If the agent moved the issue itself, treat as done.
-  if is_completed "$project_id" "$issue_id"; then
+  if [[ "$role" == "done" || "$ISSUE_STATE_ID" == "$(state_id "$project_id" done)" ]]; then
     log "done  $seq: issue already moved to a completed state"
     return 0
   fi
@@ -703,33 +707,43 @@ main() {
     # Refresh the queue: issues tagged agent-ready in a queue state.
     queue=()
     for pid in "${project_ids[@]}"; do
-      local states_json
-      states_json=$(mcp list_states "{\"project_id\":\"$pid\",\"workspace\":\"$WORKSPACE\"}" 2>/dev/null || echo '{"result":{"content":[{"type":"text","text":"[]"}]}}')
+      # Resolve state IDs once per project (cached across polls; the review
+      # gate re-resolves 'Need Review' on demand, so the cache can't go stale
+      # in a way that skips the gate). Saves one list_states call per poll.
       local states_text
-      states_text=$(jtext '.result.content[0].text' "$states_json")
-      # Resolve the state IDs once per project per poll.
-      set_state "$pid" inprogress "$(state_id_for 'In Progress' "$states_text")"
-      set_state "$pid" needreview "$(state_id_for 'Need Review' "$states_text")"
-      set_state "$pid" needconfirm "$(state_id_for 'Need Confirmation' "$states_text")"
-      set_state "$pid" done "$(state_id_for 'Done' "$states_text")"
+      if [[ -z "$(state_id "$pid" inprogress)" || -z "$(state_id "$pid" done)" ]]; then
+        local states_json
+        states_json=$(mcp list_states "{\"project_id\":\"$pid\",\"workspace\":\"$WORKSPACE\"}" 2>/dev/null || echo '{"result":{"content":[{"type":"text","text":"[]"}]}}')
+        states_text=$(jtext '.result.content[0].text' "$states_json")
+        set_state "$pid" inprogress "$(state_id_for 'In Progress' "$states_text")"
+        set_state "$pid" needreview "$(state_id_for 'Need Review' "$states_text")"
+        set_state "$pid" needconfirm "$(state_id_for 'Need Confirmation' "$states_text")"
+        set_state "$pid" done "$(state_id_for 'Done' "$states_text")"
+      fi
       if [[ -z "$(state_id "$pid" inprogress)" || -z "$(state_id "$pid" done)" ]]; then
         warn "poll  project $pid: missing states (need 'In Progress'/'Done'); skipping"
         continue
       fi
 
+      # ONE REST fetch per project per poll: the enriched response carries
+      # .labels, so we derive BOTH the breakdown candidates (issues tagged with
+      # the breakdown label) and the work queue from the same JSON — no second
+      # query for the breakdown label.
+      local list_json
+      list_json=$(rest_list_issues "$pid" 2>/dev/null || echo '{"results":[]}')
+
       # Feature breakdown: any issue tagged with the breakdown label that is
       # still in a queue state gets decomposed into child issues (which are
       # then worked individually). Idempotent — see break_down_issue.
-      local bd_list
-      bd_list=$(rest_list_issues "$pid" "$BREAKDOWN_LABEL" 2>/dev/null || echo "[]")
       while IFS=$'\t' read -r bd_group bd_name bd_id bd_seq; do
         [[ -n "$bd_id" ]] || continue
         if [[ "$bd_name" == "Backlog" || "$bd_name" == "Todo" || "$bd_group" == "unstarted" ]]; then
           log "poll  $pid: breaking down feature '$bd_name' ($bd_id)"
           break_down_issue "$pid" "$bd_id" "$bd_seq" "$bd_name" || warn "poll  $pid: breakdown of $bd_id failed"
         fi
-      done < <(echo "$bd_list" | jq -r '
+      done < <(echo "$list_json" | jq -r --arg bl "$BREAKDOWN_LABEL" '
         .results[]? |
+        select(([.labels[]?.name] | index($bl)) != null) |
         select(.state.name == "Backlog" or .state.name == "Todo" or .state.group == "unstarted") |
         [.state.group, .state.name, .id, .sequence_id] | @tsv' 2>/dev/null)
 
@@ -743,7 +757,7 @@ main() {
           log "queue  $issue_id: $issue_name (state=$state_name group=$group)"
           queue+=("$pid|$issue_id|$issue_name|$seq")
         fi
-      done < <(rest_list_issues "$pid" | jq -r '
+      done < <(echo "$list_json" | jq -r '
         .results[]? |
         select(.state.name == "Backlog" or .state.name == "Todo" or .state.group == "unstarted") |
         [.state.group, .state.name, .id, .name, .sequence_id] | @tsv' 2>/dev/null)

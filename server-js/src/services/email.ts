@@ -37,17 +37,29 @@ export async function sendOtpEmail(env: Env, to: string, code: string): Promise<
   }
 
   const subject = `Your Atur verification code: ${code}`
+  const text = `Your Atur verification code is ${code}.\n\nThis code expires in 10 minutes. If you didn't request it, you can safely ignore this email.`
   const html = otpEmailHtml(code)
 
   // Minimal RFC822 MIME; CRLF line separators.
+  const boundary = `atur-${Date.now()}-${Math.random().toString(36).slice(2)}`
   const raw = [
     `From: Atur <${fromAddr}>`,
     `To: ${to}`,
     `Subject: ${subject}`,
     'MIME-Version: 1.0',
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: 7bit',
+    '',
+    text,
+    `--${boundary}`,
     'Content-Type: text/html; charset=UTF-8',
+    'Content-Transfer-Encoding: 7bit',
     '',
     html,
+    `--${boundary}--`,
   ].join('\r\n')
 
   try {
@@ -61,15 +73,11 @@ export async function sendOtpEmail(env: Env, to: string, code: string): Promise<
   }
 }
 
-// Table-based layout for maximum email-client compatibility. The code is split
-// into individual digits, each in its own pill, so it renders as a clean
-// one-time-code entry on any client.
+// The code is rendered as a single contiguous text node — CSS letter-spacing
+// gives it the spaced-out one-time-code look, but selecting/copying it yields
+// the raw digits ("548936"), not "5 4 8 9 3 6".
 function otpEmailHtml(code: string): string {
-  const digits = code.split('').map(
-    (d) =>
-      `<td align="center" style="width:52px;padding:8px;font-size:28px;font-weight:700;letter-spacing:6px;font-family:monospace;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;color:#111827;">${d}</td>`
-  )
-  const codeTable = `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;border-spacing:6px;"><tr>${digits.join('')}</tr></table>`
+  const codeBox = `<div style="margin:0 auto;padding:16px 24px;font-size:32px;font-weight:700;letter-spacing:8px;font-family:Menlo,Consolas,monospace;text-align:center;background:#f9fafb;border:1px dashed #9ca3af;border-radius:8px;color:#111827;">${code}</div>`
 
   return `<!DOCTYPE html>
 <html>
@@ -84,7 +92,7 @@ function otpEmailHtml(code: string): string {
 <tr><td style="padding:32px;">
 <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">Hi there,</p>
 <p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.6;">Use the verification code below to sign in to your Atur account.</p>
-${codeTable}
+${codeBox}
 <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.6;">This code expires in 10 minutes. If you didn't request it, you can safely ignore this email.</p>
 </td></tr>
 <tr><td style="padding:16px 32px;background:#f9fafb;color:#6b7280;font-size:12px;text-align:center;line-height:1.5;">
