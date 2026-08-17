@@ -1,0 +1,268 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const APP_URL = "https://app.diatur.com";
+
+const features = [
+  {
+    icon: "🗂",
+    title: "Kanban Boards",
+    desc: "Drag-and-drop issue management with custom workflows and states.",
+  },
+  {
+    icon: "🎫",
+    title: "Support Portal",
+    desc: "A shared inbox and customer portal. Turn emails into tracked tickets with SLAs.",
+  },
+  {
+    icon: "🤝",
+    title: "CRM & Deals",
+    desc: "Track contacts, companies, and a sales pipeline. Close deals without leaving your workspace.",
+  },
+  {
+    icon: "⏱",
+    title: "Timesheets",
+    desc: "Log time on issues and projects. Billable hours and reports from one source of truth.",
+  },
+  {
+    icon: "📄",
+    title: "Connected Pages",
+    desc: "Rich text with [[wikilinks]], backlinks, and a knowledge graph to connect your thinking.",
+  },
+  {
+    icon: "🤖",
+    title: "AI Integration",
+    desc: "Built-in MCP server for AI agents. Let Claude, Cursor, and Copilot run your workflows.",
+  },
+];
+
+const metrics = [
+  { value: "6", label: "Tools in one" },
+  { value: "35+", label: "MCP Tools" },
+  { value: "99.9%", label: "Uptime SLA" },
+  { value: "0", label: "Servers to manage" },
+];
+
+const pageCards = [
+  "Rich text with slash commands and callouts",
+  "Wikilinks with backlink references",
+  "Interactive knowledge graph visualization",
+  "Embedded drawing whiteboards",
+];
+
+const whyCards = [
+  {
+    title: "Instant Setup",
+    desc: "Create a workspace in seconds. No servers, no config — we host it on Cloudflare's global edge.",
+  },
+  {
+    title: "Cloud-Secure",
+    desc: "Hosted on Cloudflare with encryption and daily backups. Enterprise-grade security, by default.",
+  },
+  {
+    title: "All-in-One",
+    desc: "Stop paying for Jira, Zendesk, HubSpot, and Toggl separately. One subscription, one login.",
+  },
+  {
+    title: "AI-Native",
+    desc: "35+ MCP tools let AI agents create issues, answer tickets, and update deals for you.",
+  },
+];
+
+const pricing = [
+  {
+    name: "Starter",
+    price: "$9",
+    blurb: "For individuals getting started with the whole toolkit.",
+    items: [
+      "Unlimited projects & issues",
+      "Support portal & tickets",
+      "CRM contacts & deals",
+      "Timesheets & time tracking",
+      "Pages & knowledge graph",
+      "All 35+ MCP tools",
+    ],
+  },
+  {
+    name: "Team",
+    price: "$29",
+    blurb: "For growing teams running everything together.",
+    popular: true,
+    items: [
+      "Everything in Starter",
+      "Unlimited team members",
+      "Custom domain",
+      "Daily automatic backups",
+      "Priority support",
+      "Onboarding assistance",
+    ],
+  },
+];
+---
+
+<BaseLayout
+  title="Atur — One Workspace for Everything"
+  description="Issues, sprints, support tickets, deals, and timesheets — one app on Cloudflare's edge. No more stitching five tools together."
+  canonical="/"
+>
+  <section class="hero">
+    <div class="container">
+      <span class="hero-badge"><span class="dot"></span> Projects, support &amp; CRM — in one place</span>
+      <h1>
+        One workspace
+        <br />
+        <span class="serif" style="color: var(--muted)">for your whole operation</span>
+      </h1>
+      <p class="lede">
+        Issues, sprints, support tickets, deals, and timesheets — one app on
+        Cloudflare's edge. No more stitching five tools together.
+      </p>
+      <div class="hero-actions">
+        <a class="btn-primary" href={`${APP_URL}/auth/login`}>Start Free Trial →</a>
+        <a class="btn-outline" href={`${APP_URL}/auth/login`}>View Demo</a>
+      </div>
+
+      <div class="metrics">
+        {
+          metrics.map((m) => (
+            <div class="metric">
+              <strong>{m.value}</strong>
+              <span>{m.label}</span>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="features">
+    <div class="container">
+      <p class="section-kicker">Capabilities</p>
+      <h2>
+        Replace your whole stack, <span class="serif" style="color: var(--muted)">not just your project tool</span>
+      </h2>
+      <p class="section-intro">
+        Most teams stitch together a separate tool for every job. Atur replaces them all.
+      </p>
+      <div class="feature-grid">
+        {
+          features.map((f) => (
+            <div class="feature-card">
+              <span class="icon">{f.icon}</span>
+              <h3>{f.title}</h3>
+              <p>{f.desc}</p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="pages">
+    <div class="container">
+      <p class="section-kicker">Knowledge Base</p>
+      <h2>
+        Pages that connect <span class="serif" style="color: var(--muted)">your thinking</span>
+      </h2>
+      <div class="split">
+        <div>
+          <p class="section-intro">
+            Write documentation, meeting notes, and specs with an Obsidian-inspired
+            editor. Use <code>[[wikilinks]]</code> to connect pages, then explore
+            everything through an interactive knowledge graph.
+          </p>
+          <ul>
+            {pageCards.map((text) => <li>{text}</li>)}
+          </ul>
+        </div>
+        <div class="feature-card" style="min-height: 280px">
+          <span class="icon">🧠</span>
+          <h3>Knowledge graph</h3>
+          <p>
+            Every page is a node. Follow links and backlinks to see how your
+            documentation, specs, and meeting notes fit together.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="why">
+    <div class="container">
+      <p class="section-kicker">Why Atur</p>
+      <h2>One platform, not five</h2>
+      <div class="feature-grid">
+        {
+          whyCards.map((c) => (
+            <div class="feature-card">
+              <h3>{c.title}</h3>
+              <p>{c.desc}</p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="pricing">
+    <div class="container">
+      <p class="section-kicker">Pricing</p>
+      <h2>Simple, affordable pricing</h2>
+      <p class="section-intro" style="margin-inline: auto; text-align: center">
+        No per-seat charges. No feature gates. One subscription, every tool included.
+      </p>
+      <div class="pricing-grid">
+        {
+          pricing.map((p) => (
+            <div class={`price-card${p.popular ? " popular" : ""}`}>
+              <h3>{p.name}</h3>
+              <div class="price">{p.price} <span>/month</span></div>
+              <p style="color: var(--muted); font-size: 14px">{p.blurb}</p>
+              <ul>
+                {p.items.map((item) => <li>{item}</li>)}
+              </ul>
+              <a class="btn-primary btn" href={`${APP_URL}/auth/login`}>Start Free Trial</a>
+            </div>
+          ))
+        }
+      </div>
+      <p style="text-align: center; color: var(--muted); font-size: 13px; margin-top: 32px">
+        14-day free trial on all plans. No credit card required.
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <p class="section-kicker">AI / MCP</p>
+      <h2>Bring Atur into your AI editor</h2>
+      <div class="split">
+        <div>
+          <p class="section-intro">
+            Atur speaks MCP. Connect Claude Code or Cursor and manage issues,
+            sprints, CRM, and timesheets without leaving your editor.
+          </p>
+          <a class="btn-primary" href={`${APP_URL}/auth/login`} style="margin-top: 28px; display: inline-flex">
+            Connect Atur →
+          </a>
+        </div>
+        <div class="feature-card">
+          <span class="icon">🤖</span>
+          <h3>35+ MCP tools</h3>
+          <p>
+            Create issues, answer tickets, and update deals from any AI agent —
+            all through one <code>/mcp</code> endpoint.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div class="container">
+      <h2>Ready to ship faster?</h2>
+      <p>Spin up a workspace in seconds. Run projects, support, and sales from one place.</p>
+      <a class="btn-primary" href={`${APP_URL}/auth/login`}>Get Started Now →</a>
+    </div>
+  </section>
+</BaseLayout>

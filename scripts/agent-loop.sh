@@ -60,7 +60,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-API_URL="${ATUR_API_URL:-https://diatur.com/mcp}"
+API_URL="${ATUR_API_URL:-https://app.diatur.com/mcp}"
 API_KEY="${ATUR_API_KEY:-}"
 WORKSPACE="${ATUR_WORKSPACE:-}"
 PROJECTS="${ATUR_PROJECTS:-}"

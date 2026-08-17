@@ -1,18 +1,117 @@
-# Plane PMO - Rust Rewrite
+# Atur
 
-A ground-up rewrite of [Plane](https://github.com/makeplane/plane) (project management) backend in Rust, targeting single-binary deployment on resource-constrained VPS (1 core / 1 GB RAM).
+One workspace for your whole operation — issues, sprints, support tickets,
+deals, and timesheets. A single Cloudflare Worker serving a React SPA + Hono
+API, with a separate Astro marketing/blog site.
 
-## Why
+## Stack
 
-| Metric | Plane (Python/Node) | This Project (Rust) |
-|---|---|---|
-| Containers | 12 | 1 (+ optional Redis) |
-| RAM (idle) | ~2.5 GB | ~300 MB |
-| RAM (under load) | 4-8 GB | ~500 MB |
-| Min VPS | 2 core / 4 GB ($12/mo) | 1 core / 1 GB ($4/mo) |
-| Cold start | 30-60s (all containers) | <100ms |
-| Deploy complexity | docker-compose with 12 services | Single binary |
+- **App** (`apps/app`): Vite 8 · React 19 · Hono · Cloudflare Workers · D1 +
+  Drizzle ORM · R2 · KV · Capacitor (iOS/Android) · Tailwind v4
+- **Web** (`apps/web`): Astro 7 · MDX · sitemap (marketing/blog site for SEO)
+- **Tooling**: bun workspaces · TypeScript 7 · Oxlint / Oxfmt · GitHub Actions
 
-## Documentation
+## Setup
 
-- [`prd.md`](./prd.md) - Product Requirements Document & Roadmap
+```bash
+# from the repo root
+bun install                                 # install all workspace deps
+bun run dev:app                             # app: worker + SPA on one origin
+bun run dev:web                             # marketing site dev server
+```
+
+DB scripts live in `apps/app/` (not exposed at the root); run them from there:
+
+```bash
+cd apps/app
+bun run db:generate       # generate SQL from schema (if changed)
+bun run db:migrate:local  # apply migrations to local D1
+bun run db:migrate:remote # apply migrations to remote D1
+```
+
+## Scripts
+
+Root scripts (run from repo root; delegate to the app/web workspaces):
+
+| Script                       | Purpose                                                      |
+| ---------------------------- | ------------------------------------------------------------ |
+| `dev:app`                    | Vite dev server for the app (worker + SPA, one origin)       |
+| `dev:web`                    | Dev server for the marketing site (`apps/web`)               |
+| `build`                      | Production build (app + web)                                 |
+| `build:app`                  | Production build of the app (`dist/client` SPA, worker)      |
+| `build:web`                  | Production build of the marketing site                       |
+| `deploy:app`                 | Build + deploy the app Worker to `app.diatur.com`            |
+| `deploy:web`                 | Deploy the marketing site to Cloudflare Pages (`diatur.com`) |
+| `typecheck`                  | `tsc --noEmit` worker + client (`bun --filter @atur/app`)    |
+| `test`                       | Vitest (client tests)                                        |
+| `lint` / `fmt` / `fmt:check` | Oxlint / Oxfmt                                               |
+
+App scripts (run from `apps/app/`):
+
+| Script                    | Purpose                                              |
+| ------------------------- | ---------------------------------------------------- |
+| `dev`                     | Vite dev server (worker + SPA via cloudflare plugin) |
+| `build`                   | Production build (client → `dist/client`, worker)    |
+| `deploy`                  | Build + `wrangler deploy` to `app.diatur.com`        |
+| `db:generate`             | drizzle-kit generate migrations                      |
+| `db:migrate:local`        | apply migrations to local D1                         |
+| `db:migrate:remote`       | apply migrations to remote D1                        |
+| `cf-typegen`              | regenerate Cloudflare bindings types                 |
+| `test`                    | Vitest run                                           |
+| `cap:sync` / `cap:open:*` | Capacitor native builds                              |
+
+## Domains
+
+| Domain           | Served by                                       |
+| ---------------- | ----------------------------------------------- |
+| `diatur.com`     | Astro marketing/blog site (Cloudflare Pages)    |
+| `app.diatur.com` | App Worker (`atur-hono`) — SPA + Hono API + MCP |
+
+The MCP endpoint is `https://app.diatur.com/mcp`.
+
+## Cloudflare resources
+
+| Resource      | Binding      | Value / name                                       | Where in `apps/app/wrangler.toml` |
+| ------------- | ------------ | -------------------------------------------------- | --------------------------------- |
+| Account       | —            | `b7e6f8457bd39fa37a7eea5249799754`                 | `account_id`                      |
+| D1 database   | `DB`         | `atur-db` / `08a18888-5e9a-4384-8ec2-03e73adab633` | `d1_databases[0]`                 |
+| KV namespace  | `RATE_LIMIT` | `767d9b9dfa0e4f79a70f7f3c3e205f69`                 | `kv_namespaces[0]`                |
+| R2 bucket     | `R2`         | `atur-assets`                                      | `r2_buckets[0]`                   |
+| Custom domain | —            | `app.diatur.com`                                   | `routes[0]`                       |
+| Static assets | `ASSETS`     | `./dist/client` (SPA)                              | `assets`                          |
+| Email service | `SEND_EMAIL` | sender domain `noreply@diatur.com`                 | `send_email`                      |
+
+### Where to find each resource in the Cloudflare dashboard
+
+- **Account ID** — dashboard home page, right sidebar under **API** → _Account
+  ID_. It is not a secret; never commit an **API token**.
+- **D1 database** — **Workers & Pages → D1 → SQL databases**, select `atur-db`.
+- **KV namespace** — **Workers & Pages → KV**, select `RATE_LIMIT`.
+- **R2 bucket** — **R2 → Object storage**, bucket `atur-assets`.
+- **Custom domain** — **Workers & Pages → your Worker (`atur-hono`) → Settings →
+  Domains & Routes**: the `app.diatur.com` custom domain and its zone.
+- **Email sender domain** — **Email → Email Service → sender domains**; the
+  sender domain must be verified before the `SEND_EMAIL` binding can send.
+
+### Re-creating the resources from scratch
+
+Only needed if the account or the project is rebuilt; the current IDs are
+already committed in `apps/app/wrangler.toml`:
+
+```bash
+bunx wrangler login
+bunx wrangler d1 create atur-db                    # copy database_id into wrangler.toml
+bunx wrangler kv namespace create RATE_LIMIT       # copy id into wrangler.toml
+bunx wrangler r2 bucket create atur-assets         # name only, no id needed
+bunx wrangler d1 migrations apply atur-db --remote # apply schema to the D1 database
+```
+
+Full deploy runbook (domain cutover, secrets, order): see
+[docs/DEPLOY.md](docs/DEPLOY.md).
+
+## MCP
+
+Atur exposes a built-in MCP server (Streamable HTTP) at
+`https://app.diatur.com/mcp`. It requires an `X-API-Key` (or session token);
+keys are minted in the app UI (Settings → API keys). See `CLAUDE.md` for usage
+and registration commands.

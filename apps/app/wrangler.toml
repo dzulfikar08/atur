@@ -1,0 +1,49 @@
+name = "atur-hono"
+main = "src/worker/index.ts"
+compatibility_date = "2026-04-08"
+compatibility_flags = ["nodejs_compat"]
+account_id = "b7e6f8457bd39fa37a7eea5249799754"
+
+# 2026-08-17: app split. The marketing site (Astro) owns diatur.com; the app
+# worker owns app.diatur.com.
+[[routes]]
+pattern = "app.diatur.com/*"
+zone_id = "85af83477a97625830e3a172e1d04aed"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "atur-db"
+database_id = "08a18888-5e9a-4384-8ec2-03e73adab633"
+migrations_dir = "./migrations"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "atur-assets"
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "767d9b9dfa0e4f79a70f7f3c3e205f69"
+
+# Outbound email for the support portal OTP. verified_address must be an address
+# you've verified in the Cloudflare dashboard (Email → Routing → Settings).
+# Set EMAIL_FROM to the same bare address (var below, or `wrangler secret`),
+# e.g. `wrangler secret put EMAIL_FROM` → noreply@diatur.com.
+[[send_email]]
+name = "SEND_EMAIL"
+verified_address = "noreply@diatur.com"
+
+[observability]
+enabled = true
+
+# Daily 08:00 UTC cron → scheduled() handler sends due-date reminder emails to
+# issue followers. Each recipient's local day (users.user_timezone) dedupes sends.
+[triggers]
+crons = ["0 8 * * *"]
+
+[assets]
+directory = "./dist/client"
+not_found_handling = "single-page-application"
+binding = "ASSETS"
+# index.ts routes non-API requests to ASSETS (SPA fallback). With the vite
+# cloudflare plugin the client build lands in dist/client.
+run_worker_first = true

@@ -1,10 +1,35 @@
 {
   "name": "atur",
+  "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "type": "module",
   "scripts": {
-    "deploy:app": "bun run --cwd server-js deploy"
+    "dev:app": "bun --filter @atur/app dev",
+    "dev:web": "bun --filter @atur/web dev",
+    "build": "bun --filter @atur/app build && bun --filter @atur/web build",
+    "build:app": "bun --filter @atur/app build",
+    "build:web": "bun --filter @atur/web build",
+    "deploy:app": "bun --filter @atur/app deploy",
+    "deploy:web": "bun --filter @atur/web deploy",
+    "typecheck": "bun --filter @atur/app typecheck",
+    "test": "bun --filter @atur/app test",
+    "lint": "oxlint .",
+    "fmt": "oxfmt .",
+    "fmt:check": "oxfmt --check ."
   },
-  "dependencies": {
-    "@excalidraw/excalidraw": "^0.18.1"
-  }
+  "devDependencies": {
+    "oxfmt": "^0.62.0",
+    "oxlint": "^1.77.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "trustedDependencies": [
+    "workerd",
+    "esbuild"
+  ]
 }

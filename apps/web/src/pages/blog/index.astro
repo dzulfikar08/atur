@@ -1,0 +1,32 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getCollection } from "astro:content";
+
+const posts = (await getCollection("blog")).sort(
+  (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()
+);
+---
+
+<BaseLayout
+  title="Blog — Atur"
+  description="Product updates and notes from the Atur team."
+  canonical="/blog"
+>
+  <div class="article">
+    <p class="section-kicker">Blog</p>
+    <h1>Notes from the Atur team</h1>
+    <div class="blog-list">
+      {
+        posts.map((post) => (
+          <a class="blog-card" href={`/blog/${post.id}`}>
+            <time datetime={post.data.pubDate.toISOString()}>
+              {post.data.pubDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+            </time>
+            <h2>{post.data.title}</h2>
+            <p>{post.data.description}</p>
+          </a>
+        ))
+      }
+    </div>
+  </div>
+</BaseLayout>

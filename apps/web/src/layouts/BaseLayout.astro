@@ -1,0 +1,78 @@
+---
+// Base layout for the Atur marketing site (diatur.com). Provides the SEO head,
+// site header (Sign In / Open App → the app origin), and footer.
+const APP_URL = "https://app.diatur.com";
+const year = new Date().getFullYear();
+
+interface Props {
+  title: string;
+  description: string;
+  canonical: string;
+  ogType?: string;
+  ogImage?: string;
+}
+const { title, description, canonical, ogType = "website", ogImage = "/og-atur.webp" } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={`https://diatur.com${canonical}`} />
+
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content={ogType} />
+    <meta property="og:url" content={`https://diatur.com${canonical}`} />
+    <meta property="og:image" content={`https://diatur.com${ogImage}`} />
+    <meta property="og:site_name" content="Atur" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={`https://diatur.com${ogImage}`} />
+
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles/global.css" />
+    <slot name="head" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="/">
+          <img src="/logo-128.png" alt="" width="32" height="32" />
+          <span>Atur</span>
+        </a>
+        <nav class="site-nav">
+          <a href="/#features">Features</a>
+          <a href="/blog">Blog</a>
+          <a href={APP_URL + "/auth/login"}>Sign In</a>
+          <a class="btn" href={APP_URL}>Open App →</a>
+        </nav>
+      </div>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <span>© {year} Atur</span>
+        <span class="footer-links">
+          <a href="/blog">Blog</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/support">Support</a>
+        </span>
+      </div>
+    </footer>
+  </body>
+</html>

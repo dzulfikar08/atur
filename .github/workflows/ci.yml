@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run fmt:check
+      - run: bun --filter @atur/app typecheck
+      # Fail on high/critical advisories; moderate ones are reported without
+      # breaking the build (bun audit exits 0 for moderate).
+      - run: bun audit --audit-level=high
+      - run: bun --filter @atur/app test
+      - run: bun --filter @atur/app build
+      - run: bun --filter @atur/web build
