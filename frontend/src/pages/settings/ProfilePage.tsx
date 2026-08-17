@@ -342,7 +342,7 @@ export default function ProfilePage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {(['comment', 'mention', 'reminder'] as const).map((type) => {
-              const info = NOTIF_LABELS[type];
+              const info = NOTIF_LABELS[type] ?? { label: type, desc: '' };
               const enabled = prefMap.get(type) ?? true;
               return (
                 <div key={type} className="flex items-center justify-between gap-4 py-2 border-b last:border-0">
