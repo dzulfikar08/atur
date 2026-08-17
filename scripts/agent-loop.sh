@@ -152,7 +152,9 @@ agent_headless() { # <prompt> <review|work> → runs the agent, echoes final tex
       if [[ "$mode" == "review" ]]; then
         cmd -p "$prompt" --output-format json --yolo --max-turns "$MAX_TURNS_REVIEW" 2>&1 || true
       else
-        cmd -p "$prompt" --yolo --max-turns "$MAX_TURNS_WORK" 2>&1 || true
+        # Work runs also emit JSON so the supervisor can capture the
+        # sessionId and --resume the SAME session on retries.
+        cmd -p "$prompt" --output-format json --yolo --max-turns "$MAX_TURNS_WORK" 2>&1 || true
       fi
       ;;
     claude)
@@ -275,6 +277,30 @@ state_id() { # <project_id> <role> → echo the state id ("" if unset)
   local k="$1.$2" i
   for i in "${!STATE_KEYS[@]}"; do
     [[ "${STATE_KEYS[$i]}" == "$k" ]] && { printf '%s' "${STATE_VALS[$i]}"; return 0; }
+  done
+  return 1
+}
+
+# Per-issue cmd session ids (for --resume on retries). cmd keys headless
+# sessions by cwd, so --continue would resume whatever ran last in $REPO_DIR
+# (another issue's or a reviewer's session) under concurrency. Explicitly
+# resuming the issue's own sessionId keeps retries on the right conversation.
+SID_KEYS=()
+SID_VALS=()
+
+set_sid() { # <seq> <session-id>
+  local i
+  for i in "${!SID_KEYS[@]}"; do
+    if [[ "${SID_KEYS[$i]}" == "$1" ]]; then SID_VALS[$i]="$2"; return 0; fi
+  done
+  SID_KEYS+=("$1")
+  SID_VALS+=("$2")
+}
+
+get_sid() { # <seq> → echo the session id ("" if unset)
+  local i
+  for i in "${!SID_KEYS[@]}"; do
+    [[ "${SID_KEYS[$i]}" == "$1" ]] && { printf '%s' "${SID_VALS[$i]}"; return 0; }
   done
   return 1
 }
@@ -575,21 +601,28 @@ Definition of Done (all must hold):
 Work autonomously. Post your findings as comments on the issue."
 
     local cmdline prompt_file
-    # cmd resumes its most recent headless session in the cwd, so retries keep
-    # the previous attempt's context. Other agents get a fresh session.
+    # cmd keys headless sessions by cwd, so `--continue` would resume whatever
+    # ran last in $REPO_DIR (another issue's or a reviewer's session) under
+    # concurrency. Retries explicitly --resume THIS issue's sessionId (captured
+    # from the first run's JSON result frame), so the context is always right.
     # The prompt is passed via a temp FILE (read with $(cat ...)) instead of
     # being inlined into the shell command — a multi-line prompt with
     # quotes/parens would mangle the tmux shell string, and tmux sessions don't
     # inherit client-side exported env vars (only the server's env).
     prompt_file="$(mktemp -t "atur-prompt-$seq-XXXXXX")"
     printf '%s' "$prompt" > "$prompt_file"
-    if [[ "$AGENT" == "cmd" && "$attempt" -gt 1 ]]; then
-      cmdline="cmd -p \"\$(cat $prompt_file)\" --continue --yolo --max-turns $MAX_TURNS_WORK; tmux wait-for -S atur:$seq"
+    local sid
+    sid=$(get_sid "$seq")
+    if [[ "$AGENT" == "cmd" && -n "$sid" ]]; then
+      # Resume THIS issue's session (retry).
+      cmdline="cmd -p \"\$(cat $prompt_file)\" --resume $sid --output-format json --yolo --max-turns $MAX_TURNS_WORK > /tmp/atur-work-$seq.json; tmux wait-for -S atur:$seq"
     else
-      cmdline="agent_headless \"\$(cat $prompt_file)\" work; tmux wait-for -S atur:$seq"
+      # Fresh session on attempt 1; capture output so the sessionId can be
+      # stored for future retries.
+      cmdline="agent_headless \"\$(cat $prompt_file)\" work > /tmp/atur-work-$seq.json; tmux wait-for -S atur:$seq"
     fi
     tmux new-session -d -s "$session" -c "$REPO_DIR" "$cmdline" 2>/dev/null || \
-    tmux new-session -d -s "$session" -c "$REPO_DIR" "agent_headless \"\$(cat $prompt_file)\" work; tmux wait-for -S atur:$seq"
+    tmux new-session -d -s "$session" -c "$REPO_DIR" "agent_headless \"\$(cat $prompt_file)\" work > /tmp/atur-work-$seq.json; tmux wait-for -S atur:$seq"
     log "start  $seq: spawned tmux session $session (attempt $attempt)"
   fi
 
@@ -606,6 +639,18 @@ Work autonomously. Post your findings as comments on the issue."
   fi
   # Prompt file is no longer needed once the session has exited.
   rm -f "${prompt_file:-}"
+
+  # Capture this issue's cmd sessionId (from the JSON result frame) so retries
+  # can --resume the SAME conversation. Only meaningful for cmd work runs.
+  if [[ "$AGENT" == "cmd" ]]; then
+    local new_sid
+    new_sid=$(jq -r 'select(.type=="result") | .sessionId // empty' "/tmp/atur-work-$seq.json" 2>/dev/null | tail -1)
+    rm -f "/tmp/atur-work-$seq.json"
+    if [[ -n "$new_sid" && "$new_sid" != "null" ]]; then
+      set_sid "$seq" "$new_sid"
+      log "git   $seq: sessionId=$new_sid"
+    fi
+  fi
 
   # Commit the agent's work so reviewers inspect committed code, not the
   # working tree. (The agent already wrote files in $REPO_DIR.)
