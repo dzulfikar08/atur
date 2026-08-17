@@ -40,6 +40,18 @@ export default function AppShell() {
 
   useAllModeGuard();
 
+  // Toggle sidebar collapse with Cmd/Ctrl+B
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 'b' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setCollapsed((c) => !c);
+      }
+    };
+    document.addEventListener('keydown', down);
+    return () => document.removeEventListener('keydown', down);
+  }, []);
+
   return (
     <div className="flex h-dvh overflow-hidden bg-background">
       <a

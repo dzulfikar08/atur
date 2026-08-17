@@ -26,6 +26,8 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const state = c.req.query('state')
     const priority = c.req.query('priority')
     const search = c.req.query('search')
+    const workspace = c.req.query('workspace') // workspace id
+    const project = c.req.query('project') // project id
     const limit = Math.min(parseInt(c.req.query('limit') || '500', 10), 500)
 
     const conditions = [
@@ -35,6 +37,8 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     if (state) conditions.push(eq(schema.issues.stateId, state))
     if (priority) conditions.push(eq(schema.issues.priority, priority))
     if (search) conditions.push(like(schema.issues.name, `%${search}%`))
+    if (workspace) conditions.push(eq(schema.issues.workspaceId, workspace))
+    if (project) conditions.push(eq(schema.issues.projectId, project))
 
     const rows = await db.select({
       issue: schema.issues,

@@ -1,23 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { Search, Sun, Moon, Monitor, Bell, FileText, Clock, PenTool } from '@/lib/icons';
+import { Search, Bell, Sun, Moon, Monitor, FileText, Clock, PenTool } from '@/lib/icons';
 import { useThemeStore } from '@/stores/theme';
-import { useAuthStore } from '@/stores/auth';
 import { usePagesStore } from '@/stores/pages';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch, type Page } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import UserMenu from './UserMenu';
 
 const routeLabels: Record<string, string> = {
   '': 'Dashboard',
@@ -38,8 +36,6 @@ export default function TopBar() {
   const { slug } = useParams<{ slug: string }>();
   const location = useLocation();
   const { theme, setTheme } = useThemeStore();
-  const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const { recent } = usePagesStore();
@@ -149,13 +145,6 @@ export default function TopBar() {
       };
     }),
   ];
-
-  const initials = user?.display_name
-    ?.split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2) ?? 'U';
 
   const ThemeIcon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
 
@@ -279,41 +268,7 @@ export default function TopBar() {
         </Button>
 
         {/* User menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" aria-label="Account menu" className="ml-1 h-8 w-8 rounded-full p-0">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-              </Avatar>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <div className="px-2 py-1.5">
-              <p className="text-sm font-medium">{user?.display_name ?? 'User'}</p>
-              <p className="text-xs text-muted-foreground">{user?.email ?? ''}</p>
-            </div>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => slug && navigate(`/${slug}/settings`)}>
-              Profile & Settings
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <div className="px-2 py-1.5 sm:hidden">
-              <p className="text-xs text-muted-foreground mb-1">Theme</p>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="sm" className="h-7 text-xs flex-1" onClick={() => setTheme('light')}>
-                  <Sun className="h-3 w-3 mr-1" /> Light
-                </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-xs flex-1" onClick={() => setTheme('dark')}>
-                  <Moon className="h-3 w-3 mr-1" /> Dark
-                </Button>
-              </div>
-            </div>
-            <DropdownMenuSeparator className="sm:hidden" />
-            <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
-              Log out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <UserMenu showThemeOptions />
       </div>
       </div>
     </header>

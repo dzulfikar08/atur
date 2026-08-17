@@ -6,9 +6,10 @@ import { getDb } from '../db/index'
 import { authMiddleware } from '../middleware/auth'
 import * as authService from '../services/auth'
 import * as usersRepo from '../repositories/users'
+import { SESSION_TTL_SECONDS } from '../lib/session'
 
 const SESSION_COOKIE = 'plane-session'
-const SESSION_MAX_AGE = 7 * 24 * 60 * 60
+const SESSION_MAX_AGE = SESSION_TTL_SECONDS
 
 type C = Context<{ Bindings: Env }>
 

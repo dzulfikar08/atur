@@ -28,6 +28,7 @@ import { analyticsRoutes } from './routes/analytics'
 import { timesheetRoutes } from './routes/timesheet'
 import { assetRoutes } from './routes/assets'
 import { commentRoutes } from './routes/comments'
+import { subscriberRoutes } from './routes/subscribers'
 import { issueExtrasRoutes } from './routes/issue_extras'
 import { relationRoutes } from './routes/relations'
 import { userRoutes } from './routes/users'
@@ -98,6 +99,9 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route('/api/workspaces/:slug/timesheet', timesheetRoutes)
   app.route('/api/assets', assetRoutes)
   app.route('/api/workspaces/:slug/projects/:projectId/issues/:issueId/comments', commentRoutes)
+  // Mounted before issueExtrasRoutes so /subscribers isn't swallowed by its
+  // generic /:issueId handler.
+  app.route('/api/workspaces/:slug/projects/:projectId/issues/:issueId/subscribers', subscriberRoutes)
   app.route('/api/workspaces/:slug/projects/:projectId/issues/:issueId', issueExtrasRoutes)
   app.route('/api/workspaces/:slug/projects/:projectId/issue-relations', relationRoutes)
   // Feedback board admin config (authed). Scoped under a project.

@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, List, Columns3, GitBranch, X, Timer, Settings, Package, Bookmark, Save, Trash2, Table2, Calendar, GanttChart } from '@/lib/icons';
+import { Plus, List, Columns3, GitBranch, X, Timer, Settings, Package, Bookmark, Save, Trash2, Table2, Calendar, GanttChart, User } from '@/lib/icons';
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -62,6 +62,7 @@ const createIssueSchema = z.object({
   description_html: z.string().optional(),
   priority: z.string().optional(),
   state_id: z.string().optional(),
+  assignee_ids: z.array(z.string()).optional(),
 });
 
 type CreateIssueForm = z.infer<typeof createIssueSchema>;
@@ -174,6 +175,24 @@ function SortableIssueCard({ issue, onClick, moduleMap }: {
             ))}
           </div>
         )}
+        {(issue.assignees ?? []).length > 0 && (
+          <div className="flex -space-x-1.5 mt-2">
+            {(issue.assignees ?? []).slice(0, 3).map((a) => (
+              <span
+                key={a.id}
+                title={a.display_name || a.email || a.username || ''}
+                className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] font-medium text-muted-foreground"
+              >
+                {(a.display_name || a.email || a.username || '?').charAt(0).toUpperCase()}
+              </span>
+            ))}
+            {(issue.assignees ?? []).length > 3 && (
+              <span className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] text-muted-foreground">
+                +{(issue.assignees ?? []).length - 3}
+              </span>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -211,6 +230,24 @@ function DragOverlayCard({ issue, moduleMap }: { issue: Issue; moduleMap: Map<st
             ))}
           </div>
         )}
+        {(issue.assignees ?? []).length > 0 && (
+          <div className="flex -space-x-1.5 mt-2">
+            {(issue.assignees ?? []).slice(0, 3).map((a) => (
+              <span
+                key={a.id}
+                title={a.display_name || a.email || a.username || ''}
+                className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] font-medium text-muted-foreground"
+              >
+                {(a.display_name || a.email || a.username || '?').charAt(0).toUpperCase()}
+              </span>
+            ))}
+            {(issue.assignees ?? []).length > 3 && (
+              <span className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] text-muted-foreground">
+                +{(issue.assignees ?? []).length - 3}
+              </span>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -242,6 +279,7 @@ export default function ProjectBoard() {
   const [parentSearch, setParentSearch] = useState("");
   const [selectedParent, setSelectedParent] = useState<{ id: string; name: string } | null>(null);
   const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>([]);
+  const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<string[]>([]);
   const [activeIssueId, setActiveIssueId] = useState<string | null>(null);
   const [viewName, setViewName] = useState("");
   const [viewsOpen, setViewsOpen] = useState(false);
@@ -314,11 +352,21 @@ export default function ProjectBoard() {
     enabled: !!slug && !!projectId,
   });
 
+  const { data: members = [] } = useQuery({
+    queryKey: ["project-members", slug, projectId],
+    queryFn: () =>
+      apiFetch<{ results: { memberId: string; username?: string | null; email?: string | null; displayName?: string | null; avatar?: string | null }[] }>(
+        `/workspaces/${slug}/projects/${projectId}/members/`
+      ).then((d) => d.results).catch(() => []),
+    enabled: !!slug && !!projectId,
+  });
+
   const moduleMap = useMemo(() => new Map(modules.map(m => [m.id, m])), [modules]);
+  const memberMap = useMemo(() => new Map(members.map(m => [m.memberId, m])), [members]);
 
   const form = useForm<CreateIssueForm>({
     resolver: zodResolver(createIssueSchema),
-    defaultValues: { name: "", description_html: "", priority: "none", state_id: "" },
+    defaultValues: { name: "", description_html: "", priority: "none", state_id: "", assignee_ids: [] },
   });
 
   const backlogStateId = states.find((s) => s.group === "backlog")?.id ?? states[0]?.id ?? "";
@@ -336,12 +384,14 @@ export default function ProjectBoard() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["issues", slug, projectId] });
+      qc.invalidateQueries({ queryKey: ["my-issues"] });
       setCreateOpen(false);
       form.reset();
       setSelectedParent(null);
       form.setValue("state_id", backlogStateId);
       setParentSearch("");
       setSelectedModuleIds([]);
+      setSelectedAssigneeIds([]);
       toast.success("Issue created");
     },
     onError: () => toast.error("Failed to create issue"),
@@ -568,7 +618,7 @@ export default function ProjectBoard() {
               <DialogTitle>Create Issue</DialogTitle>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit((d) => createMutation.mutate({ ...d, state_id: d.state_id || undefined, parent_id: selectedParent?.id || null, module_ids: selectedModuleIds.length > 0 ? selectedModuleIds : undefined }))} className="space-y-4">
+              <form onSubmit={form.handleSubmit((d) => createMutation.mutate({ ...d, state_id: d.state_id || undefined, parent_id: selectedParent?.id || null, module_ids: selectedModuleIds.length > 0 ? selectedModuleIds : undefined, assignee_ids: selectedAssigneeIds.length > 0 ? selectedAssigneeIds : undefined }))} className="space-y-4">
                 <FormField
                   control={form.control}
                   name="name"
@@ -695,6 +745,54 @@ export default function ProjectBoard() {
                     </FormItem>
                   )}
                 />
+                {members.length > 0 && (
+                  <div>
+                    <label className="text-sm font-medium mb-1 block flex items-center gap-1">
+                      <User className="h-3 w-3" /> Assignees
+                      <span className="text-muted-foreground font-normal">(optional)</span>
+                    </label>
+                    <div className="space-y-1">
+                      {selectedAssigneeIds.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {selectedAssigneeIds.map(mid => {
+                            const mem = memberMap.get(mid);
+                            return mem ? (
+                              <Badge key={mid} variant="secondary" className="text-xs gap-1">
+                                {mem.displayName || mem.username || mem.email}
+                                <button
+                                  type="button"
+                                  className="ml-0.5 hover:text-destructive"
+                                  onClick={() => setSelectedAssigneeIds(prev => prev.filter(id => id !== mid))}
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            ) : null;
+                          })}
+                        </div>
+                      )}
+                      <Select
+                        value=""
+                        onValueChange={(v) => {
+                          if (v && !selectedAssigneeIds.includes(v)) {
+                            setSelectedAssigneeIds(prev => [...prev, v]);
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Add assignee..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {members
+                            .filter(m => !selectedAssigneeIds.includes(m.memberId))
+                            .map(m => (
+                              <SelectItem key={m.memberId} value={m.memberId}>{m.displayName || m.username || m.email}</SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
                 {modules.length > 0 && (
                   <div>
                     <label className="text-sm font-medium mb-1 block flex items-center gap-1">

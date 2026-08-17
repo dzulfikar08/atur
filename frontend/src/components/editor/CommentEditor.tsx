@@ -26,6 +26,7 @@ import {
 } from '@/lib/icons'
 import { optimizeImage } from '@/lib/image-optimize'
 import { UploadPlaceholder, beginUpload, finishUpload, failUpload } from './UploadPlaceholder'
+import { makeMentionExtension, type MentionMember } from './MentionExtension'
 
 const lowlight = createLowlight()
 lowlight.register({ javascript, typescript, python, css, json, bash, sql, rust })
@@ -38,9 +39,12 @@ interface CommentEditorProps {
   compact?: boolean
   uploadUrl?: string
   resetKey?: string | number
+  // Workspace members for @mention suggestions. When empty, the mention picker
+  // is disabled.
+  members?: MentionMember[]
 }
 
-export default function CommentEditor({ value, onChange, onSubmit, placeholder, compact: _compact, uploadUrl = '/api/assets/upload/', resetKey }: CommentEditorProps) {
+export default function CommentEditor({ value, onChange, onSubmit, placeholder, compact: _compact, uploadUrl = '/api/assets/upload/', resetKey, members = [] }: CommentEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Set of upload ids currently in flight; used to ignore a second paste of the
   // same image while the first is still uploading.
@@ -73,6 +77,9 @@ export default function CommentEditor({ value, onChange, onSubmit, placeholder, 
       TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder: placeholder || 'Add a comment...' }),
       Markdown,
+      // Members list is captured at editor creation; the parent typically has
+      // it loaded before the composer mounts (it fetches members on page load).
+      ...(members.length > 0 ? [makeMentionExtension(members)] : []),
     ],
     content: value || '',
     editorProps: {

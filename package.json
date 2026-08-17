@@ -1,4 +1,9 @@
 {
+  "name": "atur",
+  "private": true,
+  "scripts": {
+    "deploy:app": "bun run --cwd server-js deploy"
+  },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1"
   }

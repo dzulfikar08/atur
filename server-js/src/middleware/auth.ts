@@ -7,6 +7,7 @@ import type { AuthUser } from '../lib/token'
 import { getDb, type DbClient } from '../db/index'
 import * as schema from '../db/schema'
 import * as usersRepo from '../repositories/users'
+import { SESSION_TTL_SECONDS, SESSION_REFRESH_THRESHOLD_SECONDS, sessionExpiryISO } from '../lib/session'
 
 declare module 'hono' {
   interface ContextVariableMap {
@@ -39,6 +40,42 @@ type ResolvedUser = {
   avatar: string | null
   isActive: number | null
   deletedAt?: string | null
+  sessionExpiresAt?: string | null
+}
+
+// A session is expired when its stamp is in the past. A NULL stamp (legacy
+// rows created before session_expires_at existed) is treated as always valid
+// so existing users are not logged out by the migration.
+function isSessionExpired(expiresAt: string | null | undefined): boolean {
+  if (!expiresAt) return false
+  const expires = Date.parse(expiresAt)
+  if (Number.isNaN(expires)) return false
+  return expires <= Date.now()
+}
+
+// Sliding-window extension: when a session token is still valid but inside the
+// back half of its TTL, push the expiry back out to a full SESSION_TTL_SECONDS
+// and return the new expiry so the caller can refresh the cookie Max-Age.
+// Fire-and-forget best effort — a failed write never fails the request.
+function refreshSessionIfNeeded(
+  db: DbClient,
+  userId: string,
+  token: string,
+  expiresAt: string | null | undefined
+): string | null {
+  if (!expiresAt) return null
+  const expires = Date.parse(expiresAt)
+  if (Number.isNaN(expires)) return null
+  const now = Date.now()
+  const refreshAt = expires - SESSION_REFRESH_THRESHOLD_SECONDS * 1000
+  if (now < refreshAt) return null // still in the front half — no extension needed
+
+  const nextExpiry = sessionExpiryISO()
+  db.update(schema.users)
+    .set({ sessionExpiresAt: nextExpiry, updatedAt: new Date().toISOString() })
+    .where(and(eq(schema.users.id, userId), eq(schema.users.token, token)))
+    .catch(() => {})
+  return nextExpiry
 }
 
 // Resolve a raw token to a user. Two paths:
@@ -91,6 +128,23 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   if (!user) {
     throw new HTTPException(401, { message: 'Invalid or expired token' })
   }
+
+  // Opaque session tokens carry a sliding expiry; reject when past it. API
+  // keys (pk_live_*) have their own expires_at handled in resolveUserByToken.
+  if (!token.startsWith('pk_live_') && isSessionExpired(user.sessionExpiresAt)) {
+    throw new HTTPException(401, { message: 'Invalid or expired token' })
+  }
+
+  // Sliding session window: extend the expiry (DB + cookie Max-Age) when the
+  // session has entered the back half of its TTL.
+  if (!token.startsWith('pk_live_')) {
+    const nextExpiry = refreshSessionIfNeeded(db, user.id, token, user.sessionExpiresAt)
+    if (nextExpiry) {
+      const isHttps = c.req.url.startsWith('https://')
+      c.header('Set-Cookie', `plane-session=${token}; HttpOnly; Secure=${isHttps}; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_SECONDS}`, { append: true })
+    }
+  }
+
   c.set('user', toAuthUser(user))
   await next()
 }

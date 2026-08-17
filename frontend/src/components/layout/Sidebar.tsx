@@ -8,7 +8,6 @@ import {
   Settings,
   ChevronsLeft,
   ChevronsRight,
-  LogOut,
   ChevronDown,
   Puzzle,
   Bot,
@@ -21,7 +20,7 @@ import {
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useWorkspaces } from '@/hooks/useWorkspaces';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +32,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import CreateWorkspaceDialog from '@/components/layout/CreateWorkspaceDialog';
+import UserMenu from '@/components/layout/UserMenu';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -57,9 +57,8 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
   const { data: workspaces = [] } = useWorkspaces();
-  const { currentSlug, setCurrentSlug } = useWorkspaceStore();
+  const { currentSlug, switchWorkspace } = useWorkspaceStore();
   const [createOpen, setCreateOpen] = useState(false);
 
   const activeSlug = currentSlug ?? slug;
@@ -127,8 +126,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             <DropdownMenuItem
               className={cn('cursor-pointer', isAll && 'bg-accent')}
               onClick={() => {
-                setCurrentSlug('all');
-                navigate('/all');
+                navigate(switchWorkspace('all'));
               }}
             >
               <div className="mr-2 flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground">
@@ -141,8 +139,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               <DropdownMenuItem
                 key={ws.id}
                 onClick={() => {
-                  setCurrentSlug(ws.slug);
-                  navigate(`/${ws.slug}`);
+                  navigate(switchWorkspace(ws.slug));
                 }}
                 className={cn(
                   'cursor-pointer',
@@ -226,41 +223,43 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <Separator />
 
       {/* User section */}
-      <div className={cn('flex items-center gap-2 py-3', collapsed ? 'justify-center px-0' : 'px-3')}>
-        {!collapsed && (
-          <Avatar className="h-8 w-8 shrink-0">
-            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-          </Avatar>
-        )}
-        {!collapsed && (
-          <div className="flex flex-1 items-center justify-between min-w-0">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{user?.display_name ?? 'User'}</p>
-              <p className="truncate text-xs text-muted-foreground">{user?.email ?? ''}</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-              onClick={logout}
-              aria-label="Log out"
-              title="Log out"
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
-        {collapsed && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-            onClick={logout}
-            aria-label="Log out"
-            title="Log out"
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
+      <div className={cn('flex items-center py-3', collapsed ? 'justify-center px-0' : 'px-3')}>
+        {collapsed ? (
+          <UserMenu
+            side="right"
+            align="start"
+            trigger={
+              <Button variant="ghost" aria-label="Account menu" className="h-8 w-8 rounded-full p-0">
+                <Avatar className="h-8 w-8">
+                  {user?.avatar ? <AvatarImage src={user.avatar} alt={user.display_name ?? 'User'} /> : null}
+                  <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                </Avatar>
+              </Button>
+            }
+          />
+        ) : (
+          <UserMenu
+            side="top"
+            align="start"
+            trigger={
+              <button
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent/50 cursor-pointer"
+                aria-label="Account menu"
+              >
+                <Avatar className="h-8 w-8 shrink-0">
+                  {user?.avatar ? <AvatarImage src={user.avatar} alt={user.display_name ?? 'User'} /> : null}
+                  <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                </Avatar>
+                <div className="flex flex-1 items-center justify-between min-w-0">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{user?.display_name ?? 'User'}</p>
+                    <p className="truncate text-xs text-muted-foreground">{user?.email ?? ''}</p>
+                  </div>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </div>
+              </button>
+            }
+          />
         )}
       </div>
 

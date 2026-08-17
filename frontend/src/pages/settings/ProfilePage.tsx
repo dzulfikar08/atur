@@ -3,7 +3,7 @@ import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
@@ -19,8 +19,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { User, Key, Plus, Trash2, Copy } from '@/lib/icons';
-import { useEffect, useState } from "react";
+import { User, Key, Plus, Trash2, Copy, Upload, X, Bell } from '@/lib/icons';
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -32,6 +32,7 @@ import { Building2, Check } from '@/lib/icons';
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "@/stores/auth";
+import { apiOrigin, authHeaders } from "@/lib/native";
 
 const createKeySchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -45,7 +46,7 @@ export default function ProfilePage() {
   const { theme, setTheme } = useThemeStore();
   const { i18n } = useTranslation();
   const { data: workspaces = [] } = useWorkspaces();
-  const { currentSlug, setCurrentSlug } = useWorkspaceStore();
+  const { currentSlug, switchWorkspace } = useWorkspaceStore();
   const navigate = useNavigate();
   const params = useParams<{ slug: string }>();
   const activeSlug = params.slug || currentSlug;
@@ -86,6 +87,45 @@ export default function ProfilePage() {
   const nameChanged = dispName !== (user?.display_name || "");
   const usernameChanged = username !== (user?.username || "");
 
+  // ── Avatar upload / remove ──
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const uploadAvatar = async (file: File) => {
+    setUploadingAvatar(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`${apiOrigin || ''}/api/assets/upload/`, {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+        headers: { ...authHeaders() },
+      });
+      if (!res.ok) throw new Error("upload failed");
+      const uploaded = await res.json();
+      await apiFetch("/users/me/", { method: "PATCH", body: JSON.stringify({ avatar: uploaded.url }) });
+      qc.invalidateQueries({ queryKey: ["me"] });
+      useAuthStore.getState().fetchUser();
+      toast.success("Profile picture updated");
+    } catch {
+      toast.error("Failed to upload profile picture");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const removeAvatar = async () => {
+    try {
+      await apiFetch("/users/me/", { method: "PATCH", body: JSON.stringify({ avatar: null }) });
+      qc.invalidateQueries({ queryKey: ["me"] });
+      useAuthStore.getState().fetchUser();
+      toast.success("Profile picture removed");
+    } catch {
+      toast.error("Failed to remove profile picture");
+    }
+  };
+
 
   const form = useForm<CreateKeyForm>({
     resolver: zodResolver(createKeySchema),
@@ -113,6 +153,30 @@ export default function ProfilePage() {
     },
   });
 
+  // ── Email notification preferences ──
+  const { data: notifPrefs } = useQuery({
+    queryKey: ["notification-preferences"],
+    queryFn: () =>
+      apiFetch<{ preferences: { notification_type: string; email_enabled: boolean }[] }>("/notifications/preferences/"),
+  });
+
+  const notifPrefMutation = useMutation({
+    mutationFn: (data: { notification_type: string; email_enabled: boolean }) =>
+      apiFetch("/notifications/preferences/", { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notification-preferences"] });
+      toast.success("Notification preferences updated");
+    },
+    onError: () => toast.error("Failed to update notification preferences"),
+  });
+
+  const prefMap = new Map((notifPrefs?.preferences ?? []).map((p) => [p.notification_type, p.email_enabled]));
+  const NOTIF_LABELS: Record<string, { label: string; desc: string }> = {
+    comment: { label: "Comments", desc: "Email me when someone comments on an issue I follow" },
+    mention: { label: "Mentions", desc: "Email me when I'm mentioned in a comment or description" },
+    reminder: { label: "Due-date reminders", desc: "Email me when a followed issue is due or overdue" },
+  };
+
   if (isLoading) {
     return <div className="flex items-center justify-center h-64"><div className="animate-pulse text-muted-foreground">Loading profile...</div></div>;
   }
@@ -134,13 +198,31 @@ export default function ProfilePage() {
           <CardContent className="space-y-4">
             <div className="flex items-center gap-4">
               <Avatar className="h-16 w-16">
+                {user?.avatar ? <AvatarImage src={user.avatar} alt={user?.display_name || "User"} /> : null}
                 <AvatarFallback className="text-xl">
                   {(user?.display_name || user?.username || "U").charAt(0)}
                 </AvatarFallback>
               </Avatar>
-              <div>
+              <div className="flex-1">
                 <p className="text-lg font-semibold">{user?.display_name || user?.username}</p>
                 <p className="text-sm text-muted-foreground">{user?.email}</p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAvatar(f); e.target.value = ""; }}
+                />
+                <Button variant="outline" size="sm" onClick={() => avatarInputRef.current?.click()} disabled={uploadingAvatar}>
+                  <Upload className="h-4 w-4 mr-1" /> {uploadingAvatar ? "Uploading…" : "Upload picture"}
+                </Button>
+                {user?.avatar && (
+                  <Button variant="ghost" size="sm" className="text-destructive" onClick={removeAvatar}>
+                    <X className="h-4 w-4 mr-1" /> Remove
+                  </Button>
+                )}
               </div>
             </div>
             <div>
@@ -189,8 +271,7 @@ export default function ProfilePage() {
                         isActive ? 'bg-primary/10' : 'hover:bg-muted/50'
                       )}
                       onClick={() => {
-                        setCurrentSlug(ws.slug);
-                        navigate(`/${ws.slug}`);
+                        navigate(switchWorkspace(ws.slug));
                       }}
                     >
                       <div className={cn(
@@ -248,6 +329,48 @@ export default function ProfilePage() {
                 </SelectContent>
               </Select>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Email Notifications */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bell className="h-4 w-4" /> Email Notifications
+            </CardTitle>
+            <CardDescription>Choose which activity emails you receive</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(['comment', 'mention', 'reminder'] as const).map((type) => {
+              const info = NOTIF_LABELS[type];
+              const enabled = prefMap.get(type) ?? true;
+              return (
+                <div key={type} className="flex items-center justify-between gap-4 py-2 border-b last:border-0">
+                  <div>
+                    <p className="text-sm font-medium">{info.label}</p>
+                    <p className="text-xs text-muted-foreground">{info.desc}</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={enabled}
+                    onClick={() => notifPrefMutation.mutate({ notification_type: type, email_enabled: !enabled })}
+                    disabled={notifPrefMutation.isPending}
+                    className={cn(
+                      'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none',
+                      enabled ? 'bg-primary' : 'bg-muted'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                        enabled ? 'translate-x-[18px]' : 'translate-x-0.5'
+                      )}
+                    />
+                  </button>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
 

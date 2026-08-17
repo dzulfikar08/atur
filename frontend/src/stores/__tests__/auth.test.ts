@@ -26,7 +26,7 @@ describe('useAuthStore', () => {
       email: 'test@example.com',
       display_name: 'Test User',
       username: 'testuser',
-      avatar_url: null,
+      avatar: null,
     };
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
@@ -42,7 +42,7 @@ describe('useAuthStore', () => {
   });
 
   it('fetchUser clears user on failed response', async () => {
-    useAuthStore.setState({ user: { id: '1', email: 'a@b.c', display_name: 'X', username: 'x', avatar_url: null }, isAuthenticated: true });
+    useAuthStore.setState({ user: { id: '1', email: 'a@b.c', display_name: 'X', username: 'x', avatar: null }, isAuthenticated: true });
 
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: false,
@@ -58,7 +58,7 @@ describe('useAuthStore', () => {
 
   it('logout clears user and isAuthenticated', async () => {
     useAuthStore.setState({
-      user: { id: '1', email: 'a@b.c', display_name: 'X', username: 'x', avatar_url: null },
+      user: { id: '1', email: 'a@b.c', display_name: 'X', username: 'x', avatar: null },
       isAuthenticated: true,
     });
 
@@ -87,7 +87,7 @@ describe('useAuthStore', () => {
     // fetchUser will also be called after login succeeds
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ id: '1', email: 'test@example.com', display_name: 'T', username: 't', avatar_url: null }),
+      json: () => Promise.resolve({ id: '1', email: 'test@example.com', display_name: 'T', username: 't', avatar: null }),
     } as Response);
 
     await loginPromise;
@@ -130,7 +130,7 @@ describe('useAuthStore', () => {
       } as Response)
       .mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ id: '1', email: 'a@b.c', display_name: 'X', username: 'x', avatar_url: null }),
+        json: () => Promise.resolve({ id: '1', email: 'a@b.c', display_name: 'X', username: 'x', avatar: null }),
       } as Response);
 
     await useAuthStore.getState().verifyOtp('test@example.com', '123456');

@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Calendar, MessageSquare, Clock, Link2, GitBranch, Trash2, X, Activity, Paperclip, Upload, FileIcon, Download, Timer, Package, Pencil, Check, ArrowUpDown } from '@/lib/icons';
+import { ArrowLeft, Calendar, MessageSquare, Clock, Link2, GitBranch, Trash2, X, Activity, Paperclip, Upload, FileIcon, Download, Timer, Package, Pencil, Check, ArrowUpDown, User, Bell } from '@/lib/icons';
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { useAuthStore } from "@/stores/auth";
@@ -255,6 +255,89 @@ export default function IssueDetail() {
     },
     onError: () => toast.error("Failed to update issue"),
   });
+
+  // --- Assignees ---
+  const { data: members = [] } = useQuery({
+    queryKey: ["project-members", slug, projectId],
+    queryFn: () =>
+      apiFetch<{ results: { memberId: string; username?: string | null; email?: string | null; displayName?: string | null; avatar?: string | null }[] }>(
+        `/workspaces/${slug}/projects/${projectId}/members/`
+      ).then((d) => d.results).catch(() => []),
+    enabled: !!slug && !!projectId,
+  });
+
+  const currentAssigneeIds = new Set((issue?.assignees ?? []).map((a) => a.id));
+
+  const addAssigneeMutation = useMutation({
+    mutationFn: (assigneeId: string) =>
+      api.addAssignee(slug!, projectId!, Number(issueId!), assigneeId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["issue", slug, projectId, issueId] });
+      qc.invalidateQueries({ queryKey: ["issues", slug, projectId] });
+      qc.invalidateQueries({ queryKey: ["my-issues"] });
+    },
+    onError: () => toast.error("Failed to assign user"),
+  });
+
+  const removeAssigneeMutation = useMutation({
+    mutationFn: (assigneeId: string) =>
+      api.removeAssignee(slug!, projectId!, Number(issueId!), assigneeId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["issue", slug, projectId, issueId] });
+      qc.invalidateQueries({ queryKey: ["issues", slug, projectId] });
+      qc.invalidateQueries({ queryKey: ["my-issues"] });
+    },
+    onError: () => toast.error("Failed to unassign user"),
+  });
+
+  const toggleAssignee = (assigneeId: string) => {
+    if (currentAssigneeIds.has(assigneeId)) {
+      removeAssigneeMutation.mutate(assigneeId);
+    } else {
+      addAssigneeMutation.mutate(assigneeId);
+    }
+  };
+
+  // --- Followers ---
+  const { data: subscribersData } = useQuery({
+    queryKey: ["subscribers", slug, projectId, issueId],
+    queryFn: () =>
+      api.listSubscribers(slug!, projectId!, issueId!).catch(() => ({ results: [] })),
+    enabled: !!slug && !!projectId && !!issueId,
+  });
+  const subscribed = (subscribersData?.results ?? []).some((s) => s.user?.id === currentUser?.id);
+  const followerCount = (subscribersData?.results ?? []).length;
+
+  const followMutation = useMutation({
+    mutationFn: () => api.followIssue(slug!, projectId!, issueId!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subscribers", slug, projectId, issueId] });
+      toast.success("You'll get notified about activity on this issue");
+    },
+    onError: () => toast.error("Failed to follow issue"),
+  });
+
+  const unfollowMutation = useMutation({
+    mutationFn: () => api.unfollowIssue(slug!, projectId!, issueId!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subscribers", slug, projectId, issueId] });
+      toast.success("Unfollowed — you'll no longer get notified");
+    },
+    onError: () => toast.error("Failed to unfollow issue"),
+  });
+
+  // Workspace members in the shape the mention picker expects.
+  const mentionMembers = useMemo(
+    () =>
+      members.map((m) => ({
+        id: m.memberId,
+        username: m.username || m.email?.split("@")[0] || m.memberId.slice(0, 8),
+        display_name: m.displayName,
+        email: m.email,
+        avatar: m.avatar,
+      })),
+    [members]
+  );
 
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
@@ -642,7 +725,7 @@ export default function IssueDetail() {
 
           {editingDesc ? (
             <div className="mb-6">
-              <CommentEditor value={descDraft} onChange={setDescDraft} placeholder="Add a description..." />
+              <CommentEditor value={descDraft} onChange={setDescDraft} placeholder="Add a description..." members={mentionMembers} />
               <div className="flex items-center gap-2 mt-2">
                 <Button size="sm" onClick={saveDesc}>Save</Button>
                 <Button size="sm" variant="ghost" onClick={() => setEditingDesc(false)}>Cancel</Button>
@@ -953,6 +1036,7 @@ export default function IssueDetail() {
                       }}
                       placeholder="Add a comment..."
                       resetKey={commentResetKey}
+                      members={mentionMembers}
                     />
                     <div className="flex items-center gap-3">
                       {issue?.external_source === 'portal' && (
@@ -1024,6 +1108,7 @@ export default function IssueDetail() {
                                 onChange={setEditCommentText}
                                 placeholder="Edit comment..."
                                 resetKey={editingCommentId}
+                                members={mentionMembers}
                               />
                               <div className="flex items-center gap-2">
                                 <Button
@@ -1291,6 +1376,76 @@ export default function IssueDetail() {
         {/* Sidebar */}
         <div className="w-full lg:w-[300px] lg:border-l border-t lg:border-t-0 p-4 space-y-4 overflow-y-auto">
           <div className="grid grid-cols-2 lg:grid-cols-1 gap-4">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Follow</label>
+            <Button
+              variant={subscribed ? "secondary" : "outline"}
+              size="sm"
+              className="h-7 w-full text-xs gap-1"
+              onClick={() => (subscribed ? unfollowMutation.mutate() : followMutation.mutate())}
+              disabled={followMutation.isPending || unfollowMutation.isPending}
+            >
+              <Bell className="h-3 w-3" />
+              {subscribed ? "Following" : "Follow"}
+              {followerCount > 0 && (
+                <span className="ml-auto text-muted-foreground text-[10px]">{followerCount}</span>
+              )}
+            </Button>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+              <User className="h-3 w-3" /> Assignee
+            </label>
+            <div className="space-y-1.5">
+              {currentAssigneeIds.size > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {(issue.assignees ?? []).map((a) => (
+                    <Badge key={a.id} variant="secondary" className="text-xs gap-1 pr-1">
+                      <Avatar className="h-4 w-4">
+                        <AvatarFallback className="text-[9px]">
+                          {(a.display_name || a.email || a.username || '?').charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      {a.display_name || a.email || a.username}
+                      <button
+                        className="ml-0.5 hover:text-destructive"
+                        onClick={() => removeAssigneeMutation.mutate(a.id)}
+                        disabled={removeAssigneeMutation.isPending}
+                        aria-label="Remove assignee"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              <Select value="" onValueChange={(v) => v && toggleAssignee(v)}>
+                <SelectTrigger className="h-7 text-xs">
+                  <SelectValue placeholder={currentAssigneeIds.size > 0 ? "Add assignee..." : "Assign to someone..."} />
+                </SelectTrigger>
+                <SelectContent>
+                  {members.map((m) => (
+                    <SelectItem key={m.memberId} value={m.memberId}>
+                      {m.displayName || m.username || m.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {currentUser && !currentAssigneeIds.has(currentUser.id) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 w-full text-xs gap-1"
+                  onClick={() => addAssigneeMutation.mutate(currentUser.id)}
+                  disabled={addAssigneeMutation.isPending}
+                >
+                  <User className="h-3 w-3" /> Assign to me
+                </Button>
+              )}
+            </div>
+          </div>
+
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">State</label>
             <Select

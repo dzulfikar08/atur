@@ -56,12 +56,35 @@ export const api = {
     }
     return all;
   },
+  createIssue: (slug: string, projectId: string, data: { name: string; description_html?: string; priority?: string; state_id?: string }) =>
+    apiFetch<Issue>(`/workspaces/${slug}/projects/${projectId}/issues`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
   listStates: async (slug: string, projectId: string) => {
     const data = await apiFetch<{results: State[]}>(`/workspaces/${slug}/projects/${projectId}/states/`);
     return data.results;
   },
   deleteIssue: (slug: string, projectId: string, seqId: number | string) =>
     apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${seqId}/`, { method: 'DELETE' }),
+  addAssignee: (slug: string, projectId: string, seqId: number | string, assigneeId: string) =>
+    apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${seqId}/assignees`, {
+      method: 'POST', body: JSON.stringify({ assignee_id: assigneeId }),
+    }),
+  removeAssignee: (slug: string, projectId: string, seqId: number | string, assigneeId: string) =>
+    apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${seqId}/assignees/${assigneeId}/`, {
+      method: 'DELETE',
+    }),
+  // Followers (issue subscribers)
+  listSubscribers: (slug: string, projectId: string, issueSeqId: number | string) =>
+    apiFetch<{ results: Subscriber[] }>(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/subscribers/`),
+  followIssue: (slug: string, projectId: string, issueSeqId: number | string) =>
+    apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/subscribers/`, {
+      method: 'POST',
+    }),
+  unfollowIssue: (slug: string, projectId: string, issueSeqId: number | string) =>
+    apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${issueSeqId}/subscribers/`, {
+      method: 'DELETE',
+    }),
   updateComment: (slug: string, projectId: string, seqId: number | string, commentId: string, data: { comment_html: string; access?: string }) =>
     apiFetch(`/workspaces/${slug}/projects/${projectId}/issues/${seqId}/comments/${commentId}/`, {
       method: 'PATCH', body: JSON.stringify(data),
@@ -265,11 +288,13 @@ export const api = {
     apiFetch<{ results: DealStat[] }>(`/workspaces/${slug}/projects/${projectId}/deals/stats/`).then(r => r.results),
 
   // --- Cross-workspace ("All Workspaces") endpoints — /api/me/* ---
-  listAllIssues: async (params?: { state?: string; priority?: string; search?: string; limit?: number }) => {
+  listAllIssues: async (params?: { state?: string; priority?: string; search?: string; workspace?: string; project?: string; limit?: number }) => {
     const qs = new URLSearchParams();
     if (params?.state) qs.set('state', params.state);
     if (params?.priority) qs.set('priority', params.priority);
     if (params?.search) qs.set('search', params.search);
+    if (params?.workspace) qs.set('workspace', params.workspace);
+    if (params?.project) qs.set('project', params.project);
     if (params?.limit) qs.set('limit', String(params.limit));
     const query = qs.toString();
     const data = await apiFetch<{ results: AllIssue[]; total: number }>(`/me/issues/${query ? `?${query}` : ''}`);
@@ -374,11 +399,29 @@ export interface Issue {
   estimate_points: number | null;
   external_source?: string | null;
   module_ids?: string[];
+  // Enriched fields returned by list endpoints (issues.ts / me.ts):
+  state?: { id: string; name: string; color?: string; group: string } | null;
+  labels?: { id: string; name: string; color?: string }[];
+  assignees?: { id: string; email?: string; username?: string; display_name?: string; avatar?: string | null }[];
 }
 
 export interface SearchResult {
   issues: Issue[];
   projects: Project[];
+}
+
+// Issue follower (issue_subscribers row + nested user).
+export interface Subscriber {
+  id: string;
+  subscriber_id: string;
+  created_at: string | null;
+  user: {
+    id: string;
+    email: string;
+    username: string;
+    display_name: string | null;
+    avatar: string | null;
+  } | null;
 }
 
 export interface PaginatedResponse<T> {
@@ -580,6 +623,7 @@ export type AllIssue = Issue & {
 export type AllProject = Project & {
   identifier?: string | null;
   emoji?: string | null;
+  workspace_id: string;
   workspace_slug: string;
   workspace_name: string;
 };

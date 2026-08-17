@@ -1,4 +1,5 @@
 import { createApp } from './app'
+import { runDueDateReminders } from './services/reminders'
 import type { Env } from './lib/env'
 
 const app = createApp()
@@ -40,5 +41,12 @@ export default {
     }
 
     return env.ASSETS.fetch(request)
+  },
+
+  // Cron trigger (see wrangler.toml [triggers]): daily due-date reminder emails
+  // for issue followers. Runs at 08:00 UTC; each recipient's local day is
+  // derived from users.user_timezone for the dedup date.
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runDueDateReminders(env))
   },
 } satisfies ExportedHandler<Env>

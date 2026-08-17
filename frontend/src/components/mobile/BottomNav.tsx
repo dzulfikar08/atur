@@ -47,7 +47,7 @@ export default function BottomNav() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { data: workspaces = [] } = useWorkspaces();
-  const { currentSlug, setCurrentSlug } = useWorkspaceStore();
+  const { currentSlug, switchWorkspace } = useWorkspaceStore();
   const [createWsOpen, setCreateWsOpen] = useState(false);
 
   const activeSlug = currentSlug ?? slug;
@@ -103,8 +103,7 @@ export default function BottomNav() {
             <div className="space-y-1">
               <button
                 onClick={() => {
-                  setCurrentSlug('all');
-                  navigate('/all');
+                  navigate(switchWorkspace('all'));
                   setMoreOpen(false);
                 }}
                 className={cn(
@@ -128,8 +127,7 @@ export default function BottomNav() {
                   <button
                     key={ws.id}
                     onClick={() => {
-                      setCurrentSlug(ws.slug);
-                      navigate(`/${ws.slug}`);
+                      navigate(switchWorkspace(ws.slug));
                       setMoreOpen(false);
                     }}
                     className={cn(
