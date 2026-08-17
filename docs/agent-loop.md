@@ -156,7 +156,15 @@ Every spawned session gets a focused but sufficient context envelope:
 | Issue id + sequence | the queue item |
 | Full description / acceptance criteria | the agent reads `get_issue` |
 | History / prior agent comments | the agent reads `list_comments` |
-| Breakdown feature context | carried in each child's `description_html` |
+
+**Retry context** — with `cmd`, retries resume the issue's own session via an
+explicit `--resume <sessionId>` (captured from the first run's JSON result
+frame). This is deliberate: `cmd` keys headless sessions by working directory,
+so `--continue` would resume whichever session ran last in the repo — which,
+under `ATUR_MAX_CONCURRENCY > 1`, may be another issue's or a reviewer's
+session. Pin the session id per issue and retries always continue the right
+conversation. The JSON result frame also exposes per-run `usage` for token
+metering.
 
 The prompt tells the agent exactly what to read and what's expected, so a
 session never needs the whole feature or whole repo in context — it pulls what
@@ -292,6 +300,8 @@ tmux new-session -d -s supervisor 'ATUR_WORKSPACE=opexmx ATUR_PROJECTS="My App" 
 | `ATUR_MAX_CONCURRENCY` | `2` | max simultaneous agent sessions |
 | `ATUR_MAX_ATTEMPTS` | `3` | max coding+review cycles per issue |
 | `ATUR_REVIEWERS` | `2` | parallel reviewers per review gate (all must approve) |
+| `ATUR_MAX_TURNS_WORK` | `50` | token budget (max-turns) per work session |
+| `ATUR_MAX_TURNS_REVIEW` | `20` | token budget (max-turns) per reviewer session |
 | `ATUR_ATTEMPT_TIMEOUT_MIN` | `90` | max minutes a session may run before it's killed |
 | `ATUR_POLL_INTERVAL` | `60` | seconds between queue polls |
 | `ATUR_REPO_DIR` | repo root | cwd for agent sessions |
