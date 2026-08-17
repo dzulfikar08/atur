@@ -305,6 +305,33 @@ get_sid() { # <seq> → echo the session id ("" if unset)
   return 1
 }
 
+# Per-issue token usage metering. The cmd result frame carries
+# {"inputTokens","outputTokens","cacheReadTokens","cacheWriteTokens"}; we sum
+# per issue across attempts + review gates so the final report can show cost.
+TOK_KEYS=()
+TOK_VALS=()
+
+tok_add() { # <seq> <input> <output> <cache_read> <cache_write> → accumulate
+  local i cur
+  for i in "${!TOK_KEYS[@]}"; do
+    if [[ "${TOK_KEYS[$i]}" == "$1" ]]; then
+      cur="${TOK_VALS[$i]}"
+      TOK_VALS[$i]="$(( ${cur%%|*} + ${2:-0} ))|$(( ${cur#*|} + ${3:-0} ))"
+      return 0
+    fi
+  done
+  TOK_KEYS+=("$1")
+  TOK_VALS+=("$(( ${2:-0} ))|$(( ${3:-0} ))")
+}
+
+tok_report() { # <seq> → echo "inputTokens outputTokens" totals ("" if none)
+  local i
+  for i in "${!TOK_KEYS[@]}"; do
+    [[ "${TOK_KEYS[$i]}" == "$1" ]] && { printf '%s' "${TOK_VALS[$i]}"; return 0; }
+  done
+  return 1
+}
+
 claim_issue() { # <project_id> <issue_id> <agent_member_id>
   mcp update_issue "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"state_id\":\"$(state_id "$1" inprogress)\"}" >/dev/null
   mcp set_assignee "{\"project_id\":\"$1\",\"workspace\":\"$WORKSPACE\",\"issue_id\":\"$2\",\"assignee_id\":\"$3\"}" >/dev/null
@@ -427,21 +454,30 @@ short justification on the same line." review
     wait "$pid" || rc=1
   done
 
-  # Collect verdicts + feedback.
+  # Collect verdicts + feedback (+ token usage from the JSON result frames).
   local all_approved=1
   local feedback=""
+  local rev_in=0 rev_out=0
   for out_file in "${review_files[@]}"; do
     local out verdict txt
     out=$(cat "$out_file")
     verdict=$(agent_verdict "$out")
     txt=$(agent_final_text "$out")
     log "review  $3: reviewer verdict: ${verdict:-none}"
+    if [[ "$AGENT" == "cmd" ]]; then
+      local ri ro
+      ri=$(echo "$out" | jq -r 'select(.type=="result") | .usage.inputTokens // 0' 2>/dev/null | tail -1)
+      ro=$(echo "$out" | jq -r 'select(.type=="result") | .usage.outputTokens // 0' 2>/dev/null | tail -1)
+      rev_in=$(( rev_in + ${ri:-0} )); rev_out=$(( rev_out + ${ro:-0} ))
+    fi
     if [[ "$verdict" != "APPROVED" ]]; then
       all_approved=0
       feedback+="• ${txt:-$out}"$'\n'
     fi
     rm -f "$out_file"
   done
+  tok_add "$3" "$rev_in" "$rev_out"
+  log "tok   $3: review in=${rev_in} out=${rev_out}"
 
   if (( all_approved == 1 )); then
     log "review  $3: all ${REVIEWERS} reviewer(s) approved"
@@ -640,16 +676,19 @@ Work autonomously. Post your findings as comments on the issue."
   # Prompt file is no longer needed once the session has exited.
   rm -f "${prompt_file:-}"
 
-  # Capture this issue's cmd sessionId (from the JSON result frame) so retries
-  # can --resume the SAME conversation. Only meaningful for cmd work runs.
+  # Capture this issue's cmd sessionId + token usage (from the JSON result
+  # frame) so retries --resume the SAME conversation and we can meter cost.
   if [[ "$AGENT" == "cmd" ]]; then
-    local new_sid
+    local new_sid tokin tokout
     new_sid=$(jq -r 'select(.type=="result") | .sessionId // empty' "/tmp/atur-work-$seq.json" 2>/dev/null | tail -1)
+    tokin=$(jq -r 'select(.type=="result") | .usage.inputTokens // 0' "/tmp/atur-work-$seq.json" 2>/dev/null | tail -1)
+    tokout=$(jq -r 'select(.type=="result") | .usage.outputTokens // 0' "/tmp/atur-work-$seq.json" 2>/dev/null | tail -1)
     rm -f "/tmp/atur-work-$seq.json"
     if [[ -n "$new_sid" && "$new_sid" != "null" ]]; then
       set_sid "$seq" "$new_sid"
-      log "git   $seq: sessionId=$new_sid"
     fi
+    tok_add "$seq" "${tokin:-0}" "${tokout:-0}"
+    log "tok   $seq: attempt $attempt in=${tokin:-0} out=${tokout:-0}"
   fi
 
   # Commit the agent's work so reviewers inspect committed code, not the
@@ -685,6 +724,12 @@ Work autonomously. Post your findings as comments on the issue."
       git_push_branch "$seq" || warn "git   $seq: push failed"
     fi
     mark_done "$project_id" "$issue_id"
+    # Final token summary for the issue (work attempts + all review gates).
+    local treport
+    treport=$(tok_report "$seq")
+    if [[ -n "$treport" ]]; then
+      log "tok   $seq: TOTAL in=${treport%%|*} out=${treport#*|}"
+    fi
     log "done  $seq: approved and marked Done"
     return 0
   fi
