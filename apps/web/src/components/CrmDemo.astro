@@ -1,0 +1,418 @@
+---
+import Icon from "./Icon.astro";
+// CRM demo — a pipeline board with draggable deal cards + a contacts list,
+// both client-side mocks. No backend.
+const crmStages = [
+  { id: "lead", label: "Lead", color: "#3b82f6" },
+  { id: "qualified", label: "Qualified", color: "#8b5cf6" },
+  { id: "proposal", label: "Proposal", color: "#f59e0b" },
+  { id: "won", label: "Won", color: "#22c55e" },
+];
+const crmDeals = [
+  { id: "d1", name: "Acme · onboarding", company: "Acme Inc", amount: "$12,000", stage: "lead", avatar: "AC", color: "#3b82f6", days: 2 },
+  { id: "d2", name: "Northwind · rollout", company: "Northwind", amount: "$8,400", stage: "lead", avatar: "NW", color: "#14b8a6", days: 5 },
+  { id: "d3", name: "Globex · migration", company: "Globex", amount: "$21,000", stage: "qualified", avatar: "GL", color: "#8b5cf6", days: 1 },
+  { id: "d4", name: "Initech · pilot", company: "Initech", amount: "$5,200", stage: "qualified", avatar: "IN", color: "#6366f1", days: 3 },
+  { id: "d5", name: "Umbrella · renew", company: "Umbrella Corp", amount: "$14,500", stage: "proposal", avatar: "UM", color: "#f59e0b", days: 4 },
+  { id: "d6", name: "Stark · annual plan", company: "Stark Industries", amount: "$32,000", stage: "proposal", avatar: "ST", color: "#ef4444", days: 6 },
+  { id: "d7", name: "Wayne · security", company: "Wayne Enterprises", amount: "$9,800", stage: "won", avatar: "WE", color: "#22c55e", days: 0 },
+  { id: "d8", name: "Hooli · data pack", company: "Hooli", amount: "$6,300", stage: "won", avatar: "HO", color: "#10b981", days: 0 },
+];
+const crmContacts = [
+  { name: "Alice Chen", role: "Head of Ops", company: "Acme Inc", email: "alice@acme.io", status: "active", avatar: "AC", color: "#3b82f6" },
+  { name: "Bob Nguyen", role: "Engineering Lead", company: "Northwind", email: "bob@northwind.co", status: "active", avatar: "BN", color: "#14b8a6" },
+  { name: "Carla Ruiz", role: "Procurement", company: "Globex", email: "carla@globex.com", status: "lead", avatar: "CR", color: "#8b5cf6" },
+  { name: "David Kim", role: "CTO", company: "Initech", email: "david@initech.io", status: "lead", avatar: "DK", color: "#6366f1" },
+  { name: "Emma Larsen", role: "Finance", company: "Umbrella Corp", email: "emma@umbrella.com", status: "active", avatar: "EL", color: "#f59e0b" },
+];
+const crmTabs = [
+  { id: "pipeline", label: "Pipeline" },
+  { id: "contacts", label: "Contacts" },
+];
+---
+<div class="demo-window crm-demo interactive-mock landing-demo" data-crmtab="pipeline">
+  <div class="demo-chrome">
+    <span class="demo-dots"><i></i><i></i><i></i></span>
+    <span class="demo-crumbs">app.diatur.com <i>/</i> demo <i>/</i> <b>crm</b></span>
+    <span class="demo-status"><i></i>Synced</span>
+  </div>
+
+  <div class="crm-body">
+    <header class="crm-head">
+      <div>
+        <h3 class="crm-title"><Icon name="contactBook" size={18} />CRM</h3>
+        <p class="crm-sub demo-num" data-crm-total>$108,000 pipeline · 8 deals</p>
+      </div>
+      <div class="crm-tabs">
+        {crmTabs.map((t) => <button type="button" class:list={["crm-tab", { active: t.id === "pipeline" }]} data-crmtab-btn={t.id}><Icon name={t.id === "pipeline" ? "kanban" : "contactBook"} size={13} />{t.label}</button>)}
+      </div>
+    </header>
+
+    <!-- Pipeline board -->
+    <div class="crm-pipeline" data-crmpipeline>
+      {crmStages.map((s) => (
+        <section class="crm-stage" data-crmstage={s.id}>
+          <header class="crm-stage-head">
+            <i style={`background:${s.color}`}></i>
+            <span>{s.label}</span>
+            <b class="demo-num" data-stage-count={s.id}>{crmDeals.filter((d) => d.stage === s.id).length}</b>
+          </header>
+          <div class="crm-stage-body">
+            {crmDeals.filter((d) => d.stage === s.id).map((d) => (
+              <article class="crm-deal" data-crmdeal={d.id} draggable="true">
+                <div class="crm-deal-top">
+                  <span class="demo-avatar" style={`--bg:${d.color};width:20px;height:20px;font-size:8px`}>{d.avatar}</span>
+                  <b>{d.name}</b>
+                </div>
+                <p>{d.company}</p>
+                <div class="crm-deal-foot">
+                  <strong class="demo-num">{d.amount}</strong>
+                  <span>{d.days > 0 ? `${d.days}d ago` : "today"}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+
+    <!-- Contacts list -->
+    <div class="crm-contacts" data-crmcontacts hidden>
+      <div class="crm-contacts-head">
+        <input type="text" placeholder="Search contacts…" data-crm-search />
+        <button type="button" class="crm-add"><Icon name="plus" size={13} />New lead</button>
+      </div>
+      <table class="crm-table">
+        <thead>
+          <tr><th>Name</th><th>Role</th><th>Company</th><th>Email</th><th>Status</th></tr>
+        </thead>
+        <tbody data-crm-rows>
+          {crmContacts.map((c) => (
+            <tr data-crm-contact>
+              <td><span class="demo-avatar sm" style={`--bg:${c.color}`}>{c.avatar}</span><b>{c.name}</b></td>
+              <td class="crm-muted">{c.role}</td>
+              <td class="crm-muted">{c.company}</td>
+              <td class="crm-muted">{c.email}</td>
+              <td><span class:list={["crm-status", c.status]}>{c.status}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<style>
+  .crm-body {
+    position: relative;
+    padding: 20px 22px 16px;
+  }
+  .crm-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .crm-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0;
+    color: var(--demo-text);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .crm-title svg {
+    color: var(--demo-accent-2);
+  }
+  .crm-sub {
+    margin: 3px 0 0;
+    color: var(--demo-faint);
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .crm-tabs {
+    display: flex;
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid var(--demo-hairline-2);
+    border-radius: 9px;
+    background: var(--demo-panel);
+  }
+  .crm-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--demo-dim);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .crm-tab.active {
+    background: var(--demo-card-2);
+    color: var(--demo-text);
+  }
+  .crm-pipeline {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .crm-stage {
+    border: 1px solid var(--demo-hairline);
+    border-radius: 11px;
+    background: rgba(255, 255, 255, 0.02);
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  }
+  .crm-stage.drop-target {
+    border-color: rgba(139, 92, 246, 0.5);
+    background: rgba(139, 92, 246, 0.07);
+    box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.3);
+  }
+  .crm-stage.flash { animation: board-flash 0.5s ease; }
+  .crm-stage-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 11px 11px 8px;
+    color: var(--demo-dim);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .crm-stage-head i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    box-shadow: 0 0 6px currentColor;
+  }
+  .crm-stage-head b {
+    margin-left: auto;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--demo-faint);
+    font-size: 10px;
+  }
+  .crm-stage-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 110px;
+    padding: 0 7px 8px;
+  }
+  .crm-deal {
+    padding: 10px 11px;
+    border: 1px solid var(--demo-hairline-2);
+    border-radius: 9px;
+    background: linear-gradient(180deg, var(--demo-card), var(--demo-panel-2));
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    cursor: grab;
+    transition: transform 0.12s, border-color 0.12s, box-shadow 0.12s, opacity 0.12s;
+  }
+  .crm-deal:hover {
+    border-color: rgba(255, 255, 255, 0.22);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.3);
+  }
+  .crm-deal.dragging { opacity: 0.35; }
+  .crm-deal-top { display: flex; align-items: center; gap: 8px; }
+  .crm-deal-top b {
+    color: var(--demo-text);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  .crm-deal p {
+    margin: 6px 0 0;
+    color: var(--demo-faint);
+    font-size: 10px;
+  }
+  .crm-deal-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 8px;
+  }
+  .crm-deal-foot strong {
+    color: var(--demo-text);
+    font-size: 11.5px;
+  }
+  .crm-deal-foot span {
+    color: var(--demo-faint);
+    font-size: 9.5px;
+  }
+  .demo-avatar.sm {
+    width: 18px;
+    height: 18px;
+    margin-right: 7px;
+    font-size: 7px;
+    vertical-align: middle;
+  }
+  .drag-ghost {
+    z-index: 999;
+    width: 200px;
+    opacity: 0.94;
+    cursor: grabbing;
+    transform: rotate(2deg) scale(1.04);
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(139, 92, 246, 0.4);
+    border-radius: 9px;
+  }
+  .crm-contacts { margin-top: 2px; }
+  .crm-contacts-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .crm-contacts-head input {
+    width: 220px;
+    padding: 8px 13px;
+    border: 1px solid var(--demo-hairline-2);
+    border-radius: 8px;
+    background: var(--demo-card);
+    color: var(--demo-text);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .crm-contacts-head input:focus {
+    border-color: var(--demo-accent);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.18);
+  }
+  .crm-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border: 0;
+    border-radius: 8px;
+    background: linear-gradient(180deg, var(--demo-accent), #7c3aed);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.35);
+    cursor: pointer;
+  }
+  .crm-add:hover { filter: brightness(1.1); }
+  .crm-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid var(--demo-hairline);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .crm-table th {
+    padding: 10px 13px;
+    color: var(--demo-faint);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-align: left;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--demo-hairline);
+  }
+  .crm-table td {
+    padding: 10px 13px;
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    font-size: 12px;
+  }
+  .crm-table td b {
+    color: var(--demo-text);
+    font-weight: 500;
+  }
+  .crm-muted { color: var(--demo-faint); font-size: 11px; }
+  .crm-status {
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: capitalize;
+  }
+  .crm-status.active { background: rgba(52, 211, 153, 0.14); color: var(--demo-green); }
+  .crm-status.lead { background: rgba(96, 165, 250, 0.14); color: var(--demo-blue); }
+</style>
+
+<script>
+  (function () {
+    const root = document.querySelector(".crm-demo");
+    if (!root) return;
+    const tabs = [...root.querySelectorAll(".crm-tab")];
+    const pipeline = root.querySelector("[data-crmpipeline]");
+    const contacts = root.querySelector("[data-crmcontacts]");
+    const stages = [...root.querySelectorAll(".crm-stage")];
+    const search = root.querySelector("[data-crm-search]");
+    const totalEl = root.querySelector("[data-crm-total]");
+
+    tabs.forEach((t) => {
+      t.addEventListener("click", () => {
+        tabs.forEach((x) => x.classList.toggle("active", x === t));
+        const isPipeline = t.dataset.crmtabBtn === "pipeline";
+        pipeline.hidden = !isPipeline;
+        contacts.hidden = isPipeline;
+      });
+    });
+
+    function recount() {
+      let total = 0;
+      stages.forEach((s) => {
+        const n = s.querySelectorAll(".crm-deal").length;
+        s.querySelector(".crm-stage-head b").textContent = n;
+      });
+      root.querySelectorAll(".crm-deal").forEach((d) => {
+        const amount = parseInt((d.querySelector(".crm-deal-foot strong").textContent || "").replace(/[^0-9]/g, ""), 10) || 0;
+        total += amount;
+      });
+      totalEl.textContent = "$" + total.toLocaleString() + " pipeline · " + root.querySelectorAll(".crm-deal").length + " deals";
+    }
+    recount();
+
+    let dragEl = null;
+    root.addEventListener("dragstart", (e) => {
+      const deal = e.target.closest(".crm-deal");
+      if (!deal) return;
+      dragEl = deal;
+      deal.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    root.addEventListener("dragend", (e) => {
+      const deal = e.target.closest(".crm-deal");
+      if (deal) deal.classList.remove("dragging");
+      stages.forEach((s) => s.classList.remove("drop-target"));
+      dragEl = null;
+    });
+    stages.forEach((s) => {
+      s.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        if (dragEl) s.classList.add("drop-target");
+      });
+      s.addEventListener("dragleave", () => s.classList.remove("drop-target"));
+      s.addEventListener("drop", (e) => {
+        e.preventDefault();
+        s.classList.remove("drop-target");
+        if (!dragEl) return;
+        const from = dragEl.closest(".crm-stage");
+        s.querySelector(".crm-stage-body").appendChild(dragEl);
+        if (from !== s) {
+          s.classList.remove("flash");
+          void s.offsetWidth;
+          s.classList.add("flash");
+        }
+        recount();
+      });
+    });
+
+    search.addEventListener("input", () => {
+      const q = search.value.toLowerCase();
+      root.querySelectorAll("[data-crm-contact]").forEach((row) => {
+        row.hidden = !(row.textContent || "").toLowerCase().includes(q);
+      });
+    });
+  })();
+</script>
