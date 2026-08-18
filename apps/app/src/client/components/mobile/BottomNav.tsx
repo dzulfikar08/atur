@@ -8,7 +8,6 @@ import {
   Menu,
   FileText,
   Puzzle,
-  Bot,
   Shield,
   Settings,
   LogOut,
@@ -16,7 +15,6 @@ import {
   Building2,
   Users,
   Layers,
-  Zap,
 } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
@@ -35,9 +33,7 @@ const mainTabs = [
 const moreItems = [
   { to: "pages", icon: FileText, label: "Pages" },
   { to: "crm", icon: Users, label: "CRM" },
-  { to: "integrations/github", icon: Puzzle, label: "Integrations" },
-  { to: "integrations/polar", icon: Zap, label: "Polar" },
-  { to: "integrations/mcp", icon: Bot, label: "AI / MCP" },
+  { to: "integrations", icon: Puzzle, label: "Integrations" },
   { to: "admin", icon: Shield, label: "Admin" },
   { to: "settings", icon: Settings, label: "Settings" },
 ];

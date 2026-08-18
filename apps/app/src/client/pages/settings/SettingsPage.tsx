@@ -12,6 +12,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "sonner";
 import { Settings, Users, Tag, Inbox, Trash2, AlertTriangle, Upload } from "@/lib/icons";
 import { useState, useEffect, useRef } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function SettingsPage() {
   const { slug, projectId } = useParams();
@@ -403,18 +410,22 @@ export default function SettingsPage() {
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">Support project</label>
-                <select
-                  value={portalProjectId}
-                  onChange={(e) => setPortalProjectId(e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                <Select
+                  value={portalProjectId || "none"}
+                  onValueChange={(v) => setPortalProjectId(v === "none" ? "" : v)}
                 >
-                  <option value="">Select a project…</option>
-                  {projects.map((p: any) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select a project…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No project</SelectItem>
+                    {projects.map((p: any) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <Button
                 onClick={() =>

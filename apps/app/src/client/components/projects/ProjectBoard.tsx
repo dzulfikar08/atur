@@ -179,7 +179,7 @@ function SortableIssueCard({
     <Card
       ref={setNodeRef}
       style={style}
-      className={`cursor-pointer hover:shadow-md transition-shadow select-none ${
+      className={`cursor-pointer transition-shadow select-none duration-200 hover:shadow-elevated ${
         isDragging ? "shadow-lg ring-2 ring-primary/30" : ""
       }`}
       onClick={onClick}
@@ -1184,35 +1184,43 @@ export default function ProjectBoard() {
                     </td>
                     <td className="p-2 font-medium">{issue.name}</td>
                     <td className="p-1" onClick={(e) => e.stopPropagation()}>
-                      <select
-                        className="text-xs bg-transparent rounded px-1 py-0.5 w-full cursor-pointer"
-                        style={{ color: st?.color || "#6b7280" }}
-                        value={issue.state_id || ""}
-                        onChange={(e) =>
-                          patchIssue(issue.sequence_id, { state_id: e.target.value })
-                        }
+                      <Select
+                        value={issue.state_id ?? undefined}
+                        onValueChange={(v) => patchIssue(issue.sequence_id, { state_id: v })}
                       >
-                        {states.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
+                        <SelectTrigger
+                          className="h-7 w-full justify-start gap-1 border-none bg-transparent px-2 text-xs shadow-none focus-visible:ring-1 focus-visible:ring-offset-0 dark:bg-transparent"
+                          style={{ color: st?.color || "#6b7280" }}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="min-w-[10rem]">
+                          {states.map((s) => (
+                            <SelectItem key={s.id} value={s.id} className="text-xs">
+                              <span style={{ color: s.color }}>{s.name}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </td>
                     <td className="p-1" onClick={(e) => e.stopPropagation()}>
-                      <select
-                        className={`text-xs rounded px-1 py-0.5 w-full cursor-pointer ${PRIORITY_COLORS[issue.priority || "none"]}`}
+                      <Select
                         value={issue.priority || "none"}
-                        onChange={(e) =>
-                          patchIssue(issue.sequence_id, { priority: e.target.value })
-                        }
+                        onValueChange={(v) => patchIssue(issue.sequence_id, { priority: v })}
                       >
-                        {["urgent", "high", "medium", "low", "none"].map((p) => (
-                          <option key={p} value={p}>
-                            {p}
-                          </option>
-                        ))}
-                      </select>
+                        <SelectTrigger
+                          className={`h-7 w-full justify-start gap-1 rounded border-none px-2 text-xs shadow-none focus-visible:ring-1 focus-visible:ring-offset-0 ${PRIORITY_COLORS[issue.priority || "none"]}`}
+                        >
+                          <SelectValue className="capitalize" />
+                        </SelectTrigger>
+                        <SelectContent className="min-w-[8rem]">
+                          {["urgent", "high", "medium", "low", "none"].map((p) => (
+                            <SelectItem key={p} value={p} className="text-xs capitalize">
+                              {p}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </td>
                     <td className="p-1" onClick={(e) => e.stopPropagation()}>
                       <DatePicker

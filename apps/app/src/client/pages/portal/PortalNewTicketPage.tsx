@@ -9,6 +9,13 @@ import { ArrowLeft } from "@/lib/icons";
 import { toast } from "sonner";
 import { ApiError, portalApi } from "@/lib/portalApi";
 import CommentEditor from "@/components/editor/CommentEditor";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const PRIORITIES = ["none", "low", "medium", "high", "urgent"] as const;
 
@@ -82,18 +89,18 @@ export default function PortalNewTicketPage() {
 
           <div className="space-y-1.5">
             <Label htmlFor="priority">Priority</Label>
-            <select
-              id="priority"
-              value={priority}
-              onChange={(e) => setPriority(e.target.value)}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              {PRIORITIES.map((p) => (
-                <option key={p} value={p} className="capitalize">
-                  {p}
-                </option>
-              ))}
-            </select>
+            <Select value={priority} onValueChange={setPriority}>
+              <SelectTrigger id="priority" className="h-9">
+                <SelectValue className="capitalize" />
+              </SelectTrigger>
+              <SelectContent>
+                {PRIORITIES.map((p) => (
+                  <SelectItem key={p} value={p} className="capitalize">
+                    {p}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex justify-end gap-2">
