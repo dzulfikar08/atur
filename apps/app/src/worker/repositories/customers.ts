@@ -17,6 +17,7 @@ export interface CustomerRow {
   source: string | null;
   username: string | null;
   sessionToken: string | null;
+  polarCustomerId: string | null;
 }
 
 // Contact fields live on the customers row now; users is LEFT-joined only for
@@ -33,6 +34,7 @@ const contactSelect = {
   source: schema.customers.source,
   username: schema.users.username,
   sessionToken: schema.customers.sessionToken,
+  polarCustomerId: schema.customers.polarCustomerId,
 };
 
 // Portal session lookup — mirrors usersRepo.findByToken but against

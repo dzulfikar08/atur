@@ -363,6 +363,23 @@ export const api = {
       `/workspaces/${slug}/contacts/${query ? `?${query}` : ""}`,
     );
   },
+
+  // Polar (payments → CRM import)
+  getPolarSettings: (slug: string) => apiFetch<PolarSettings>(`/workspaces/${slug}/polar/settings`),
+  savePolarSettings: (slug: string, data: Partial<PolarSettings>) =>
+    apiFetch<PolarSettings>(`/workspaces/${slug}/polar/settings`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  syncPolar: (slug: string) =>
+    apiFetch<{ ok: boolean; customers: number; subscriptions: number; orders: number }>(
+      `/workspaces/${slug}/polar/sync`,
+      { method: "POST" },
+    ),
+  listPolarLinks: (slug: string) =>
+    apiFetch<{ results: PolarLink[] }>(`/workspaces/${slug}/polar/links`),
+  listContactPolarLinks: (slug: string, contactId: string) =>
+    apiFetch<{ results: PolarLink[] }>(`/workspaces/${slug}/polar/contacts/${contactId}/links`),
   createContact: (
     slug: string,
     data: { email: string; name?: string; company?: string; phone?: string; source?: string },
@@ -831,4 +848,30 @@ export interface ContactDetail {
     state_name: string | null;
     created_at: string | null;
   }[];
+}
+
+// ── Polar (payments → CRM import) ──
+
+export interface PolarSettings {
+  workspace_id: string;
+  access_token: string | null;
+  webhook_secret: string | null;
+  pipeline_project_id: string | null;
+  default_state_id: string | null;
+  webhook_enabled: number;
+  last_synced_at: string | null;
+}
+
+export interface PolarLink {
+  id: string;
+  workspace_id: string;
+  service: string;
+  polar_type: "customer" | "subscription" | "order";
+  polar_id: string;
+  customer_id: string | null;
+  deal_id: string | null;
+  raw: string | null;
+  last_event: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 }
