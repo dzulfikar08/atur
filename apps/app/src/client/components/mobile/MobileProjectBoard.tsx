@@ -4,7 +4,7 @@ import { api, apiFetch, type Issue, type State } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import CommentEditor from "@/components/editor/CommentEditor";
 import {
   Select,
   SelectContent,
@@ -417,11 +417,11 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
             />
-            <Textarea
-              placeholder="Description (optional)"
-              rows={3}
+            <CommentEditor
               value={newDesc}
-              onChange={(e) => setNewDesc(e.target.value)}
+              onChange={setNewDesc}
+              placeholder="Description (optional)"
+              compact
             />
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
