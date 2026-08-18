@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
@@ -297,6 +297,12 @@ export default function SettingsPage() {
                     <div key={m.id} className="flex items-center justify-between py-2">
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
+                          {m.member?.avatar ? (
+                            <AvatarImage
+                              src={m.member.avatar}
+                              alt={m.member?.display_name || m.member?.username || "User"}
+                            />
+                          ) : null}
                           <AvatarFallback className="text-xs">
                             {(m.member?.display_name || m.member?.username || "U").charAt(0)}
                           </AvatarFallback>

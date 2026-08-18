@@ -135,14 +135,18 @@ export default function TopBar() {
       // A project UUID segment (the one right after "projects") is unreadable —
       // show the project's identifier (or name) instead.
       let label = routeLabels[segment] ?? segment;
+      let path = `/${slug}/${pathSegments.slice(0, i + 1).join("/")}`;
       if (pathSegments[i - 1] === "projects") {
         const p = projectById.get(segment);
         if (p) label = p.identifier || p.name;
       }
-      return {
-        label,
-        path: `/${slug}/${pathSegments.slice(0, i + 1).join("/")}`,
-      };
+      // "issues" is a workspace-level page (My Issues), but inside a project
+      // detail route its naive path (/:slug/projects/:id/issues) matches no
+      // route and renders a blank page — point it at the real page instead.
+      if (segment === "issues") {
+        path = `/${slug}/issues`;
+      }
+      return { label, path };
     }),
   ];
 

@@ -95,7 +95,7 @@ export default function CommentEditor({
       Markdown,
       // Members list is captured at editor creation; the parent typically has
       // it loaded before the composer mounts (it fetches members on page load).
-      ...(members.length > 0 ? [makeMentionExtension(members)] : []),
+      ...(members.length > 0 ? makeMentionExtension(members) : []),
     ],
     content: value || "",
     editorProps: {

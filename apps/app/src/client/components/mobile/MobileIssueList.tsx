@@ -94,6 +94,36 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
     enabled: createOpen && !!effectiveCreateWorkspaceSlug && !!effectiveCreateProjectId,
   });
 
+  // Project members for @mention suggestions in the create-sheet description.
+  const { data: createMembers = [] } = useQuery({
+    queryKey: ["project-members", effectiveCreateWorkspaceSlug, effectiveCreateProjectId],
+    queryFn: () =>
+      apiFetch<{
+        results: {
+          memberId: string;
+          username?: string | null;
+          email?: string | null;
+          displayName?: string | null;
+          avatar?: string | null;
+        }[];
+      }>(`/workspaces/${effectiveCreateWorkspaceSlug}/projects/${effectiveCreateProjectId}/members/`)
+        .then((d) => d.results)
+        .catch(() => []),
+    enabled: createOpen && !!effectiveCreateWorkspaceSlug && !!effectiveCreateProjectId,
+  });
+
+  const createMentionMembers = useMemo(
+    () =>
+      createMembers.map((m) => ({
+        id: m.memberId,
+        username: m.username || m.email?.split("@")[0] || m.memberId.slice(0, 8),
+        display_name: m.displayName,
+        email: m.email,
+        avatar: m.avatar,
+      })),
+    [createMembers],
+  );
+
   // States for the cards shown on a project board view.
   const { data: states = [] } = useQuery({
     queryKey: ["states", slug, projectId],
@@ -622,6 +652,7 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
             onChange={setNewIssueDesc}
             placeholder="Description (optional)"
             compact
+            members={createMentionMembers}
           />
           {effectiveCreateProjectId && (
             <div>

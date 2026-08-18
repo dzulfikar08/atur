@@ -94,32 +94,40 @@ export const issueRoutes = new Hono<{ Bindings: Env }>({ strict: false })
 
   .post("/:issueId/labels", authMiddleware, async (c) => {
     const db = getDb(c.env.DB);
-    const issueId = c.req.param("issueId")!;
+    const projectId = c.req.param("projectId")!;
+    const issue = await issuesRepo.resolveIssue(db, projectId, c.req.param("issueId")!);
+    if (!issue) throw new HTTPException(404, { message: "Issue not found" });
     const { label_id } = (await c.req.json()) as { label_id: string };
-    await issuesService.addLabel(db, issueId, label_id);
+    await issuesService.addLabel(db, issue.id, label_id);
     return c.json({ ok: true });
   })
 
   .delete("/:issueId/labels/:labelId", authMiddleware, async (c) => {
     const db = getDb(c.env.DB);
-    const issueId = c.req.param("issueId")!;
+    const projectId = c.req.param("projectId")!;
+    const issue = await issuesRepo.resolveIssue(db, projectId, c.req.param("issueId")!);
+    if (!issue) throw new HTTPException(404, { message: "Issue not found" });
     const labelId = c.req.param("labelId")!;
-    await issuesService.removeLabel(db, issueId, labelId);
+    await issuesService.removeLabel(db, issue.id, labelId);
     return c.json({ ok: true });
   })
 
   .post("/:issueId/assignees", authMiddleware, async (c) => {
     const db = getDb(c.env.DB);
-    const issueId = c.req.param("issueId")!;
+    const projectId = c.req.param("projectId")!;
+    const issue = await issuesRepo.resolveIssue(db, projectId, c.req.param("issueId")!);
+    if (!issue) throw new HTTPException(404, { message: "Issue not found" });
     const { assignee_id } = (await c.req.json()) as { assignee_id: string };
-    await issuesService.addAssignee(db, issueId, assignee_id);
+    await issuesService.addAssignee(db, issue.id, assignee_id);
     return c.json({ ok: true });
   })
 
   .delete("/:issueId/assignees/:assigneeId", authMiddleware, async (c) => {
     const db = getDb(c.env.DB);
-    const issueId = c.req.param("issueId")!;
+    const projectId = c.req.param("projectId")!;
+    const issue = await issuesRepo.resolveIssue(db, projectId, c.req.param("issueId")!);
+    if (!issue) throw new HTTPException(404, { message: "Issue not found" });
     const assigneeId = c.req.param("assigneeId")!;
-    await issuesService.removeAssignee(db, issueId, assigneeId);
+    await issuesService.removeAssignee(db, issue.id, assigneeId);
     return c.json({ ok: true });
   });

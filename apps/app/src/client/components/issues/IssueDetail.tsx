@@ -1,4 +1,4 @@
-import { useState, useMemo, type ReactNode } from "react";
+import { useState, useMemo, useRef, useCallback, type ReactNode } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, api, type Module } from "@/lib/api";
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -83,7 +83,7 @@ interface Comment {
   updated_at: string;
   actor: string;
   actor_id?: string;
-  actor_detail?: { display_name: string; avatar: string };
+  actor_detail?: { display_name: string; avatar: string | null };
 }
 
 interface State {
@@ -231,7 +231,7 @@ export default function IssueDetail() {
   const [commentResetKey, setCommentResetKey] = useState(0);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editCommentText, setEditCommentText] = useState("");
-  const [commentSort, setCommentSort] = useState<"newest" | "oldest">("newest");
+  const [commentSort, setCommentSort] = useState<"newest" | "oldest">("oldest");
   const [activeTab, setActiveTab] = useState<"comments" | "activity" | "attachments" | "time">(
     "comments",
   );
@@ -239,6 +239,47 @@ export default function IssueDetail() {
   const [titleDraft, setTitleDraft] = useState("");
   const [editingDesc, setEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState("");
+
+  // Resizable split between detail pane and comments pane (desktop only).
+  const SPLIT_KEY = "atur:issue-detail-split";
+  const clampSplit = (pct: number) => Math.min(80, Math.max(20, pct));
+  const [rightPct, setRightPct] = useState(() => {
+    const saved = Number(localStorage.getItem(SPLIT_KEY));
+    return Number.isFinite(saved) && saved >= 20 && saved <= 80 ? saved : 45;
+  });
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+  const draggingSplitRef = useRef(false);
+  const rightPctRef = useRef(rightPct);
+
+  const onSplitPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    draggingSplitRef.current = true;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  const onSplitPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingSplitRef.current || !splitContainerRef.current) return;
+    const rect = splitContainerRef.current.getBoundingClientRect();
+    const pct = clampSplit(((rect.right - e.clientX) / rect.width) * 100);
+    rightPctRef.current = pct;
+    setRightPct(pct);
+  }, []);
+
+  const onSplitPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingSplitRef.current) return;
+    draggingSplitRef.current = false;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    localStorage.setItem(SPLIT_KEY, String(rightPctRef.current));
+  }, []);
+
+  const resetSplit = useCallback(() => {
+    rightPctRef.current = 45;
+    setRightPct(45);
+    localStorage.setItem(SPLIT_KEY, "45");
+  }, []);
 
   const { data: issue, isLoading } = useQuery({
     queryKey: ["issue", slug, projectId, issueId],
@@ -764,8 +805,8 @@ export default function IssueDetail() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center gap-2 px-4 py-3 border-b">
+    <div className="flex flex-col h-[calc(100dvh-7rem)] md:h-[calc(100dvh-3.5rem)] -m-4 md:-m-6 lg:-m-8">
+      <div className="flex items-center gap-2 px-4 py-3 border-b shrink-0">
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -776,7 +817,7 @@ export default function IssueDetail() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+            className="h-8 w-8 text-destructive"
             onClick={() => setConfirmDeleteOpen(true)}
             aria-label="Delete issue"
           >
@@ -814,9 +855,10 @@ export default function IssueDetail() {
         </DialogContent>
       </Dialog>
 
-      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+      <div ref={splitContainerRef} className="flex flex-1 overflow-hidden">
         {/* Main content */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        <div className="flex-1 overflow-y-auto flex flex-col">
+          <div className="px-4 md:px-5 lg:px-6 pt-4 md:pt-5 lg:pt-6 pb-6">
           {editingTitle ? (
             <div className="flex items-center gap-2 mb-4">
               <Input
@@ -1069,7 +1111,7 @@ export default function IssueDetail() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
+                        className="h-6 w-6 shrink-0 text-destructive"
                         disabled={deleteRelationMutation.isPending}
                         onClick={() => deleteRelationMutation.mutate(rel.id)}
                       >
@@ -1163,466 +1205,11 @@ export default function IssueDetail() {
               </Button>
             </form>
           </div>
-
-          <Separator className="my-6" />
-
-          {/* Activity / Comments tabs */}
-          <div className="space-y-4">
-            <div className="flex gap-1 border-b">
-              <button
-                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === "comments"
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => setActiveTab("comments")}
-              >
-                <MessageSquare className="h-3.5 w-3.5 inline mr-1" />
-                Comments ({comments.length})
-              </button>
-              <button
-                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === "activity"
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => setActiveTab("activity")}
-              >
-                <Activity className="h-3.5 w-3.5 inline mr-1" />
-                Activity ({activities.length})
-              </button>
-              <button
-                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === "attachments"
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => setActiveTab("attachments")}
-              >
-                <Paperclip className="h-3.5 w-3.5 inline mr-1" />
-                Attachments ({attachments.length})
-              </button>
-              <button
-                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === "time"
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => setActiveTab("time")}
-              >
-                <Timer className="h-3.5 w-3.5 inline mr-1" />
-                Time ({Math.floor(totalTimeSeconds / 3600)}h{" "}
-                {Math.floor((totalTimeSeconds % 3600) / 60)}m)
-              </button>
-            </div>
-
-            {activeTab === "comments" && (
-              <>
-                <div className="flex gap-3">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback className="text-xs">Y</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 space-y-2">
-                    <CommentEditor
-                      value={commentText}
-                      onChange={(html) => setCommentText(html)}
-                      onSubmit={() => {
-                        if (
-                          commentText.replace(/<[^>]*>/g, "").trim() &&
-                          !commentMutation.isPending
-                        ) {
-                          commentMutation.mutate({
-                            comment_html: commentText,
-                            access: commentPublic ? "public" : "internal",
-                          });
-                        }
-                      }}
-                      placeholder="Add a comment..."
-                      resetKey={commentResetKey}
-                      members={mentionMembers}
-                    />
-                    <div className="flex items-center gap-3">
-                      {issue?.external_source === "portal" && (
-                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <input
-                            type="checkbox"
-                            checked={commentPublic}
-                            onChange={(e) => setCommentPublic(e.target.checked)}
-                            className="h-3.5 w-3.5"
-                          />
-                          Visible to customer
-                        </label>
-                      )}
-                      <Button
-                        size="sm"
-                        disabled={
-                          !commentText.replace(/<[^>]*>/g, "").trim() || commentMutation.isPending
-                        }
-                        onClick={() =>
-                          commentMutation.mutate({
-                            comment_html: commentText,
-                            access: commentPublic ? "public" : "internal",
-                          })
-                        }
-                      >
-                        {commentMutation.isPending ? "Sending..." : "Comment"}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">
-                    {sortedComments.length} comments
-                  </span>
-                  <button
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground rounded px-1.5 py-0.5"
-                    onClick={() => setCommentSort(commentSort === "newest" ? "oldest" : "newest")}
-                    title="Toggle comment order"
-                  >
-                    <ArrowUpDown className="h-3 w-3" />
-                    {commentSort === "newest" ? "Newest first" : "Earliest first"}
-                  </button>
-                </div>
-                {commentsLoading ? (
-                  <div className="animate-pulse text-sm text-muted-foreground">
-                    Loading comments...
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {sortedComments.map((c) => {
-                      const isMine = c.actor_id === currentUser?.id;
-                      return (
-                        <div key={c.id} className="flex gap-3 group">
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className="text-xs">
-                              {c.actor_detail?.display_name?.charAt(0) || "U"}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-sm font-medium">
-                                {c.actor_detail?.display_name || "User"}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
-                              </span>
-                              {isMine && editingCommentId !== c.id && (
-                                <button
-                                  className="ml-auto p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-                                  onClick={() => startEditComment(c)}
-                                  aria-label="Edit comment"
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                </button>
-                              )}
-                            </div>
-                            {editingCommentId === c.id ? (
-                              <div className="space-y-2">
-                                <CommentEditor
-                                  value={editCommentText}
-                                  onChange={setEditCommentText}
-                                  placeholder="Edit comment..."
-                                  resetKey={editingCommentId}
-                                  members={mentionMembers}
-                                />
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    size="sm"
-                                    disabled={
-                                      !editCommentText.replace(/<[^>]*>/g, "").trim() ||
-                                      editCommentMutation.isPending
-                                    }
-                                    onClick={() =>
-                                      editCommentMutation.mutate({
-                                        commentId: c.id,
-                                        comment_html: editCommentText,
-                                      })
-                                    }
-                                  >
-                                    {editCommentMutation.isPending ? "Saving..." : "Save"}
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => {
-                                      setEditingCommentId(null);
-                                      setEditCommentText("");
-                                    }}
-                                  >
-                                    Cancel
-                                  </Button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="text-sm">
-                                <CommentContent html={c.comment_html} />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </>
-            )}
-
-            {activeTab === "activity" && (
-              <>
-                {activitiesLoading ? (
-                  <div className="animate-pulse text-sm text-muted-foreground">
-                    Loading activity...
-                  </div>
-                ) : activities.length === 0 ? (
-                  <p className="text-sm text-muted-foreground italic py-4">No activity yet</p>
-                ) : (
-                  <div className="space-y-1">
-                    {activities.map((a) => (
-                      <div key={a.id} className="flex items-start gap-3 py-2 text-sm">
-                        <div className="h-2 w-2 rounded-full bg-muted-foreground/30 mt-1.5 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-muted-foreground">{renderActivityText(a)}</span>
-                          {a.created_at && (
-                            <span className="text-xs text-muted-foreground ml-2">
-                              {formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-
-            {activeTab === "attachments" && (
-              <>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm text-muted-foreground">
-                    {attachments.length} file{attachments.length !== 1 ? "s" : ""}
-                  </span>
-                  <label className="cursor-pointer">
-                    <input
-                      type="file"
-                      className="hidden"
-                      multiple
-                      onChange={(e) => {
-                        const files = e.target.files;
-                        if (!files) return;
-                        for (let i = 0; i < files.length; i++) {
-                          uploadMutation.mutate(files[i]!);
-                        }
-                        e.target.value = "";
-                      }}
-                    />
-                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1" asChild>
-                      <span>
-                        <Upload className="h-3 w-3" /> Upload
-                      </span>
-                    </Button>
-                  </label>
-                </div>
-                {attachmentsLoading ? (
-                  <div className="animate-pulse text-sm text-muted-foreground">
-                    Loading attachments...
-                  </div>
-                ) : attachments.length === 0 ? (
-                  <div className="text-center py-8 border border-dashed rounded-lg">
-                    <Paperclip className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">No attachments yet</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Upload files or drag & drop here
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {attachments.map((att) => {
-                      const name = att.attributes?.name || "File";
-                      const size = att.attributes?.size;
-                      const type = att.attributes?.type || "";
-                      const isImage = type.startsWith("image/");
-                      const fmtSize = size
-                        ? size > 1024 * 1024
-                          ? `${(size / 1024 / 1024).toFixed(1)} MB`
-                          : `${(size / 1024).toFixed(0)} KB`
-                        : "";
-                      return (
-                        <div
-                          key={att.id}
-                          className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/20 transition-colors"
-                        >
-                          {isImage ? (
-                            <div className="h-10 w-10 rounded bg-muted flex items-center justify-center shrink-0 overflow-hidden">
-                              {att.asset ? (
-                                <img
-                                  src={resolveApiUrl(att.asset)}
-                                  alt={name}
-                                  className="h-10 w-10 object-cover"
-                                />
-                              ) : (
-                                <FileIcon className="h-4 w-4 text-muted-foreground" />
-                              )}
-                            </div>
-                          ) : (
-                            <div className="h-10 w-10 rounded bg-muted flex items-center justify-center shrink-0">
-                              <FileIcon className="h-4 w-4 text-muted-foreground" />
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {fmtSize}
-                              {type && ` · ${type}`}
-                              {att.created_at &&
-                                ` · ${formatDistanceToNow(new Date(att.created_at), { addSuffix: true })}`}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            {att.asset && (
-                              <a
-                                href={resolveApiUrl(att.asset)}
-                                download={name}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-muted transition-colors"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <Download className="h-3.5 w-3.5 text-muted-foreground" />
-                              </a>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                              onClick={() => deleteAttachmentMutation.mutate(att.id)}
-                              disabled={deleteAttachmentMutation.isPending}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </>
-            )}
-
-            {activeTab === "time" && (
-              <>
-                {/* Log time form */}
-                <div className="rounded-lg border p-3 mb-4">
-                  <h4 className="text-xs font-semibold mb-2">Log Time</h4>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Input
-                      type="number"
-                      min="0"
-                      placeholder="Hours"
-                      className="h-8 w-20 text-sm"
-                      value={timeHours}
-                      onChange={(e) => setTimeHours(e.target.value)}
-                    />
-                    <span className="text-xs text-muted-foreground">h</span>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="59"
-                      placeholder="Minutes"
-                      className="h-8 w-20 text-sm"
-                      value={timeMinutes}
-                      onChange={(e) => setTimeMinutes(e.target.value)}
-                    />
-                    <span className="text-xs text-muted-foreground">m</span>
-                  </div>
-                  <Input
-                    placeholder="Description (optional)"
-                    className="h-8 text-sm mb-2"
-                    value={timeDesc}
-                    onChange={(e) => setTimeDesc(e.target.value)}
-                  />
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs"
-                    disabled={!timeHours && !timeMinutes}
-                    onClick={() => {
-                      const secs =
-                        parseInt(timeHours || "0") * 3600 + parseInt(timeMinutes || "0") * 60;
-                      if (secs > 0) {
-                        logTimeMutation.mutate({
-                          duration_seconds: secs,
-                          description: timeDesc || undefined,
-                        });
-                      }
-                    }}
-                  >
-                    {logTimeMutation.isPending ? "Logging..." : "Log Time"}
-                  </Button>
-                </div>
-
-                {/* Total */}
-                <div className="flex items-center gap-2 mb-3">
-                  <Timer className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-medium">
-                    Total: {Math.floor(totalTimeSeconds / 3600)}h{" "}
-                    {Math.floor((totalTimeSeconds % 3600) / 60)}m
-                  </span>
-                </div>
-
-                {/* Entries list */}
-                {timeEntriesLoading ? (
-                  <div className="animate-pulse text-sm text-muted-foreground">Loading...</div>
-                ) : timeEntries.length === 0 ? (
-                  <p className="text-sm text-muted-foreground italic py-4">No time logged yet</p>
-                ) : (
-                  <div className="space-y-2">
-                    {timeEntries.map((entry) => {
-                      const hrs = Math.floor(entry.duration_seconds / 3600);
-                      const mins = Math.floor((entry.duration_seconds % 3600) / 60);
-                      return (
-                        <div
-                          key={entry.id}
-                          className="flex items-center justify-between gap-3 rounded-lg border p-3 hover:bg-muted/20"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium">
-                              {hrs}h {mins}m
-                            </p>
-                            {entry.description && (
-                              <p className="text-xs text-muted-foreground truncate">
-                                {entry.description}
-                              </p>
-                            )}
-                            {entry.created_at && (
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {formatDistanceToNow(new Date(entry.created_at), {
-                                  addSuffix: true,
-                                })}
-                              </p>
-                            )}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-                            onClick={() => deleteTimeMutation.mutate(entry.id)}
-                            disabled={deleteTimeMutation.isPending}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </>
-            )}
           </div>
-        </div>
 
-        {/* Sidebar */}
-        <div className="w-full lg:w-[300px] lg:border-l border-t lg:border-t-0 p-4 space-y-4 overflow-y-auto">
-          <div className="grid grid-cols-2 lg:grid-cols-1 gap-4">
+        {/* Properties */}
+        <div className="mt-auto border-t px-4 md:px-5 lg:px-6 py-4 md:py-5">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-5">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Follow</label>
               <Button
@@ -1650,6 +1237,9 @@ export default function IssueDetail() {
                     {(issue.assignees ?? []).map((a) => (
                       <Badge key={a.id} variant="secondary" className="text-xs gap-1 pr-1">
                         <Avatar className="h-4 w-4">
+                          {a.avatar ? (
+                            <AvatarImage src={a.avatar} alt={a.display_name || a.email || "User"} />
+                          ) : null}
                           <AvatarFallback className="text-[9px]">
                             {(a.display_name || a.email || a.username || "?")
                               .charAt(0)
@@ -1855,9 +1445,8 @@ export default function IssueDetail() {
               <CustomFieldValues slug={slug} projectId={projectId} issueSeqId={Number(issueId)} />
             )}
           </div>
-          <Separator className="hidden lg:block" />
-
-          <div className="grid grid-cols-2 lg:grid-cols-1 gap-4">
+          <Separator className="my-4" />
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-5">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                 <Clock className="h-3 w-3" /> Created
@@ -1874,6 +1463,492 @@ export default function IssueDetail() {
               </p>
             </div>
           </div>
+        </div>
+        </div>
+
+        {/* Drag handle between detail and comments panes (desktop only) */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize detail and comments panes"
+          title="Drag to resize · double-click to reset"
+          className="hidden md:block w-1.5 shrink-0 cursor-col-resize touch-none bg-border/40 hover:bg-primary/60 active:bg-primary transition-colors"
+          onPointerDown={onSplitPointerDown}
+          onPointerMove={onSplitPointerMove}
+          onPointerUp={onSplitPointerUp}
+          onPointerCancel={onSplitPointerUp}
+          onDoubleClick={resetSplit}
+        />
+
+        {/* Comments / Activity / Attachments / Time */}
+        <div
+          className="hidden md:flex flex-col shrink-0"
+          style={{ width: `${rightPct}%` }}
+        >
+          <div className="flex gap-1 border-b px-3 pt-1 overflow-x-auto shrink-0">
+              <button
+                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === "comments"
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setActiveTab("comments")}
+              >
+                <MessageSquare className="h-3.5 w-3.5 inline mr-1" />
+                Comments ({comments.length})
+              </button>
+              <button
+                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === "activity"
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setActiveTab("activity")}
+              >
+                <Activity className="h-3.5 w-3.5 inline mr-1" />
+                Activity ({activities.length})
+              </button>
+              <button
+                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === "attachments"
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setActiveTab("attachments")}
+              >
+                <Paperclip className="h-3.5 w-3.5 inline mr-1" />
+                Attachments ({attachments.length})
+              </button>
+              <button
+                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === "time"
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setActiveTab("time")}
+              >
+                <Timer className="h-3.5 w-3.5 inline mr-1" />
+                Time ({Math.floor(totalTimeSeconds / 3600)}h{" "}
+                {Math.floor((totalTimeSeconds % 3600) / 60)}m)
+              </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {activeTab === "comments" && (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    {sortedComments.length} comments
+                  </span>
+                  <button
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground rounded px-1.5 py-0.5"
+                    onClick={() => setCommentSort(commentSort === "newest" ? "oldest" : "newest")}
+                    title="Toggle comment order"
+                  >
+                    <ArrowUpDown className="h-3 w-3" />
+                    {commentSort === "newest" ? "Newest first" : "Earliest first"}
+                  </button>
+                </div>
+                {commentsLoading ? (
+                  <div className="animate-pulse text-sm text-muted-foreground">
+                    Loading comments...
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {sortedComments.map((c) => {
+                      const isMine = c.actor_id === currentUser?.id;
+                      return (
+                        <div key={c.id} className="flex gap-3 group">
+                          <Avatar className="h-8 w-8">
+                            {c.actor_detail?.avatar ? (
+                              <AvatarImage
+                                src={c.actor_detail.avatar}
+                                alt={c.actor_detail?.display_name || "User"}
+                              />
+                            ) : null}
+                            <AvatarFallback className="text-xs">
+                              {c.actor_detail?.display_name?.charAt(0) || "U"}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-sm font-medium">
+                                {c.actor_detail?.display_name || "User"}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
+                              </span>
+                              {isMine && editingCommentId !== c.id && (
+                                <button
+                                  className="ml-auto p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                                  onClick={() => startEditComment(c)}
+                                  aria-label="Edit comment"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                            {editingCommentId === c.id ? (
+                              <div className="space-y-2">
+                                <CommentEditor
+                                  value={editCommentText}
+                                  onChange={setEditCommentText}
+                                  placeholder="Edit comment..."
+                                  resetKey={editingCommentId}
+                                  members={mentionMembers}
+                                />
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    disabled={
+                                      !editCommentText.replace(/<[^>]*>/g, "").trim() ||
+                                      editCommentMutation.isPending
+                                    }
+                                    onClick={() =>
+                                      editCommentMutation.mutate({
+                                        commentId: c.id,
+                                        comment_html: editCommentText,
+                                      })
+                                    }
+                                  >
+                                    {editCommentMutation.isPending ? "Saving..." : "Save"}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      setEditingCommentId(null);
+                                      setEditCommentText("");
+                                    }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-sm">
+                                <CommentContent html={c.comment_html} />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === "activity" && (
+              <>
+                {activitiesLoading ? (
+                  <div className="animate-pulse text-sm text-muted-foreground">
+                    Loading activity...
+                  </div>
+                ) : activities.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic py-4">No activity yet</p>
+                ) : (
+                  <div className="space-y-1">
+                    {activities.map((a) => (
+                      <div key={a.id} className="flex items-start gap-3 py-2 text-sm">
+                        <div className="h-2 w-2 rounded-full bg-muted-foreground/30 mt-1.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-muted-foreground">{renderActivityText(a)}</span>
+                          {a.created_at && (
+                            <span className="text-xs text-muted-foreground ml-2">
+                              {formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === "attachments" && (
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm text-muted-foreground">
+                    {attachments.length} file{attachments.length !== 1 ? "s" : ""}
+                  </span>
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      className="hidden"
+                      multiple
+                      onChange={(e) => {
+                        const files = e.target.files;
+                        if (!files) return;
+                        for (let i = 0; i < files.length; i++) {
+                          uploadMutation.mutate(files[i]!);
+                        }
+                        e.target.value = "";
+                      }}
+                    />
+                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1" asChild>
+                      <span>
+                        <Upload className="h-3 w-3" /> Upload
+                      </span>
+                    </Button>
+                  </label>
+                </div>
+                {attachmentsLoading ? (
+                  <div className="animate-pulse text-sm text-muted-foreground">
+                    Loading attachments...
+                  </div>
+                ) : attachments.length === 0 ? (
+                  <div className="text-center py-8 border border-dashed rounded-lg">
+                    <Paperclip className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">No attachments yet</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Upload files or drag & drop here
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {attachments.map((att) => {
+                      const name = att.attributes?.name || "File";
+                      const size = att.attributes?.size;
+                      const type = att.attributes?.type || "";
+                      const isImage = type.startsWith("image/");
+                      const fmtSize = size
+                        ? size > 1024 * 1024
+                          ? `${(size / 1024 / 1024).toFixed(1)} MB`
+                          : `${(size / 1024).toFixed(0)} KB`
+                        : "";
+                      return (
+                        <div
+                          key={att.id}
+                          className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/20 transition-colors"
+                        >
+                          {isImage ? (
+                            <div className="h-10 w-10 rounded bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+                              {att.asset ? (
+                                <img
+                                  src={resolveApiUrl(att.asset)}
+                                  alt={name}
+                                  className="h-10 w-10 object-cover"
+                                />
+                              ) : (
+                                <FileIcon className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </div>
+                          ) : (
+                            <div className="h-10 w-10 rounded bg-muted flex items-center justify-center shrink-0">
+                              <FileIcon className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {fmtSize}
+                              {type && ` · ${type}`}
+                              {att.created_at &&
+                                ` · ${formatDistanceToNow(new Date(att.created_at), { addSuffix: true })}`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {att.asset && (
+                              <a
+                                href={resolveApiUrl(att.asset)}
+                                download={name}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-muted transition-colors"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Download className="h-3.5 w-3.5 text-muted-foreground" />
+                              </a>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive"
+                              onClick={() => deleteAttachmentMutation.mutate(att.id)}
+                              disabled={deleteAttachmentMutation.isPending}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === "time" && (
+              <>
+                {/* Log time form */}
+                <div className="rounded-lg border p-3 mb-4">
+                  <h4 className="text-xs font-semibold mb-2">Log Time</h4>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder="Hours"
+                      className="h-8 w-20 text-sm"
+                      value={timeHours}
+                      onChange={(e) => setTimeHours(e.target.value)}
+                    />
+                    <span className="text-xs text-muted-foreground">h</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="59"
+                      placeholder="Minutes"
+                      className="h-8 w-20 text-sm"
+                      value={timeMinutes}
+                      onChange={(e) => setTimeMinutes(e.target.value)}
+                    />
+                    <span className="text-xs text-muted-foreground">m</span>
+                  </div>
+                  <Input
+                    placeholder="Description (optional)"
+                    className="h-8 text-sm mb-2"
+                    value={timeDesc}
+                    onChange={(e) => setTimeDesc(e.target.value)}
+                  />
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={!timeHours && !timeMinutes}
+                    onClick={() => {
+                      const secs =
+                        parseInt(timeHours || "0") * 3600 + parseInt(timeMinutes || "0") * 60;
+                      if (secs > 0) {
+                        logTimeMutation.mutate({
+                          duration_seconds: secs,
+                          description: timeDesc || undefined,
+                        });
+                      }
+                    }}
+                  >
+                    {logTimeMutation.isPending ? "Logging..." : "Log Time"}
+                  </Button>
+                </div>
+
+                {/* Total */}
+                <div className="flex items-center gap-2 mb-3">
+                  <Timer className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">
+                    Total: {Math.floor(totalTimeSeconds / 3600)}h{" "}
+                    {Math.floor((totalTimeSeconds % 3600) / 60)}m
+                  </span>
+                </div>
+
+                {/* Entries list */}
+                {timeEntriesLoading ? (
+                  <div className="animate-pulse text-sm text-muted-foreground">Loading...</div>
+                ) : timeEntries.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic py-4">No time logged yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {timeEntries.map((entry) => {
+                      const hrs = Math.floor(entry.duration_seconds / 3600);
+                      const mins = Math.floor((entry.duration_seconds % 3600) / 60);
+                      return (
+                        <div
+                          key={entry.id}
+                          className="flex items-center justify-between gap-3 rounded-lg border p-3 hover:bg-muted/20"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">
+                              {hrs}h {mins}m
+                            </p>
+                            {entry.description && (
+                              <p className="text-xs text-muted-foreground truncate">
+                                {entry.description}
+                              </p>
+                            )}
+                            {entry.created_at && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {formatDistanceToNow(new Date(entry.created_at), {
+                                  addSuffix: true,
+                                })}
+                              </p>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive shrink-0"
+                            onClick={() => deleteTimeMutation.mutate(entry.id)}
+                            disabled={deleteTimeMutation.isPending}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          {activeTab === "comments" && (
+            <div className="shrink-0 border-t p-3">
+                <div className="flex gap-3">
+                  <Avatar className="h-8 w-8">
+                    {currentUser?.avatar ? (
+                      <AvatarImage src={currentUser.avatar} alt={currentUser.display_name || "User"} />
+                    ) : null}
+                    <AvatarFallback className="text-xs">
+                      {(currentUser?.display_name || currentUser?.username || "Y").charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 space-y-2">
+                    <CommentEditor
+                      value={commentText}
+                      onChange={(html) => setCommentText(html)}
+                      onSubmit={() => {
+                        if (
+                          commentText.replace(/<[^>]*>/g, "").trim() &&
+                          !commentMutation.isPending
+                        ) {
+                          commentMutation.mutate({
+                            comment_html: commentText,
+                            access: commentPublic ? "public" : "internal",
+                          });
+                        }
+                      }}
+                      placeholder="Add a comment..."
+                      resetKey={commentResetKey}
+                      members={mentionMembers}
+                    />
+                    <div className="flex items-center gap-3">
+                      {issue?.external_source === "portal" && (
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={commentPublic}
+                            onChange={(e) => setCommentPublic(e.target.checked)}
+                            className="h-3.5 w-3.5"
+                          />
+                          Visible to customer
+                        </label>
+                      )}
+                      <Button
+                        size="sm"
+                        disabled={
+                          !commentText.replace(/<[^>]*>/g, "").trim() || commentMutation.isPending
+                        }
+                        onClick={() =>
+                          commentMutation.mutate({
+                            comment_html: commentText,
+                            access: commentPublic ? "public" : "internal",
+                          })
+                        }
+                      >
+                        {commentMutation.isPending ? "Sending..." : "Comment"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

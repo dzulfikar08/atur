@@ -1,6 +1,6 @@
-import { Node, mergeAttributes } from "@tiptap/core";
+import { Extension, Node, mergeAttributes } from "@tiptap/core";
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
-import type { SuggestionOptions } from "@tiptap/suggestion";
+import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion";
 import { ReactRenderer } from "@tiptap/react";
 import tippy, { type Instance as TippyInstance } from "tippy.js";
 import {
@@ -46,7 +46,7 @@ declare module "@tiptap/core" {
   }
 }
 
-export const MentionExtension = Node.create({
+export const MentionNode = Node.create({
   name: "mention",
   group: "inline",
   inline: true,
@@ -162,7 +162,15 @@ export const MentionMenu = forwardRef<MentionMenuRef, MentionMenuProps>(
             onMouseEnter={() => setSelectedIndex(index)}
           >
             <span className="slash-command-icon" style={{ fontSize: "0.7em" }}>
-              {(item.display_name || item.username || "?").charAt(0).toUpperCase()}
+              {item.avatar ? (
+                <img
+                  src={item.avatar}
+                  alt=""
+                  className="h-full w-full object-cover rounded-[6px]"
+                />
+              ) : (
+                (item.display_name || item.username || "?").charAt(0).toUpperCase()
+              )}
             </span>
             <span className="slash-command-text">
               <span className="slash-command-title">@{item.username}</span>
@@ -180,14 +188,6 @@ MentionMenu.displayName = "MentionMenu";
 export interface MentionExtensionOptions {
   members: MentionMember[];
   suggestion: Partial<SuggestionOptions>;
-}
-
-declare module "@tiptap/core" {
-  interface Commands<ReturnType> {
-    mention: {
-      setMention: (attrs: { id: string; username: string }) => ReturnType;
-    };
-  }
 }
 
 export function createMentionSuggestion(members: MentionMember[]) {
@@ -260,8 +260,60 @@ export function createMentionSuggestion(members: MentionMember[]) {
   };
 }
 
+// The Suggestion plugin lives on an Extension, not on the node itself: without
+// addProseMirrorPlugins() the "@" trigger is never registered and the picker
+// never opens. Members are captured at editor creation. Returns both the
+// mention node (so inserted mentions have a node type to resolve to) and the
+// suggestion extension that opens the picker.
 export function makeMentionExtension(members: MentionMember[]) {
-  return MentionExtension.configure({
-    suggestion: createMentionSuggestion(members),
+  const suggestion = Extension.create<MentionExtensionOptions>({
+    name: "mentionSuggestion",
+
+    addOptions() {
+      return {
+        members,
+        suggestion: {
+          char: "@",
+          command: ({
+            editor,
+            range,
+            props,
+          }: {
+            editor: any;
+            range: any;
+            props: MentionMember;
+          }) => {
+            editor
+              .chain()
+              .focus()
+              .deleteRange(range)
+              .insertContent({
+                type: "mention",
+                attrs: { id: props.id, username: props.username },
+              })
+              .run();
+          },
+        } as Partial<SuggestionOptions>,
+      };
+    },
+
+    addProseMirrorPlugins() {
+      return [
+        Suggestion({
+          editor: this.editor,
+          ...this.options.suggestion,
+          items: ({ query }: { query: string }) => {
+            const q = query.toLowerCase();
+            const list = this.options.members.filter((m) => {
+              const hay = `${m.username} ${m.display_name || ""} ${m.email || ""}`.toLowerCase();
+              return hay.includes(q);
+            });
+            return list.slice(0, 8);
+          },
+        }),
+      ];
+    },
   });
+
+  return [MentionNode, suggestion];
 }
