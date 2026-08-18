@@ -1,6 +1,6 @@
 ---
 title: "Why we built Atur"
-description: "The story behind the all-in-one workspace: issues, support, CRM, and timesheets on Cloudflare's edge."
+description: "The story behind the all-in-one workspace: issues, support, CRM, and timesheets in one place."
 pubDate: 2026-08-17
 tags: ["product", "company"]
 ---
@@ -24,9 +24,9 @@ Atur brings the tools your team actually uses into a single app:
 
 ## No servers to manage
 
-Everything runs on Cloudflare's edge. There are no containers to patch, no
-databases to back up, no VPS to babysit. Your data is encrypted in transit and
-at rest, with daily backups handled for you.
+Atur is a fully managed service. We handle the infrastructure, security, and
+daily backups, so your team never has to think about them. Your data is
+encrypted in transit and at rest.
 
 ## AI-native from day one
 

@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import "../styles/demos.css";
 
 // Base layout for the Atur marketing site (diatur.com). Provides the SEO head,
 // site header (Sign In / Open App → the app origin), and footer.
@@ -87,5 +88,20 @@ const {
         </div>
       </footer>
     )}
+    <script>
+      // Scroll-triggered reveal for .demo-window blocks
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (e.isIntersecting) {
+              e.target.classList.add("demo-in");
+              io.unobserve(e.target);
+            }
+          }
+        },
+        { threshold: 0.18 },
+      );
+      document.querySelectorAll(".demo-window").forEach((el) => io.observe(el));
+    </script>
   </body>
 </html>

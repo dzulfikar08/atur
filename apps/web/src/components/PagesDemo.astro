@@ -1,0 +1,510 @@
+---
+import Icon from "./Icon.astro";
+// Pages demo — a TipTap-style rich text editor + an Excalidraw-style whiteboard,
+// both fully client-side mocks. No backend, no libraries.
+const docTitle = "Q3 launch plan";
+const docMeta = "Last edited 2h ago by Dev User · 4 backlinks";
+const headings = [
+  { icon: "h1", label: "Heading 1" },
+  { icon: "h2", label: "Heading 2" },
+  { icon: "h3", label: "Heading 3" },
+  { icon: "bold", label: "Bold", active: true },
+  { icon: "italic", label: "Italic" },
+  { icon: "strikethrough", label: "Strikethrough" },
+  { icon: "bulletList", label: "Bullet list" },
+  { icon: "numberList", label: "Numbered list" },
+  { icon: "quote", label: "Quote" },
+  { icon: "code", label: "Code" },
+  { icon: "more", label: "More" },
+];
+const docBlocks = [
+  { type: "h", text: "Q3 launch plan" },
+  { type: "p", text: "The release window is the first two weeks of September. We ship the connected workspace in three waves: projects first, then customer context, then reporting." },
+  { type: "callout", icon: "◈", title: "AI note", text: "The agent loop can draft the changelog from merged issues once the board is green." },
+  { type: "h", text: "Milestones" },
+  { type: "task", checked: true, text: "Freeze scope for wave one (projects)" },
+  { type: "task", checked: false, text: "Invite 5 design partners from the waitlist" },
+  { type: "task", checked: false, text: "Record walkthrough video for the blog" },
+  { type: "h", text: "Risks" },
+  { type: "quote", text: "“Time tracking is the most-requested feature — keep the entry flow under 5 seconds.”" },
+  { type: "link", label: "▤ linked-page", text: "Roadmap 2026" },
+];
+const shapes = [
+  { type: "rect", x: 40, y: 40, w: 150, h: 60, label: "Capture", fill: "rgba(139,92,246,0.15)", stroke: "#8b5cf6" },
+  { type: "rect", x: 230, y: 40, w: 150, h: 60, label: "Give it a home", fill: "rgba(59,130,246,0.15)", stroke: "#3b82f6" },
+  { type: "rect", x: 420, y: 40, w: 150, h: 60, label: "Move it to done", fill: "rgba(34,197,94,0.15)", stroke: "#22c55e" },
+  { type: "line", x1: 190, y1: 70, x2: 230, y2: 70 },
+  { type: "line", x1: 380, y1: 70, x2: 420, y2: 70 },
+  { type: "rect", x: 120, y: 150, w: 190, h: 80, label: "Issue · DEMO-7", fill: "rgba(255,255,255,0.03)", stroke: "#71717a" },
+  { type: "rect", x: 350, y: 150, w: 190, h: 80, label: "Customer · Acme", fill: "rgba(255,255,255,0.03)", stroke: "#71717a" },
+  { type: "dash", x1: 215, y1: 150, x2: 350, y2: 150 },
+  { type: "dash", x1: 445, y1: 150, x2: 445, y2: 230 },
+];
+const toolIcons = ["cursor", "square", "circle", "penTool", "triangle", "arrowRight", "scissors", "comment", "zap", "image", "layers", "eraser", "more"];
+const toolLabels = ["Select", "Rectangle", "Ellipse", "Pen", "Triangle", "Line", "Scissors", "Comment", "Zap", "Image", "Layers", "Eraser", "More"];
+---
+<div class="demo-window pages-demo interactive-mock landing-demo" data-pagemode="doc">
+  <div class="demo-chrome">
+    <span class="demo-dots"><i></i><i></i><i></i></span>
+    <span class="demo-crumbs">app.diatur.com <i>/</i> demo <i>/</i> pages <i>/</i> <b>Q3 launch plan</b></span>
+    <span class="demo-status"><i></i>Saved</span>
+  </div>
+
+  <div class="pages-body">
+    <aside class="pages-side">
+      <div class="pages-user"><span class="demo-avatar" style="--bg:#a855f7;width:26px;height:26px;font-size:10px">DV</span><div><b>Dev User</b><i>demo workspace</i></div></div>
+      <div class="pages-nav">
+        <span class="active"><Icon name="file" size={14} />Pages</span>
+        <span><Icon name="kanban" size={14} />Projects</span>
+        <span><Icon name="timer" size={14} />Time</span>
+        <span><Icon name="contactBook" size={14} />CRM</span>
+      </div>
+      <div class="pages-tree">
+        <b>Workspace</b>
+        <span class="active"><Icon name="file" size={12} />Q3 launch plan</span>
+        <span><Icon name="file" size={12} />Design system notes</span>
+        <span><Icon name="file" size={12} />Customer interviews</span>
+        <span><Icon name="file" size={12} />Incident log</span>
+      </div>
+      <div class="pages-foot"><i class="tab-live"></i>MCP connected</div>
+    </aside>
+
+    <div class="pages-main">
+      <header class="pages-toolbar">
+        <div class="pages-tabs">
+          <button type="button" class="pages-tab active" data-pagetab="doc"><Icon name="file" size={13} />Document</button>
+          <button type="button" class="pages-tab" data-pagetab="draw"><Icon name="whiteboard" size={13} />Whiteboard</button>
+        </div>
+        <button type="button" class="pages-share"><Icon name="share" size={13} />Share</button>
+      </header>
+
+      <!-- TipTap-style editor -->
+      <div class="pages-doc" data-pagedoc>
+        <div class="pages-doc-title" contenteditable="true" spellcheck="false">{docTitle}</div>
+        <div class="pages-doc-meta">{docMeta}</div>
+        <div class="pages-tool-row">
+          {headings.map((h) => <span class:list={["pages-tool", { active: h.active }]} title={h.label}><Icon name={h.icon} size={14} /></span>)}
+        </div>
+        {docBlocks.map((b, i) =>
+          b.type === "h" ? (
+            <h3 class:list={["doc-block", { "doc-h": true }]}>{b.text}</h3>
+          ) : b.type === "p" ? (
+            <p class="doc-block">{b.text}</p>
+          ) : b.type === "callout" ? (
+            <div class="doc-callout"><Icon name="bot" size={16} /><div><b>{b.title}</b><p>{b.text}</p></div></div>
+          ) : b.type === "task" ? (
+            <label class="doc-task"><input type="checkbox" checked={b.checked} /><span>{b.text}</span></label>
+          ) : b.type === "quote" ? (
+            <blockquote class="doc-block doc-quote">{b.text}</blockquote>
+          ) : b.type === "link" ? (
+            <span class="doc-link"><Icon name="link" size={12} />{b.label} · {b.text}</span>
+          ) : null
+        )}
+      </div>
+
+      <!-- Excalidraw-style whiteboard -->
+      <div class="pages-draw" data-pagedraw hidden>
+        <div class="draw-toolbar">
+          <div class="draw-tools">
+            {toolIcons.map((t, i) => <span class:list={["draw-tool", { active: i === 0 }]} title={toolLabels[i]}><Icon name={t} size={14} /></span>)}
+          </div>
+          <div class="draw-zoom"><button type="button" class="zoom-btn"><Icon name="minus" size={11} /></button><b class="demo-num">100%</b><button type="button" class="zoom-btn"><Icon name="plus" size={11} /></button></div>
+        </div>
+        <div class="draw-canvas">
+          {shapes.map((s) =>
+            s.type === "rect" ? (
+              <div class="draw-shape" style={`left:${s.x}px;top:${s.y}px;width:${s.w}px;height:${s.h}px;background:${s.fill};border-color:${s.stroke}`}>{s.label}</div>
+            ) : s.type === "line" ? (
+              <div class="draw-line" style={`left:${s.x1}px;top:${s.y1}px;width:${s.x2 - s.x1}px;height:${s.y2 - s.y1}px`}></div>
+            ) : s.type === "dash" ? (
+              <div class="draw-line draw-dash" style={`left:${s.x1}px;top:${s.y1}px;width:${s.x2 - s.x1}px;height:${s.y2 - s.y1}px`}></div>
+            ) : null
+          )}
+          <div class="draw-grid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .pages-demo {
+    /* chrome from .demo-window */
+  }
+  .pages-body {
+    position: relative;
+    display: flex;
+    height: 620px;
+  }
+  .pages-side {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    width: 168px;
+    flex-direction: column;
+    padding: 15px 10px;
+    border-right: 1px solid var(--demo-hairline);
+    background: rgba(12, 12, 16, 0.7);
+  }
+  .pages-user {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0 6px 16px;
+  }
+  .pages-user b {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .pages-user i {
+    display: block;
+    margin-top: 1px;
+    color: var(--demo-faint);
+    font-size: 9.5px;
+    font-style: normal;
+  }
+  .pages-nav span,
+  .pages-tree span {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6.5px 10px;
+    border-radius: 7px;
+    color: var(--demo-dim);
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .pages-nav span svg,
+  .pages-tree span svg {
+    flex: none;
+    opacity: 0.75;
+  }
+  .pages-nav span.active svg {
+    color: var(--demo-accent-2);
+    opacity: 1;
+  }
+  .pages-nav span.active,
+  .pages-tree span.active {
+    background: linear-gradient(90deg, var(--demo-accent-soft), rgba(255, 255, 255, 0.02));
+    color: var(--demo-text);
+    box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.22);
+  }
+  .pages-tree {
+    display: grid;
+    gap: 2px;
+    margin-top: 20px;
+  }
+  .pages-tree b {
+    margin: 0 10px 7px;
+    color: var(--demo-faint);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .pages-foot {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: auto 8px 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--demo-hairline);
+    color: var(--demo-green);
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .pages-main {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+  .pages-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--demo-hairline);
+  }
+  .pages-tabs {
+    display: flex;
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid var(--demo-hairline-2);
+    border-radius: 9px;
+    background: var(--demo-panel);
+  }
+  .pages-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 11px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--demo-dim);
+    font-size: 10.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .pages-tab.active {
+    background: var(--demo-card-2);
+    color: var(--demo-text);
+  }
+  .pages-share {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    padding: 5px 15px;
+    border: 0;
+    border-radius: 8px;
+    background: linear-gradient(180deg, var(--demo-accent), #7c3aed);
+    color: #fff;
+    font-size: 10.5px;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.35);
+    cursor: pointer;
+  }
+  .pages-share:hover {
+    filter: brightness(1.1);
+  }
+  .pages-doc {
+    flex: 1;
+    padding: 30px 40px 40px;
+    overflow-y: auto;
+  }
+  .pages-doc-title {
+    color: var(--demo-text);
+    font-family: var(--demo-serif);
+    font-size: 34px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+    outline: none;
+  }
+  .pages-doc-meta {
+    margin: 8px 0 0;
+    color: var(--demo-faint);
+    font-size: 10.5px;
+  }
+  .pages-tool-row {
+    display: flex;
+    gap: 2px;
+    margin: 20px 0 18px;
+    padding: 4px 6px;
+    border: 1px solid var(--demo-hairline);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    width: max-content;
+  }
+  .pages-tool {
+    display: grid;
+    width: 23px;
+    height: 23px;
+    place-items: center;
+    border-radius: 5px;
+    color: var(--demo-faint);
+    font-size: 9.5px;
+    cursor: default;
+  }
+  .pages-tool.active {
+    background: var(--demo-accent-soft);
+    color: var(--demo-accent-2);
+  }
+  .doc-block {
+    margin: 0 0 11px;
+    color: var(--demo-text);
+    font-size: 13.5px;
+    line-height: 1.65;
+    letter-spacing: -0.005em;
+  }
+  .doc-h {
+    margin: 24px 0 9px;
+    color: var(--demo-text);
+    font-size: 15.5px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .doc-callout {
+    display: flex;
+    gap: 11px;
+    margin: 16px 0;
+    padding: 13px 15px;
+    border: 1px solid rgba(139, 92, 246, 0.32);
+    border-radius: 11px;
+    background: linear-gradient(180deg, rgba(139, 92, 246, 0.1), rgba(139, 92, 246, 0.03));
+  }
+  .doc-callout > svg {
+    flex: none;
+    color: var(--demo-accent-2);
+  }
+  .doc-callout b {
+    display: block;
+    color: var(--demo-accent-2);
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .doc-callout p {
+    margin: 3px 0 0;
+    color: var(--demo-dim);
+    font-size: 12px;
+    line-height: 1.55;
+  }
+  .doc-task {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 9px 0;
+    color: var(--demo-text);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .doc-task input {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--demo-accent);
+  }
+  .doc-task input:checked + span {
+    color: var(--demo-faint);
+    text-decoration: line-through;
+  }
+  .doc-quote {
+    margin: 16px 0;
+    padding: 13px 17px;
+    border-left: 3px solid var(--demo-accent);
+    border-radius: 0 10px 10px 0;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--demo-dim);
+    font-style: italic;
+  }
+  .doc-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    padding: 5px 11px;
+    border: 1px solid rgba(96, 165, 250, 0.35);
+    border-radius: 7px;
+    background: rgba(96, 165, 250, 0.08);
+    color: var(--demo-blue);
+    font-size: 11px;
+  }
+  .pages-draw {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .draw-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--demo-hairline);
+  }
+  .draw-tools {
+    display: flex;
+    gap: 2px;
+  }
+  .draw-tool {
+    display: grid;
+    width: 25px;
+    height: 25px;
+    place-items: center;
+    border-radius: 5px;
+    color: var(--demo-faint);
+    font-size: 11px;
+  }
+  .draw-tool.active {
+    background: var(--demo-accent-soft);
+    color: var(--demo-accent-2);
+  }
+  .draw-zoom {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .draw-zoom b {
+    color: var(--demo-faint);
+    font-size: 10px;
+  }
+  .zoom-btn {
+    width: 21px;
+    height: 21px;
+    border: 1px solid var(--demo-hairline-2);
+    border-radius: 5px;
+    background: transparent;
+    color: var(--demo-dim);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .zoom-btn:hover {
+    border-color: var(--demo-accent);
+    color: var(--demo-accent-2);
+  }
+  .draw-canvas {
+    position: relative;
+    flex: 1;
+    overflow: hidden;
+    background: #0b0b0f;
+  }
+  .draw-grid {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: 22px 22px;
+    pointer-events: none;
+  }
+  .draw-shape {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid;
+    border-radius: 9px;
+    color: var(--demo-text);
+    font-size: 11px;
+    font-weight: 500;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  }
+  .draw-line {
+    position: absolute;
+    height: 2px;
+    background: var(--demo-faint);
+    transform-origin: left center;
+  }
+  .draw-dash {
+    height: 0;
+    border-top: 2px dashed var(--demo-faint);
+    background: transparent;
+  }
+  @media (max-width: 640px) {
+    .pages-side { display: none; }
+    .pages-body { height: auto; min-height: 440px; }
+    .pages-doc { padding: 22px; }
+  }
+</style>
+
+<script>
+  (function () {
+    const root = document.querySelector(".pages-demo");
+    if (!root) return;
+    const tabs = [...root.querySelectorAll(".pages-tab")];
+    const doc = root.querySelector("[data-pagedoc]");
+    const draw = root.querySelector("[data-pagedraw]");
+    tabs.forEach((t) => {
+      t.addEventListener("click", () => {
+        tabs.forEach((x) => x.classList.toggle("active", x === t));
+        doc.hidden = t.dataset.pagetab !== "doc";
+        draw.hidden = t.dataset.pagetab !== "draw";
+      });
+    });
+    root.querySelectorAll(".doc-task input").forEach((cb) => {
+      cb.addEventListener("change", () => {
+        cb.checked = true;
+      });
+    });
+  })();
+</script>
