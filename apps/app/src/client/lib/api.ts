@@ -61,7 +61,13 @@ export const api = {
   createIssue: (
     slug: string,
     projectId: string,
-    data: { name: string; description_html?: string; priority?: string; state_id?: string },
+    data: {
+      name: string;
+      description_html?: string;
+      priority?: string;
+      state_id?: string;
+      parent_id?: string | null;
+    },
   ) =>
     apiFetch<Issue>(`/workspaces/${slug}/projects/${projectId}/issues`, {
       method: "POST",

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { Fragment, useMemo, useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useWindowSize } from "@/hooks/useWindowSize";
 import MobileIssueList from "@/components/mobile/MobileIssueList";
@@ -26,7 +26,17 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
-import { Plus, Search, Filter, X, ArrowUpDown, User } from "@/lib/icons";
+import {
+  Plus,
+  Search,
+  Filter,
+  X,
+  ArrowUpDown,
+  User,
+  ChevronDown,
+  ChevronRight,
+  GitBranch,
+} from "@/lib/icons";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { toast } from "sonner";
 
@@ -424,6 +434,92 @@ function DesktopMyIssues({ slug }: { slug: string }) {
     return result;
   }, [allIssues, filters, filterWorkspaceSlug]);
 
+  // ── Sub-issue hierarchy ──
+  const qc = useQueryClient();
+  const [collapsedParents, setCollapsedParents] = useState<Set<string>>(new Set());
+  const [addingTo, setAddingTo] = useState<string | null>(null);
+  const [subIssueName, setSubIssueName] = useState("");
+
+  const createSubIssueMutation = useMutation({
+    mutationFn: ({ parentId, name }: { parentId: string; name: string }) => {
+      const parent = allIssues.find((i) => i.id === parentId);
+      const wsSlug = isAll ? parent?.workspace_slug : slug;
+      const projId = parent?.project_id ?? undefined;
+      if (!wsSlug || !projId) throw new Error("Parent issue not found");
+      return api.createIssue(wsSlug, projId, { name, parent_id: parentId, priority: "none" });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["my-issues"] });
+      qc.invalidateQueries({ queryKey: ["mobile-issues"] });
+      setAddingTo(null);
+      setSubIssueName("");
+      toast.success("Sub-issue created");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to create sub-issue"),
+  });
+
+  const submitSubIssue = (parentId: string) => {
+    const name = subIssueName.trim();
+    if (!name || createSubIssueMutation.isPending) return;
+    createSubIssueMutation.mutate({ parentId, name });
+  };
+
+  // Nest sub-issues under their parent row. Orphans (parent filtered out or
+  // missing) stay at the top level but keep the ↳ marker so the relationship
+  // is still visible.
+  const hierarchicalRows = useMemo(() => {
+    type Row = MyIssueRow & { depth: number; childCount: number; isSubIssue: boolean };
+    const byId = new Map(filteredIssues.map((i) => [i.id, i]));
+    const childrenOf = new Map<string, MyIssueRow[]>();
+    const roots: MyIssueRow[] = [];
+    for (const issue of filteredIssues) {
+      const parent = issue.parent_id ? byId.get(issue.parent_id) : undefined;
+      if (parent && parent.id !== issue.id && parent.project_id === issue.project_id) {
+        const list = childrenOf.get(parent.id);
+        if (list) list.push(issue);
+        else childrenOf.set(parent.id, [issue]);
+      } else {
+        roots.push(issue);
+      }
+    }
+    const rows: Row[] = [];
+    const walk = (issue: MyIssueRow, depth: number, stack: Set<string>) => {
+      if (stack.has(issue.id)) return; // cycle guard
+      const children = childrenOf.get(issue.id) ?? [];
+      rows.push({
+        ...issue,
+        depth,
+        childCount: children.length,
+        isSubIssue:
+          depth > 0 || (!!issue.parent_id && !byId.get(issue.parent_id)),
+      });
+      if (collapsedParents.has(issue.id)) return;
+      const next = new Set(stack);
+      next.add(issue.id);
+      for (const child of children) walk(child, depth + 1, next);
+    };
+    for (const root of roots) walk(root, 0, new Set());
+    return rows;
+  }, [filteredIssues, collapsedParents]);
+
+  const toggleCollapse = (id: string) =>
+    setCollapsedParents((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const openQuickAdd = (issueId: string) => {
+    setCollapsedParents((prev) => {
+      const next = new Set(prev);
+      next.delete(issueId);
+      return next;
+    });
+    setAddingTo((prev) => (prev === issueId ? null : issueId));
+    setSubIssueName("");
+  };
+
   const defaultWorkspaceSlug = isAll ? "" : slug;
   const defaultProjectId = isAll ? "" : (projects[0]?.id ?? "");
 
@@ -741,95 +837,190 @@ function DesktopMyIssues({ slug }: { slug: string }) {
               </tr>
             </thead>
             <tbody>
-              {filteredIssues.map((issue) => (
-                <tr
-                  key={issue.id}
-                  className="border-t hover:bg-muted/30 cursor-pointer"
-                  onClick={() =>
-                    navigate(
-                      `/${isAll ? issue.workspace_slug : slug}/projects/${issue.project_id}/issues/${issue.sequence_id}`,
-                    )
-                  }
-                >
-                  <td className="p-2 text-muted-foreground">
-                    {String(issue.sequence_id).padStart(4, "0")}
-                  </td>
-                  <td className="p-2 font-medium max-w-[240px]">
-                    <div className="truncate">{issue.name}</div>
-                    {issue.labels && issue.labels.length > 0 && (
-                      <div className="flex gap-1 mt-1 flex-wrap">
-                        {issue.labels.slice(0, 2).map((l) => (
-                          <Badge
-                            key={l.id}
-                            variant="outline"
-                            className="text-[10px] h-4 px-1.5"
-                            style={{ borderColor: l.color || undefined }}
-                          >
-                            {l.name}
-                          </Badge>
-                        ))}
-                        {issue.labels.length > 2 && (
-                          <span className="text-[10px] text-muted-foreground">
-                            +{issue.labels.length - 2}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  <td className="p-2 text-muted-foreground hidden sm:table-cell">
-                    {issue.project_name}
-                  </td>
-                  {isAll && (
-                    <td className="p-2 text-muted-foreground hidden md:table-cell">
-                      {issue.workspace_name}
+              {hierarchicalRows.map((issue) => (
+                <Fragment key={issue.id}>
+                  <tr
+                    className={`group border-t hover:bg-muted/30 cursor-pointer ${issue.isSubIssue ? "bg-muted/10" : ""}`}
+                    onClick={() =>
+                      navigate(
+                        `/${isAll ? issue.workspace_slug : slug}/projects/${issue.project_id}/issues/${issue.sequence_id}`,
+                      )
+                    }
+                  >
+                    <td className="p-2 text-muted-foreground">
+                      {String(issue.sequence_id).padStart(4, "0")}
                     </td>
-                  )}
-                  <td className="p-2 hidden lg:table-cell">
-                    {issue.state ? (
-                      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: issue.state.color || "#6b7280" }}
-                        />
-                        {issue.state.name}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/60">—</span>
-                    )}
-                  </td>
-                  <td className="p-2">
-                    <Badge variant="outline" className="text-xs">
-                      {issue.priority || "none"}
-                    </Badge>
-                  </td>
-                  <td className="p-2 hidden md:table-cell">
-                    {(issue.assignees ?? []).length > 0 ? (
-                      <div className="flex -space-x-1.5">
-                        {(issue.assignees ?? []).slice(0, 3).map((a) => (
-                          <span
-                            key={a.id}
-                            title={a.display_name || a.email || a.username || ""}
-                            className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] font-medium text-muted-foreground"
+                    <td className="p-2 font-medium max-w-[280px]">
+                      <div className="flex items-center gap-1.5" style={{ paddingLeft: issue.depth * 18 }}>
+                        {issue.childCount > 0 ? (
+                          <button
+                            className="shrink-0 p-0.5 rounded hover:bg-muted text-muted-foreground"
+                            title={collapsedParents.has(issue.id) ? "Expand sub-issues" : "Collapse sub-issues"}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleCollapse(issue.id);
+                            }}
                           >
-                            {(a.display_name || a.email || a.username || "?")
-                              .charAt(0)
-                              .toUpperCase()}
+                            {collapsedParents.has(issue.id) ? (
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            ) : (
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        ) : issue.isSubIssue ? (
+                          <span className="shrink-0 w-[22px] text-center text-muted-foreground/60 text-sm leading-none select-none">
+                            ↳
                           </span>
-                        ))}
-                        {(issue.assignees ?? []).length > 3 && (
-                          <span className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] text-muted-foreground">
-                            +{(issue.assignees ?? []).length - 3}
-                          </span>
+                        ) : (
+                          <span className="shrink-0 w-[22px]" />
                         )}
+                        <span className="truncate">{issue.name}</span>
+                        {issue.childCount > 0 && (
+                          <Badge
+                            variant="secondary"
+                            className="text-[10px] h-4 px-1.5 shrink-0 gap-0.5"
+                            title={`${issue.childCount} sub-issue${issue.childCount === 1 ? "" : "s"}`}
+                          >
+                            <GitBranch className="h-3 w-3" />
+                            {issue.childCount}
+                          </Badge>
+                        )}
+                        <button
+                          className="shrink-0 ml-auto p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-muted text-muted-foreground focus:opacity-100"
+                          title="Add sub-issue"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openQuickAdd(issue.id);
+                          }}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/60">—</span>
+                      {issue.labels && issue.labels.length > 0 && (
+                        <div className="flex gap-1 mt-1 flex-wrap" style={{ paddingLeft: issue.depth * 18 + (issue.childCount > 0 || issue.isSubIssue ? 22 : 0) }}>
+                          {issue.labels.slice(0, 2).map((l) => (
+                            <Badge
+                              key={l.id}
+                              variant="outline"
+                              className="text-[10px] h-4 px-1.5"
+                              style={{ borderColor: l.color || undefined }}
+                            >
+                              {l.name}
+                            </Badge>
+                          ))}
+                          {issue.labels.length > 2 && (
+                            <span className="text-[10px] text-muted-foreground">
+                              +{issue.labels.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-2 text-muted-foreground hidden sm:table-cell">
+                      {issue.project_name}
+                    </td>
+                    {isAll && (
+                      <td className="p-2 text-muted-foreground hidden md:table-cell">
+                        {issue.workspace_name}
+                      </td>
                     )}
-                  </td>
-                  <td className="p-2 text-muted-foreground text-xs hidden md:table-cell">
-                    {formatDistanceToNow(new Date(issue.updated_at), { addSuffix: true })}
-                  </td>
-                </tr>
+                    <td className="p-2 hidden lg:table-cell">
+                      {issue.state ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: issue.state.color || "#6b7280" }}
+                          />
+                          {issue.state.name}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/60">—</span>
+                      )}
+                    </td>
+                    <td className="p-2">
+                      <Badge variant="outline" className="text-xs">
+                        {issue.priority || "none"}
+                      </Badge>
+                    </td>
+                    <td className="p-2 hidden md:table-cell">
+                      {(issue.assignees ?? []).length > 0 ? (
+                        <div className="flex -space-x-1.5">
+                          {(issue.assignees ?? []).slice(0, 3).map((a) => (
+                            <span
+                              key={a.id}
+                              title={a.display_name || a.email || a.username || ""}
+                              className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] font-medium text-muted-foreground"
+                            >
+                              {(a.display_name || a.email || a.username || "?")
+                                .charAt(0)
+                                .toUpperCase()}
+                            </span>
+                          ))}
+                          {(issue.assignees ?? []).length > 3 && (
+                            <span className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] font-medium text-muted-foreground">
+                              +{(issue.assignees ?? []).length - 3}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/60">—</span>
+                      )}
+                    </td>
+                    <td className="p-2 text-muted-foreground text-xs hidden md:table-cell">
+                      {formatDistanceToNow(new Date(issue.updated_at), { addSuffix: true })}
+                    </td>
+                  </tr>
+                  {addingTo === issue.id && (
+                    <tr className="border-t bg-muted/20">
+                      <td colSpan={7 + (isAll ? 1 : 0)} className="p-2">
+                        <form
+                          className="flex items-center gap-2"
+                          style={{ paddingLeft: (issue.depth + 1) * 18 + 22 }}
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            submitSubIssue(issue.id);
+                          }}
+                        >
+                          <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <Input
+                            autoFocus
+                            value={subIssueName}
+                            onChange={(e) => setSubIssueName(e.target.value)}
+                            placeholder={`Sub-issue of #${issue.sequence_id} — ${issue.name}`}
+                            className="h-8 text-sm"
+                            disabled={createSubIssueMutation.isPending}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") {
+                                setAddingTo(null);
+                                setSubIssueName("");
+                              }
+                            }}
+                          />
+                          <Button
+                            type="submit"
+                            size="sm"
+                            className="h-8 shrink-0"
+                            disabled={!subIssueName.trim() || createSubIssueMutation.isPending}
+                          >
+                            {createSubIssueMutation.isPending ? "Adding..." : "Add"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 shrink-0"
+                            onClick={() => {
+                              setAddingTo(null);
+                              setSubIssueName("");
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </form>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
