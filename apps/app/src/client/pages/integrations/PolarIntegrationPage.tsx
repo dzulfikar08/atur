@@ -147,6 +147,91 @@ export default function PolarIntegrationPage() {
         <Zap className="h-6 w-6" />
         <h1 className="text-2xl font-bold">Polar Integration</h1>
       </div>
+      {/* Setup guide */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Setup Guide</CardTitle>
+          <CardDescription>
+            What to create in Polar and which permissions it needs. Create both in your Polar
+            dashboard under Settings → Developers.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5 text-sm">
+          <div className="space-y-2">
+            <div className="font-medium">1. Access token (Polar → Settings → API)</div>
+            <p className="text-muted-foreground">
+              Read-only personal access token. Used for the initial backfill ("Sync Now") and to
+              enrich incoming webhook payloads. Grant these scopes:
+            </p>
+            <ul className="space-y-1 text-muted-foreground">
+              <li>
+                <code className="text-xs bg-muted px-1.5 py-0.5 rounded">customers:read</code> —
+                import customers as CRM contacts
+              </li>
+              <li>
+                <code className="text-xs bg-muted px-1.5 py-0.5 rounded">subscriptions:read</code> —
+                import subscriptions as deals with recurring amount
+              </li>
+              <li>
+                <code className="text-xs bg-muted px-1.5 py-0.5 rounded">orders:read</code> —
+                import one-off orders as deals
+              </li>
+            </ul>
+            <p className="text-xs text-muted-foreground">No write scopes needed — Atur never mutates Polar data.</p>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <div className="font-medium">2. Webhook endpoint (Polar → Settings → Webhooks)</div>
+            <p className="text-muted-foreground">
+              Point it at the Webhook Receiver URL in the API Credentials card below, copy the <code className="text-xs bg-muted px-1.5 py-0.5 rounded">whsec_…</code>{" "}
+              secret into the Webhook Secret field, then subscribe to these events:
+            </p>
+            <div className="space-y-2">
+              {[
+                {
+                  group: "Customer — creates/updates CRM contacts",
+                  events: ["customer.created", "customer.updated", "customer.state_changed", "customer.deleted"],
+                },
+                {
+                  group: "Subscription — creates deals, moves stage on status",
+                  events: [
+                    "subscription.created",
+                    "subscription.active",
+                    "subscription.updated",
+                    "subscription.cycled",
+                    "subscription.canceled",
+                    "subscription.uncanceled",
+                    "subscription.revoked",
+                    "subscription.paused",
+                    "subscription.resumed",
+                    "subscription.past_due",
+                  ],
+                },
+                {
+                  group: "Order — one-off purchases as deals",
+                  events: ["order.created", "order.paid", "order.updated", "order.refunded"],
+                },
+              ].map((g) => (
+                <div key={g.group} className="space-y-1.5">
+                  <p className="text-xs font-medium">{g.group}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {g.events.map((e) => (
+                      <Badge key={e} variant="outline" className="font-mono text-[11px]">
+                        {e}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Other events are ignored — subscribing to extras is harmless but unnecessary.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Credentials */}
       <Card className="mb-6">

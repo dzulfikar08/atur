@@ -29,6 +29,7 @@ const GitHubIntegrationPage = lazy(() => import("@/pages/integrations/GitHubInte
 const ClockifyIntegrationPage = lazy(() => import("@/pages/integrations/ClockifyIntegrationPage"));
 const McpIntegrationPage = lazy(() => import("@/pages/integrations/McpIntegrationPage"));
 const PolarIntegrationPage = lazy(() => import("@/pages/integrations/PolarIntegrationPage"));
+const IntegrationsIndexPage = lazy(() => import("@/pages/integrations/IntegrationsIndexPage"));
 const AdminDashboardPage = lazy(() => import("@/pages/admin/AdminDashboardPage"));
 const NotificationsPage = lazy(() => import("@/pages/notifications/NotificationsPage"));
 const TimesheetPage = lazy(() => import("@/pages/timesheet/TimesheetPage"));
@@ -154,6 +155,7 @@ export default function App() {
           />
           <Route path="/:slug/projects/:projectId/cycles" element={<CyclesPage />} />
           <Route path="/:slug/projects/:projectId/cycles/:cycleId" element={<CycleDetailPage />} />
+          <Route path="/:slug/integrations" element={<IntegrationsIndexPage />} />
           <Route path="/:slug/integrations/github" element={<GitHubIntegrationPage />} />
           <Route path="/:slug/integrations/clockify" element={<ClockifyIntegrationPage />} />
           <Route path="/:slug/integrations/mcp" element={<McpIntegrationPage />} />
