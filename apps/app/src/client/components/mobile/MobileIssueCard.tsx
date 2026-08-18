@@ -27,6 +27,12 @@ interface MobileIssueCardProps {
   slug: string;
   projectId?: string;
   states?: { id: string; name: string; group: string }[];
+  /** Nesting depth — 0 = top-level, 1+ = sub-issue. */
+  depth?: number;
+  /** Number of sub-issues under this card. */
+  childCount?: number;
+  /** True when the parent is not visible (filtered out) but the row is a sub-issue. */
+  isSubIssue?: boolean;
 }
 
 const STATE_DOT_COLORS: Record<string, string> = {
@@ -46,7 +52,15 @@ const PRIORITY_DOTS: Record<string, string> = {
   none: "bg-gray-300",
 };
 
-export default function MobileIssueCard({ issue, slug, projectId, states }: MobileIssueCardProps) {
+export default function MobileIssueCard({
+  issue,
+  slug,
+  projectId,
+  states,
+  depth = 0,
+  childCount = 0,
+  isSubIssue = false,
+}: MobileIssueCardProps) {
   const navigate = useNavigate();
   const state = issue.state ?? states?.find((s) => s.id === issue.state_id) ?? null;
   const group = state?.group || "backlog";
@@ -67,8 +81,25 @@ export default function MobileIssueCard({ issue, slug, projectId, states }: Mobi
         <div className={cn("h-2.5 w-2.5 rounded-full mt-1.5 shrink-0", STATE_DOT_COLORS[group])} />
 
         <div className="flex-1 min-w-0">
-          {/* Title */}
-          <p className="text-sm font-medium leading-tight line-clamp-2">{issue.name}</p>
+          {/* Title — sub-issues indent with a ↳ marker, parents show a sub-count */}
+          <div
+            className="flex items-start gap-1.5"
+            style={{ marginLeft: depth * 16 + (isSubIssue && depth === 0 ? 16 : 0) }}
+          >
+            {depth > 0 || isSubIssue ? (
+              <span className="text-sm leading-tight text-muted-foreground/60 select-none shrink-0">
+                ↳
+              </span>
+            ) : null}
+            <p className="text-sm font-medium leading-tight line-clamp-2 flex-1 min-w-0">
+              {issue.name}
+            </p>
+            {childCount > 0 && (
+              <Badge variant="secondary" className="text-[10px] h-4 px-1.5 shrink-0">
+                {childCount} sub
+              </Badge>
+            )}
+          </div>
 
           {/* Meta row */}
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">

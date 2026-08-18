@@ -26,6 +26,7 @@ interface Issue {
   name: string;
   sequence_id: number;
   state_id: string | null;
+  parent_id: string | null;
   priority: string | null;
   project_id: string;
   created_at: string;
@@ -238,6 +239,40 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
     return filterSortDir === "desc" ? -cmp : cmp;
   });
 
+  // Nest sub-issues under their parent card (indent + ↳ marker). Orphans
+  // (parent filtered out) stay top-level but keep the marker.
+  const hierarchical = useMemo(() => {
+    const byId = new Map(filteredSorted.map((i) => [i.id, i]));
+    const childrenOf = new Map<string, Issue[]>();
+    const roots: Issue[] = [];
+    for (const issue of filteredSorted) {
+      const parent = issue.parent_id ? byId.get(issue.parent_id) : undefined;
+      if (parent && parent.id !== issue.id && parent.project_id === issue.project_id) {
+        const list = childrenOf.get(parent.id);
+        if (list) list.push(issue);
+        else childrenOf.set(parent.id, [issue]);
+      } else {
+        roots.push(issue);
+      }
+    }
+    const rows: (Issue & { depth: number; childCount: number; isSubIssue: boolean })[] = [];
+    const walk = (issue: Issue, depth: number, stack: Set<string>) => {
+      if (stack.has(issue.id)) return; // cycle guard
+      const children = childrenOf.get(issue.id) ?? [];
+      rows.push({
+        ...issue,
+        depth,
+        childCount: children.length,
+        isSubIssue: depth > 0 || (!!issue.parent_id && !byId.get(issue.parent_id)),
+      });
+      const next = new Set(stack);
+      next.add(issue.id);
+      for (const child of children) walk(child, depth + 1, next);
+    };
+    for (const root of roots) walk(root, 0, new Set());
+    return rows;
+  }, [filteredSorted]);
+
   // Distinct assignees / labels across the fetched issues (for the filter sheet).
   const stateOptions = useMemo(() => {
     const map = new Map<string, { id: string; name: string; group: string; color?: string }>();
@@ -407,13 +442,16 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
         <div className="py-12 text-center text-sm text-muted-foreground">No issues found</div>
       ) : (
         <div className="space-y-2">
-          {filteredSorted.map((issue) => (
+          {hierarchical.map((issue) => (
             <MobileIssueCard
               key={issue.id}
               issue={issue}
               slug={issue.workspace_slug || slug}
               projectId={projectId || issue.project_id}
               states={states}
+              depth={issue.depth}
+              childCount={issue.childCount}
+              isSubIssue={issue.isSubIssue}
             />
           ))}
         </div>
