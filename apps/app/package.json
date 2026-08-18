@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "wrangler dev",
-    "deploy": "rm -rf dist .wrangler/deploy .wrangler/tmp && wrangler deploy",
+    "deploy": "rm -rf dist .wrangler/deploy .wrangler/tmp && vite build && wrangler deploy",
     "typecheck": "tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tsconfig.client.json",
     "test": "vitest run",
     "test:watch": "vitest",

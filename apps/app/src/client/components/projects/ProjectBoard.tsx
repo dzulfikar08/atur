@@ -32,7 +32,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Textarea } from "@/components/ui/textarea";
+import CommentEditor from "@/components/editor/CommentEditor";
 import {
   Plus,
   List,
@@ -744,7 +744,11 @@ export default function ProjectBoard() {
                       <FormItem>
                         <FormLabel>Description</FormLabel>
                         <FormControl>
-                          <Textarea placeholder="Describe the issue..." rows={4} {...field} />
+                          <CommentEditor
+                            value={field.value ?? ""}
+                            onChange={field.onChange}
+                            placeholder="Describe the issue... Type / for commands"
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

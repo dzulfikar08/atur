@@ -1,4 +1,6 @@
 ---
+import "../styles/global.css";
+
 // Base layout for the Atur marketing site (diatur.com). Provides the SEO head,
 // site header (Sign In / Open App → the app origin), and footer.
 const APP_URL = "https://app.diatur.com";
@@ -10,8 +12,16 @@ interface Props {
   canonical: string;
   ogType?: string;
   ogImage?: string;
+  showChrome?: boolean;
 }
-const { title, description, canonical, ogType = "website", ogImage = "/og-atur.webp" } = Astro.props;
+const {
+  title,
+  description,
+  canonical,
+  ogType = "website",
+  ogImage = "/og-atur.webp",
+  showChrome = true,
+} = Astro.props;
 ---
 
 <!doctype html>
@@ -43,36 +53,39 @@ const { title, description, canonical, ogType = "website", ogImage = "/og-atur.w
       href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/styles/global.css" />
     <slot name="head" />
   </head>
   <body>
-    <header class="site-header">
-      <div class="container header-inner">
-        <a class="brand" href="/">
-          <img src="/logo-128.png" alt="" width="32" height="32" />
-          <span>Atur</span>
-        </a>
-        <nav class="site-nav">
-          <a href="/#features">Features</a>
-          <a href="/blog">Blog</a>
-          <a href={APP_URL + "/auth/login"}>Sign In</a>
-          <a class="btn" href={APP_URL}>Open App →</a>
-        </nav>
-      </div>
-    </header>
+    {showChrome && (
+      <header class="site-header">
+        <div class="container header-inner">
+          <a class="brand" href="/">
+            <img src="/logo-128.png" alt="" width="32" height="32" />
+            <span>Atur</span>
+          </a>
+          <nav class="site-nav">
+            <a href="/#features">Features</a>
+            <a href="/blog">Blog</a>
+            <a href={APP_URL + "/auth/login"}>Sign In</a>
+            <a class="btn" href={APP_URL}>Open App →</a>
+          </nav>
+        </div>
+      </header>
+    )}
     <main>
       <slot />
     </main>
-    <footer class="site-footer">
-      <div class="container footer-inner">
-        <span>© {year} Atur</span>
-        <span class="footer-links">
-          <a href="/blog">Blog</a>
-          <a href="/privacy">Privacy</a>
-          <a href="/support">Support</a>
-        </span>
-      </div>
-    </footer>
+    {showChrome && (
+      <footer class="site-footer">
+        <div class="container footer-inner">
+          <span>© {year} Atur</span>
+          <span class="footer-links">
+            <a href="/blog">Blog</a>
+            <a href="/privacy">Privacy</a>
+            <a href="/support">Support</a>
+          </span>
+        </div>
+      </footer>
+    )}
   </body>
 </html>

@@ -7,7 +7,7 @@ import { api, type Issue, type AllProject } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import CommentEditor from "@/components/editor/CommentEditor";
 import {
   Dialog,
   DialogContent,
@@ -207,11 +207,11 @@ function AddIssueDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Description</Label>
-            <Textarea
-              placeholder="Optional description"
-              rows={3}
+            <CommentEditor
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={setDescription}
+              placeholder="Optional description"
+              compact
             />
           </div>
           <Button

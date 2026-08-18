@@ -2,267 +2,66 @@
 import BaseLayout from "../layouts/BaseLayout.astro";
 
 const APP_URL = "https://app.diatur.com";
-
 const features = [
-  {
-    icon: "🗂",
-    title: "Kanban Boards",
-    desc: "Drag-and-drop issue management with custom workflows and states.",
-  },
-  {
-    icon: "🎫",
-    title: "Support Portal",
-    desc: "A shared inbox and customer portal. Turn emails into tracked tickets with SLAs.",
-  },
-  {
-    icon: "🤝",
-    title: "CRM & Deals",
-    desc: "Track contacts, companies, and a sales pipeline. Close deals without leaving your workspace.",
-  },
-  {
-    icon: "⏱",
-    title: "Timesheets",
-    desc: "Log time on issues and projects. Billable hours and reports from one source of truth.",
-  },
-  {
-    icon: "📄",
-    title: "Connected Pages",
-    desc: "Rich text with [[wikilinks]], backlinks, and a knowledge graph to connect your thinking.",
-  },
-  {
-    icon: "🤖",
-    title: "AI Integration",
-    desc: "Built-in MCP server for AI agents. Let Claude, Cursor, and Copilot run your workflows.",
-  },
+  ["▦", "Plan and ship", "Projects, issues, cycles, and kanban boards give the team one clear place to move work forward."],
+  ["↗", "Listen to customers", "Collect feedback and support tickets in a portal your customers can actually use."],
+  ["◇", "Keep relationships warm", "Contacts, companies, and pipeline stages stay close to the work they influence."],
+  ["◷", "Know where time goes", "Track time against issues and projects without rebuilding the same report in another tool."],
+  ["▤", "Make context searchable", "Write docs, meeting notes, and specs with linked pages, backlinks, and a knowledge graph."],
+  ["◈", "Let AI do the busywork", "Use Atur's MCP server to create issues, update work, and retrieve context from your AI editor."],
 ];
-
-const metrics = [
-  { value: "6", label: "Tools in one" },
-  { value: "35+", label: "MCP Tools" },
-  { value: "99.9%", label: "Uptime SLA" },
-  { value: "0", label: "Servers to manage" },
+const metrics = [["01", "One workspace"], ["06", "Connected workflows"], ["∞", "Room to grow"], ["24/7", "Cloud-hosted"]];
+const workflow = [
+  ["01", "Capture the signal", "Turn a customer request, team idea, or rough note into a trackable piece of work."],
+  ["02", "Give it a home", "Connect the issue to a project, cycle, customer, page, or deal so the context travels with it."],
+  ["03", "Move it to done", "See what is next, what is blocked, and what shipped — without stitching together status updates."],
 ];
-
-const pageCards = [
-  "Rich text with slash commands and callouts",
-  "Wikilinks with backlink references",
-  "Interactive knowledge graph visualization",
-  "Embedded drawing whiteboards",
+const pageItems = ["Rich text with slash commands and callouts", "Wikilinks with backlink references", "Interactive knowledge graph visualization", "Embedded drawing whiteboards"];
+const reasons = [
+  ["ϟ", "Less tab switching", "Project work, customer context, notes, and time live together instead of getting lost between tools."],
+  ["⌁", "A workspace that connects", "A page can lead to an issue. An issue can lead to a customer. Your context stays connected as work changes."],
+  ["◈", "Ready for AI workflows", "Connect Claude Code, Cursor, or another MCP-compatible client when you want an agent to work with your workspace."],
 ];
-
-const whyCards = [
-  {
-    title: "Instant Setup",
-    desc: "Create a workspace in seconds. No servers, no config — we host it on Cloudflare's global edge.",
-  },
-  {
-    title: "Cloud-Secure",
-    desc: "Hosted on Cloudflare with encryption and daily backups. Enterprise-grade security, by default.",
-  },
-  {
-    title: "All-in-One",
-    desc: "Stop paying for Jira, Zendesk, HubSpot, and Toggl separately. One subscription, one login.",
-  },
-  {
-    title: "AI-Native",
-    desc: "35+ MCP tools let AI agents create issues, answer tickets, and update deals for you.",
-  },
-];
-
-const pricing = [
-  {
-    name: "Starter",
-    price: "$9",
-    blurb: "For individuals getting started with the whole toolkit.",
-    items: [
-      "Unlimited projects & issues",
-      "Support portal & tickets",
-      "CRM contacts & deals",
-      "Timesheets & time tracking",
-      "Pages & knowledge graph",
-      "All 35+ MCP tools",
-    ],
-  },
-  {
-    name: "Team",
-    price: "$29",
-    blurb: "For growing teams running everything together.",
-    popular: true,
-    items: [
-      "Everything in Starter",
-      "Unlimited team members",
-      "Custom domain",
-      "Daily automatic backups",
-      "Priority support",
-      "Onboarding assistance",
-    ],
-  },
+const plans = [
+  ["Starter", "$9", "For individuals and small teams building a calmer operating system.", ["Projects, issues, and cycles", "Support portal and feedback", "CRM contacts and pipeline", "Pages and knowledge graph", "Time tracking", "MCP access"]],
+  ["Team", "$29", "For growing teams bringing delivery and customer work together.", ["Everything in Starter", "Unlimited team members", "Custom domain", "Daily automatic backups", "Priority support", "Onboarding assistance"]],
 ];
 ---
 
-<BaseLayout
-  title="Atur — One Workspace for Everything"
-  description="Issues, sprints, support tickets, deals, and timesheets — one app on Cloudflare's edge. No more stitching five tools together."
-  canonical="/"
->
-  <section class="hero">
-    <div class="container">
-      <span class="hero-badge"><span class="dot"></span> Projects, support &amp; CRM — in one place</span>
-      <h1>
-        One workspace
-        <br />
-        <span class="serif" style="color: var(--muted)">for your whole operation</span>
-      </h1>
-      <p class="lede">
-        Issues, sprints, support tickets, deals, and timesheets — one app on
-        Cloudflare's edge. No more stitching five tools together.
-      </p>
-      <div class="hero-actions">
-        <a class="btn-primary" href={`${APP_URL}/auth/login`}>Start Free Trial →</a>
-        <a class="btn-outline" href={`${APP_URL}/auth/login`}>View Demo</a>
-      </div>
+<BaseLayout title="Atur — One workspace for work that moves" description="Atur connects projects, customer feedback, CRM, docs, time tracking, and AI workflows in one workspace." canonical="/" showChrome={false}>
+  <div class="old-landing">
+    <nav class="landing-nav">
+      <a class="landing-brand" href="/"><img src="/logo-128.png" alt="" width="32" height="32" />Atur</a>
+      <div class="landing-links"><a href="#features">What it does</a><a href="#workflow">How it works</a><a href="#pricing">Pricing</a></div>
+      <div class="landing-actions"><a href={`${APP_URL}/auth/login`}>Sign in</a><a class="landing-button" href={`${APP_URL}/auth/login`}>Open workspace <b>→</b></a></div>
+      <details class="landing-mobile"><summary>☰</summary><div><a href="#features">What it does</a><a href="#workflow">How it works</a><a href="#pricing">Pricing</a><a href={`${APP_URL}/auth/login`}>Sign in</a><a href={`${APP_URL}/auth/login`}>Open workspace</a></div></details>
+    </nav>
 
-      <div class="metrics">
-        {
-          metrics.map((m) => (
-            <div class="metric">
-              <strong>{m.value}</strong>
-              <span>{m.label}</span>
-            </div>
-          ))
-        }
-      </div>
-    </div>
-  </section>
+    <section class="landing-hero">
+      <div class="landing-grid-lines"></div><div class="landing-noise"></div>
+      <div class="landing-container landing-hero-content">
+        <span class="landing-badge"><i></i> Built for teams that do more than one kind of work</span>
+        <h1>Work moves better<br /><em>when context stays close</em></h1>
+        <p>Atur brings projects, customer feedback, CRM, docs, time tracking, and AI workflows into one connected workspace — so your team can spend less time updating tools and more time doing the work.</p>
+        <div class="landing-hero-actions"><a class="landing-button large" href={`${APP_URL}/auth/login`}>Start with Atur <b>→</b></a><a class="landing-outline large" href="#workflow">See how it works <b>↓</b></a></div>
 
-  <section class="section" id="features">
-    <div class="container">
-      <p class="section-kicker">Capabilities</p>
-      <h2>
-        Replace your whole stack, <span class="serif" style="color: var(--muted)">not just your project tool</span>
-      </h2>
-      <p class="section-intro">
-        Most teams stitch together a separate tool for every job. Atur replaces them all.
-      </p>
-      <div class="feature-grid">
-        {
-          features.map((f) => (
-            <div class="feature-card">
-              <span class="icon">{f.icon}</span>
-              <h3>{f.title}</h3>
-              <p>{f.desc}</p>
-            </div>
-          ))
-        }
+        <div class="app-mockup"><div class="window-bar"><span>● ● ●</span><b>app.diatur.com / projects</b></div><div class="mockup-body"><aside><strong></strong>{[80,60,72,48,64,56,68].map((w, i) => <i style={`width:${w}%${i === 1 ? ';opacity:.15' : ''}`}></i>)}<footer></footer></aside><div class="mockup-main"><header><strong></strong><b></b></header><div class="mock-columns">{['Backlog','In Progress','Done'].map((column, ci) => <section><label>{column}</label>{[0,1].map((card) => <article><strong></strong><i></i>{ci === 1 && card === 0 && <b></b>}{ci === 2 && card === 0 && <small></small>}</article>)}</section>)}</div></div></div></div>
+        <div class="landing-metrics">{metrics.map(([value, label]) => <div><strong>{value}</strong><span>{label}</span></div>)}</div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="section" id="pages">
-    <div class="container">
-      <p class="section-kicker">Knowledge Base</p>
-      <h2>
-        Pages that connect <span class="serif" style="color: var(--muted)">your thinking</span>
-      </h2>
-      <div class="split">
-        <div>
-          <p class="section-intro">
-            Write documentation, meeting notes, and specs with an Obsidian-inspired
-            editor. Use <code>[[wikilinks]]</code> to connect pages, then explore
-            everything through an interactive knowledge graph.
-          </p>
-          <ul>
-            {pageCards.map((text) => <li>{text}</li>)}
-          </ul>
-        </div>
-        <div class="feature-card" style="min-height: 280px">
-          <span class="icon">🧠</span>
-          <h3>Knowledge graph</h3>
-          <p>
-            Every page is a node. Follow links and backlinks to see how your
-            documentation, specs, and meeting notes fit together.
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
+    <section id="features" class="landing-section"><div class="landing-container"><div class="landing-heading"><small>One connected workspace</small><h2>Everything your team needs<br /><em>to keep momentum</em></h2><p>Atur is designed for teams whose work does not fit neatly into one category. Bring the operating pieces together without making everyone learn five systems.</p></div><div class="landing-feature-grid">{features.map(([icon, title, description]) => <article><span class="feature-icon">{icon}</span><h3>{title}</h3><p>{description}</p></article>)}</div></div></section>
 
-  <section class="section" id="why">
-    <div class="container">
-      <p class="section-kicker">Why Atur</p>
-      <h2>One platform, not five</h2>
-      <div class="feature-grid">
-        {
-          whyCards.map((c) => (
-            <div class="feature-card">
-              <h3>{c.title}</h3>
-              <p>{c.desc}</p>
-            </div>
-          ))
-        }
-      </div>
-    </div>
-  </section>
+    <section id="workflow" class="landing-section landing-workflow"><div class="landing-container"><div class="landing-heading"><small>A simpler operating rhythm</small><h2>From signal to shipped<br /><em>without losing the thread</em></h2></div><div class="workflow-grid">{workflow.map(([number, title, description]) => <article><span>{number}</span><h3>{title}</h3><p>{description}</p></article>)}</div></div></section>
 
-  <section class="section" id="pricing">
-    <div class="container">
-      <p class="section-kicker">Pricing</p>
-      <h2>Simple, affordable pricing</h2>
-      <p class="section-intro" style="margin-inline: auto; text-align: center">
-        No per-seat charges. No feature gates. One subscription, every tool included.
-      </p>
-      <div class="pricing-grid">
-        {
-          pricing.map((p) => (
-            <div class={`price-card${p.popular ? " popular" : ""}`}>
-              <h3>{p.name}</h3>
-              <div class="price">{p.price} <span>/month</span></div>
-              <p style="color: var(--muted); font-size: 14px">{p.blurb}</p>
-              <ul>
-                {p.items.map((item) => <li>{item}</li>)}
-              </ul>
-              <a class="btn-primary btn" href={`${APP_URL}/auth/login`}>Start Free Trial</a>
-            </div>
-          ))
-        }
-      </div>
-      <p style="text-align: center; color: var(--muted); font-size: 13px; margin-top: 32px">
-        14-day free trial on all plans. No credit card required.
-      </p>
-    </div>
-  </section>
+    <section id="pages" class="landing-section"><div class="landing-container landing-split"><div><small>Knowledge that stays useful</small><h2>Write it once.<br /><em>Find it again.</em></h2><p>Keep the decisions, specs, and working notes that make delivery easier. Atur's linked pages give your team a shared memory instead of another folder nobody opens.</p><ul>{pageItems.map((item, i) => <li><span>{['▧','⌘','✦','✎'][i]}</span>{item}</li>)}</ul></div><article class="page-mockup"><header><i></i><b></b><i></i></header><div><strong></strong><i></i><i></i><i></i><blockquote><b></b><i></i><i></i></blockquote><i></i><i></i><label>▤ linked-page</label><i></i></div></article></div></section>
 
-  <section class="section">
-    <div class="container">
-      <p class="section-kicker">AI / MCP</p>
-      <h2>Bring Atur into your AI editor</h2>
-      <div class="split">
-        <div>
-          <p class="section-intro">
-            Atur speaks MCP. Connect Claude Code or Cursor and manage issues,
-            sprints, CRM, and timesheets without leaving your editor.
-          </p>
-          <a class="btn-primary" href={`${APP_URL}/auth/login`} style="margin-top: 28px; display: inline-flex">
-            Connect Atur →
-          </a>
-        </div>
-        <div class="feature-card">
-          <span class="icon">🤖</span>
-          <h3>35+ MCP tools</h3>
-          <p>
-            Create issues, answer tickets, and update deals from any AI agent —
-            all through one <code>/mcp</code> endpoint.
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
+    <section class="landing-section landing-reasons"><div class="landing-container"><div class="landing-heading"><small>Why Atur</small><h2>Make the whole picture<br /><em>easier to see</em></h2></div><div class="reason-grid">{reasons.map(([icon, title, description]) => <article><span>{icon}</span><h3>{title}</h3><p>{description}</p></article>)}</div></div></section>
 
-  <section class="cta">
-    <div class="container">
-      <h2>Ready to ship faster?</h2>
-      <p>Spin up a workspace in seconds. Run projects, support, and sales from one place.</p>
-      <a class="btn-primary" href={`${APP_URL}/auth/login`}>Get Started Now →</a>
-    </div>
-  </section>
+    <section id="pricing" class="landing-section"><div class="landing-container"><div class="landing-heading"><small>Pricing</small><h2>Start small. Keep everything.</h2><p>Simple plans for a connected workspace. No feature scavenger hunt, and no credit card required to try it.</p></div><div class="plans">{plans.map(([name, price, blurb, items], i) => <article class={i === 1 ? "popular" : ""}>{i === 1 && <label>For growing teams</label>}<h3>{name}</h3><strong>{price}<small>/month</small></strong><p>{blurb}</p><ul>{items.map((item) => <li>✓ {item}</li>)}</ul><a class={i === 1 ? "landing-button" : "landing-outline"} href={`${APP_URL}/auth/login`}>{i === 1 ? "Start with Team →" : "Start with Starter"}</a></article>)}</div><p class="trial-note">Try Atur without a credit card. Upgrade when the workspace earns its place.</p></div></section>
+
+    <section class="landing-section landing-cta"><div class="landing-container"><h2>Give your work<br /><em>one place to land.</em></h2><p>Open a workspace, invite your team, and see how much easier the day feels when the context is already there.</p><a class="landing-button large" href={`${APP_URL}/auth/login`}>Open Atur <b>→</b></a></div></section>
+    <section class="landing-section landing-mcp"><div class="landing-container"><span>◈</span><h2>Your AI editor can work with Atur</h2><p>Atur includes an MCP server for AI-assisted workflows. Connect a compatible client, then create issues, retrieve context, and update work without leaving your editor.</p><div><a class="landing-button large" href={`${APP_URL}/auth/login`}>Explore MCP in Atur <b>→</b></a><small>Find setup commands in <strong>AI / MCP</strong> inside the app.</small></div></div></section>
+    <footer class="landing-footer"><a class="landing-brand" href="/"><img src="/logo-128.png" alt="" width="28" height="28" />Atur</a><div><a href="#features">What it does</a><a href="#workflow">How it works</a><a href="#pricing">Pricing</a></div><span>© 2026 Atur</span></footer>
+  </div>
 </BaseLayout>

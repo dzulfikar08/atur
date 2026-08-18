@@ -5,7 +5,7 @@ import BottomSheet from "./BottomSheet";
 import PullToRefreshIndicator from "./PullToRefreshIndicator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import CommentEditor from "@/components/editor/CommentEditor";
 import { useState, useEffect, useMemo } from "react";
 import { Plus, Search, SlidersHorizontal } from "@/lib/icons";
 import { Badge } from "@/components/ui/badge";
@@ -617,11 +617,11 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
             value={newIssueName}
             onChange={(e) => setNewIssueName(e.target.value)}
           />
-          <Textarea
-            placeholder="Description (optional)"
-            rows={3}
+          <CommentEditor
             value={newIssueDesc}
-            onChange={(e) => setNewIssueDesc(e.target.value)}
+            onChange={setNewIssueDesc}
+            placeholder="Description (optional)"
+            compact
           />
           {effectiveCreateProjectId && (
             <div>
