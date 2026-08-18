@@ -9,14 +9,11 @@ interface ThemeState {
 
 function applyTheme(theme: Theme) {
   const root = document.documentElement;
-  if (
+  const isDark =
     theme === "dark" ||
-    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)
-  ) {
-    root.classList.add("dark");
-  } else {
-    root.classList.remove("dark");
-  }
+    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  root.classList.toggle("dark", isDark);
+  root.setAttribute("data-mode", isDark ? "dark" : "light");
 }
 
 const stored = localStorage.getItem("theme") as Theme | null;

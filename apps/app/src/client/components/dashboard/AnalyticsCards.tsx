@@ -125,13 +125,13 @@ export default function AnalyticsCards({ slug }: AnalyticsCardsProps) {
         const trend = data?.[config.trendKey] ?? 0;
 
         return (
-          <Card key={config.key} className="transition-shadow hover:shadow-md">
+          <Card key={config.key} className="transition-shadow duration-200 hover:shadow-elevated">
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-muted-foreground">{config.label}</p>
                 <div
                   className={cn(
-                    "flex h-9 w-9 items-center justify-center rounded-lg",
+                    "flex h-9 w-9 items-center justify-center rounded-xl shadow-soft",
                     config.bgColor,
                   )}
                 >

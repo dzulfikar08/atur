@@ -15,6 +15,13 @@ import {
 } from "@/components/ui/dialog";
 import { Plus } from "@/lib/icons";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const STATUS_COLORS: Record<string, string> = {
   lead: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
@@ -127,16 +134,17 @@ export default function ContactsListPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-xs"
         />
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          className="border rounded px-2 text-sm"
-        >
-          <option value="">All statuses</option>
-          <option value="lead">Lead</option>
-          <option value="active">Active</option>
-          <option value="churned">Churned</option>
-        </select>
+        <Select value={status || "all"} onValueChange={(v) => setStatus(v === "all" ? "" : v)}>
+          <SelectTrigger className="h-9 w-[150px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="lead">Lead</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="churned">Churned</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <Card>

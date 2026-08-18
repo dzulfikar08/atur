@@ -154,13 +154,6 @@ export default function TopBar() {
 
   return (
     <header className="flex h-14 items-center gap-3 border-b border-border bg-background px-4">
-      <button
-        onClick={() => slug && navigate(`/${slug}`)}
-        className="shrink-0 rounded-md"
-        aria-label="Atur home"
-      >
-        <img src="/logo-128.png" alt="Atur" className="h-7 w-7 rounded-md" />
-      </button>
       {/* Breadcrumb - left */}
       <nav className="hidden items-center gap-1 text-sm md:flex min-w-0">
         {breadcrumbs.map((crumb, i) => (
@@ -232,11 +225,11 @@ export default function TopBar() {
             <button
               onClick={() => setSearchOpen(true)}
               aria-label="Search"
-              className="flex h-8 w-full items-center gap-2 rounded-md border border-input bg-muted/50 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted"
+              className="flex h-8 w-full items-center gap-2 rounded-lg border border-input bg-muted/60 px-3 text-sm text-muted-foreground shadow-soft transition-colors hover:bg-muted hover:border-border"
             >
               <Search className="h-3.5 w-3.5 shrink-0" />
               <span className="hidden sm:inline">Search...</span>
-              <kbd className="ml-auto rounded bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground border border-border hidden sm:inline-block">
+              <kbd className="ml-auto rounded-md bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground border border-border shadow-soft hidden sm:inline-block">
                 ⌘K
               </kbd>
             </button>

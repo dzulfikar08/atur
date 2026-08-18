@@ -32,12 +32,12 @@ export default function ProjectCard({ project, slug, onDelete, onEdit }: Project
 
   return (
     <Card
-      className="cursor-pointer hover:border-primary/50 transition-colors"
+      className="cursor-pointer transition-all duration-200 hover:border-primary/40 hover:shadow-elevated hover:-translate-y-0.5"
       onClick={() => navigate(`/${slug}/projects/${project.id}`)}
     >
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
             <FolderKanban className="h-4 w-4 text-primary" />
           </div>
           <div>

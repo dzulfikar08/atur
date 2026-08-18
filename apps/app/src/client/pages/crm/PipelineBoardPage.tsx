@@ -16,6 +16,13 @@ import {
 import { Plus } from "@/lib/icons";
 import { toast } from "sonner";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   DndContext,
   PointerSensor,
   useSensor,
@@ -223,18 +230,22 @@ export default function PipelineBoardPage() {
               </div>
               <div>
                 <label className="text-sm font-medium">Customer</label>
-                <select
-                  value={form.customer_id}
-                  onChange={(e) => setForm({ ...form, customer_id: e.target.value })}
-                  className="w-full border rounded px-2 py-2 text-sm"
+                <Select
+                  value={form.customer_id || "none"}
+                  onValueChange={(v) => setForm({ ...form, customer_id: v === "none" ? "" : v })}
                 >
-                  <option value="">— None —</option>
-                  {contacts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name || c.email}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— None —</SelectItem>
+                    {contacts.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name || c.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="text-sm font-medium">Expected close</label>

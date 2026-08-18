@@ -7,6 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Copy, ExternalLink, MessageSquare } from "@/lib/icons";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Position = "bottom-right" | "bottom-left" | "top-right" | "top-left";
 
@@ -120,33 +127,41 @@ export default function FeedbackBoardSettings({
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="text-sm font-medium mb-1 block">New ideas land in state</label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
-                value={form.default_state_id ?? ""}
-                onChange={(e) => set("default_state_id", e.target.value || null)}
+              <Select
+                value={form.default_state_id ?? "auto"}
+                onValueChange={(v) => set("default_state_id", v === "auto" ? null : v)}
               >
-                <option value="">Auto (triage / default)</option>
-                {states.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto (triage / default)</SelectItem>
+                  {states.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Tag submissions with label</label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
-                value={form.submit_label_id ?? ""}
-                onChange={(e) => set("submit_label_id", e.target.value || null)}
+              <Select
+                value={form.submit_label_id ?? "none"}
+                onValueChange={(v) => set("submit_label_id", v === "none" ? null : v)}
               >
-                <option value="">None</option>
-                {labels.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {labels.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>
+                      {l.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -192,17 +207,21 @@ export default function FeedbackBoardSettings({
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Widget position</label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+              <Select
                 value={form.position ?? "bottom-right"}
-                onChange={(e) => set("position", e.target.value as Position)}
+                onValueChange={(v) => set("position", v as Position)}
               >
-                {POSITIONS.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {POSITIONS.map((p) => (
+                    <SelectItem key={p} value={p} className="capitalize">
+                      {p.replace(/-/g, " ")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

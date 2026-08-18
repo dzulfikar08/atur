@@ -1,3 +1,5 @@
+@source "../../node_modules/@cloudflare/kumo/dist/**/*.{js,jsx,ts,tsx}";
+@import "@cloudflare/kumo/styles/tailwind";
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -44,6 +46,11 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --font-heading: var(--font-sans);
+  --shadow-soft: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.05), 0 1px 3px 0 rgb(15 23 42 / 0.06);
+  --shadow-elevated: 0 8px 20px -4px rgb(15 23 42 / 0.1), 0 2px 6px -2px rgb(15 23 42 / 0.06);
+  --shadow-popover: 0 12px 32px -4px rgb(15 23 42 / 0.16), 0 4px 12px -6px rgb(15 23 42 / 0.1);
+  --shadow-dialog: 0 24px 48px -12px rgb(15 23 42 / 0.26), 0 8px 16px -8px rgb(15 23 42 / 0.14);
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
@@ -51,86 +58,135 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  /* Monochrome graphite neutrals — crisp, plane/linear-like grayscale */
+  --background: oklch(0.984 0 0);
+  --foreground: oklch(0.16 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.16 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.16 0 0);
+  --primary: oklch(0.2 0 0);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.965 0 0);
+  --secondary-foreground: oklch(0.2 0 0);
+  --muted: oklch(0.962 0 0);
+  --muted-foreground: oklch(0.51 0 0);
+  --accent: oklch(0.955 0 0);
+  --accent-foreground: oklch(0.2 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: oklch(0.91 0 0);
+  --input: oklch(0.9 0 0);
+  --ring: oklch(0.55 0 0);
   --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --chart-2: oklch(0.62 0 0);
+  --chart-3: oklch(0.45 0 0);
+  --chart-4: oklch(0.35 0 0);
+  --chart-5: oklch(0.27 0 0);
+  --sidebar: oklch(0.976 0 0);
+  --sidebar-foreground: oklch(0.16 0 0);
+  --sidebar-primary: oklch(0.2 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-accent: oklch(0.94 0 0);
+  --sidebar-accent-foreground: oklch(0.2 0 0);
+  --sidebar-border: oklch(0.902 0 0);
+  --sidebar-ring: oklch(0.55 0 0);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.155 0 0);
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.195 0 0);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.195 0 0);
+  --popover-foreground: oklch(0.97 0 0);
+  --primary: oklch(0.92 0 0);
+  --primary-foreground: oklch(0.2 0 0);
+  --secondary: oklch(0.255 0 0);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: oklch(0.255 0 0);
+  --muted-foreground: oklch(0.68 0 0);
+  --accent: oklch(0.27 0 0);
+  --accent-foreground: oklch(0.97 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 13%);
+  --ring: oklch(0.62 0 0);
   --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
+  --chart-2: oklch(0.62 0 0);
+  --chart-3: oklch(0.45 0 0);
+  --chart-4: oklch(0.35 0 0);
+  --chart-5: oklch(0.27 0 0);
+  --sidebar: oklch(0.17 0 0);
+  --sidebar-foreground: oklch(0.97 0 0);
+  --sidebar-primary: oklch(0.92 0 0);
+  --sidebar-primary-foreground: oklch(0.2 0 0);
+  --sidebar-accent: oklch(0.24 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.62 0 0);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    @apply font-sans;
+  }
   body {
     @apply bg-background text-foreground;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    letter-spacing: -0.011em;
+    font-variant-numeric: tabular-nums;
+    /* Subtle ambient glow at the top of the app — plane/linear depth without noise */
+    background-image: radial-gradient(
+      90rem 42rem at 50% -14rem,
+      color-mix(in oklab, var(--ring) 8%, transparent),
+      transparent 65%
+    );
+    background-attachment: fixed;
+    background-repeat: no-repeat;
   }
-  html {
-    @apply font-sans;
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 18%, transparent);
+  }
+  :focus-visible {
+    outline: none;
+  }
+}
+
+/* Focus ring — accent-tinted, softened. Applied to interactive elements that
+   opt in via focus-visible:ring-2. */
+:where(button, a, input, select, textarea, [role="button"]):focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ring) 35%, transparent);
+}
+
+/* Slim, unobtrusive scrollbars on pointer devices */
+@media (pointer: fine) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 18%, transparent) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--foreground) 16%, transparent);
+    background-clip: content-box;
+    border: 2px solid transparent;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--foreground) 28%, transparent);
+    background-clip: content-box;
   }
 }
 
@@ -704,12 +760,10 @@
 }
 
 .slash-command-menu {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.12),
-    0 0 0 1px rgba(0, 0, 0, 0.04);
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-popover);
   padding: 6px;
   max-height: 340px;
   overflow-y: auto;
@@ -717,9 +771,9 @@
   z-index: 99999;
 }
 .dark .slash-command-menu {
-  background: #1f2937;
-  border-color: #374151;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  background: var(--popover);
+  border-color: var(--border);
+  box-shadow: var(--shadow-dialog);
 }
 .slash-command-empty {
   padding: 12px 16px;
@@ -743,11 +797,11 @@
 }
 .slash-command-item:hover,
 .slash-command-item.is-selected {
-  background: #f3f4f6;
+  background: var(--accent);
 }
 .dark .slash-command-item:hover,
 .dark .slash-command-item.is-selected {
-  background: #374151;
+  background: var(--accent);
 }
 .slash-command-icon {
   flex-shrink: 0;
@@ -756,15 +810,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   font-size: 0.8em;
   font-weight: 600;
 }
 .dark .slash-command-icon {
-  background: #111827;
-  border-color: #4b5563;
+  background: var(--muted);
+  border-color: var(--border);
 }
 .slash-command-text {
   display: flex;
@@ -1009,4 +1063,44 @@
 }
 .status-dot.disconnected {
   background: #ef4444;
+}
+
+/* ==========================================
+   Kumo prototype — keep the app monochrome.
+   Kumo's brand/focus tokens default to blue/orange;
+   pin them to the app's grayscale tokens so the
+   Kumo sidebar matches the rest of the UI.
+   ========================================== */
+:root {
+  --color-kumo-brand: var(--primary);
+  --color-kumo-brand-hover: var(--primary);
+  --text-color-kumo-brand: var(--primary);
+  --color-kumo-focus: var(--ring);
+  --color-kumo-link: var(--ring);
+}
+[data-mode="dark"] {
+  --color-kumo-brand: var(--primary);
+  --color-kumo-brand-hover: var(--primary);
+  --text-color-kumo-brand: var(--primary);
+  --color-kumo-focus: var(--ring);
+  --color-kumo-link: var(--ring);
+}
+
+/* Kumo sidebar — Linear-style active accent bar */
+.kumo-active-accent {
+  box-shadow: inset 3px 0 0 0 var(--primary);
+}
+[data-state="collapsed"] .kumo-active-accent {
+  box-shadow: none;
+}
+
+/* Kumo sidebar — flat chrome, no header/footer border lines */
+[data-sidebar] .border-kumo-line {
+  border-color: transparent;
+}
+
+/* Kumo sidebar — collapsed rail at Linear's 52px (Kumo sets the var inline,
+   so it needs !important to win the cascade) */
+[data-sidebar] {
+  --sidebar-width-icon: 52px !important;
 }

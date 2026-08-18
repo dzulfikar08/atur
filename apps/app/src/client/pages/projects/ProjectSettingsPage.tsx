@@ -20,6 +20,13 @@ import {
   MessageSquare,
 } from "@/lib/icons";
 import FeedbackBoardSettings from "@/components/projects/FeedbackBoardSettings";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const STATE_GROUPS = [
   { value: "backlog", label: "Backlog", color: "#6b7280" },
@@ -41,6 +48,7 @@ export default function ProjectSettingsPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [tab, setTab] = useState("general");
+  const [memberToAdd, setMemberToAdd] = useState("");
 
   // Queries
   const { data: project, isLoading: projectLoading } = useQuery({
@@ -256,17 +264,18 @@ export default function ProjectSettingsPage() {
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">
                     Group
                   </label>
-                  <select
-                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
-                    value={newStateGroup}
-                    onChange={(e) => setNewStateGroup(e.target.value)}
-                  >
-                    {STATE_GROUPS.map((g) => (
-                      <option key={g.value} value={g.value}>
-                        {g.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={newStateGroup} onValueChange={setNewStateGroup}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STATE_GROUPS.map((g) => (
+                        <SelectItem key={g.value} value={g.value}>
+                          {g.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <Button
                   onClick={() => createState.mutate({ name: newStateName, group: newStateGroup })}
@@ -399,24 +408,23 @@ export default function ProjectSettingsPage() {
               {/* Add member */}
               {availableMembers.length > 0 && (
                 <div className="flex gap-2">
-                  <select
-                    id="member-select"
-                    className="flex h-9 flex-1 rounded-md border border-input bg-background px-3 py-1 text-sm"
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      Add a member...
-                    </option>
-                    {availableMembers.map((m: any) => (
-                      <option key={m.member?.id || m.id} value={m.member?.id || m.id}>
-                        {m.member?.display_name || m.member?.username || m.member?.email}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={memberToAdd} onValueChange={setMemberToAdd}>
+                    <SelectTrigger className="h-9 flex-1">
+                      <SelectValue placeholder="Add a member…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableMembers.map((m: any) => (
+                        <SelectItem key={m.member?.id || m.id} value={m.member?.id || m.id}>
+                          {m.member?.display_name || m.member?.username || m.member?.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button
+                    disabled={!memberToAdd}
                     onClick={() => {
-                      const sel = document.getElementById("member-select") as HTMLSelectElement;
-                      if (sel.value) addMember.mutate(sel.value);
+                      addMember.mutate(memberToAdd);
+                      setMemberToAdd("");
                     }}
                   >
                     <Plus className="h-4 w-4 mr-1" />

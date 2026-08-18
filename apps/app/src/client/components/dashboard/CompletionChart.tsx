@@ -93,8 +93,8 @@ export default function CompletionChart({ slug }: CompletionChartProps) {
                 type="monotone"
                 dataKey="created"
                 name="Created"
-                stroke="hsl(220, 70%, 55%)"
-                strokeWidth={2}
+                stroke="var(--chart-1)"
+                strokeWidth={2.5}
                 dot={false}
                 activeDot={{ r: 4 }}
               />

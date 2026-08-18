@@ -85,18 +85,18 @@ function RecentIssues({ slug }: { slug: string }) {
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-semibold">Recent Issues</CardTitle>
-          <button className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+          <button className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
             View all <ArrowUpRight className="h-3 w-3" />
           </button>
         </div>
       </CardHeader>
       <CardContent>
         {recentIssues.length === 0 ? (
-          <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
+          <div className="flex h-24 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
             No recent issues.
           </div>
         ) : (
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border/70">
             {recentIssues.map((issue) => (
               <div key={issue.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
                 <Circle
@@ -154,7 +154,12 @@ export default function DesktopDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Welcome to {workspaceName}</h1>
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-primary">
+          Overview
+        </p>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight">
+          Welcome to {workspaceName}
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Here is an overview of your project activity.
         </p>
