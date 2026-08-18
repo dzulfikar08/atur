@@ -24,9 +24,9 @@ DB scripts live in `apps/app/` (not exposed at the root); run them from there:
 
 ```bash
 cd apps/app
-bun run db:generate       # generate SQL from schema (if changed)
-bun run db:migrate:local  # apply migrations to local D1
-bun run db:migrate:remote # apply migrations to remote D1
+bun run db:generate       # generate migration SQL from schema (if changed)
+bun run db:migrate        # apply pending migrations to remote (prod) D1
+bun run db:migrate:local  # rebuild local D1 from baseline + dev seed
 ```
 
 ## Scripts
@@ -54,8 +54,9 @@ App scripts (run from `apps/app/`):
 | `build`                   | Production build (client → `dist/client`, worker)    |
 | `deploy`                  | Build + `wrangler deploy` to `app.diatur.com`        |
 | `db:generate`             | drizzle-kit generate migrations                      |
-| `db:migrate:local`        | apply migrations to local D1                         |
-| `db:migrate:remote`       | apply migrations to remote D1                        |
+| `db:migrate`              | drizzle-kit migrate (apply pending to prod D1)      |
+| `db:migrate:local`        | rebuild local D1 from baseline + seed               |
+| `db:migrate:remote`       | drizzle-kit migrate (alias for `db:migrate`)        |
 | `cf-typegen`              | regenerate Cloudflare bindings types                 |
 | `test`                    | Vitest run                                           |
 | `cap:sync` / `cap:open:*` | Capacitor native builds                              |
