@@ -28,6 +28,7 @@ const KnowledgeGraphPage = lazy(() => import("@/pages/pages/KnowledgeGraphPage")
 const GitHubIntegrationPage = lazy(() => import("@/pages/integrations/GitHubIntegrationPage"));
 const ClockifyIntegrationPage = lazy(() => import("@/pages/integrations/ClockifyIntegrationPage"));
 const McpIntegrationPage = lazy(() => import("@/pages/integrations/McpIntegrationPage"));
+const PolarIntegrationPage = lazy(() => import("@/pages/integrations/PolarIntegrationPage"));
 const AdminDashboardPage = lazy(() => import("@/pages/admin/AdminDashboardPage"));
 const NotificationsPage = lazy(() => import("@/pages/notifications/NotificationsPage"));
 const TimesheetPage = lazy(() => import("@/pages/timesheet/TimesheetPage"));
@@ -156,6 +157,7 @@ export default function App() {
           <Route path="/:slug/integrations/github" element={<GitHubIntegrationPage />} />
           <Route path="/:slug/integrations/clockify" element={<ClockifyIntegrationPage />} />
           <Route path="/:slug/integrations/mcp" element={<McpIntegrationPage />} />
+          <Route path="/:slug/integrations/polar" element={<PolarIntegrationPage />} />
           <Route path="/:slug/admin" element={<AdminDashboardPage />} />
           <Route path="/:slug/notifications" element={<NotificationsPage />} />
           <Route path="/:slug/timesheet" element={<TimesheetPage />} />

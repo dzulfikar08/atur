@@ -28,6 +28,15 @@ cd apps/app
 bunx wrangler secret put EMAIL_FROM   # e.g. noreply@diatur.com (must match send_email verified_address)
 ```
 
+### Polar integration
+
+The Polar integration (payments → CRM import) stores its credentials
+**per-workspace in the `polar_settings` table**, entered by a workspace member
+in **Integrations → Polar** (access token + webhook secret). No worker secrets
+are needed. The signed webhook endpoint is
+`https://app.diatur.com/webhooks/polar/<workspace-slug>` — register it in Polar
+with the workspace's webhook secret.
+
 ## 2. Deploy the marketing site (diatur.com)
 
 ```bash

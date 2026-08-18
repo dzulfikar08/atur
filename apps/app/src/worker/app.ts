@@ -40,6 +40,7 @@ import { dealsRoutes } from "./routes/deals";
 import { feedbackRoutes } from "./routes/feedback";
 import { feedbackAdminRoutes } from "./routes/feedback_admin";
 import { widgetRoutes } from "./routes/widget";
+import { polarWebhookRoutes, polarRoutes } from "./routes/polar";
 import { meRoutes } from "./routes/me";
 import type { Env } from "./lib/env";
 
@@ -69,6 +70,10 @@ export function createApp(): Hono<{ Bindings: Env }> {
   // Public feedback board API — token-keyed, no session.
   app.route("/public/feedback/:token", feedbackRoutes);
 
+  // Polar webhook receiver — per-workspace URL (/webhooks/polar/:slug), each
+  // workspace verifies with its own secret from polar_settings. Public.
+  app.route("/webhooks/polar", polarWebhookRoutes);
+
   app.route("/api/users", userRoutes);
 
   app.route("/api/workspaces", workspaceRoutes);
@@ -90,6 +95,7 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/api/notifications", notificationRoutes);
   app.route("/api/workspaces/:slug/webhooks", webhookRoutes);
   app.route("/api/workspaces/:slug/integrations", integrationRoutes);
+  app.route("/api/workspaces/:slug/polar", polarRoutes);
   app.route("/api/workspaces/:slug/exports", exportRoutes);
   app.route("/api/workspaces/:slug/imports", importRoutes);
   app.route("/api/search", searchRoutes);

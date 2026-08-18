@@ -106,7 +106,7 @@ export async function createDeal(
   workspaceId: string,
   projectId: string,
   data: z.infer<typeof createDealSchema>,
-  createdById: string,
+  createdById?: string | null,
 ) {
   const issue = await issuesService.create(
     db,
@@ -116,7 +116,7 @@ export async function createDeal(
       priority: "none",
       state_id: data.state_id,
     },
-    createdById,
+    createdById ?? undefined,
   );
 
   await db

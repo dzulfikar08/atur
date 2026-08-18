@@ -14,7 +14,6 @@ zone_id = "85af83477a97625830e3a172e1d04aed"
 binding = "DB"
 database_name = "atur-db"
 database_id = "08a18888-5e9a-4384-8ec2-03e73adab633"
-migrations_dir = "./migrations"
 
 [[r2_buckets]]
 binding = "R2"
@@ -47,3 +46,7 @@ binding = "ASSETS"
 # index.ts routes non-API requests to ASSETS (SPA fallback). With the vite
 # cloudflare plugin the client build lands in dist/client.
 run_worker_first = true
+
+# Polar (payments → CRM import): credentials are per-workspace and entered in
+# the app UI (Integrations → Polar), stored in the polar_settings table — NOT
+# worker secrets. Webhook endpoint: /webhooks/polar/:slug (signed, per-workspace).

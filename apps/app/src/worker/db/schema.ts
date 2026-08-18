@@ -804,6 +804,8 @@ export const customers = sqliteTable(
     status: text("status").notNull().default("active"),
     source: text("source"),
     sessionToken: text("session_token"),
+    // Polar customer id when this contact was imported from Polar.
+    polarCustomerId: text("polar_customer_id"),
     createdAt: text("created_at"),
     updatedAt: text("updated_at"),
   },
@@ -956,6 +958,9 @@ export const deals = sqliteTable(
     amountCents: integer("amount_cents").notNull().default(0),
     currency: text("currency").notNull().default("USD"),
     expectedCloseAt: text("expected_close_at"),
+    // Polar provenance on the deal side (external ids — no FK).
+    polarSubscriptionId: text("polar_subscription_id"),
+    polarOrderId: text("polar_order_id"),
     createdAt: text("created_at"),
     updatedAt: text("updated_at"),
   },
@@ -964,3 +969,61 @@ export const deals = sqliteTable(
     index("idx_deals_workspace").on(table.workspaceId),
   ],
 );
+
+// ── Polar integration ──
+// One row per Polar entity imported into the CRM. Gives idempotency (unique
+// on service+type+polar_id) and provenance (which contact/deal a Polar
+// customer/subscription/order mapped to). raw holds the latest webhook payload
+// for debugging.
+export const polarLinks = sqliteTable(
+  "polar_links",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    service: text("service").notNull().default("polar"),
+    polarType: text("polar_type").notNull(), // 'customer' | 'subscription' | 'order'
+    polarId: text("polar_id").notNull(),
+    customerId: text("customer_id").references(() => customers.id, { onDelete: "cascade" }),
+    dealId: text("deal_id").references(() => deals.id, { onDelete: "cascade" }),
+    raw: text("raw"),
+    lastEvent: text("last_event"),
+    createdAt: text("created_at"),
+    updatedAt: text("updated_at"),
+  },
+  (table) => [
+    // Scoped per workspace: two workspaces may legitimately link the same
+    // Polar entity (e.g. both connect the same Polar org) — without
+    // workspaceId in the key the second one's inserts hit the constraint.
+    uniqueIndex("uq_polar_links_entity").on(
+      table.workspaceId,
+      table.service,
+      table.polarType,
+      table.polarId,
+    ),
+    index("idx_polar_links_customer").on(table.customerId),
+    index("idx_polar_links_workspace").on(table.workspaceId),
+  ],
+);
+
+// Per-workspace Polar configuration: API credentials (entered by the user in
+// the Integrations page), which pipeline project imported deals land in, the
+// default stage, and whether the webhook receiver is active. The webhook
+// endpoint is /webhooks/polar/:slug so each workspace verifies with its own
+// webhook secret.
+export const polarSettings = sqliteTable("polar_settings", {
+  workspaceId: text("workspace_id")
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  accessToken: text("access_token"),
+  webhookSecret: text("webhook_secret"),
+  pipelineProjectId: text("pipeline_project_id").references(() => projects.id, {
+    onDelete: "set null",
+  }),
+  defaultStateId: text("default_state_id"),
+  webhookEnabled: integer("webhook_enabled").notNull().default(0),
+  lastSyncedAt: text("last_synced_at"),
+  createdAt: text("created_at"),
+  updatedAt: text("updated_at"),
+});
