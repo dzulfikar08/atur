@@ -62,6 +62,8 @@ export default function CommentContent({ html }: CommentContentProps) {
       "checked",
       "data-type",
       "data-checked",
+      "data-mention-id",
+      "data-mention-username",
       "colspan",
       "rowspan",
     ],

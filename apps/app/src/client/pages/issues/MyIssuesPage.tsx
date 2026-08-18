@@ -115,6 +115,13 @@ function AddIssueDialog({
     return "";
   }, [projectId, projects]);
 
+  // Members for @mention suggestions in the description editor.
+  const { data: mentionMembers = [] } = useQuery({
+    queryKey: ["project-members", effectiveWorkspaceSlug, effectiveProjectId],
+    queryFn: () => api.listProjectMembers(effectiveWorkspaceSlug!, effectiveProjectId!),
+    enabled: open && !!effectiveWorkspaceSlug && !!effectiveProjectId,
+  });
+
   const selectedWorkspace = workspaces.find((w) => w.slug === effectiveWorkspaceSlug);
 
   const createMutation = useMutation({
@@ -212,6 +219,13 @@ function AddIssueDialog({
               onChange={setDescription}
               placeholder="Optional description"
               compact
+              members={mentionMembers.map((m: any) => ({
+                id: m.memberId,
+                username: m.username || m.email?.split("@")[0] || m.memberId.slice(0, 8),
+                display_name: m.displayName,
+                email: m.email,
+                avatar: m.avatar,
+              }))}
             />
           </div>
           <Button

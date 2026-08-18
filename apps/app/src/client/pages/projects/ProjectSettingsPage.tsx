@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
@@ -436,6 +436,12 @@ export default function ProjectSettingsPage() {
                     >
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
+                          {m.member?.avatar ? (
+                            <AvatarImage
+                              src={m.member.avatar}
+                              alt={m.member?.display_name || m.member?.username || "User"}
+                            />
+                          ) : null}
                           <AvatarFallback className="text-xs">
                             {(m.member?.display_name || m.member?.username || "U")
                               .charAt(0)

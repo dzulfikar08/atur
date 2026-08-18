@@ -408,6 +408,19 @@ export default function ProjectBoard() {
   const moduleMap = useMemo(() => new Map(modules.map((m) => [m.id, m])), [modules]);
   const memberMap = useMemo(() => new Map(members.map((m) => [m.memberId, m])), [members]);
 
+  // Project members in the shape the mention picker expects.
+  const mentionMembers = useMemo(
+    () =>
+      members.map((m) => ({
+        id: m.memberId,
+        username: m.username || m.email?.split("@")[0] || m.memberId.slice(0, 8),
+        display_name: m.displayName,
+        email: m.email,
+        avatar: m.avatar,
+      })),
+    [members],
+  );
+
   const form = useForm<CreateIssueForm>({
     resolver: zodResolver(createIssueSchema),
     defaultValues: {
@@ -748,6 +761,7 @@ export default function ProjectBoard() {
                             value={field.value ?? ""}
                             onChange={field.onChange}
                             placeholder="Describe the issue... Type / for commands"
+                            members={mentionMembers}
                           />
                         </FormControl>
                         <FormMessage />

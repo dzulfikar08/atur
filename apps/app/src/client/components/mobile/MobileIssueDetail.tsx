@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import CommentEditor from "@/components/editor/CommentEditor";
 import {
   Dialog,
@@ -72,7 +72,7 @@ interface Comment {
   comment_html: string;
   created_at: string;
   actor_id?: string;
-  actor_detail?: { display_name: string };
+  actor_detail?: { display_name: string; avatar: string | null };
 }
 
 interface State {
@@ -104,7 +104,7 @@ export default function MobileIssueDetail() {
   const [commentText, setCommentText] = useState("");
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editCommentText, setEditCommentText] = useState("");
-  const [commentSort, setCommentSort] = useState<"newest" | "oldest">("newest");
+  const [commentSort, setCommentSort] = useState<"newest" | "oldest">("oldest");
   const [stateSheetOpen, setStateSheetOpen] = useState(false);
   const [prioritySheetOpen, setPrioritySheetOpen] = useState(false);
   const [assigneeSheetOpen, setAssigneeSheetOpen] = useState(false);
@@ -396,7 +396,7 @@ export default function MobileIssueDetail() {
   const group = currentState?.group || "backlog";
 
   return (
-    <div className="flex flex-col h-full -m-4 md:-m-6 lg:-m-8">
+    <div className="flex flex-col h-[calc(100dvh-7rem)] md:h-[calc(100dvh-3.5rem)] -m-4 md:-m-6 lg:-m-8">
       {/* Header */}
       <div className="shrink-0 border-b">
         <div className="flex items-center gap-2 px-3 py-2">
@@ -410,7 +410,7 @@ export default function MobileIssueDetail() {
           <div className="flex-1" />
           <button
             onClick={() => setConfirmDeleteOpen(true)}
-            className="flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-destructive"
+            className="flex items-center justify-center h-8 w-8 rounded-md text-destructive"
             aria-label="Delete issue"
           >
             <Trash2 className="h-4 w-4" />
@@ -551,7 +551,7 @@ export default function MobileIssueDetail() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-5 w-5 shrink-0 text-muted-foreground"
+                      className="h-5 w-5 shrink-0 text-destructive"
                       onClick={() => deleteRelationMutation.mutate(rel.id)}
                     >
                       <Trash2 className="h-3 w-3" />
@@ -585,6 +585,12 @@ export default function MobileIssueDetail() {
             return (
               <div key={c.id} className="flex gap-2">
                 <Avatar className="h-7 w-7 shrink-0">
+                  {c.actor_detail?.avatar ? (
+                    <AvatarImage
+                      src={c.actor_detail.avatar}
+                      alt={c.actor_detail?.display_name || "User"}
+                    />
+                  ) : null}
                   <AvatarFallback className="text-[10px]">
                     {c.actor_detail?.display_name?.charAt(0) || "U"}
                   </AvatarFallback>

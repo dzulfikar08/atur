@@ -163,6 +163,36 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
     enabled: !!slug && !!projectId,
   });
 
+  // Project members for @mention suggestions in the create-sheet description.
+  const { data: members = [] } = useQuery({
+    queryKey: ["project-members", slug, projectId],
+    queryFn: () =>
+      apiFetch<{
+        results: {
+          memberId: string;
+          username?: string | null;
+          email?: string | null;
+          displayName?: string | null;
+          avatar?: string | null;
+        }[];
+      }>(`/workspaces/${slug}/projects/${projectId}/members/`)
+        .then((d) => d.results)
+        .catch(() => []),
+    enabled: !!slug && !!projectId,
+  });
+
+  const mentionMembers = useMemo(
+    () =>
+      members.map((m) => ({
+        id: m.memberId,
+        username: m.username || m.email?.split("@")[0] || m.memberId.slice(0, 8),
+        display_name: m.displayName,
+        email: m.email,
+        avatar: m.avatar,
+      })),
+    [members],
+  );
+
   const backlogStateId = states.find((s) => s.group === "backlog")?.id ?? states[0]?.id ?? "";
   useEffect(() => {
     if (!newState && backlogStateId) setNewState(backlogStateId);
@@ -422,6 +452,7 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
               onChange={setNewDesc}
               placeholder="Description (optional)"
               compact
+              members={mentionMembers}
             />
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
