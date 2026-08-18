@@ -65,6 +65,13 @@ export default function CommentEditor({
   // Set of upload ids currently in flight; used to ignore a second paste of the
   // same image while the first is still uploading.
   const inFlight = useRef<Set<string>>(new Set());
+  // Latest workspace members for the @mention picker. The mention extension is
+  // registered at editor creation (members often resolve asynchronously after
+  // the composer mounts), so items are resolved through this ref on demand.
+  const membersRef = useRef(members);
+  useEffect(() => {
+    membersRef.current = members;
+  }, [members]);
 
   const editor = useEditor({
     extensions: [
@@ -93,9 +100,9 @@ export default function CommentEditor({
       TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder: placeholder || "Add a comment..." }),
       Markdown,
-      // Members list is captured at editor creation; the parent typically has
-      // it loaded before the composer mounts (it fetches members on page load).
-      ...(members.length > 0 ? makeMentionExtension(members) : []),
+      // Always registered — members resolve asynchronously after the composer
+      // mounts, so the extension reads them from membersRef on demand.
+      ...makeMentionExtension(() => membersRef.current),
     ],
     content: value || "",
     editorProps: {

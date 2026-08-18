@@ -186,15 +186,16 @@ export const MentionMenu = forwardRef<MentionMenuRef, MentionMenuProps>(
 MentionMenu.displayName = "MentionMenu";
 
 export interface MentionExtensionOptions {
-  members: MentionMember[];
+  members: MentionMember[] | (() => MentionMember[]);
   suggestion: Partial<SuggestionOptions>;
 }
 
-export function createMentionSuggestion(members: MentionMember[]) {
+export function createMentionSuggestion(members: MentionMember[] | (() => MentionMember[])) {
+  const resolveMembers = () => (typeof members === "function" ? members() : members);
   return {
     items: ({ query }: { query: string }) => {
       const q = query.toLowerCase();
-      const list = members.filter((m) => {
+      const list = resolveMembers().filter((m) => {
         const hay = `${m.username} ${m.display_name || ""} ${m.email || ""}`.toLowerCase();
         return hay.includes(q);
       });
@@ -265,7 +266,7 @@ export function createMentionSuggestion(members: MentionMember[]) {
 // never opens. Members are captured at editor creation. Returns both the
 // mention node (so inserted mentions have a node type to resolve to) and the
 // suggestion extension that opens the picker.
-export function makeMentionExtension(members: MentionMember[]) {
+export function makeMentionExtension(members: MentionMember[] | (() => MentionMember[])) {
   const suggestion = Extension.create<MentionExtensionOptions>({
     name: "mentionSuggestion",
 
@@ -274,25 +275,7 @@ export function makeMentionExtension(members: MentionMember[]) {
         members,
         suggestion: {
           char: "@",
-          command: ({
-            editor,
-            range,
-            props,
-          }: {
-            editor: any;
-            range: any;
-            props: MentionMember;
-          }) => {
-            editor
-              .chain()
-              .focus()
-              .deleteRange(range)
-              .insertContent({
-                type: "mention",
-                attrs: { id: props.id, username: props.username },
-              })
-              .run();
-          },
+          ...createMentionSuggestion(members),
         } as Partial<SuggestionOptions>,
       };
     },
@@ -302,14 +285,6 @@ export function makeMentionExtension(members: MentionMember[]) {
         Suggestion({
           editor: this.editor,
           ...this.options.suggestion,
-          items: ({ query }: { query: string }) => {
-            const q = query.toLowerCase();
-            const list = this.options.members.filter((m) => {
-              const hay = `${m.username} ${m.display_name || ""} ${m.email || ""}`.toLowerCase();
-              return hay.includes(q);
-            });
-            return list.slice(0, 8);
-          },
         }),
       ];
     },
