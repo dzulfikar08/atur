@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import { Sidebar as KumoSidebar, DropdownMenu } from "@cloudflare/kumo";
 import {
   FolderSimple,
   Circle,
@@ -11,15 +10,30 @@ import {
   ShieldCheck,
   GearSix,
   CaretDown,
+  CaretRight,
   Plus,
   SquaresFour,
   Stack,
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
+import { useSidebarStore } from "@/stores/sidebar";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import UserMenu from "@/components/layout/UserMenu";
 import CreateWorkspaceDialog from "@/components/layout/CreateWorkspaceDialog";
 
@@ -57,20 +71,21 @@ const navGroups: { label: string; items: NavItem[] }[] = [
   },
 ];
 
-const itemRow =
-  "min-h-7! flex w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-lg px-3 py-0 outline-none transition-colors group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0";
-
 /**
- * Sidebar (Kumo) — the app's navigation rail, built on @cloudflare/kumo.
- * Linear-style: workspace switcher sits flush with the nav rows (no header
- * bar), items are 28px, active row gets a left accent bar (see
- * .kumo-active-accent in index.css).
+ * Sidebar — the app's navigation rail, Linear-style graphite.
+ * Plain flex + Tailwind over the app's design tokens (no component library):
+ * workspace switcher flush with the nav rows (no header bar), 28px rows,
+ * tiny uppercase group labels, footer with user menu + collapse toggle.
+ * Collapse state lives in useSidebarStore (footer button or Cmd/Ctrl+B).
+ * Mobile uses BottomNav instead — the rail is md+ only.
  */
 export default function Sidebar() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
+  const collapsed = useSidebarStore((s) => s.collapsed);
+  const toggle = useSidebarStore((s) => s.toggle);
   const { data: workspaces = [] } = useWorkspaces();
   const { currentSlug, switchWorkspace } = useWorkspaceStore();
   const [createOpen, setCreateOpen] = useState(false);
@@ -102,106 +117,150 @@ export default function Sidebar() {
       "Workspace");
 
   return (
-    <KumoSidebar>
-      <KumoSidebar.Content>
-        {/* Workspace switcher — Linear-style row, flush with nav items */}
-        <DropdownMenu>
-          <DropdownMenu.Trigger
-            className={cn(
-              itemRow,
-              "gap-2.5 text-kumo-strong hover:bg-(--color-kumo-interact)",
-            )}
-          >
-            {isAll ? (
-              <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Stack size={16} weight="bold" />
-              </div>
-            ) : (() => {
-              const cws = workspaces.find((w) => w.slug === activeSlug);
-              if (cws?.logo) {
-                return (
-                  <img src={cws.logo} alt="" className="size-7 shrink-0 rounded-lg object-cover" />
-                );
-              }
-              return (
-                <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
-                  {currentName.charAt(0).toUpperCase()}
+    <TooltipProvider delayDuration={300}>
+      <aside
+        className={cn(
+          "hidden h-full shrink-0 flex-col overflow-hidden border-r border-border bg-card text-foreground transition-[width] duration-200 md:flex",
+          collapsed ? "w-[52px]" : "w-60",
+        )}
+      >
+        <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-1.5 py-2">
+          {/* Workspace switcher — Linear-style row, flush with nav items */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label={currentName}
+              className={cn(
+                "flex h-7 w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 outline-none transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+                collapsed && "justify-center px-0",
+              )}
+            >
+              {isAll ? (
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                  <Stack size={16} weight="bold" />
                 </div>
-              );
-            })()}
-            <span className="min-w-0 flex-1 truncate text-sm font-medium group-data-[state=collapsed]/sidebar:hidden">
-              {currentName}
-            </span>
-            <CaretDown
-              size={14}
-              className="shrink-0 text-kumo-subtle group-data-[state=collapsed]/sidebar:hidden"
-            />
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="start" className="w-56">
-            <DropdownMenu.Item selected={isAll} onClick={() => navigate(switchWorkspace("all"))}>
-              <Stack size={16} />
-              All Workspaces
-            </DropdownMenu.Item>
-            <DropdownMenu.Separator />
-            {workspaces.map((ws) => (
-              <DropdownMenu.Item
-                key={ws.id}
-                selected={ws.slug === currentSlug}
-                onClick={() => navigate(switchWorkspace(ws.slug))}
-              >
-                {ws.logo ? (
-                  <img src={ws.logo} alt="" className="size-4 rounded object-cover" />
-                ) : (
-                  <span className="flex size-4 items-center justify-center rounded bg-primary text-[10px] font-semibold text-primary-foreground">
-                    {(ws.name[0] ?? "").toUpperCase()}
-                  </span>
+              ) : (() => {
+                const cws = workspaces.find((w) => w.slug === activeSlug);
+                if (cws?.logo) {
+                  return (
+                    <img src={cws.logo} alt="" className="size-7 shrink-0 rounded-lg object-cover" />
+                  );
+                }
+                return (
+                  <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
+                    {currentName.charAt(0).toUpperCase()}
+                  </div>
+                );
+              })()}
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate text-left text-[13px] font-medium",
+                  collapsed && "hidden",
                 )}
-                {ws.name}
-              </DropdownMenu.Item>
-            ))}
-            {workspaces.length === 0 && (
-              <DropdownMenu.Item disabled>No workspaces</DropdownMenu.Item>
-            )}
-            <DropdownMenu.Separator />
-            <DropdownMenu.Item onClick={() => setCreateOpen(true)}>
-              <Plus size={16} />
-              Create workspace
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu>
-
-        {navGroups.map((group) => (
-          <KumoSidebar.Group key={group.label}>
-            <KumoSidebar.GroupLabel>{group.label}</KumoSidebar.GroupLabel>
-            <KumoSidebar.Menu>
-              {group.items.map((item) => (
-                <KumoSidebar.MenuButton
-                  key={item.to}
-                  icon={item.icon}
-                  active={isActive(item)}
-                  tooltip={item.label}
-                  onClick={() => go(item.to)}
-                  className={cn(
-                    itemRow,
-                    isActive(item) && "kumo-active-accent text-kumo-strong",
+              >
+                {currentName}
+              </span>
+              <CaretDown
+                size={14}
+                className={cn("shrink-0 text-muted-foreground", collapsed && "hidden")}
+              />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem onClick={() => navigate(switchWorkspace("all"))}>
+                <Stack size={16} className="text-muted-foreground" />
+                <span className={cn(isAll && "font-medium")}>All Workspaces</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {workspaces.map((ws) => (
+                <DropdownMenuItem key={ws.id} onClick={() => navigate(switchWorkspace(ws.slug))}>
+                  {ws.logo ? (
+                    <img src={ws.logo} alt="" className="size-4 rounded object-cover" />
+                  ) : (
+                    <span className="flex size-4 items-center justify-center rounded bg-primary text-[10px] font-semibold text-primary-foreground">
+                      {(ws.name[0] ?? "").toUpperCase()}
+                    </span>
                   )}
-                >
-                  {item.label}
-                </KumoSidebar.MenuButton>
+                  <span className={cn(ws.slug === currentSlug && "font-medium")}>{ws.name}</span>
+                </DropdownMenuItem>
               ))}
-            </KumoSidebar.Menu>
-          </KumoSidebar.Group>
-        ))}
-      </KumoSidebar.Content>
+              {workspaces.length === 0 && (
+                <DropdownMenuItem disabled>No workspaces</DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setCreateOpen(true)}>
+                <Plus size={16} className="text-muted-foreground" />
+                Create workspace
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-      <KumoSidebar.Footer>
-        <div className="flex items-center gap-1 px-2 py-2 group-data-[state=collapsed]/sidebar:justify-center">
+          {navGroups.map((group, gi) => (
+            <div key={group.label}>
+              <div
+                className={cn(
+                  "px-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground",
+                  collapsed ? "hidden" : cn(gi === 0 ? "mt-3" : "mt-4", "mb-1"),
+                )}
+              >
+                {group.label}
+              </div>
+              {group.items.map((item) => {
+                const active = isActive(item);
+                const Icon = item.icon;
+                const row = (
+                  <button
+                    onClick={() => go(item.to)}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "flex h-7 w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 text-[13px] outline-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+                      collapsed && "justify-center px-0",
+                      active
+                        ? "bg-accent font-medium text-foreground"
+                        : "text-foreground/80 hover:bg-accent hover:text-foreground",
+                    )}
+                  >
+                    <Icon
+                      className={cn(
+                        "size-4 shrink-0",
+                        active ? "text-foreground" : "text-muted-foreground",
+                      )}
+                    />
+                    <span className={cn("min-w-0 truncate", collapsed && "hidden")}>
+                      {item.label}
+                    </span>
+                  </button>
+                );
+                // Collapsed: the label is gone, so surface it as a tooltip.
+                return collapsed ? (
+                  <Tooltip key={item.to}>
+                    <TooltipTrigger asChild>{row}</TooltipTrigger>
+                    <TooltipContent side="right">{item.label}</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <span key={item.to} className="contents">
+                    {row}
+                  </span>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+
+        {/* Footer — user menu + collapse toggle */}
+        <div
+          className={cn(
+            "flex items-center gap-1 border-t border-border px-1.5 py-2",
+            collapsed && "flex-col justify-center",
+          )}
+        >
           <UserMenu
             side="top"
             align="start"
             trigger={
               <button
-                className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-(--color-kumo-interact) group-data-[state=collapsed]/sidebar:px-0"
+                className={cn(
+                  "flex items-center gap-2 rounded-md outline-none transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+                  collapsed ? "p-1.5" : "px-2 py-1.5",
+                )}
                 aria-label="Account menu"
               >
                 <Avatar className="size-7 shrink-0">
@@ -210,22 +269,31 @@ export default function Sidebar() {
                   ) : null}
                   <AvatarFallback className="text-[10px]">{initials}</AvatarFallback>
                 </Avatar>
-                <span className="min-w-0 flex-1 text-left group-data-[state=collapsed]/sidebar:hidden">
-                  <span className="block truncate text-[13px] font-medium leading-tight text-kumo-strong">
+                <span className={cn("min-w-0 flex-1 text-left", collapsed && "hidden")}>
+                  <span className="block truncate text-[13px] font-medium leading-tight">
                     {user?.display_name ?? "User"}
                   </span>
-                  <span className="block truncate text-[11px] leading-tight text-kumo-subtle">
+                  <span className="block truncate text-[11px] leading-tight text-muted-foreground">
                     {user?.email ?? ""}
                   </span>
                 </span>
               </button>
             }
           />
-          <KumoSidebar.Trigger className="group-data-[state=collapsed]/sidebar:hidden" />
+          <button
+            onClick={toggle}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+          >
+            <CaretRight
+              size={14}
+              className={cn("transition-transform", !collapsed && "rotate-180")}
+            />
+          </button>
         </div>
-      </KumoSidebar.Footer>
+      </aside>
 
       <CreateWorkspaceDialog open={createOpen} onOpenChange={setCreateOpen} />
-    </KumoSidebar>
+    </TooltipProvider>
   );
 }
