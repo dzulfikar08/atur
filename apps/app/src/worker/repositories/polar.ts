@@ -26,15 +26,18 @@ export async function findLinkByPolarId(
   return row ?? null;
 }
 
-export async function upsertLink(db: DbClient, data: {
-  workspaceId: string;
-  polarType: string;
-  polarId: string;
-  customerId?: string | null;
-  dealId?: string | null;
-  raw?: string | null;
-  lastEvent?: string | null;
-}) {
+export async function upsertLink(
+  db: DbClient,
+  data: {
+    workspaceId: string;
+    polarType: string;
+    polarId: string;
+    customerId?: string | null;
+    dealId?: string | null;
+    raw?: string | null;
+    lastEvent?: string | null;
+  },
+) {
   const now = nowISO();
   // Single-statement upsert. A concurrent webhook (Polar retry racing the
   // original) with a SELECT-then-INSERT pattern here would crash on the
@@ -114,7 +117,11 @@ export async function getSettings(db: DbClient, workspaceId: string) {
 
 // ── Provenance columns on CRM rows ──
 
-export async function setCustomerPolarId(db: DbClient, customerId: string, polarCustomerId: string) {
+export async function setCustomerPolarId(
+  db: DbClient,
+  customerId: string,
+  polarCustomerId: string,
+) {
   await db
     .update(schema.customers)
     .set({ polarCustomerId, updatedAt: nowISO() })
@@ -144,14 +151,18 @@ export async function dealIssueId(db: DbClient, dealId: string): Promise<string 
   return row?.issueId ?? null;
 }
 
-export async function upsertSettings(db: DbClient, workspaceId: string, data: {
-  accessToken?: string | null;
-  webhookSecret?: string | null;
-  pipelineProjectId?: string | null;
-  defaultStateId?: string | null;
-  webhookEnabled?: number | null;
-  lastSyncedAt?: string | null;
-}) {
+export async function upsertSettings(
+  db: DbClient,
+  workspaceId: string,
+  data: {
+    accessToken?: string | null;
+    webhookSecret?: string | null;
+    pipelineProjectId?: string | null;
+    defaultStateId?: string | null;
+    webhookEnabled?: number | null;
+    lastSyncedAt?: string | null;
+  },
+) {
   const now = nowISO();
   const existing = await getSettings(db, workspaceId);
   if (existing) {
@@ -162,7 +173,10 @@ export async function upsertSettings(db: DbClient, workspaceId: string, data: {
     if (data.defaultStateId !== undefined) set.defaultStateId = data.defaultStateId;
     if (data.webhookEnabled !== undefined) set.webhookEnabled = data.webhookEnabled;
     if (data.lastSyncedAt !== undefined) set.lastSyncedAt = data.lastSyncedAt;
-    await db.update(schema.polarSettings).set(set).where(eq(schema.polarSettings.workspaceId, workspaceId));
+    await db
+      .update(schema.polarSettings)
+      .set(set)
+      .where(eq(schema.polarSettings.workspaceId, workspaceId));
     return getSettings(db, workspaceId);
   }
   // onConflictDoNothing: a concurrent first-save (e.g. webhook arriving while

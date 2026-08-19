@@ -131,7 +131,9 @@ polarRoutes.put("/settings", async (c) => {
   const existing = await polarRepo.getSettings(db, ws.id);
   const secretAfterSave = body.webhook_secret ?? existing?.webhookSecret ?? null;
   if (body.webhook_enabled === true && !secretAfterSave) {
-    throw new HTTPException(400, { message: "Store a webhook secret before enabling the receiver" });
+    throw new HTTPException(400, {
+      message: "Store a webhook secret before enabling the receiver",
+    });
   }
   const updated = await polarRepo.upsertSettings(db, ws.id, {
     accessToken: body.access_token,

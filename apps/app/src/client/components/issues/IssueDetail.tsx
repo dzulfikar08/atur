@@ -859,547 +859,406 @@ export default function IssueDetail() {
         {/* Main content */}
         <div className="flex-1 overflow-y-auto flex flex-col">
           <div className="px-4 md:px-5 lg:px-6 pt-4 md:pt-5 lg:pt-6 pb-6">
-          {editingTitle ? (
-            <div className="flex items-center gap-2 mb-4">
-              <Input
-                autoFocus
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") saveTitle();
-                  if (e.key === "Escape") setEditingTitle(false);
-                }}
-                className="text-xl font-semibold h-auto py-1 flex-1"
-              />
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 shrink-0"
-                onClick={saveTitle}
-                aria-label="Save title"
-              >
-                <Check className="h-4 w-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 shrink-0"
-                onClick={() => setEditingTitle(false)}
-                aria-label="Cancel"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1 mb-4 group">
-              <h1 className="text-xl font-semibold">{issue.name}</h1>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={startEditTitle}
-                aria-label="Edit title"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          )}
-
-          {editingDesc ? (
-            <div className="mb-6">
-              <CommentEditor
-                value={descDraft}
-                onChange={setDescDraft}
-                placeholder="Add a description..."
-                members={mentionMembers}
-              />
-              <div className="flex items-center gap-2 mt-2">
-                <Button size="sm" onClick={saveDesc}>
-                  Save
+            {editingTitle ? (
+              <div className="flex items-center gap-2 mb-4">
+                <Input
+                  autoFocus
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveTitle();
+                    if (e.key === "Escape") setEditingTitle(false);
+                  }}
+                  className="text-xl font-semibold h-auto py-1 flex-1"
+                />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  onClick={saveTitle}
+                  aria-label="Save title"
+                >
+                  <Check className="h-4 w-4" />
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setEditingDesc(false)}>
-                  Cancel
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setEditingTitle(false)}
+                  aria-label="Cancel"
+                >
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
-            </div>
-          ) : (
-            <div className="mb-6 group">
-              {issue.description_html ? (
-                <div className="text-sm text-foreground max-w-none prose prose-sm">
-                  <CommentContent html={issue.description_html} />
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-sm italic">No description provided</p>
-              )}
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 mt-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={startEditDesc}
-              >
-                <Pencil className="h-3 w-3 mr-1" /> Edit
-              </Button>
-            </div>
-          )}
-
-          {/* Relations Section */}
-          <Separator className="my-6" />
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium flex items-center gap-2">
-                <Link2 className="h-4 w-4" /> Relations ({relations.length})
-              </h3>
-              {!showRelationSearch && (
+            ) : (
+              <div className="flex items-center gap-1 mb-4 group">
+                <h1 className="text-xl font-semibold">{issue.name}</h1>
                 <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => setShowRelationSearch(true)}
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={startEditTitle}
+                  aria-label="Edit title"
                 >
-                  Add Relation
+                  <Pencil className="h-3.5 w-3.5" />
                 </Button>
-              )}
-            </div>
+              </div>
+            )}
 
-            {showRelationSearch && (
-              <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                    Search Issue
-                  </label>
-                  <div className="relative">
-                    <Input
-                      placeholder="Type to search issues..."
-                      value={relationSearch}
-                      onChange={(e) => {
-                        setRelationSearch(e.target.value);
-                        setSelectedRelatedIssue(null);
-                      }}
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                  {selectedRelatedIssue && (
-                    <div className="flex items-center gap-2 mt-2 p-2 bg-muted/50 rounded text-xs">
-                      <span className="font-medium">{selectedRelatedIssue.name}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-5 w-5"
-                        onClick={() => {
-                          setSelectedRelatedIssue(null);
-                          setRelationSearch("");
-                        }}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  )}
-                  {!selectedRelatedIssue && relationSearch.length >= 2 && (
-                    <div className="mt-1 border rounded-md max-h-[200px] overflow-y-auto">
-                      {relationSearchLoading ? (
-                        <div className="p-2 text-xs text-muted-foreground">Searching...</div>
-                      ) : relationSearchResults.length === 0 ? (
-                        <div className="p-2 text-xs text-muted-foreground">No issues found</div>
-                      ) : (
-                        relationSearchResults.map((i) => (
-                          <button
-                            key={i.id}
-                            className="w-full text-left p-2 text-sm hover:bg-muted/50 transition-colors flex items-center gap-2"
-                            onClick={() => {
-                              setSelectedRelatedIssue({ id: i.id, name: i.name });
-                              setRelationSearch("");
-                            }}
-                          >
-                            <span className="text-muted-foreground text-xs">
-                              #{String(i.sequence_id).padStart(4, "0")}
-                            </span>
-                            <span className="truncate">{i.name}</span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                    Relation Type
-                  </label>
-                  <Select value={relationType} onValueChange={setRelationType}>
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(RELATION_TYPE_LABELS).map(([key, { label }]) => (
-                        <SelectItem key={key} value={key}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs"
-                    disabled={!selectedRelatedIssue || addRelationMutation.isPending}
-                    onClick={() => {
-                      if (selectedRelatedIssue) {
-                        addRelationMutation.mutate({
-                          related_issue_id: selectedRelatedIssue.id,
-                          relation_type: relationType,
-                        });
-                      }
-                    }}
-                  >
-                    {addRelationMutation.isPending ? "Adding..." : "Add"}
+            {editingDesc ? (
+              <div className="mb-6">
+                <CommentEditor
+                  value={descDraft}
+                  onChange={setDescDraft}
+                  placeholder="Add a description..."
+                  members={mentionMembers}
+                />
+                <div className="flex items-center gap-2 mt-2">
+                  <Button size="sm" onClick={saveDesc}>
+                    Save
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => {
-                      setShowRelationSearch(false);
-                      setSelectedRelatedIssue(null);
-                      setRelationSearch("");
-                    }}
-                  >
+                  <Button size="sm" variant="ghost" onClick={() => setEditingDesc(false)}>
                     Cancel
                   </Button>
                 </div>
               </div>
-            )}
-
-            {relationsLoading ? (
-              <div className="animate-pulse text-sm text-muted-foreground">
-                Loading relations...
-              </div>
-            ) : relations.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">No relations</p>
             ) : (
-              <div className="space-y-2">
-                {relations.map((rel) => {
-                  const relInfo = RELATION_TYPE_LABELS[rel.relation_type] || {
-                    label: rel.relation_type,
-                    color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-                  };
-                  const relIssue = relatedIssueMap.get(rel.related_issue_id);
-                  return (
-                    <div key={rel.id} className="flex items-center gap-2 p-2 border rounded-md">
-                      <Badge
-                        variant="secondary"
-                        className={`text-[10px] shrink-0 ${relInfo.color}`}
-                      >
-                        {relInfo.label}
-                      </Badge>
-                      {relIssue ? (
-                        <button
-                          className="text-sm hover:underline truncate flex-1 text-left"
-                          onClick={() =>
-                            navigate(
-                              `/${slug}/projects/${projectId}/issues/${relIssue.sequence_id}`,
-                            )
-                          }
-                        >
-                          <span className="text-muted-foreground mr-1">
-                            #{String(relIssue.sequence_id).padStart(4, "0")}
-                          </span>
-                          {relIssue.name}
-                        </button>
-                      ) : (
-                        <span className="text-sm text-muted-foreground flex-1">Loading...</span>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 shrink-0 text-destructive"
-                        disabled={deleteRelationMutation.isPending}
-                        onClick={() => deleteRelationMutation.mutate(rel.id)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Sub-issues Section */}
-          <Separator className="my-6" />
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium flex items-center gap-2">
-              <GitBranch className="h-4 w-4" /> Sub-issues ({subIssues.length})
-            </h3>
-
-            {parentIssue && (
-              <div className="flex items-center gap-2 p-2 border rounded-md bg-muted/30">
-                <span className="text-xs text-muted-foreground">Parent:</span>
-                <button
-                  className="text-sm hover:underline flex items-center gap-1"
-                  onClick={() =>
-                    navigate(`/${slug}/projects/${projectId}/issues/${parentIssue.sequence_id}`)
-                  }
+              <div className="mb-6 group">
+                {issue.description_html ? (
+                  <div className="text-sm text-foreground max-w-none prose prose-sm">
+                    <CommentContent html={issue.description_html} />
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm italic">No description provided</p>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 mt-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={startEditDesc}
                 >
-                  <GitBranch className="h-3 w-3" />
-                  <span className="text-muted-foreground">
-                    #{String(parentIssue.sequence_id).padStart(4, "0")}
-                  </span>
-                  {parentIssue.name}
-                </button>
+                  <Pencil className="h-3 w-3 mr-1" /> Edit
+                </Button>
               </div>
             )}
 
-            {subIssuesLoading ? (
-              <div className="animate-pulse text-sm text-muted-foreground">
-                Loading sub-issues...
-              </div>
-            ) : subIssues.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">No sub-issues</p>
-            ) : (
-              <div className="space-y-2">
-                {subIssues.map((si) => (
-                  <div
-                    key={si.id}
-                    className="flex items-center gap-2 p-2 border rounded-md cursor-pointer hover:bg-muted/30 transition-colors"
-                    onClick={() =>
-                      navigate(`/${slug}/projects/${projectId}/issues/${si.sequence_id}`)
-                    }
-                  >
-                    <GitBranch className="h-3 w-3 text-muted-foreground shrink-0" />
-                    <span className="text-muted-foreground text-xs">
-                      #{String(si.sequence_id).padStart(4, "0")}
-                    </span>
-                    <span className="text-sm truncate flex-1">{si.name}</span>
-                    {si.priority && si.priority !== "none" && (
-                      <Badge variant="outline" className="text-[10px] shrink-0">
-                        {si.priority}
-                      </Badge>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (newSubIssue.trim()) createSubIssueMutation.mutate(newSubIssue.trim());
-              }}
-              className="flex items-center gap-2 mt-2"
-            >
-              <GitBranch className="h-3 w-3 text-muted-foreground shrink-0" />
-              <input
-                placeholder="Add sub-issue..."
-                value={newSubIssue}
-                onChange={(e) => setNewSubIssue(e.target.value)}
-                className="flex-1 bg-transparent text-sm py-1 px-1 border-b border-input outline-none placeholder:text-muted-foreground focus:border-primary"
-              />
-              <Button
-                type="submit"
-                size="sm"
-                variant="ghost"
-                className="h-6 text-xs"
-                disabled={!newSubIssue.trim() || createSubIssueMutation.isPending}
-              >
-                {createSubIssueMutation.isPending ? "..." : "Add"}
-              </Button>
-            </form>
-          </div>
-          </div>
-
-        {/* Properties */}
-        <div className="mt-auto border-t px-4 md:px-5 lg:px-6 py-4 md:py-5">
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-5">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Follow</label>
-              <Button
-                variant={subscribed ? "secondary" : "outline"}
-                size="sm"
-                className="h-7 w-full text-xs gap-1"
-                onClick={() => (subscribed ? unfollowMutation.mutate() : followMutation.mutate())}
-                disabled={followMutation.isPending || unfollowMutation.isPending}
-              >
-                <Bell className="h-3 w-3" />
-                {subscribed ? "Following" : "Follow"}
-                {followerCount > 0 && (
-                  <span className="ml-auto text-muted-foreground text-[10px]">{followerCount}</span>
-                )}
-              </Button>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                <User className="h-3 w-3" /> Assignee
-              </label>
-              <div className="space-y-1.5">
-                {currentAssigneeIds.size > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {(issue.assignees ?? []).map((a) => (
-                      <Badge key={a.id} variant="secondary" className="text-xs gap-1 pr-1">
-                        <Avatar className="h-4 w-4">
-                          {a.avatar ? (
-                            <AvatarImage src={a.avatar} alt={a.display_name || a.email || "User"} />
-                          ) : null}
-                          <AvatarFallback className="text-[9px]">
-                            {(a.display_name || a.email || a.username || "?")
-                              .charAt(0)
-                              .toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        {a.display_name || a.email || a.username}
-                        <button
-                          className="ml-0.5 hover:text-destructive"
-                          onClick={() => removeAssigneeMutation.mutate(a.id)}
-                          disabled={removeAssigneeMutation.isPending}
-                          aria-label="Remove assignee"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-                <Select value="" onValueChange={(v) => v && toggleAssignee(v)}>
-                  <SelectTrigger className="h-7 text-xs">
-                    <SelectValue
-                      placeholder={
-                        currentAssigneeIds.size > 0 ? "Add assignee..." : "Assign to someone..."
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {members.map((m) => (
-                      <SelectItem key={m.memberId} value={m.memberId}>
-                        {m.displayName || m.username || m.email}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {currentUser && !currentAssigneeIds.has(currentUser.id) && (
+            {/* Relations Section */}
+            <Separator className="my-6" />
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium flex items-center gap-2">
+                  <Link2 className="h-4 w-4" /> Relations ({relations.length})
+                </h3>
+                {!showRelationSearch && (
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-7 w-full text-xs gap-1"
-                    onClick={() => addAssigneeMutation.mutate(currentUser.id)}
-                    disabled={addAssigneeMutation.isPending}
+                    className="h-7 text-xs"
+                    onClick={() => setShowRelationSearch(true)}
                   >
-                    <User className="h-3 w-3" /> Assign to me
+                    Add Relation
                   </Button>
                 )}
               </div>
-            </div>
 
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">State</label>
-              <Select
-                value={issue.state_id || ""}
-                onValueChange={(v) => updateMutation.mutate({ state_id: v })}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Set state" />
-                </SelectTrigger>
-                <SelectContent>
-                  {states.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      <span className="flex items-center gap-2">
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: s.color || "#9ca3af" }}
-                        />
-                        {s.name}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              {showRelationSearch && (
+                <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                      Search Issue
+                    </label>
+                    <div className="relative">
+                      <Input
+                        placeholder="Type to search issues..."
+                        value={relationSearch}
+                        onChange={(e) => {
+                          setRelationSearch(e.target.value);
+                          setSelectedRelatedIssue(null);
+                        }}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    {selectedRelatedIssue && (
+                      <div className="flex items-center gap-2 mt-2 p-2 bg-muted/50 rounded text-xs">
+                        <span className="font-medium">{selectedRelatedIssue.name}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5"
+                          onClick={() => {
+                            setSelectedRelatedIssue(null);
+                            setRelationSearch("");
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                    {!selectedRelatedIssue && relationSearch.length >= 2 && (
+                      <div className="mt-1 border rounded-md max-h-[200px] overflow-y-auto">
+                        {relationSearchLoading ? (
+                          <div className="p-2 text-xs text-muted-foreground">Searching...</div>
+                        ) : relationSearchResults.length === 0 ? (
+                          <div className="p-2 text-xs text-muted-foreground">No issues found</div>
+                        ) : (
+                          relationSearchResults.map((i) => (
+                            <button
+                              key={i.id}
+                              className="w-full text-left p-2 text-sm hover:bg-muted/50 transition-colors flex items-center gap-2"
+                              onClick={() => {
+                                setSelectedRelatedIssue({ id: i.id, name: i.name });
+                                setRelationSearch("");
+                              }}
+                            >
+                              <span className="text-muted-foreground text-xs">
+                                #{String(i.sequence_id).padStart(4, "0")}
+                              </span>
+                              <span className="truncate">{i.name}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                      Relation Type
+                    </label>
+                    <Select value={relationType} onValueChange={setRelationType}>
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(RELATION_TYPE_LABELS).map(([key, { label }]) => (
+                          <SelectItem key={key} value={key}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={!selectedRelatedIssue || addRelationMutation.isPending}
+                      onClick={() => {
+                        if (selectedRelatedIssue) {
+                          addRelationMutation.mutate({
+                            related_issue_id: selectedRelatedIssue.id,
+                            relation_type: relationType,
+                          });
+                        }
+                      }}
+                    >
+                      {addRelationMutation.isPending ? "Adding..." : "Add"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        setShowRelationSearch(false);
+                        setSelectedRelatedIssue(null);
+                        setRelationSearch("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
 
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Priority
-              </label>
-              <Select
-                value={issue.priority || "none"}
-                onValueChange={(v) => updateMutation.mutate({ priority: v })}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {["none", "low", "medium", "high", "urgent"].map((p) => (
-                    <SelectItem key={p} value={p}>
-                      <span className="flex items-center gap-2 capitalize">
-                        <span className={`h-2 w-2 rounded-full ${PRIORITY_DOT[p]}`} />
-                        {PRIORITY_LABELS[p]}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Estimate (pts)
-              </label>
-              <Select
-                value={issue.estimate_points != null ? String(issue.estimate_points) : "__none__"}
-                onValueChange={(v) =>
-                  updateMutation.mutate({ estimate_points: v === "__none__" ? null : Number(v) })
-                }
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="No estimate" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
-                  {[0, 1, 2, 3, 5, 8, 13, 21].map((p) => (
-                    <SelectItem key={p} value={String(p)}>
-                      {p}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                <Calendar className="h-3 w-3" /> Start Date
-              </label>
-              <DatePicker
-                value={issue.start_date}
-                onChange={(v) => updateMutation.mutate({ start_date: v })}
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                <Calendar className="h-3 w-3" /> Target Date
-              </label>
-              <DatePicker
-                value={issue.target_date}
-                onChange={(v) => updateMutation.mutate({ target_date: v })}
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                <Package className="h-3 w-3" /> Modules
-              </label>
-              {issueModulesLoading ? (
-                <p className="text-xs text-muted-foreground animate-pulse">Loading...</p>
+              {relationsLoading ? (
+                <div className="animate-pulse text-sm text-muted-foreground">
+                  Loading relations...
+                </div>
+              ) : relations.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">No relations</p>
               ) : (
+                <div className="space-y-2">
+                  {relations.map((rel) => {
+                    const relInfo = RELATION_TYPE_LABELS[rel.relation_type] || {
+                      label: rel.relation_type,
+                      color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+                    };
+                    const relIssue = relatedIssueMap.get(rel.related_issue_id);
+                    return (
+                      <div key={rel.id} className="flex items-center gap-2 p-2 border rounded-md">
+                        <Badge
+                          variant="secondary"
+                          className={`text-[10px] shrink-0 ${relInfo.color}`}
+                        >
+                          {relInfo.label}
+                        </Badge>
+                        {relIssue ? (
+                          <button
+                            className="text-sm hover:underline truncate flex-1 text-left"
+                            onClick={() =>
+                              navigate(
+                                `/${slug}/projects/${projectId}/issues/${relIssue.sequence_id}`,
+                              )
+                            }
+                          >
+                            <span className="text-muted-foreground mr-1">
+                              #{String(relIssue.sequence_id).padStart(4, "0")}
+                            </span>
+                            {relIssue.name}
+                          </button>
+                        ) : (
+                          <span className="text-sm text-muted-foreground flex-1">Loading...</span>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 shrink-0 text-destructive"
+                          disabled={deleteRelationMutation.isPending}
+                          onClick={() => deleteRelationMutation.mutate(rel.id)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Sub-issues Section */}
+            <Separator className="my-6" />
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium flex items-center gap-2">
+                <GitBranch className="h-4 w-4" /> Sub-issues ({subIssues.length})
+              </h3>
+
+              {parentIssue && (
+                <div className="flex items-center gap-2 p-2 border rounded-md bg-muted/30">
+                  <span className="text-xs text-muted-foreground">Parent:</span>
+                  <button
+                    className="text-sm hover:underline flex items-center gap-1"
+                    onClick={() =>
+                      navigate(`/${slug}/projects/${projectId}/issues/${parentIssue.sequence_id}`)
+                    }
+                  >
+                    <GitBranch className="h-3 w-3" />
+                    <span className="text-muted-foreground">
+                      #{String(parentIssue.sequence_id).padStart(4, "0")}
+                    </span>
+                    {parentIssue.name}
+                  </button>
+                </div>
+              )}
+
+              {subIssuesLoading ? (
+                <div className="animate-pulse text-sm text-muted-foreground">
+                  Loading sub-issues...
+                </div>
+              ) : subIssues.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">No sub-issues</p>
+              ) : (
+                <div className="space-y-2">
+                  {subIssues.map((si) => (
+                    <div
+                      key={si.id}
+                      className="flex items-center gap-2 p-2 border rounded-md cursor-pointer hover:bg-muted/30 transition-colors"
+                      onClick={() =>
+                        navigate(`/${slug}/projects/${projectId}/issues/${si.sequence_id}`)
+                      }
+                    >
+                      <GitBranch className="h-3 w-3 text-muted-foreground shrink-0" />
+                      <span className="text-muted-foreground text-xs">
+                        #{String(si.sequence_id).padStart(4, "0")}
+                      </span>
+                      <span className="text-sm truncate flex-1">{si.name}</span>
+                      {si.priority && si.priority !== "none" && (
+                        <Badge variant="outline" className="text-[10px] shrink-0">
+                          {si.priority}
+                        </Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (newSubIssue.trim()) createSubIssueMutation.mutate(newSubIssue.trim());
+                }}
+                className="flex items-center gap-2 mt-2"
+              >
+                <GitBranch className="h-3 w-3 text-muted-foreground shrink-0" />
+                <input
+                  placeholder="Add sub-issue..."
+                  value={newSubIssue}
+                  onChange={(e) => setNewSubIssue(e.target.value)}
+                  className="flex-1 bg-transparent text-sm py-1 px-1 border-b border-input outline-none placeholder:text-muted-foreground focus:border-primary"
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 text-xs"
+                  disabled={!newSubIssue.trim() || createSubIssueMutation.isPending}
+                >
+                  {createSubIssueMutation.isPending ? "..." : "Add"}
+                </Button>
+              </form>
+            </div>
+          </div>
+
+          {/* Properties */}
+          <div className="mt-auto border-t px-4 md:px-5 lg:px-6 py-4 md:py-5">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-5">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                  Follow
+                </label>
+                <Button
+                  variant={subscribed ? "secondary" : "outline"}
+                  size="sm"
+                  className="h-7 w-full text-xs gap-1"
+                  onClick={() => (subscribed ? unfollowMutation.mutate() : followMutation.mutate())}
+                  disabled={followMutation.isPending || unfollowMutation.isPending}
+                >
+                  <Bell className="h-3 w-3" />
+                  {subscribed ? "Following" : "Follow"}
+                  {followerCount > 0 && (
+                    <span className="ml-auto text-muted-foreground text-[10px]">
+                      {followerCount}
+                    </span>
+                  )}
+                </Button>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                  <User className="h-3 w-3" /> Assignee
+                </label>
                 <div className="space-y-1.5">
-                  {issueModules.length > 0 && (
+                  {currentAssigneeIds.size > 0 && (
                     <div className="flex flex-wrap gap-1">
-                      {issueModules.map((m: Module) => (
-                        <Badge key={m.id} variant="secondary" className="text-xs gap-1 pr-1">
-                          <Package className="h-2.5 w-2.5" />
-                          {m.name}
+                      {(issue.assignees ?? []).map((a) => (
+                        <Badge key={a.id} variant="secondary" className="text-xs gap-1 pr-1">
+                          <Avatar className="h-4 w-4">
+                            {a.avatar ? (
+                              <AvatarImage
+                                src={a.avatar}
+                                alt={a.display_name || a.email || "User"}
+                              />
+                            ) : null}
+                            <AvatarFallback className="text-[9px]">
+                              {(a.display_name || a.email || a.username || "?")
+                                .charAt(0)
+                                .toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          {a.display_name || a.email || a.username}
                           <button
                             className="ml-0.5 hover:text-destructive"
-                            onClick={() => removeModuleMutation.mutate(m.id)}
-                            disabled={removeModuleMutation.isPending}
+                            onClick={() => removeAssigneeMutation.mutate(a.id)}
+                            disabled={removeAssigneeMutation.isPending}
+                            aria-label="Remove assignee"
                           >
                             <X className="h-3 w-3" />
                           </button>
@@ -1407,63 +1266,215 @@ export default function IssueDetail() {
                       ))}
                     </div>
                   )}
-                  {projectModules.length > 0 &&
-                    (() => {
-                      const issueModuleIds = new Set(issueModules.map((m: Module) => m.id));
-                      const available = projectModules.filter((m) => !issueModuleIds.has(m.id));
-                      return available.length > 0 ? (
-                        <Select
-                          value={moduleSelectValue}
-                          onValueChange={(v) => {
-                            addModuleMutation.mutate(v);
-                            setModuleSelectValue("");
-                          }}
-                        >
-                          <SelectTrigger className="h-7 text-xs">
-                            <SelectValue placeholder="Add to module..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {available.map((m) => (
-                              <SelectItem key={m.id} value={m.id}>
-                                {m.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : issueModules.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic">No modules available</p>
-                      ) : null;
-                    })()}
-                  {projectModules.length === 0 && issueModules.length === 0 && (
-                    <p className="text-xs text-muted-foreground italic">No modules in project</p>
+                  <Select value="" onValueChange={(v) => v && toggleAssignee(v)}>
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue
+                        placeholder={
+                          currentAssigneeIds.size > 0 ? "Add assignee..." : "Assign to someone..."
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {members.map((m) => (
+                        <SelectItem key={m.memberId} value={m.memberId}>
+                          {m.displayName || m.username || m.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {currentUser && !currentAssigneeIds.has(currentUser.id) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 w-full text-xs gap-1"
+                      onClick={() => addAssigneeMutation.mutate(currentUser.id)}
+                      disabled={addAssigneeMutation.isPending}
+                    >
+                      <User className="h-3 w-3" /> Assign to me
+                    </Button>
                   )}
                 </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                  State
+                </label>
+                <Select
+                  value={issue.state_id || ""}
+                  onValueChange={(v) => updateMutation.mutate({ state_id: v })}
+                >
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="Set state" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {states.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        <span className="flex items-center gap-2">
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: s.color || "#9ca3af" }}
+                          />
+                          {s.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                  Priority
+                </label>
+                <Select
+                  value={issue.priority || "none"}
+                  onValueChange={(v) => updateMutation.mutate({ priority: v })}
+                >
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["none", "low", "medium", "high", "urgent"].map((p) => (
+                      <SelectItem key={p} value={p}>
+                        <span className="flex items-center gap-2 capitalize">
+                          <span className={`h-2 w-2 rounded-full ${PRIORITY_DOT[p]}`} />
+                          {PRIORITY_LABELS[p]}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                  Estimate (pts)
+                </label>
+                <Select
+                  value={issue.estimate_points != null ? String(issue.estimate_points) : "__none__"}
+                  onValueChange={(v) =>
+                    updateMutation.mutate({ estimate_points: v === "__none__" ? null : Number(v) })
+                  }
+                >
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="No estimate" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {[0, 1, 2, 3, 5, 8, 13, 21].map((p) => (
+                      <SelectItem key={p} value={String(p)}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                  <Calendar className="h-3 w-3" /> Start Date
+                </label>
+                <DatePicker
+                  value={issue.start_date}
+                  onChange={(v) => updateMutation.mutate({ start_date: v })}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                  <Calendar className="h-3 w-3" /> Target Date
+                </label>
+                <DatePicker
+                  value={issue.target_date}
+                  onChange={(v) => updateMutation.mutate({ target_date: v })}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                  <Package className="h-3 w-3" /> Modules
+                </label>
+                {issueModulesLoading ? (
+                  <p className="text-xs text-muted-foreground animate-pulse">Loading...</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {issueModules.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {issueModules.map((m: Module) => (
+                          <Badge key={m.id} variant="secondary" className="text-xs gap-1 pr-1">
+                            <Package className="h-2.5 w-2.5" />
+                            {m.name}
+                            <button
+                              className="ml-0.5 hover:text-destructive"
+                              onClick={() => removeModuleMutation.mutate(m.id)}
+                              disabled={removeModuleMutation.isPending}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {projectModules.length > 0 &&
+                      (() => {
+                        const issueModuleIds = new Set(issueModules.map((m: Module) => m.id));
+                        const available = projectModules.filter((m) => !issueModuleIds.has(m.id));
+                        return available.length > 0 ? (
+                          <Select
+                            value={moduleSelectValue}
+                            onValueChange={(v) => {
+                              addModuleMutation.mutate(v);
+                              setModuleSelectValue("");
+                            }}
+                          >
+                            <SelectTrigger className="h-7 text-xs">
+                              <SelectValue placeholder="Add to module..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {available.map((m) => (
+                                <SelectItem key={m.id} value={m.id}>
+                                  {m.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : issueModules.length === 0 ? (
+                          <p className="text-xs text-muted-foreground italic">
+                            No modules available
+                          </p>
+                        ) : null;
+                      })()}
+                    {projectModules.length === 0 && issueModules.length === 0 && (
+                      <p className="text-xs text-muted-foreground italic">No modules in project</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {slug && projectId && issueId && (
+                <CustomFieldValues slug={slug} projectId={projectId} issueSeqId={Number(issueId)} />
               )}
             </div>
+            <Separator className="my-4" />
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-5">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                  <Clock className="h-3 w-3" /> Created
+                </label>
+                <p className="text-sm">{new Date(issue.created_at).toLocaleDateString()}</p>
+              </div>
 
-            {slug && projectId && issueId && (
-              <CustomFieldValues slug={slug} projectId={projectId} issueSeqId={Number(issueId)} />
-            )}
-          </div>
-          <Separator className="my-4" />
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-5">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                <Clock className="h-3 w-3" /> Created
-              </label>
-              <p className="text-sm">{new Date(issue.created_at).toLocaleDateString()}</p>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                <Clock className="h-3 w-3" /> Updated
-              </label>
-              <p className="text-sm">
-                {formatDistanceToNow(new Date(issue.updated_at), { addSuffix: true })}
-              </p>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                  <Clock className="h-3 w-3" /> Updated
+                </label>
+                <p className="text-sm">
+                  {formatDistanceToNow(new Date(issue.updated_at), { addSuffix: true })}
+                </p>
+              </div>
             </div>
           </div>
-        </div>
         </div>
 
         {/* Drag handle between detail and comments panes (desktop only) */}
@@ -1481,56 +1492,53 @@ export default function IssueDetail() {
         />
 
         {/* Comments / Activity / Attachments / Time */}
-        <div
-          className="hidden md:flex flex-col shrink-0"
-          style={{ width: `${rightPct}%` }}
-        >
+        <div className="hidden md:flex flex-col shrink-0" style={{ width: `${rightPct}%` }}>
           <div className="flex gap-1 border-b px-3 pt-1 overflow-x-auto shrink-0">
-              <button
-                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === "comments"
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => setActiveTab("comments")}
-              >
-                <MessageSquare className="h-3.5 w-3.5 inline mr-1" />
-                Comments ({comments.length})
-              </button>
-              <button
-                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === "activity"
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => setActiveTab("activity")}
-              >
-                <Activity className="h-3.5 w-3.5 inline mr-1" />
-                Activity ({activities.length})
-              </button>
-              <button
-                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === "attachments"
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => setActiveTab("attachments")}
-              >
-                <Paperclip className="h-3.5 w-3.5 inline mr-1" />
-                Attachments ({attachments.length})
-              </button>
-              <button
-                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === "time"
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => setActiveTab("time")}
-              >
-                <Timer className="h-3.5 w-3.5 inline mr-1" />
-                Time ({Math.floor(totalTimeSeconds / 3600)}h{" "}
-                {Math.floor((totalTimeSeconds % 3600) / 60)}m)
-              </button>
+            <button
+              className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "comments"
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setActiveTab("comments")}
+            >
+              <MessageSquare className="h-3.5 w-3.5 inline mr-1" />
+              Comments ({comments.length})
+            </button>
+            <button
+              className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "activity"
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setActiveTab("activity")}
+            >
+              <Activity className="h-3.5 w-3.5 inline mr-1" />
+              Activity ({activities.length})
+            </button>
+            <button
+              className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "attachments"
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setActiveTab("attachments")}
+            >
+              <Paperclip className="h-3.5 w-3.5 inline mr-1" />
+              Attachments ({attachments.length})
+            </button>
+            <button
+              className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "time"
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setActiveTab("time")}
+            >
+              <Timer className="h-3.5 w-3.5 inline mr-1" />
+              Time ({Math.floor(totalTimeSeconds / 3600)}h{" "}
+              {Math.floor((totalTimeSeconds % 3600) / 60)}m)
+            </button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {activeTab === "comments" && (
@@ -1890,63 +1898,68 @@ export default function IssueDetail() {
           </div>
           {activeTab === "comments" && (
             <div className="shrink-0 border-t p-3">
-                <div className="flex gap-3">
-                  <Avatar className="h-8 w-8">
-                    {currentUser?.avatar ? (
-                      <AvatarImage src={currentUser.avatar} alt={currentUser.display_name || "User"} />
-                    ) : null}
-                    <AvatarFallback className="text-xs">
-                      {(currentUser?.display_name || currentUser?.username || "Y").charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 space-y-2">
-                    <CommentEditor
-                      value={commentText}
-                      onChange={(html) => setCommentText(html)}
-                      onSubmit={() => {
-                        if (
-                          commentText.replace(/<[^>]*>/g, "").trim() &&
-                          !commentMutation.isPending
-                        ) {
-                          commentMutation.mutate({
-                            comment_html: commentText,
-                            access: commentPublic ? "public" : "internal",
-                          });
-                        }
-                      }}
-                      placeholder="Add a comment..."
-                      resetKey={commentResetKey}
-                      members={mentionMembers}
+              <div className="flex gap-3">
+                <Avatar className="h-8 w-8">
+                  {currentUser?.avatar ? (
+                    <AvatarImage
+                      src={currentUser.avatar}
+                      alt={currentUser.display_name || "User"}
                     />
-                    <div className="flex items-center gap-3">
-                      {issue?.external_source === "portal" && (
-                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <input
-                            type="checkbox"
-                            checked={commentPublic}
-                            onChange={(e) => setCommentPublic(e.target.checked)}
-                            className="h-3.5 w-3.5"
-                          />
-                          Visible to customer
-                        </label>
-                      )}
-                      <Button
-                        size="sm"
-                        disabled={
-                          !commentText.replace(/<[^>]*>/g, "").trim() || commentMutation.isPending
-                        }
-                        onClick={() =>
-                          commentMutation.mutate({
-                            comment_html: commentText,
-                            access: commentPublic ? "public" : "internal",
-                          })
-                        }
-                      >
-                        {commentMutation.isPending ? "Sending..." : "Comment"}
-                      </Button>
-                    </div>
+                  ) : null}
+                  <AvatarFallback className="text-xs">
+                    {(currentUser?.display_name || currentUser?.username || "Y")
+                      .charAt(0)
+                      .toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 space-y-2">
+                  <CommentEditor
+                    value={commentText}
+                    onChange={(html) => setCommentText(html)}
+                    onSubmit={() => {
+                      if (
+                        commentText.replace(/<[^>]*>/g, "").trim() &&
+                        !commentMutation.isPending
+                      ) {
+                        commentMutation.mutate({
+                          comment_html: commentText,
+                          access: commentPublic ? "public" : "internal",
+                        });
+                      }
+                    }}
+                    placeholder="Add a comment..."
+                    resetKey={commentResetKey}
+                    members={mentionMembers}
+                  />
+                  <div className="flex items-center gap-3">
+                    {issue?.external_source === "portal" && (
+                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={commentPublic}
+                          onChange={(e) => setCommentPublic(e.target.checked)}
+                          className="h-3.5 w-3.5"
+                        />
+                        Visible to customer
+                      </label>
+                    )}
+                    <Button
+                      size="sm"
+                      disabled={
+                        !commentText.replace(/<[^>]*>/g, "").trim() || commentMutation.isPending
+                      }
+                      onClick={() =>
+                        commentMutation.mutate({
+                          comment_html: commentText,
+                          access: commentPublic ? "public" : "internal",
+                        })
+                      }
+                    >
+                      {commentMutation.isPending ? "Sending..." : "Comment"}
+                    </Button>
                   </div>
                 </div>
+              </div>
             </div>
           )}
         </div>

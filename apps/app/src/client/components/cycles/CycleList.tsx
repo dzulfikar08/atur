@@ -19,12 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  TooltipProvider,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -339,15 +334,15 @@ function CycleTipsCard() {
       {tipsOpen && (
         <CardContent className="pb-4 space-y-2 text-sm text-muted-foreground">
           <p>
-            A <strong>Sprint (Cycle)</strong> is a short time-box — usually 1–4 weeks — where a
-            team commits to finishing a set of issues. Unlike a Module (a permanent grouping like a
+            A <strong>Sprint (Cycle)</strong> is a short time-box — usually 1–4 weeks — where a team
+            commits to finishing a set of issues. Unlike a Module (a permanent grouping like a
             workstream or feature), a sprint is a <strong>temporary schedule</strong>: issues in it
             are the work you'll do right now.
           </p>
           <ul className="list-disc pl-5 space-y-1">
             <li>
-              <strong>Time-boxed</strong> — has start/end dates; the card shows days left or
-              Overdue if missed.
+              <strong>Time-boxed</strong> — has start/end dates; the card shows days left or Overdue
+              if missed.
             </li>
             <li>
               <strong>Progress tracked</strong> — completed vs total issues shown as a % bar.

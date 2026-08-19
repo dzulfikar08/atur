@@ -44,7 +44,9 @@ function PolarPanel({ slug, contactId }: { slug: string; contactId: string }) {
             return (
               <li key={l.id} className="flex items-center justify-between text-sm">
                 <span className="truncate">
-                  <Badge variant="outline" className="mr-2">{label}</Badge>
+                  <Badge variant="outline" className="mr-2">
+                    {label}
+                  </Badge>
                   <span className="text-muted-foreground">{sub}</span>
                 </span>
                 <span className="text-muted-foreground ml-2">{l.last_event ?? "—"}</span>

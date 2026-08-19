@@ -490,8 +490,7 @@ function DesktopMyIssues({ slug }: { slug: string }) {
         ...issue,
         depth,
         childCount: children.length,
-        isSubIssue:
-          depth > 0 || (!!issue.parent_id && !byId.get(issue.parent_id)),
+        isSubIssue: depth > 0 || (!!issue.parent_id && !byId.get(issue.parent_id)),
       });
       if (collapsedParents.has(issue.id)) return;
       const next = new Set(stack);
@@ -851,11 +850,18 @@ function DesktopMyIssues({ slug }: { slug: string }) {
                       {String(issue.sequence_id).padStart(4, "0")}
                     </td>
                     <td className="p-2 font-medium max-w-[280px]">
-                      <div className="flex items-center gap-1.5" style={{ paddingLeft: issue.depth * 18 }}>
+                      <div
+                        className="flex items-center gap-1.5"
+                        style={{ paddingLeft: issue.depth * 18 }}
+                      >
                         {issue.childCount > 0 ? (
                           <button
                             className="shrink-0 p-0.5 rounded hover:bg-muted text-muted-foreground"
-                            title={collapsedParents.has(issue.id) ? "Expand sub-issues" : "Collapse sub-issues"}
+                            title={
+                              collapsedParents.has(issue.id)
+                                ? "Expand sub-issues"
+                                : "Collapse sub-issues"
+                            }
                             onClick={(e) => {
                               e.stopPropagation();
                               toggleCollapse(issue.id);
@@ -897,7 +903,14 @@ function DesktopMyIssues({ slug }: { slug: string }) {
                         </button>
                       </div>
                       {issue.labels && issue.labels.length > 0 && (
-                        <div className="flex gap-1 mt-1 flex-wrap" style={{ paddingLeft: issue.depth * 18 + (issue.childCount > 0 || issue.isSubIssue ? 22 : 0) }}>
+                        <div
+                          className="flex gap-1 mt-1 flex-wrap"
+                          style={{
+                            paddingLeft:
+                              issue.depth * 18 +
+                              (issue.childCount > 0 || issue.isSubIssue ? 22 : 0),
+                          }}
+                        >
                           {issue.labels.slice(0, 2).map((l) => (
                             <Badge
                               key={l.id}
