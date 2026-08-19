@@ -7,8 +7,10 @@ import "@/index.css";
 import App from "./App";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { initNativePlatform } from "@/lib/native";
+import { initDevAuth } from "@/lib/dev-auth";
 
 initNativePlatform();
+initDevAuth();
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30000, retry: 1 } },
