@@ -1,25 +1,25 @@
 import { useEffect } from "react";
 import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Sidebar as KumoSidebar, useSidebar } from "@cloudflare/kumo";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import BottomNav from "@/components/mobile/BottomNav";
 import CommandPalette from "./CommandPalette";
+import { useSidebarStore } from "@/stores/sidebar";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 
-// Toggle sidebar collapse with Cmd/Ctrl+B (Kumo's collapse state)
+// Toggle sidebar collapse with Cmd/Ctrl+B
 function ShellShortcuts() {
-  const { toggleSidebar } = useSidebar();
+  const toggle = useSidebarStore((s) => s.toggle);
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === "b" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        toggleSidebar();
+        toggle();
       }
     };
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
-  }, [toggleSidebar]);
+  }, [toggle]);
   return null;
 }
 
@@ -56,12 +56,7 @@ export default function AppShell() {
   useAllModeGuard();
 
   return (
-    <KumoSidebar.Provider
-      defaultOpen
-      collapsible="icon"
-      peekable
-      className="flex h-dvh w-full overflow-hidden bg-background"
-    >
+    <div className="flex h-dvh w-full overflow-hidden bg-background">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-background focus:px-3 focus:py-1.5 focus:text-sm focus:shadow"
@@ -69,7 +64,7 @@ export default function AppShell() {
         Skip to content
       </a>
 
-      {/* Sidebar (Kumo) — handles collapse + mobile drawer internally */}
+      {/* Sidebar rail (md+; mobile uses BottomNav) */}
       <Sidebar />
 
       {/* Main area */}
@@ -91,6 +86,6 @@ export default function AppShell() {
       <CommandPalette />
 
       <ShellShortcuts />
-    </KumoSidebar.Provider>
+    </div>
   );
 }
