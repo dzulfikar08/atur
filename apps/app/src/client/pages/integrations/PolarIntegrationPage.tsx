@@ -75,9 +75,9 @@ export default function PolarIntegrationPage() {
   const { data: states = [] } = useQuery({
     queryKey: ["polar-states", slug, selectedProjectId],
     queryFn: () =>
-      apiFetch<{ results: State[] }>(`/workspaces/${slug}/projects/${selectedProjectId}/states/`).then(
-        (d) => d.results,
-      ),
+      apiFetch<{ results: State[] }>(
+        `/workspaces/${slug}/projects/${selectedProjectId}/states/`,
+      ).then((d) => d.results),
     enabled: !!slug && !!selectedProjectId,
   });
 
@@ -137,9 +137,7 @@ export default function PolarIntegrationPage() {
     saveMutation.mutate({ webhook_enabled: !(settings?.webhook_enabled === 1) });
   }
 
-  const webhookUrl = slug
-    ? `${window.location.origin}/webhooks/polar/${slug}`
-    : "";
+  const webhookUrl = slug ? `${window.location.origin}/webhooks/polar/${slug}` : "";
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto">
@@ -173,11 +171,13 @@ export default function PolarIntegrationPage() {
                 import subscriptions as deals with recurring amount
               </li>
               <li>
-                <code className="text-xs bg-muted px-1.5 py-0.5 rounded">orders:read</code> —
-                import one-off orders as deals
+                <code className="text-xs bg-muted px-1.5 py-0.5 rounded">orders:read</code> — import
+                one-off orders as deals
               </li>
             </ul>
-            <p className="text-xs text-muted-foreground">No write scopes needed — Atur never mutates Polar data.</p>
+            <p className="text-xs text-muted-foreground">
+              No write scopes needed — Atur never mutates Polar data.
+            </p>
           </div>
 
           <Separator />
@@ -185,14 +185,20 @@ export default function PolarIntegrationPage() {
           <div className="space-y-2">
             <div className="font-medium">2. Webhook endpoint (Polar → Settings → Webhooks)</div>
             <p className="text-muted-foreground">
-              Point it at the Webhook Receiver URL in the API Credentials card below, copy the <code className="text-xs bg-muted px-1.5 py-0.5 rounded">whsec_…</code>{" "}
-              secret into the Webhook Secret field, then subscribe to these events:
+              Point it at the Webhook Receiver URL in the API Credentials card below, copy the{" "}
+              <code className="text-xs bg-muted px-1.5 py-0.5 rounded">whsec_…</code> secret into
+              the Webhook Secret field, then subscribe to these events:
             </p>
             <div className="space-y-2">
               {[
                 {
                   group: "Customer — creates/updates CRM contacts",
-                  events: ["customer.created", "customer.updated", "customer.state_changed", "customer.deleted"],
+                  events: [
+                    "customer.created",
+                    "customer.updated",
+                    "customer.state_changed",
+                    "customer.deleted",
+                  ],
                 },
                 {
                   group: "Subscription — creates deals, moves stage on status",
@@ -238,8 +244,8 @@ export default function PolarIntegrationPage() {
         <CardHeader>
           <CardTitle>API Credentials</CardTitle>
           <CardDescription>
-            Enter your Polar organization's access token and webhook secret to import
-            customers, subscriptions, and orders into the CRM.
+            Enter your Polar organization's access token and webhook secret to import customers,
+            subscriptions, and orders into the CRM.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -268,7 +274,9 @@ export default function PolarIntegrationPage() {
                   id="polar-secret"
                   type="password"
                   placeholder={
-                    settings?.webhook_secret ? "•••••••• (stored — leave blank to keep)" : "whsec_..."
+                    settings?.webhook_secret
+                      ? "•••••••• (stored — leave blank to keep)"
+                      : "whsec_..."
                   }
                   value={webhookSecret}
                   onChange={(e) => setWebhookSecret(e.target.value)}
@@ -366,7 +374,10 @@ export default function PolarIntegrationPage() {
                       ) : null}
                     </p>
                   </div>
-                  <Button onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending || !settings?.access_token}>
+                  <Button
+                    onClick={() => syncMutation.mutate()}
+                    disabled={syncMutation.isPending || !settings?.access_token}
+                  >
                     {syncMutation.isPending ? (
                       <span className="flex items-center gap-2">
                         <RefreshCw className="h-4 w-4 animate-spin" /> Syncing...
@@ -388,7 +399,9 @@ export default function PolarIntegrationPage() {
       <Card>
         <CardHeader>
           <CardTitle>Imported from Polar</CardTitle>
-          <CardDescription>Recent customers, subscriptions, and orders synced into the CRM.</CardDescription>
+          <CardDescription>
+            Recent customers, subscriptions, and orders synced into the CRM.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {links.length === 0 ? (
@@ -400,11 +413,14 @@ export default function PolarIntegrationPage() {
               {links.map((l) => (
                 <li key={l.id} className="flex items-center justify-between text-sm">
                   <span className="truncate">
-                    <Badge variant="outline" className="mr-2">{l.polar_type}</Badge>
+                    <Badge variant="outline" className="mr-2">
+                      {l.polar_type}
+                    </Badge>
                     {l.polar_id}
                   </span>
                   <span className="text-muted-foreground ml-2">
-                    {l.last_event ?? "—"} · {l.created_at ? new Date(l.created_at).toLocaleDateString() : ""}
+                    {l.last_event ?? "—"} ·{" "}
+                    {l.created_at ? new Date(l.created_at).toLocaleDateString() : ""}
                   </span>
                 </li>
               ))}

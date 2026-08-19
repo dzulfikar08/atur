@@ -59,7 +59,11 @@ function SprintItem({ sprint }: { sprint: SprintData }) {
           <div
             className={cn(
               "h-1.5 rounded-full transition-all",
-              percent >= 100 ? "bg-emerald-500" : percent >= 50 ? "bg-[var(--chart-1)]" : "bg-amber-500",
+              percent >= 100
+                ? "bg-emerald-500"
+                : percent >= 50
+                  ? "bg-[var(--chart-1)]"
+                  : "bg-amber-500",
             )}
             style={{ width: `${Math.min(percent, 100)}%` }}
           />

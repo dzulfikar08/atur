@@ -28,12 +28,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import UserMenu from "@/components/layout/UserMenu";
 import CreateWorkspaceDialog from "@/components/layout/CreateWorkspaceDialog";
 
@@ -111,10 +106,7 @@ export default function Sidebar() {
 
   const currentName = isAll
     ? "All Workspaces"
-    : (workspaces.find((w) => w.slug === activeSlug)?.name ??
-      currentSlug ??
-      slug ??
-      "Workspace");
+    : (workspaces.find((w) => w.slug === activeSlug)?.name ?? currentSlug ?? slug ?? "Workspace");
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -138,19 +130,25 @@ export default function Sidebar() {
                 <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                   <Stack size={16} weight="bold" />
                 </div>
-              ) : (() => {
-                const cws = workspaces.find((w) => w.slug === activeSlug);
-                if (cws?.logo) {
+              ) : (
+                (() => {
+                  const cws = workspaces.find((w) => w.slug === activeSlug);
+                  if (cws?.logo) {
+                    return (
+                      <img
+                        src={cws.logo}
+                        alt=""
+                        className="size-7 shrink-0 rounded-lg object-cover"
+                      />
+                    );
+                  }
                   return (
-                    <img src={cws.logo} alt="" className="size-7 shrink-0 rounded-lg object-cover" />
+                    <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
+                      {currentName.charAt(0).toUpperCase()}
+                    </div>
                   );
-                }
-                return (
-                  <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
-                    {currentName.charAt(0).toUpperCase()}
-                  </div>
-                );
-              })()}
+                })()
+              )}
               <span
                 className={cn(
                   "min-w-0 flex-1 truncate text-left text-[13px] font-medium",

@@ -22,14 +22,7 @@ export interface PolarCustomer {
 
 export interface PolarSubscription {
   id: string;
-  status:
-    | "active"
-    | "canceled"
-    | "revoked"
-    | "paused"
-    | "past_due"
-    | "incomplete"
-    | "trialing";
+  status: "active" | "canceled" | "revoked" | "paused" | "past_due" | "incomplete" | "trialing";
   customer: PolarCustomer;
   product: { name: string };
   price_amount: number | null;

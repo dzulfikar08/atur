@@ -154,12 +154,8 @@ export default function DesktopDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-primary">
-          Overview
-        </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight">
-          Welcome to {workspaceName}
-        </h1>
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-primary">Overview</p>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight">Welcome to {workspaceName}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Here is an overview of your project activity.
         </p>

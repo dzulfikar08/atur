@@ -107,7 +107,9 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
           displayName?: string | null;
           avatar?: string | null;
         }[];
-      }>(`/workspaces/${effectiveCreateWorkspaceSlug}/projects/${effectiveCreateProjectId}/members/`)
+      }>(
+        `/workspaces/${effectiveCreateWorkspaceSlug}/projects/${effectiveCreateProjectId}/members/`,
+      )
         .then((d) => d.results)
         .catch(() => []),
     enabled: createOpen && !!effectiveCreateWorkspaceSlug && !!effectiveCreateProjectId,

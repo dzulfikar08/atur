@@ -25,4 +25,3 @@ if (typeof window !== "undefined") {
     document.elementFromPoint ??= () => null;
   }
 }
-

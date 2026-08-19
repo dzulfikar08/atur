@@ -100,15 +100,19 @@ async function findStateByGroup(
 // a project whose name suggests a CRM pipeline, else the most recently created.
 async function pickPipelineProject(db: DbClient, workspaceId: string): Promise<string | null> {
   const projects = await db
-    .select({ id: schema.projects.id, name: schema.projects.name, createdAt: schema.projects.createdAt })
+    .select({
+      id: schema.projects.id,
+      name: schema.projects.name,
+      createdAt: schema.projects.createdAt,
+    })
     .from(schema.projects)
     .where(and(eq(schema.projects.workspaceId, workspaceId), isNull(schema.projects.deletedAt)));
   if (projects.length === 0) return null;
-  const hinted = projects.find((p) =>
-    /crm|deal|pipeline|sales/i.test(p.name ?? ""),
-  );
+  const hinted = projects.find((p) => /crm|deal|pipeline|sales/i.test(p.name ?? ""));
   if (hinted) return hinted.id;
-  return projects.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))[0]?.id ?? null;
+  return (
+    projects.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))[0]?.id ?? null
+  );
 }
 
 async function ensureSettings(
@@ -162,13 +166,19 @@ async function ensureDeal(
   }
 
   const { projectId, defaultStateId } = await resolvePipeline(db, settings);
-  const deal = await crmService.createDeal(db, workspaceId, projectId, {
-    name,
-    customer_id: customerRow.id,
-    amount_cents: amountCents,
-    currency,
-    state_id: defaultStateId ?? undefined,
-  }, null);
+  const deal = await crmService.createDeal(
+    db,
+    workspaceId,
+    projectId,
+    {
+      name,
+      customer_id: customerRow.id,
+      amount_cents: amountCents,
+      currency,
+      state_id: defaultStateId ?? undefined,
+    },
+    null,
+  );
 
   await polarRepo.upsertLink(db, {
     workspaceId,
@@ -336,7 +346,11 @@ export async function handleEvent(
   event: PolarEvent,
 ): Promise<void> {
   const { type, data } = event;
-  if (type === "customer.created" || type === "customer.updated" || type === "customer.state_changed") {
+  if (
+    type === "customer.created" ||
+    type === "customer.updated" ||
+    type === "customer.state_changed"
+  ) {
     await upsertCustomer(db, workspaceId, data as unknown as PolarCustomer, type);
   } else if (type === "customer.deleted") {
     // Contact stays for history; just drop the link + polar id mapping.
@@ -387,9 +401,7 @@ export async function syncAll(
   // polarListAll stops at SYNC_MAX per resource — flag it so the UI can say
   // the sync was partial rather than silently dropping the tail.
   const truncated =
-    customers.length >= SYNC_MAX ||
-    subscriptions.length >= SYNC_MAX ||
-    orders.length >= SYNC_MAX;
+    customers.length >= SYNC_MAX || subscriptions.length >= SYNC_MAX || orders.length >= SYNC_MAX;
 
   let customerCount = 0;
   let subscriptionCount = 0;

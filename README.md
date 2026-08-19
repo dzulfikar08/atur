@@ -54,9 +54,9 @@ App scripts (run from `apps/app/`):
 | `build`                   | Production build (client → `dist/client`, worker)    |
 | `deploy`                  | Build + `wrangler deploy` to `app.diatur.com`        |
 | `db:generate`             | drizzle-kit generate migrations                      |
-| `db:migrate`              | drizzle-kit migrate (apply pending to prod D1)      |
-| `db:migrate:local`        | rebuild local D1 from baseline + seed               |
-| `db:migrate:remote`       | drizzle-kit migrate (alias for `db:migrate`)        |
+| `db:migrate`              | drizzle-kit migrate (apply pending to prod D1)       |
+| `db:migrate:local`        | rebuild local D1 from baseline + seed                |
+| `db:migrate:remote`       | drizzle-kit migrate (alias for `db:migrate`)         |
 | `cf-typegen`              | regenerate Cloudflare bindings types                 |
 | `test`                    | Vitest run                                           |
 | `cap:sync` / `cap:open:*` | Capacitor native builds                              |

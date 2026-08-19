@@ -84,9 +84,15 @@
   border-radius: 50%;
   box-shadow: inset 0 -1px 1px rgba(0, 0, 0, 0.25);
 }
-.demo-dots i:nth-child(1) { background: #ff5f57; }
-.demo-dots i:nth-child(2) { background: #febc2e; }
-.demo-dots i:nth-child(3) { background: #28c840; }
+.demo-dots i:nth-child(1) {
+  background: #ff5f57;
+}
+.demo-dots i:nth-child(2) {
+  background: #febc2e;
+}
+.demo-dots i:nth-child(3) {
+  background: #28c840;
+}
 .demo-crumbs {
   display: flex;
   align-items: center;
@@ -127,7 +133,9 @@
   animation: demo-pulse 2.2s ease-in-out infinite;
 }
 @keyframes demo-pulse {
-  50% { opacity: 0.45; }
+  50% {
+    opacity: 0.45;
+  }
 }
 
 /* ---- scroll-triggered stagger ---- */
@@ -156,7 +164,9 @@
   color: #fff;
   font-weight: 700;
   letter-spacing: 0.02em;
-  box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow:
+    inset 0 -2px 4px rgba(0, 0, 0, 0.25),
+    0 1px 2px rgba(0, 0, 0, 0.3);
 }
 .demo-num {
   font-variant-numeric: tabular-nums;
