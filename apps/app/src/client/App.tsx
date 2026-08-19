@@ -78,8 +78,14 @@ function RootRoute() {
   if (!initialized) return <PageLoader />;
   // The marketing site owns the public landing. Logged-out visitors on the app
   // origin bounce to https://diatur.com (auth pages like /auth/login still
-  // live here on the app origin).
+  // live here on the app origin). Dev keeps you local: the seeded dev user
+  // (lib/dev-auth.ts) normally logs you in automatically; if that fails,
+  // fall back to the login page instead of shipping you off to prod.
   if (!isAuthenticated) {
+    if (import.meta.env.DEV) {
+      navigate("/auth/login", { replace: true });
+      return null;
+    }
     window.location.replace("https://diatur.com");
     return null;
   }

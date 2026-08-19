@@ -38,7 +38,6 @@ import {
   ClipboardCopy,
   Copy,
   Check,
-  X,
   ChevronDown,
   Layers,
 } from "@/lib/icons";
