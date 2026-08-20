@@ -116,6 +116,17 @@ export async function sendNotificationEmail(
   }
 }
 
+// Customer-facing email (CRM communication: feedback requests, follow-ups,
+// etc.). Non-fatal when the SEND_EMAIL binding is absent (logged + skipped,
+// like sendNotificationEmail).
+export async function sendCustomerEmail(
+  env: Env,
+  to: string,
+  email: NotificationEmail,
+): Promise<SendResult> {
+  return sendNotificationEmail(env, to, email);
+}
+
 // Shared styled layout for notification emails. bodyHtml is the inner content;
 // cta renders a button linking back to the app.
 export function notificationEmailHtml(opts: {

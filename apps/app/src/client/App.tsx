@@ -38,6 +38,7 @@ const ContactsListPage = lazy(() => import("@/pages/crm/ContactsListPage"));
 const ContactDetailPage = lazy(() => import("@/pages/crm/ContactDetailPage"));
 const CrmPipelineListPage = lazy(() => import("@/pages/crm/PipelineListPage"));
 const CrmPipelineBoardPage = lazy(() => import("@/pages/crm/PipelineBoardPage"));
+const EmailTemplatesPage = lazy(() => import("@/pages/crm/EmailTemplatesPage"));
 const FeedbackPortalPage = lazy(() => import("@/pages/feedback/FeedbackPortalPage"));
 const PortalLoginPage = lazy(() => import("@/pages/portal/PortalLoginPage"));
 const PortalTicketsPage = lazy(() => import("@/pages/portal/PortalTicketsPage"));
@@ -174,6 +175,7 @@ export default function App() {
           <Route path="/:slug/crm/contacts/:id" element={<ContactDetailPage />} />
           <Route path="/:slug/crm/pipelines" element={<CrmPipelineListPage />} />
           <Route path="/:slug/crm/pipelines/:projectId" element={<CrmPipelineBoardPage />} />
+          <Route path="/:slug/crm/email-templates" element={<EmailTemplatesPage />} />
           <Route path="/:slug/settings" element={<SettingsPage />} />
           <Route path="/:slug/me" element={<ProfilePage />} />
         </Route>

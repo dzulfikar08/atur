@@ -406,6 +406,50 @@ export const api = {
   deleteContact: (slug: string, contactId: string) =>
     apiFetch(`/workspaces/${slug}/contacts/${contactId}/`, { method: "DELETE" }),
 
+  // CRM customer email (e.g. feedback-request templates)
+  previewContactEmail: (slug: string, contactId: string, template?: string) =>
+    apiFetch<ContactEmailPreview>(
+      `/workspaces/${slug}/contacts/${contactId}/email-preview${template ? `?template=${template}` : ""}`,
+    ),
+  sendContactEmail: (
+    slug: string,
+    contactId: string,
+    data: { template: string },
+  ) =>
+    apiFetch<ContactEmailResult>(
+      `/workspaces/${slug}/contacts/${contactId}/send-email/`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    ),
+
+  // CRM email template management (edit subject + body with {{placeholders}})
+  listEmailTemplates: async (slug: string) => {
+    const data = await apiFetch<{ results: ContactEmailTemplate[] }>(
+      `/workspaces/${slug}/contacts/email-templates/`,
+    );
+    return data.results;
+  },
+  getEmailTemplate: (slug: string, name: string) =>
+    apiFetch<ContactEmailTemplate>(
+      `/workspaces/${slug}/contacts/email-templates/${name}/`,
+    ),
+  saveEmailTemplate: (
+    slug: string,
+    name: string,
+    data: { subject: string; body: string; is_html?: boolean },
+  ) =>
+    apiFetch<ContactEmailTemplate>(
+      `/workspaces/${slug}/contacts/email-templates/${name}/`,
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      },
+    ),
+  deleteEmailTemplate: (slug: string, name: string) =>
+    apiFetch(`/workspaces/${slug}/contacts/email-templates/${name}/`, { method: "DELETE" }),
+
   // CRM deals (a pipeline is just a project)
   listDeals: async (slug: string, projectId: string, params?: { state_id?: string }) => {
     const qs = new URLSearchParams();
@@ -856,6 +900,37 @@ export interface ContactDetail {
     state_name: string | null;
     created_at: string | null;
   }[];
+}
+
+export interface ContactEmailResult {
+  subject: string;
+  sent: boolean;
+  to: string | null;
+}
+
+export interface ContactEmailPurchase {
+  date: string;
+  amount_cents: number;
+  currency: string;
+  product_name: string;
+}
+
+export interface ContactEmailPreview {
+  subject: string;
+  text: string;
+  html: string;
+  to: string | null;
+  purchase: ContactEmailPurchase | null;
+}
+
+export interface ContactEmailTemplate {
+  id: string;
+  template_name: string;
+  subject: string;
+  body: string;
+  is_html: number;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 // ── Polar (payments → CRM import) ──
