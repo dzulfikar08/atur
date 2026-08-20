@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Mail } from "@/lib/icons";
+import { ArrowLeft, Mail } from "@/lib/icons";
 import { toast } from "sonner";
 
 function money(cents: number, currency = "USD") {
@@ -215,8 +215,9 @@ export default function ContactDetailPage() {
 
   return (
     <div className="space-y-4">
-      <Link to={`/${slug}/crm/contacts`} className="text-sm text-muted-foreground hover:underline">
-        ← Contacts
+      <Link to={`/${slug}/crm/contacts`} className="inline-flex items-center text-sm text-muted-foreground hover:underline">
+        <ArrowLeft className="mr-1 h-4 w-4" />
+        Contacts
       </Link>
       <div>
         <h1 className="text-2xl font-bold">{c.name || c.email || "Contact"}</h1>

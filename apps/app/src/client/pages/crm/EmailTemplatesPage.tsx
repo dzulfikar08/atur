@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Pencil, Trash2, RefreshCw, Info } from "@/lib/icons";
+import { ArrowLeft, Pencil, Trash2, RefreshCw, Info } from "@/lib/icons";
 import { toast } from "sonner";
 
 // Placeholder variables available in template subject/body.
@@ -189,8 +189,9 @@ export default function EmailTemplatesPage() {
 
   return (
     <div className="space-y-4">
-      <Link to={`/${slug}/crm`} className="text-sm text-muted-foreground hover:underline">
-        ← CRM
+      <Link to={`/${slug}/crm`} className="inline-flex items-center text-sm text-muted-foreground hover:underline">
+        <ArrowLeft className="mr-1 h-4 w-4" />
+        CRM
       </Link>
 
       <div>

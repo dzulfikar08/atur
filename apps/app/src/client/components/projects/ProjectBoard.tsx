@@ -34,6 +34,8 @@ import {
 } from "@/components/ui/form";
 import CommentEditor from "@/components/editor/CommentEditor";
 import {
+  ArrowLeft,
+  ArrowRight,
   Plus,
   List,
   Columns3,
@@ -1247,11 +1249,12 @@ export default function ProjectBoard() {
           {/* Month navigation */}
           <div className="flex items-center justify-between mb-4">
             <Button variant="ghost" size="sm" onClick={() => setCalMonth(subMonths(calMonth, 1))}>
-              ← Prev
+              <ArrowLeft className="mr-1 h-4 w-4" />
+              Prev
             </Button>
             <h3 className="text-sm font-semibold">{format(calMonth, "MMMM yyyy")}</h3>
             <Button variant="ghost" size="sm" onClick={() => setCalMonth(addMonths(calMonth, 1))}>
-              Next →
+              Next <ArrowRight className="ml-1 h-4 w-4" />
             </Button>
           </div>
           {/* Calendar grid */}
