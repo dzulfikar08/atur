@@ -125,6 +125,8 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
+  deleteProject: (slug: string, projectId: string) =>
+    apiFetch(`/workspaces/${slug}/projects/${projectId}/`, { method: "DELETE" }),
 
   // States
   createState: (

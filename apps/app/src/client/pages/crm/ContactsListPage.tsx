@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -13,8 +13,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus } from "@/lib/icons";
+import { Plus, MoreHorizontal, Pencil, Trash2 } from "@/lib/icons";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -38,6 +45,8 @@ export default function ContactsListPage() {
   const [status, setStatus] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
+  const [editing, setEditing] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
 
   const isAll = slug === "all";
 
@@ -60,6 +69,41 @@ export default function ContactsListPage() {
     },
     onError: () => toast.error("Failed to create contact"),
   });
+
+  const updateMut = useMutation({
+    mutationFn: (body: Partial<typeof form>) =>
+      api.updateContact(editing.workspace_slug || slug!, editing.id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["contacts", slug] });
+      setEditing(null);
+      toast.success("Contact updated");
+    },
+    onError: () => toast.error("Failed to update contact"),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: ({ id, wsSlug }: { id: string; wsSlug: string }) => api.deleteContact(wsSlug, id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["contacts", slug] });
+      setDeleteTarget(null);
+      toast.success("Contact deleted");
+    },
+    onError: () => toast.error("Failed to delete contact"),
+  });
+
+  useEffect(() => {
+    if (editing) {
+      setForm({
+        email: editing.email ?? "",
+        name: editing.name ?? "",
+        company: editing.company ?? "",
+        phone: editing.phone ?? "",
+        source: editing.source ?? "",
+      });
+    } else {
+      setForm(EMPTY);
+    }
+  }, [editing]);
 
   return (
     <div className="space-y-4">
@@ -125,6 +169,89 @@ export default function ContactsListPage() {
             </div>
           </DialogContent>
         </Dialog>
+        <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit contact</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium">Email</label>
+                <Input
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="name@company.com"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Name</label>
+                <Input
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Company</label>
+                <Input
+                  value={form.company}
+                  onChange={(e) => setForm({ ...form, company: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Phone</label>
+                <Input
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Source</label>
+                <Input
+                  value={form.source}
+                  onChange={(e) => setForm({ ...form, source: e.target.value })}
+                  placeholder="referral, ads, …"
+                />
+              </div>
+              <Button
+                className="w-full"
+                disabled={!form.email || updateMut.isPending}
+                onClick={() => updateMut.mutate(form)}
+              >
+                {updateMut.isPending ? "Saving…" : "Save changes"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete contact?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              This action cannot be undone. Remove{" "}
+              <span className="font-medium">{deleteTarget?.name || deleteTarget?.email}</span>?
+            </p>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={deleteMut.isPending}
+                onClick={() => {
+                  if (deleteTarget)
+                    deleteMut.mutate({
+                      id: deleteTarget.id,
+                      wsSlug: deleteTarget.workspace_slug || slug!,
+                    });
+                }}
+              >
+                {deleteMut.isPending ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="flex gap-2">
@@ -160,6 +287,7 @@ export default function ContactsListPage() {
                   <th className="text-left p-3 font-medium">Company</th>
                   <th className="text-left p-3 font-medium">Status</th>
                   {isAll && <th className="text-left p-3 font-medium">Workspace</th>}
+                  {!isAll && <th className="p-3" />}
                 </tr>
               </thead>
               <tbody>
@@ -183,11 +311,34 @@ export default function ContactsListPage() {
                     {isAll && (
                       <td className="p-3 text-muted-foreground">{c.workspace_name || "—"}</td>
                     )}
+                    {!isAll && (
+                      <td className="p-3">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-7 w-7">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setEditing(c)}>
+                              <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => setDeleteTarget(c)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {data?.results.length === 0 && (
                   <tr>
-                    <td colSpan={isAll ? 5 : 4} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={isAll ? 6 : 5} className="p-6 text-center text-muted-foreground">
                       No contacts yet.
                     </td>
                   </tr>
