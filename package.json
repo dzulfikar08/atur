@@ -13,6 +13,7 @@
     "build": "bun --filter @atur/app build && bun --filter @atur/web build",
     "build:app": "bun --filter @atur/app build",
     "build:web": "bun --filter @atur/web build",
+    "deploy": "bun run deploy:app",
     "deploy:app": "bun --filter @atur/app deploy",
     "deploy:web": "bun --filter @atur/web deploy",
     "typecheck": "bun --filter @atur/app typecheck",
