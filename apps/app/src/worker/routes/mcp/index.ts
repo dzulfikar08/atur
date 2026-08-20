@@ -10,6 +10,7 @@ import * as schema from "../../db/schema";
 import * as customersRepo from "../../repositories/customers";
 import * as dealsRepo from "../../repositories/deals";
 import * as crmService from "../../services/crm";
+import * as issuesRepo from "../../repositories/issues";
 
 interface JsonRpcRequest {
   jsonrpc: string;
@@ -124,6 +125,7 @@ const TOOLS = [
         state_id: { type: "string" },
         priority: { type: "string" },
         name: { type: "string" },
+        description_html: { type: "string" },
       },
       required: ["project_id", "workspace", "issue_id"],
     },
@@ -886,28 +888,24 @@ async function handleTool(
     case "create_issue": {
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
       const projectId = params.project_id as string;
-      const [maxSeq] = await db
-        .select({ seq: schema.issues.sequenceId })
-        .from(schema.issues)
-        .where(eq(schema.issues.projectId, projectId))
-        .orderBy(desc(schema.issues.sequenceId))
-        .limit(1);
-      const seq = (maxSeq?.seq ?? 0) + 1;
       const id = uuid();
       const now = nowISO();
-      await db.insert(schema.issues).values({
+      const row: typeof schema.issues.$inferInsert = {
         id,
         name: params.name as string,
         descriptionHtml: (params.description_html as string) ?? null,
         priority: (params.priority as string) ?? "none",
         stateId: (params.state_id as string) ?? null,
         parentId: (params.parent_id as string) ?? null,
-        sequenceId: seq,
+        sequenceId: await issuesRepo.getNextSequence(db, projectId),
         projectId,
         workspaceId,
         createdAt: now,
         updatedAt: now,
-      });
+      };
+      // sequenceId is MAX+1 and collides under concurrent creators;
+      // insertIssueWithRetry re-derives it and retries on uq_issue_sequence.
+      await issuesRepo.insertIssueWithRetry(db, row);
       if (params.label_ids && Array.isArray(params.label_ids)) {
         for (const labelId of params.label_ids as string[]) {
           await db
@@ -922,7 +920,18 @@ async function handleTool(
             .values({ id: uuid(), issueId: id, assigneeId, createdAt: now, updatedAt: now });
         }
       }
-      return db.select().from(schema.issues).where(eq(schema.issues.id, id)).limit(1);
+      return db
+        .select()
+        .from(schema.issues)
+        .where(
+          and(
+            eq(schema.issues.id, id),
+            eq(schema.issues.projectId, projectId),
+            eq(schema.issues.workspaceId, workspaceId),
+            isNull(schema.issues.deletedAt),
+          ),
+        )
+        .limit(1);
     }
     case "update_issue": {
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
@@ -930,6 +939,7 @@ async function handleTool(
       if (params.state_id !== undefined) updates.stateId = params.state_id;
       if (params.priority !== undefined) updates.priority = params.priority;
       if (params.name !== undefined) updates.name = params.name;
+      if (params.description_html !== undefined) updates.descriptionHtml = params.description_html;
       await db
         .update(schema.issues)
         .set(updates)
@@ -938,12 +948,20 @@ async function handleTool(
             eq(schema.issues.id, params.issue_id as string),
             eq(schema.issues.projectId, params.project_id as string),
             eq(schema.issues.workspaceId, workspaceId),
+            isNull(schema.issues.deletedAt),
           ),
         );
       return db
         .select()
         .from(schema.issues)
-        .where(eq(schema.issues.id, params.issue_id as string))
+        .where(
+          and(
+            eq(schema.issues.id, params.issue_id as string),
+            eq(schema.issues.projectId, params.project_id as string),
+            eq(schema.issues.workspaceId, workspaceId),
+            isNull(schema.issues.deletedAt),
+          ),
+        )
         .limit(1);
     }
     case "get_issue": {

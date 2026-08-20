@@ -109,27 +109,37 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const user = c.get("user");
     const body = (await c.req.json().catch(() => ({}))) as { name?: string };
     if (!body.name) throw new HTTPException(400, { message: "name is required" });
-    const [maxSeq] = await db
-      .select({ seq: schema.issues.sequenceId })
-      .from(schema.issues)
-      .where(eq(schema.issues.projectId, parent.projectId))
-      .orderBy(desc(schema.issues.sequenceId))
-      .limit(1);
     const id = uuid();
     const now = nowISO();
-    await db.insert(schema.issues).values({
+    const row: typeof schema.issues.$inferInsert = {
       id,
       name: body.name,
-      sequenceId: (maxSeq?.seq ?? 0) + 1,
+      sequenceId: await issuesRepo.getNextSequence(db, parent.projectId),
       parentId: parent.id,
       projectId: parent.projectId,
       workspaceId: parent.workspaceId,
       createdById: user.sub,
       createdAt: now,
       updatedAt: now,
-    });
+    };
+    // sequenceId is MAX+1 and collides under concurrent creators;
+    // insertIssueWithRetry re-derives it and retries on uq_issue_sequence.
+    await issuesRepo.insertIssueWithRetry(db, row);
     return c.json(
-      (await db.select().from(schema.issues).where(eq(schema.issues.id, id)).limit(1))[0],
+      (
+        await db
+          .select()
+          .from(schema.issues)
+          .where(
+            and(
+              eq(schema.issues.id, id),
+              eq(schema.issues.projectId, parent.projectId),
+              eq(schema.issues.workspaceId, parent.workspaceId),
+              isNull(schema.issues.deletedAt),
+            ),
+          )
+          .limit(1)
+      )[0],
       201,
     );
   })
