@@ -15,6 +15,13 @@
       "when": 1787020002897,
       "tag": "0001_daffy_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787212175326,
+      "tag": "0002_polite_ikaris",
+      "breakpoints": true
     }
   ]
 }

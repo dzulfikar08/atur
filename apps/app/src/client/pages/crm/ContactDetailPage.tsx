@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Mail } from "@/lib/icons";
 import { toast } from "sonner";
-import type { PolarLink } from "@/lib/api";
+import type { ApiError } from "@/lib/api";
 
 function money(cents: number, currency = "USD") {
   try {
@@ -74,11 +74,17 @@ function SendEmailDialog({ slug, contactId }: { slug: string; contactId: string 
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
 
-  const { data: preview, isLoading: previewLoading } = useQuery({
+  const { data: preview, isLoading: previewLoading, error: previewError } = useQuery({
     queryKey: ["contact-email-preview", slug, contactId],
     queryFn: () => api.previewContactEmail(slug!, contactId, "feedback_request"),
     enabled: open && !!slug && !!contactId,
   });
+
+  const errorMsg = previewError instanceof ApiError
+    ? `${previewError.status}: ${previewError.message}`
+    : previewError instanceof Error
+      ? previewError.message
+      : "Unknown error";
 
   const sendMut = useMutation({
     mutationFn: () => api.sendContactEmail(slug!, contactId, { template: "feedback_request" }),
