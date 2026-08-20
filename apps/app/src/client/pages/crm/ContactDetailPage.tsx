@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import type { PolarLink } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,6 @@ import {
 } from "@/components/ui/dialog";
 import { Mail } from "@/lib/icons";
 import { toast } from "sonner";
-import type { ApiError } from "@/lib/api";
 
 function money(cents: number, currency = "USD") {
   try {
@@ -86,6 +86,13 @@ function SendEmailDialog({ slug, contactId }: { slug: string; contactId: string 
       ? previewError.message
       : "Unknown error";
 
+  const copyBody = async () => {
+    if (!preview) return;
+    const text = `${preview.subject}\n\n${preview.text}`;
+    await navigator.clipboard.writeText(text);
+    toast.success("Message body copied");
+  };
+
   const sendMut = useMutation({
     mutationFn: () => api.sendContactEmail(slug!, contactId, { template: "feedback_request" }),
     onSuccess: (result) => {
@@ -122,7 +129,7 @@ function SendEmailDialog({ slug, contactId }: { slug: string; contactId: string 
         {previewLoading ? (
           <p className="text-sm text-muted-foreground">Generating preview…</p>
         ) : !preview ? (
-          <p className="text-sm text-muted-foreground">Could not load preview.</p>
+          <p className="text-sm text-red-500">Could not load preview: {errorMsg}</p>
         ) : (
           <div className="space-y-4">
             <div>
@@ -162,6 +169,9 @@ function SendEmailDialog({ slug, contactId }: { slug: string; contactId: string 
               <div className="mt-1 p-3 bg-muted/50 rounded-md text-sm text-muted-foreground whitespace-pre-wrap">
                 {preview.text}
               </div>
+              <Button variant="ghost" size="sm" className="mt-2" onClick={copyBody}>
+                Copy message
+              </Button>
             </div>
             <div className="flex justify-between items-center pt-2 border-t">
               <Link
