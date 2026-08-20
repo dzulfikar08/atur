@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { ContactEmailTemplate } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -172,14 +172,20 @@ export default function EmailTemplatesPage() {
   const { slug } = useParams();
   const [editing, setEditing] = useState<ContactEmailTemplate | null>(null);
 
-  const { data: templates, isLoading } = useQuery({
+  const { data: templates, isLoading, error: templatesError } = useQuery({
     queryKey: ["email-templates", slug],
     queryFn: () => api.listEmailTemplates(slug!),
     enabled: !!slug,
   });
 
   if (isLoading) return <p className="text-muted-foreground">Loading…</p>;
-  if (!templates) return <p>Not found.</p>;
+  const errMsg =
+    templatesError instanceof ApiError
+      ? `${templatesError.status}: ${templatesError.message}`
+      : templatesError instanceof Error
+        ? templatesError.message
+        : "Unknown error";
+  if (!templates) return <p className="text-sm text-red-500">Error: {errMsg}</p>;
 
   return (
     <div className="space-y-4">
