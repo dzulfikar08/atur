@@ -26,6 +26,9 @@
 #   ATUR_PROJECTS       comma-separated project names or identifiers to watch
 #                       (default: ALL projects in the workspace — use sparingly)
 #   ATUR_AGENT          cmd | claude | opencode  (default "cmd")
+#   ATUR_MODEL          model id passed to cmd via -m/--model
+#                       (default: empty = cmd's default model;
+#                        e.g. "poolside/laguna-s-2.1-free")
 #   ATUR_LABEL          opt-in label name  (default "agent-ready")
 #   ATUR_BREAKDOWN_LABEL  label marking a feature issue to be broken down into
 #                       child issues before work (default "agent-breakdown")
@@ -65,6 +68,7 @@ API_KEY="${ATUR_API_KEY:-}"
 WORKSPACE="${ATUR_WORKSPACE:-}"
 PROJECTS="${ATUR_PROJECTS:-}"
 AGENT="${ATUR_AGENT:-cmd}"
+MODEL="${ATUR_MODEL:-}"
 LABEL="${ATUR_LABEL:-agent-ready}"
 BREAKDOWN_LABEL="${ATUR_BREAKDOWN_LABEL:-agent-breakdown}"
 MAX_CONCURRENCY="${ATUR_MAX_CONCURRENCY:-2}"
@@ -149,12 +153,13 @@ agent_headless() { # <prompt> <review|work> → runs the agent, echoes final tex
   local prompt="$1" mode="$2"
   case "$AGENT" in
     cmd)
+      # Optional model override (e.g. ATUR_MODEL=poolside/laguna-s-2.1-free).
       if [[ "$mode" == "review" ]]; then
-        cmd -p "$prompt" --output-format json --yolo --max-turns "$MAX_TURNS_REVIEW" 2>&1 || true
+        cmd -p "$prompt" ${MODEL:+--model "$MODEL"} --output-format json --yolo --max-turns "$MAX_TURNS_REVIEW" 2>&1 || true
       else
         # Work runs also emit JSON so the supervisor can capture the
         # sessionId and --resume the SAME session on retries.
-        cmd -p "$prompt" --output-format json --yolo --max-turns "$MAX_TURNS_WORK" 2>&1 || true
+        cmd -p "$prompt" ${MODEL:+--model "$MODEL"} --output-format json --yolo --max-turns "$MAX_TURNS_WORK" 2>&1 || true
       fi
       ;;
     claude)
@@ -651,7 +656,7 @@ Work autonomously. Post your findings as comments on the issue."
     sid=$(get_sid "$seq")
     if [[ "$AGENT" == "cmd" && -n "$sid" ]]; then
       # Resume THIS issue's session (retry).
-      cmdline="cmd -p \"\$(cat $prompt_file)\" --resume $sid --output-format json --yolo --max-turns $MAX_TURNS_WORK > /tmp/atur-work-$seq.json; tmux wait-for -S atur:$seq"
+      cmdline="cmd -p \"\$(cat $prompt_file)\" ${MODEL:+--model $MODEL} --resume $sid --output-format json --yolo --max-turns $MAX_TURNS_WORK > /tmp/atur-work-$seq.json; tmux wait-for -S atur:$seq"
     else
       # Fresh session on attempt 1; capture output so the sessionId can be
       # stored for future retries.
