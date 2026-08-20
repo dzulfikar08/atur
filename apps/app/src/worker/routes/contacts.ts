@@ -64,33 +64,9 @@ contactsRoutes.post("/", async (c) => {
   return c.json(contact, 201);
 });
 
-contactsRoutes.get("/:id", async (c) => {
-  const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
-  const result = await crmService.getContact(db, ws.id, c.req.param("id")!);
-  return c.json(result);
-});
-
-contactsRoutes.patch("/:id", async (c) => {
-  const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
-  const body = crmService.updateContactSchema.parse(await c.req.json());
-  const contact = await crmService.updateContact(db, ws.id, c.req.param("id")!, body);
-  return c.json(contact);
-});
-
-contactsRoutes.delete("/:id", async (c) => {
-  const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
-  await crmService.deleteContact(db, ws.id, c.req.param("id")!);
-  return c.body(null, 204);
-});
-
 // ── Email template management ────────────────────────────────────────────────
-// List all templates (defaults + any custom overrides for this workspace).
+// IMPORTANT: register static /email-templates routes BEFORE /:id so Hono's
+// radix tree doesn't match "email-templates" as the :id parametric segment.
 contactsRoutes.get("/email-templates", async (c) => {
   const db = getDb(c.env.DB);
   const ws = await resolveWorkspace(c);
@@ -130,6 +106,31 @@ contactsRoutes.delete("/email-templates/:name", async (c) => {
   const ws = await resolveWorkspace(c);
   await assertMember(db, ws, c.get("user").sub);
   await crmService.deleteEmailTemplate(db, ws.id, c.req.param("name") as "feedback_request");
+  return c.body(null, 204);
+});
+
+contactsRoutes.get("/:id", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspace(c);
+  await assertMember(db, ws, c.get("user").sub);
+  const result = await crmService.getContact(db, ws.id, c.req.param("id")!);
+  return c.json(result);
+});
+
+contactsRoutes.patch("/:id", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspace(c);
+  await assertMember(db, ws, c.get("user").sub);
+  const body = crmService.updateContactSchema.parse(await c.req.json());
+  const contact = await crmService.updateContact(db, ws.id, c.req.param("id")!, body);
+  return c.json(contact);
+});
+
+contactsRoutes.delete("/:id", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspace(c);
+  await assertMember(db, ws, c.get("user").sub);
+  await crmService.deleteContact(db, ws.id, c.req.param("id")!);
   return c.body(null, 204);
 });
 
