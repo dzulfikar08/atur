@@ -88,3 +88,75 @@ contactsRoutes.delete("/:id", async (c) => {
   await crmService.deleteContact(db, ws.id, c.req.param("id")!);
   return c.body(null, 204);
 });
+
+// ── Email template management ────────────────────────────────────────────────
+// List all templates (defaults + any custom overrides for this workspace).
+contactsRoutes.get("/email-templates", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspace(c);
+  await assertMember(db, ws, c.get("user").sub);
+  const result = await crmService.listEmailTemplates(db, ws.id);
+  return c.json({ results: result });
+});
+
+// Get a specific template (default or custom).
+contactsRoutes.get("/email-templates/:name", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspace(c);
+  await assertMember(db, ws, c.get("user").sub);
+  const result = await crmService.getEmailTemplate(db, ws.id, c.req.param("name") as "feedback_request");
+  if (!result) throw new HTTPException(404, { message: "Template not found" });
+  return c.json(result);
+});
+
+// Save/update a template (creates or overwrites the DB override).
+contactsRoutes.put("/email-templates/:name", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspace(c);
+  await assertMember(db, ws, c.get("user").sub);
+  const body = crmService.saveTemplateSchema.parse(await c.req.json());
+  const result = await crmService.saveEmailTemplate(
+    db,
+    ws.id,
+    c.req.param("name") as "feedback_request",
+    body,
+  );
+  return c.json(result);
+});
+
+// Revert a custom template back to the code default.
+contactsRoutes.delete("/email-templates/:name", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspace(c);
+  await assertMember(db, ws, c.get("user").sub);
+  await crmService.deleteEmailTemplate(db, ws.id, c.req.param("name") as "feedback_request");
+  return c.body(null, 204);
+});
+
+// Preview a CRM customer email template for a contact (no email is sent).
+contactsRoutes.get("/:id/email-preview", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspace(c);
+  await assertMember(db, ws, c.get("user").sub);
+  const template = crmService.sendEmailSchema.parse({
+    template: c.req.query("template") || "feedback_request",
+  }).template;
+  const result = await crmService.renderTemplateEmail(db, ws.id, c.req.param("id")!, template);
+  return c.json(result);
+});
+
+// Send a templated customer email (e.g. feedback request) to a contact.
+contactsRoutes.post("/:id/send-email", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspace(c);
+  await assertMember(db, ws, c.get("user").sub);
+  const body = crmService.sendEmailSchema.parse(await c.req.json());
+  const result = await crmService.sendTemplateEmail(
+    db,
+    c.env,
+    ws.id,
+    c.req.param("id")!,
+    body,
+  );
+  return c.json(result);
+});

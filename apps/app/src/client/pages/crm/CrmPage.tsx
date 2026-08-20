@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import { Users, FolderKanban } from "@/lib/icons";
+import { Users, FolderKanban, Mail } from "@/lib/icons";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default function CrmPage() {
@@ -29,6 +29,17 @@ export default function CrmPage() {
               <div>
                 <p className="font-semibold">Pipelines</p>
                 <p className="text-sm text-muted-foreground">Sales deal boards</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to={`/${slug}/crm/email-templates`}>
+          <Card className="hover:shadow-md transition-shadow">
+            <CardContent className="p-6 flex items-center gap-4">
+              <Mail className="h-8 w-8 text-primary" />
+              <div>
+                <p className="font-semibold">Email Templates</p>
+                <p className="text-sm text-muted-foreground">Customer communication</p>
               </div>
             </CardContent>
           </Card>

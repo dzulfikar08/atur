@@ -75,6 +75,7 @@ import Loading03Icon from "@hugeicons/core-free-icons/Loading03Icon";
 import Logout01Icon from "@hugeicons/core-free-icons/Logout01Icon";
 import Maximize01Icon from "@hugeicons/core-free-icons/Maximize01Icon";
 import Menu01Icon from "@hugeicons/core-free-icons/Menu01Icon";
+import Mail01Icon from "@hugeicons/core-free-icons/Mail01Icon";
 import MessageSquareDashedIcon from "@hugeicons/core-free-icons/MessageSquareDashedIcon";
 import Minimize01Icon from "@hugeicons/core-free-icons/Minimize01Icon";
 import MinusSignIcon from "@hugeicons/core-free-icons/MinusSignIcon";
@@ -279,6 +280,7 @@ export const TriangleAlert = (props: IconProps) => (
   <HugeiconsIcon icon={AlertCircleIcon} {...props} />
 );
 export const Upload = (props: IconProps) => <HugeiconsIcon icon={Upload04Icon} {...props} />;
+export const Mail = (props: IconProps) => <HugeiconsIcon icon={Mail01Icon} {...props} />;
 export const User = (props: IconProps) => <HugeiconsIcon icon={UserIcon} {...props} />;
 export const Users = (props: IconProps) => <HugeiconsIcon icon={UserMultipleIcon} {...props} />;
 export const X = (props: IconProps) => <HugeiconsIcon icon={Cancel01Icon} {...props} />;

@@ -1027,3 +1027,26 @@ export const polarSettings = sqliteTable("polar_settings", {
   createdAt: text("created_at"),
   updatedAt: text("updated_at"),
 });
+
+// ── CRM customer email templates ──────────────────────────────────────────────
+// Per-workspace, per-template-name. Uses {{placeholder}} variables filled with
+// customer + purchase data at render time. Falls back to code defaults when
+// no row exists for a (workspace, template_name) pair.
+export const crmEmailTemplates = sqliteTable("crm_email_templates", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id")
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  templateName: text("template_name").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  isHtml: integer("is_html").notNull().default(0),
+  createdAt: text("created_at"),
+  updatedAt: text("updated_at"),
+}, (table) => [
+  uniqueIndex("uq_crm_email_templates_workspace").on(
+    table.workspaceId,
+    table.templateName,
+  ),
+  index("idx_crm_email_templates_workspace").on(table.workspaceId),
+]);
