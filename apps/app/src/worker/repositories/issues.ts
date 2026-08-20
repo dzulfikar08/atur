@@ -117,7 +117,7 @@ export async function create(
   },
 ) {
   const now = nowISO();
-  await db.insert(issues).values({
+  const row: typeof issues.$inferInsert = {
     id: data.id,
     name: data.name,
     sequenceId: data.sequenceId,
@@ -134,17 +134,23 @@ export async function create(
     parentId: data.parentId ?? null,
     createdAt: now,
     updatedAt: now,
-  });
+  };
+  // sequenceId is MAX(sequence_id)+1, which is not atomic across concurrent
+  // creators. insertIssueWithRetry re-derives it and retries on the
+  // uq_issue_sequence collision instead of surfacing a 500 to the caller.
+  await insertIssueWithRetry(db, row);
 
-  await db.insert(issueSequences).values({
-    id: uuid(),
-    sequence: data.sequenceId,
-    issueId: data.id,
-    projectId: data.projectId,
-    isDeleted: 0,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await db
+    .insert(issueSequences)
+    .values({
+      id: uuid(),
+      sequence: row.sequenceId,
+      issueId: data.id,
+      projectId: data.projectId,
+      isDeleted: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
 
   return findById(db, data.id);
 }
@@ -263,4 +269,55 @@ export async function getNextSequence(db: DbClient, projectId: string): Promise<
     .from(issues)
     .where(eq(issues.projectId, projectId));
   return (row?.maxSeq ?? 0) + 1;
+}
+
+/**
+ * True when `error` is a unique-constraint violation: SQLite/D1 reports these as
+ * "UNIQUE constraint failed: ..." (the `uq_issue_sequence` index on issues), and
+ * Postgres reports SQLSTATE 23505. We only retry on these — never on NOT NULL
+ * or foreign-key failures.
+ */
+export function isUniqueConstraintError(error: unknown): boolean {
+  const cause = (error as { cause?: unknown })?.cause as
+    | { message?: string; code?: string }
+    | undefined;
+  const msg =
+    (error as { message?: string })?.message ?? cause?.message ?? "";
+  const code =
+    (error as { code?: string })?.code ?? cause?.code ?? "";
+  return /(^|[^a-z])23505($|[^a-z])|unique|uq_issue_sequence/i.test(`${code} ${msg}`);
+}
+
+const MAX_SEQUENCE_RETRIES = 10;
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Inserts an issue row, re-deriving a fresh sequenceId (via getNextSequence) and
+ * retrying on a `uq_issue_sequence` collision. sequenceId is assigned as
+ * MAX(sequence_id)+1, which is not atomic across concurrent creators; the unique
+ * index turns the collision into a catchable error, and a short jittered backoff
+ * desynchronizes contending writers so the loop converges.
+ */
+export async function insertIssueWithRetry(
+  db: DbClient,
+  row: typeof issues.$inferInsert,
+): Promise<void> {
+  for (let attempt = 0; attempt < MAX_SEQUENCE_RETRIES; attempt++) {
+    try {
+      await db.insert(issues).values(row);
+      return;
+    } catch (error) {
+      if (attempt + 1 < MAX_SEQUENCE_RETRIES && isUniqueConstraintError(error)) {
+        // 1–8ms jitter so concurrent retries don't all re-collide on the same
+        // freshly-incremented MAX.
+        await sleep(1 + Math.floor(Math.random() * 7));
+        row.sequenceId = await getNextSequence(db, row.projectId);
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error("Could not assign a unique issue sequence id after retries");
 }
