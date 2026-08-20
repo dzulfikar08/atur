@@ -322,9 +322,9 @@ export async function listEmailTemplates(
 ): Promise<
   { id: string; template_name: string; subject: string; body: string; is_html: number; created_at: string | null; updated_at: string | null }[]
 > {
-  const rows = await emailTemplatesRepo.listTemplates(db, workspaceId);
-  // Always include default templates so the UI can show "not customized" state.
-  const defaults = TEMPLATE_NAMES.map((name) => {
+   const rows = await emailTemplatesRepo.listTemplates(db, workspaceId);
+  const customizedNames = new Set(rows.map((r) => r.templateName));
+  const defaults = TEMPLATE_NAMES.filter((name) => !customizedNames.has(name)).map((name) => {
     const def = getDefaultTemplate(name)!;
     return {
       id: `default:${name}`,
