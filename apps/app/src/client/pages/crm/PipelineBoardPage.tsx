@@ -13,15 +13,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus } from "@/lib/icons";
-import { toast } from "sonner";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import { Plus, Check, ChevronDown } from "@/lib/icons";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import {
   DndContext,
   PointerSensor,
@@ -103,6 +105,7 @@ export default function PipelineBoardPage() {
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
+  const [customerOpen, setCustomerOpen] = useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -230,22 +233,69 @@ export default function PipelineBoardPage() {
               </div>
               <div>
                 <label className="text-sm font-medium">Customer</label>
-                <Select
-                  value={form.customer_id || "none"}
-                  onValueChange={(v) => setForm({ ...form, customer_id: v === "none" ? "" : v })}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— None —</SelectItem>
-                    {contacts.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name || c.email}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={customerOpen}
+                      className="w-full justify-between h-9"
+                    >
+                      {form.customer_id
+                        ? contacts.find((c) => c.id === form.customer_id)?.name ||
+                          contacts.find((c) => c.id === form.customer_id)?.email ||
+                          ""
+                        : "— None —"}
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search customers…" className="h-9" />
+                      <CommandEmpty>No customer found.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="none"
+                          onSelect={() => {
+                            setForm({ ...form, customer_id: "" });
+                            setCustomerOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              !form.customer_id ? "opacity-100" : "opacity-0",
+                            )}
+                          />
+                          — None —
+                        </CommandItem>
+                        {contacts.map((c) => (
+                          <CommandItem
+                            key={c.id}
+                            value={`${c.id} ${c.name || ""} ${c.email || ""}`}
+                            onSelect={() => {
+                              setForm({ ...form, customer_id: c.id });
+                              setCustomerOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                form.customer_id === c.id ? "opacity-100" : "opacity-0",
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span>{c.name || c.email}</span>
+                              {c.email && c.name && (
+                                <span className="text-xs text-muted-foreground">{c.email}</span>
+                              )}
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div>
                 <label className="text-sm font-medium">Expected close</label>
