@@ -10,8 +10,8 @@ export async function addWorkspaceMember(
   return membersRepo.addWorkspaceMember(db, workspaceId, memberId, role);
 }
 
-export async function removeWorkspaceMember(db: DbClient, id: string) {
-  await membersRepo.removeWorkspaceMember(db, id);
+export async function removeWorkspaceMember(db: DbClient, workspaceId: string, id: string) {
+  return membersRepo.removeWorkspaceMember(db, workspaceId, id);
 }
 
 export async function listWorkspaceMembers(db: DbClient, workspaceId: string) {
