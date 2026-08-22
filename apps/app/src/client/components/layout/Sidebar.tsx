@@ -1,20 +1,20 @@
 import { useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import {
-  FolderSimple,
+  FolderKanban,
   Circle,
   Timer,
   FileText,
   Users,
-  PuzzlePiece,
-  ShieldCheck,
-  GearSix,
-  CaretDown,
-  CaretRight,
+  Puzzle,
+  Shield,
+  Settings,
+  ChevronDown,
+  ChevronRight,
   Plus,
-  SquaresFour,
-  Stack,
-} from "@phosphor-icons/react";
+  LayoutDashboard,
+  Layers,
+} from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { useSidebarStore } from "@/stores/sidebar";
@@ -44,8 +44,8 @@ const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: "Workspace",
     items: [
-      { to: "", icon: SquaresFour, label: "Dashboard", end: true },
-      { to: "projects", icon: FolderSimple, label: "Projects" },
+      { to: "", icon: LayoutDashboard, label: "Dashboard", end: true },
+      { to: "projects", icon: FolderKanban, label: "Projects" },
     ],
   },
   {
@@ -60,9 +60,9 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Manage",
     items: [
       { to: "crm", icon: Users, label: "CRM" },
-      { to: "integrations", icon: PuzzlePiece, label: "Integrations" },
-      { to: "admin", icon: ShieldCheck, label: "Admin" },
-      { to: "settings", icon: GearSix, label: "Settings" },
+      { to: "integrations", icon: Puzzle, label: "Integrations" },
+      { to: "admin", icon: Shield, label: "Admin" },
+      { to: "settings", icon: Settings, label: "Settings" },
     ],
   },
 ];
@@ -131,7 +131,7 @@ export default function Sidebar() {
             >
               {isAll ? (
                 <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Stack size={16} weight="bold" />
+                  <Layers size={16} />
                 </div>
               ) : (
                 (() => {
@@ -170,75 +170,73 @@ export default function Sidebar() {
                   collapsed && "justify-center px-0",
                 )}
               >
-              {isAll ? (
-                <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Stack size={16} weight="bold" />
-                </div>
-              ) : (
-                (() => {
-                  const cws = workspaces.find((w) => w.slug === activeSlug);
-                  if (cws?.logo) {
+                {isAll ? (
+                  <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                    <Layers size={16} />
+                  </div>
+                ) : (
+                  (() => {
+                    const cws = workspaces.find((w) => w.slug === activeSlug);
+                    if (cws?.logo) {
+                      return (
+                        <img
+                          src={cws.logo}
+                          alt=""
+                          className="size-7 shrink-0 rounded-lg object-cover"
+                        />
+                      );
+                    }
                     return (
-                      <img
-                        src={cws.logo}
-                        alt=""
-                        className="size-7 shrink-0 rounded-lg object-cover"
-                      />
+                      <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
+                        {currentName.charAt(0).toUpperCase()}
+                      </div>
                     );
-                  }
-                  return (
-                    <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
-                      {currentName.charAt(0).toUpperCase()}
-                    </div>
-                  );
-                })()
-              )}
-              <span
-                className={cn(
-                  "min-w-0 flex-1 truncate text-left text-[13px] font-medium",
-                  collapsed && "hidden",
+                  })()
                 )}
-              >
-                {currentName}
-              </span>
-              <span
-                className={cn("shrink-0 text-muted-foreground", collapsed && "hidden")}
-              >
-                <CaretDown size={14} />
-              </span>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              <DropdownMenuItem onClick={() => navigate(switchWorkspace("all"))}>
-                <span className="text-muted-foreground">
-                  <Stack size={16} />
-                </span>
-                <span className={cn(isAll && "font-medium")}>All Workspaces</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {workspaces.map((ws) => (
-                <DropdownMenuItem key={ws.id} onClick={() => navigate(switchWorkspace(ws.slug))}>
-                  {ws.logo ? (
-                    <img src={ws.logo} alt="" className="size-4 rounded object-cover" />
-                  ) : (
-                    <span className="flex size-4 items-center justify-center rounded bg-primary text-[10px] font-semibold text-primary-foreground">
-                      {(ws.name[0] ?? "").toUpperCase()}
-                    </span>
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 truncate text-left text-[13px] font-medium",
+                    collapsed && "hidden",
                   )}
-                  <span className={cn(ws.slug === currentSlug && "font-medium")}>{ws.name}</span>
-                </DropdownMenuItem>
-              ))}
-              {workspaces.length === 0 && (
-                <DropdownMenuItem disabled>No workspaces</DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setCreateOpen(true)}>
-                <span className="text-muted-foreground">
-                  <Plus size={16} />
+                >
+                  {currentName}
                 </span>
-                Create workspace
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <span className={cn("shrink-0 text-muted-foreground", collapsed && "hidden")}>
+                  <ChevronDown size={14} />
+                </span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuItem onClick={() => navigate(switchWorkspace("all"))}>
+                  <span className="text-muted-foreground">
+                    <Layers size={16} />
+                  </span>
+                  <span className={cn(isAll && "font-medium")}>All Workspaces</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {workspaces.map((ws) => (
+                  <DropdownMenuItem key={ws.id} onClick={() => navigate(switchWorkspace(ws.slug))}>
+                    {ws.logo ? (
+                      <img src={ws.logo} alt="" className="size-4 rounded object-cover" />
+                    ) : (
+                      <span className="flex size-4 items-center justify-center rounded bg-primary text-[10px] font-semibold text-primary-foreground">
+                        {(ws.name[0] ?? "").toUpperCase()}
+                      </span>
+                    )}
+                    <span className={cn(ws.slug === currentSlug && "font-medium")}>{ws.name}</span>
+                  </DropdownMenuItem>
+                ))}
+                {workspaces.length === 0 && (
+                  <DropdownMenuItem disabled>No workspaces</DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setCreateOpen(true)}>
+                  <span className="text-muted-foreground">
+                    <Plus size={16} />
+                  </span>
+                  Create workspace
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
 
           {navGroups.map((group, gi) => (
@@ -334,7 +332,7 @@ export default function Sidebar() {
             className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
           >
             <span className={cn("transition-transform", !collapsed && "rotate-180")}>
-              <CaretRight size={14} />
+              <ChevronRight size={14} />
             </span>
           </button>
         </div>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Plus, Stack } from "@phosphor-icons/react";
+import { Plus, Layers } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
@@ -51,7 +51,7 @@ export default function WorkspaceRail() {
               : "text-foreground/80 hover:bg-accent hover:text-foreground",
           )}
         >
-          <Stack size={17} weight="bold" />
+          <Layers size={17} />
         </button>
 
         <div className="my-1 h-px w-5 shrink-0 bg-border" />
