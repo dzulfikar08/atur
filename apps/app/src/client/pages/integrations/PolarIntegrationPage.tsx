@@ -40,6 +40,7 @@ interface PolarLink {
 interface Project {
   id: string;
   name: string;
+  is_pipeline?: number;
 }
 
 interface State {
@@ -71,6 +72,11 @@ export default function PolarIntegrationPage() {
   });
 
   const selectedProjectId = pipelineProjectId || settings?.pipeline_project_id || "";
+
+  // Prefer flagged pipelines in the picker; fall back to all projects for
+  // workspaces that haven't flagged any (legacy behavior).
+  const pipelineOnly = projects.filter((p) => p.is_pipeline);
+  const pickerProjects = pipelineOnly.length ? pipelineOnly : projects;
 
   const { data: states = [] } = useQuery({
     queryKey: ["polar-states", slug, selectedProjectId],
@@ -296,7 +302,7 @@ export default function PolarIntegrationPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">Auto (CRM/deal/pipeline)</SelectItem>
-                      {projects.map((p) => (
+                      {pickerProjects.map((p) => (
                         <SelectItem key={p.id} value={p.id}>
                           {p.name}
                         </SelectItem>
