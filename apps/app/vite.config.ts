@@ -4,6 +4,11 @@ import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { fileURLToPath, URL } from "node:url";
+import { createRequire } from "node:module";
+
+// @tiptap/y-tiptap imports prosemirror-transform without declaring it (upstream bug) —
+// resolve the workspace copy so rolldown finds it from the bun store realpath
+const prosemirrorTransform = createRequire(import.meta.url).resolve("prosemirror-transform");
 
 export default defineConfig({
   plugins: [
@@ -41,6 +46,14 @@ export default defineConfig({
       // Force single React instance to avoid duplicate hooks crash
       react: fileURLToPath(new URL("./node_modules/react", import.meta.url)),
       "react-dom": fileURLToPath(new URL("./node_modules/react-dom", import.meta.url)),
+      // tiptap-markdown (bun store) can't resolve @tiptap/pm peers — pin to local copy
+      "@tiptap/pm/model": fileURLToPath(
+        new URL("./node_modules/@tiptap/pm/dist/model/index.js", import.meta.url),
+      ),
+      "@tiptap/pm/state": fileURLToPath(
+        new URL("./node_modules/@tiptap/pm/dist/state/index.js", import.meta.url),
+      ),
+      "prosemirror-transform": prosemirrorTransform,
     },
     dedupe: ["react", "react-dom"],
   },

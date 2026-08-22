@@ -32,3 +32,6 @@ android/
 
 # Machine-local tool status cache (statusline usage stats)
 status-cache.json
+
+# Machine-local Claude Code artifacts (worktrees, session state)
+.claude/
