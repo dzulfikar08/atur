@@ -62,7 +62,7 @@ export default function BottomNav() {
                 key={tab.to || "home"}
                 to={targetPath}
                 end={tab.to === ""}
-                className={({ isActive }) =>
+                className={({ isActive }: { isActive: boolean }) =>
                   cn(
                     "flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors",
                     isActive ? "text-primary" : "text-muted-foreground",
@@ -170,7 +170,7 @@ export default function BottomNav() {
                 key={item.to}
                 to={targetPath}
                 onClick={() => setMoreOpen(false)}
-                className={({ isActive }) =>
+                className={({ isActive }: { isActive: boolean }) =>
                   cn(
                     "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
                     isActive ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50",
