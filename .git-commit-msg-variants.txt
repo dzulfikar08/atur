@@ -1,0 +1,32 @@
+feat(crm): lifecycle email purposes with variants + send log
+
+Replaces the single feedback-request template with a purpose × variant
+model covering the full CRM cycle:
+
+- Purpose registry in code (cold_outreach, welcome, feedback_request,
+  follow_up, thank_you, win_back) — each with label, description,
+  requiresPurchase flag and a curated default subject/body
+- Workspaces save arbitrary VARIANTS per purpose (crm_email_variants,
+  UNIQUE(workspace, purpose, name)); first variant for a purpose becomes
+  its default; "Set default" re-flags. Resolution at send time:
+  requested variant → default-flagged variant → curated default
+- crm_email_log records every send attempt (purpose, variant, subject,
+  sent flag — dev no-binding attempts logged as sent=0); contact detail
+  returns the latest 20 as `emails` and shows an Email history card
+- {{company}} placeholder added; subjects still newline-rejected and
+  header-sanitized; is_html variants pass through verbatim
+- API: GET /email-templates now returns {purposes, variants, footer};
+  POST/PUT/DELETE /email-templates/variants[/:id[/default]] for variant
+  CRUD (UNIQUE violation → 409); preview/send take purpose + variant_id;
+  parseTemplateName → parsePurposeName guards all inputs
+- UI: EmailTemplatesPage shows one card per purpose (curated default
+  read-only + variant list with edit/set-default/delete/add dialog);
+  SendEmailDialog gets purpose + variant selects with live preview
+- Migrations 0004/0005: create variants + log tables, move existing
+  template overrides into variants (purpose = old template_name,
+  is_default), drop crm_email_templates. Applied to remote D1.
+
+Old single-template endpoints (GET/PUT/DELETE /email-templates/:name)
+removed — the SPA is the only consumer and ships in the same deploy.
+
+Co-Authored-By: Claude <noreply@anthropic.com>

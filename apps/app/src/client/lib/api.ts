@@ -407,14 +407,18 @@ export const api = {
     apiFetch(`/workspaces/${slug}/contacts/${contactId}/`, { method: "DELETE" }),
 
   // CRM customer email (e.g. feedback-request templates)
-  previewContactEmail: (slug: string, contactId: string, template?: string) =>
-    apiFetch<ContactEmailPreview>(
-      `/workspaces/${slug}/contacts/${contactId}/email-preview${template ? `?template=${template}` : ""}`,
-    ),
+  // CRM customer email (purpose + optional variant)
+  previewContactEmail: (slug: string, contactId: string, purpose: string, variantId?: string) => {
+    const qs = new URLSearchParams({ purpose });
+    if (variantId) qs.set("variant_id", variantId);
+    return apiFetch<ContactEmailPreview>(
+      `/workspaces/${slug}/contacts/${contactId}/email-preview?${qs.toString()}`,
+    );
+  },
   sendContactEmail: (
     slug: string,
     contactId: string,
-    data: { template: string },
+    data: { purpose: string; variant_id?: string },
   ) =>
     apiFetch<ContactEmailResult>(
       `/workspaces/${slug}/contacts/${contactId}/send-email/`,
@@ -424,11 +428,13 @@ export const api = {
       },
     ),
 
-  // CRM email template management (edit subject + body with {{placeholders}})
+  // CRM email templates: purpose registry + per-purpose variants
   listEmailTemplates: async (slug: string) => {
-    const data = await apiFetch<{ results: ContactEmailTemplate[]; footer: string }>(
-      `/workspaces/${slug}/contacts/email-templates/`,
-    );
+    const data = await apiFetch<{
+      purposes: EmailPurpose[];
+      variants: EmailVariant[];
+      footer: string;
+    }>(`/workspaces/${slug}/contacts/email-templates/`);
     return data;
   },
   // Workspace-level {{footer}} signature (stored on the workspace).
@@ -440,24 +446,31 @@ export const api = {
         body: JSON.stringify({ footer }),
       },
     ),
-  getEmailTemplate: (slug: string, name: string) =>
-    apiFetch<ContactEmailTemplate>(
-      `/workspaces/${slug}/contacts/email-templates/${name}/`,
-    ),
-  saveEmailTemplate: (
+  createEmailVariant: (
     slug: string,
-    name: string,
-    data: { subject: string; body: string; is_html?: boolean },
+    data: { purpose: string; name: string; subject: string; body: string; is_html?: boolean },
   ) =>
-    apiFetch<ContactEmailTemplate>(
-      `/workspaces/${slug}/contacts/email-templates/${name}/`,
-      {
-        method: "PUT",
-        body: JSON.stringify(data),
-      },
-    ),
-  deleteEmailTemplate: (slug: string, name: string) =>
-    apiFetch(`/workspaces/${slug}/contacts/email-templates/${name}/`, { method: "DELETE" }),
+    apiFetch<EmailVariant>(`/workspaces/${slug}/contacts/email-templates/variants/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateEmailVariant: (
+    slug: string,
+    variantId: string,
+    data: { name?: string; subject?: string; body?: string; is_html?: boolean },
+  ) =>
+    apiFetch(`/workspaces/${slug}/contacts/email-templates/variants/${variantId}/`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteEmailVariant: (slug: string, variantId: string) =>
+    apiFetch(`/workspaces/${slug}/contacts/email-templates/variants/${variantId}/`, {
+      method: "DELETE",
+    }),
+  setDefaultEmailVariant: (slug: string, variantId: string) =>
+    apiFetch(`/workspaces/${slug}/contacts/email-templates/variants/${variantId}/default/`, {
+      method: "PUT",
+    }),
 
   // CRM deals (a pipeline is just a project)
   listDeals: async (slug: string, projectId: string, params?: { state_id?: string }) => {
@@ -898,6 +911,16 @@ export interface DealStat {
   count: number;
 }
 
+export interface ContactEmailLogEntry {
+  id: string;
+  purpose: string;
+  variant_id: string | null;
+  variant_name: string | null;
+  subject: string;
+  sent_at: string;
+  sent: number;
+}
+
 export interface ContactDetail {
   contact: Contact;
   deals: Deal[];
@@ -909,6 +932,7 @@ export interface ContactDetail {
     state_name: string | null;
     created_at: string | null;
   }[];
+  emails: ContactEmailLogEntry[];
 }
 
 export interface ContactEmailResult {
@@ -930,14 +954,28 @@ export interface ContactEmailPreview {
   html: string;
   to: string | null;
   purchase: ContactEmailPurchase | null;
+  variant_id: string | null;
+  variant_name: string | null;
 }
 
-export interface ContactEmailTemplate {
+// A lifecycle purpose (cold_outreach, welcome, …) with its curated default.
+export interface EmailPurpose {
+  name: string;
+  label: string;
+  description: string;
+  requires_purchase: boolean;
+  default: { subject: string; body: string };
+}
+
+// A user-saved variant of a purpose's template.
+export interface EmailVariant {
   id: string;
-  template_name: string;
+  purpose: string;
+  name: string;
   subject: string;
   body: string;
   is_html: number;
+  is_default: number;
   created_at: string | null;
   updated_at: string | null;
 }

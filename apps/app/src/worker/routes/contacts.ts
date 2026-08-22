@@ -72,11 +72,12 @@ contactsRoutes.get("/email-templates", async (c) => {
   const ws = await resolveWorkspace(c);
   await assertMember(db, ws, c.get("user").sub);
   const result = await crmService.listEmailTemplates(db, ws.id);
-  return c.json({ results: result, footer: ws.emailFooter ?? "" });
+  return c.json({ ...result, footer: ws.emailFooter ?? "" });
 });
 
-// Workspace-level {{footer}} signature. Registered before /:name so "footer"
-// isn't matched as the parametric segment (same radix-tree rule as above).
+// Workspace-level {{footer}} signature. Registered before parametric siblings
+// so "footer" / "variants" aren't matched as the :name segment (radix-tree
+// rule: static segments must be registered first).
 contactsRoutes.put("/email-templates/footer", async (c) => {
   const db = getDb(c.env.DB);
   const ws = await resolveWorkspace(c);
@@ -88,45 +89,41 @@ contactsRoutes.put("/email-templates/footer", async (c) => {
   return c.json({ footer: body.footer });
 });
 
-// Get a specific template (default or custom).
-contactsRoutes.get("/email-templates/:name", async (c) => {
+// Create a variant under a purpose.
+contactsRoutes.post("/email-templates/variants", async (c) => {
   const db = getDb(c.env.DB);
   const ws = await resolveWorkspace(c);
   await assertMember(db, ws, c.get("user").sub);
-  const result = await crmService.getEmailTemplate(
-    db,
-    ws.id,
-    crmService.parseTemplateName(c.req.param("name")!),
-  );
-  if (!result) throw new HTTPException(404, { message: "Template not found" });
-  return c.json(result);
+  const body = crmService.saveVariantSchema.parse(await c.req.json());
+  const result = await crmService.createEmailVariant(db, ws.id, body);
+  return c.json(result, 201);
 });
 
-// Save/update a template (creates or overwrites the DB override).
-contactsRoutes.put("/email-templates/:name", async (c) => {
+// Update a variant.
+contactsRoutes.put("/email-templates/variants/:id", async (c) => {
   const db = getDb(c.env.DB);
   const ws = await resolveWorkspace(c);
   await assertMember(db, ws, c.get("user").sub);
-  const body = crmService.saveTemplateSchema.parse(await c.req.json());
-  const result = await crmService.saveEmailTemplate(
-    db,
-    ws.id,
-    crmService.parseTemplateName(c.req.param("name")!),
-    body,
-  );
-  return c.json(result);
+  const body = crmService.updateVariantSchema.parse(await c.req.json());
+  await crmService.updateEmailVariant(db, ws.id, c.req.param("id")!, body);
+  return c.body(null, 204);
 });
 
-// Revert a custom template back to the code default.
-contactsRoutes.delete("/email-templates/:name", async (c) => {
+// Delete a variant.
+contactsRoutes.delete("/email-templates/variants/:id", async (c) => {
   const db = getDb(c.env.DB);
   const ws = await resolveWorkspace(c);
   await assertMember(db, ws, c.get("user").sub);
-  await crmService.deleteEmailTemplate(
-    db,
-    ws.id,
-    crmService.parseTemplateName(c.req.param("name")!),
-  );
+  await crmService.deleteEmailVariant(db, ws.id, c.req.param("id")!);
+  return c.body(null, 204);
+});
+
+// Flag a variant as its purpose's default.
+contactsRoutes.put("/email-templates/variants/:id/default", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspace(c);
+  await assertMember(db, ws, c.get("user").sub);
+  await crmService.setDefaultEmailVariant(db, ws.id, c.req.param("id")!);
   return c.body(null, 204);
 });
 
@@ -160,10 +157,11 @@ contactsRoutes.get("/:id/email-preview", async (c) => {
   const db = getDb(c.env.DB);
   const ws = await resolveWorkspace(c);
   await assertMember(db, ws, c.get("user").sub);
-  const template = crmService.sendEmailSchema.parse({
-    template: c.req.query("template") || "feedback_request",
-  }).template;
-  const result = await crmService.renderTemplateEmail(db, ws, c.req.param("id")!, template);
+  const { purpose, variant_id } = crmService.sendEmailSchema.parse({
+    purpose: c.req.query("purpose") || "feedback_request",
+    variant_id: c.req.query("variant_id") || undefined,
+  });
+  const result = await crmService.renderTemplateEmail(db, ws, c.req.param("id")!, purpose, variant_id);
   return c.json(result);
 });
 
