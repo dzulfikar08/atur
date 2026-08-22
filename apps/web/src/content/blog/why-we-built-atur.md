@@ -2,7 +2,9 @@
 title: "Why we built Atur"
 description: "The story behind the all-in-one workspace: issues, support, CRM, and timesheets in one place."
 pubDate: 2026-08-17
+category: "company"
 tags: ["product", "company"]
+keywords: ["all in one workspace", "unified workspace for teams"]
 ---
 
 Every team eventually hits the same wall. You start with a project tool. Then

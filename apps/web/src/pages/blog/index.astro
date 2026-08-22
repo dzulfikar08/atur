@@ -1,32 +1,54 @@
 ---
-import BaseLayout from "../../layouts/BaseLayout.astro";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import LdJson from "@/components/LdJson.astro";
+import PostCard from "@/components/PostCard.astro";
 import { getCollection } from "astro:content";
+import { allCategories, allTags, newestFirst } from "@/lib/blog";
 
-const posts = (await getCollection("blog")).sort(
-  (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()
-);
+const site = Astro.site ?? new URL("https://diatur.com");
+const posts = newestFirst(await getCollection("blog"));
+const categories = allCategories(posts);
+const tags = allTags(posts);
 ---
 
 <BaseLayout
   title="Blog — Atur"
-  description="Product updates and notes from the Atur team."
+  description="Guides and notes on running projects, support, CRM, and time in one connected workspace."
   canonical="/blog"
 >
+  <LdJson
+    slot="head"
+    data={{
+      "@context": "https://schema.org",
+      "@type": "Blog",
+      name: "Atur Blog",
+      url: new URL("/blog", site).href,
+      description: "Guides and notes from the Atur team.",
+      publisher: { "@type": "Organization", name: "Atur" },
+    }}
+  />
   <div class="article">
     <p class="section-kicker">Blog</p>
     <h1>Notes from the Atur team</h1>
+    <div class="blog-filters">
+      <span class="chip" aria-current="page">All ({posts.length})</span>
+      {categories.map((c) => (
+        <a class="chip" href={`/blog/category/${c.key}`}>
+          {c.label} ({c.count})
+        </a>
+      ))}
+    </div>
     <div class="blog-list">
-      {
-        posts.map((post) => (
-          <a class="blog-card" href={`/blog/${post.id}`}>
-            <time datetime={post.data.pubDate.toISOString()}>
-              {post.data.pubDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-            </time>
-            <h2>{post.data.title}</h2>
-            <p>{post.data.description}</p>
-          </a>
-        ))
-      }
+      {posts.map((post) => (
+        <PostCard post={post} />
+      ))}
+    </div>
+    <div class="tag-cloud">
+      {tags.map((t) => (
+        <a class="chip" href={`/blog/tag/${t.slug}`}>
+          #{t.label}
+        </a>
+      ))}
     </div>
   </div>
 </BaseLayout>

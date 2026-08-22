@@ -1,0 +1,10 @@
+---
+// Renders a JSON-LD <script>. Pass EITHER:
+//   data — a plain object (JSON.stringify'd)
+//   html — a pre-built string
+// Centralizes schema.org output so structured data stays consistent across
+// article pages and listing pages.
+const { data, html } = Astro.props as { data?: unknown; html?: string };
+const content = html ?? JSON.stringify(data);
+---
+<script type="application/ld+json" is:inline set:html={content}></script>

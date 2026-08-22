@@ -1,0 +1,24 @@
+---
+// Visible breadcrumb nav. The last crumb renders as plain text (current
+// page); pages emit the matching BreadcrumbList JSON-LD separately in the
+// BaseLayout head slot.
+interface Crumb {
+  name: string;
+  href?: string;
+}
+const { crumbs } = Astro.props as { crumbs: Crumb[] };
+---
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  {
+    crumbs.map((crumb, i) => (
+      <>
+        {i > 0 && <span class="sep">·</span>}
+        {crumb.href && i < crumbs.length - 1 ? (
+          <a href={crumb.href}>{crumb.name}</a>
+        ) : (
+          <span>{crumb.name}</span>
+        )}
+      </>
+    ))
+  }
+</nav>

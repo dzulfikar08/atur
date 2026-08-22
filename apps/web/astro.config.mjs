@@ -1,5 +1,5 @@
 import { defineConfig } from "astro/config";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -16,6 +16,10 @@ const SITE = process.env.ATUR_WEB_SITE ?? "https://diatur.com";
 // misses or untracked files.
 const PAGES_DIR = fileURLToPath(new URL("./src/pages/", import.meta.url));
 
+const BLOG_CONTENT_DIR = fileURLToPath(
+  new URL("./src/content/blog/", import.meta.url),
+);
+
 function srcForUrl(urlPath) {
   if (urlPath === "/") return path.join(PAGES_DIR, "index.astro");
   const clean = urlPath.replace(/^\/|\/$/g, "");
@@ -26,8 +30,23 @@ function srcForUrl(urlPath) {
   ]) {
     if (existsSync(t)) return t;
   }
-  // Dynamic routes: /blog/x -> pages/blog/[slug].astro
+  // Article pages: /blog/<slug> maps to the markdown file itself, so lastmod
+  // tracks the article content rather than the shared template.
   const segs = clean.split("/");
+  if (segs.length === 2 && segs[0] === "blog") {
+    const md = path.join(BLOG_CONTENT_DIR, segs[1] + ".md");
+    if (existsSync(md)) return md;
+  }
+  // Nested dynamic routes: /blog/category/<x> -> pages/blog/category/[category]/index.astro
+  if (segs.length >= 3) {
+    const parent = path.join(PAGES_DIR, ...segs.slice(0, -2));
+    try {
+      const dyn = readdirSync(parent).find((d) => /^\[.+\]$/.test(d));
+      if (dyn && existsSync(path.join(parent, dyn, "index.astro")))
+        return path.join(parent, dyn, "index.astro");
+    } catch {}
+  }
+  // Dynamic routes: /blog/x -> pages/blog/[slug].astro
   if (segs.length >= 1) {
     const parent = path.join(PAGES_DIR, ...segs.slice(0, -1));
     const leafFile = path.join(parent, "[slug].astro");
@@ -70,9 +89,17 @@ function sitemapAtRoot() {
 export default defineConfig({
   site: SITE,
   output: "static",
+  // "@" -> ./src, so deep routes import "@/layouts/BaseLayout.astro" instead
+  // of counting ../../../. Mirrored in tsconfig.json paths for the editor.
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
   integrations: [
     mdx(),
     sitemap({
+      filter: (page) => !page.endsWith("/rss.xml"),
       serialize(item) {
         item.lastmod = lastmodFor(new URL(item.url).pathname);
         return item;
