@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, isNull } from "drizzle-orm";
+import { eq, and, desc, gte, sql, isNull } from "drizzle-orm";
 import type { DbClient } from "../db/index";
 import * as schema from "../db/schema";
 import { v4 as uuid } from "uuid";
@@ -27,6 +27,8 @@ export interface DealBoardRow extends DealRow {
   stateGroup: string | null;
   priority: string | null;
   sortOrder: number;
+  customerName: string | null;
+  issueUpdatedAt: string | null;
 }
 
 const dealSelect = {
@@ -51,6 +53,10 @@ const boardSelect = {
   stateGroup: schema.states.groupName,
   priority: schema.issues.priority,
   sortOrder: schema.issues.sortOrder,
+  // Contact display name (falls back to email) + issue freshness for the
+  // board's stale-deal indicator.
+  customerName: sql<string | null>`COALESCE(${schema.customers.name}, ${schema.customers.email})`,
+  issueUpdatedAt: schema.issues.updatedAt,
 };
 
 export async function create(
@@ -123,6 +129,7 @@ export async function listByProject(
     .from(schema.deals)
     .innerJoin(schema.issues, eq(schema.issues.id, schema.deals.issueId))
     .leftJoin(schema.states, eq(schema.states.id, schema.issues.stateId))
+    .leftJoin(schema.customers, eq(schema.customers.id, schema.deals.customerId))
     .where(where)
     .orderBy(schema.issues.sortOrder)
     .offset(opts.offset)
@@ -137,6 +144,7 @@ export async function listByCustomer(db: DbClient, customerId: string): Promise<
     .from(schema.deals)
     .innerJoin(schema.issues, eq(schema.issues.id, schema.deals.issueId))
     .leftJoin(schema.states, eq(schema.states.id, schema.issues.stateId))
+    .leftJoin(schema.customers, eq(schema.customers.id, schema.deals.customerId))
     .where(and(eq(schema.deals.customerId, customerId), isNull(schema.issues.deletedAt)))
     .orderBy(desc(schema.issues.sequenceId));
 }
@@ -160,21 +168,64 @@ export async function update(
   return getByIssue(db, issueId);
 }
 
-// Per-stage rollup: SUM(amount_cents) and COUNT, grouped by the issue's state.
-// Powers pipeline column totals on the board.
-export async function aggregateByState(
+// Per-stage, per-currency rollup: SUM(amount_cents) and COUNT grouped by the
+// issue's state AND the deal's currency — mixed-currency pipelines must never
+// cross-sum. Powers pipeline column totals on the board. stateGroup rides
+// along (functionally dependent on state_id in SQLite's loose GROUP BY).
+export async function aggregateByStageCurrency(
   db: DbClient,
   projectId: string,
-): Promise<{ stateId: string | null; totalCents: number; count: number }[]> {
+): Promise<
+  {
+    stateId: string | null;
+    stateGroup: string | null;
+    currency: string;
+    totalCents: number;
+    count: number;
+  }[]
+> {
   const rows = await db
     .select({
       stateId: schema.issues.stateId,
+      stateGroup: schema.states.groupName,
+      currency: schema.deals.currency,
       totalCents: sql<number>`COALESCE(SUM(${schema.deals.amountCents}), 0)`,
       count: sql<number>`COUNT(*)`,
     })
     .from(schema.deals)
     .innerJoin(schema.issues, eq(schema.issues.id, schema.deals.issueId))
+    .leftJoin(schema.states, eq(schema.states.id, schema.issues.stateId))
     .where(and(eq(schema.issues.projectId, projectId), isNull(schema.issues.deletedAt)))
-    .groupBy(schema.issues.stateId);
+    .groupBy(schema.issues.stateId, schema.deals.currency);
+  return rows;
+}
+
+// Terminal-stage totals (Won/Lost) per currency, optionally restricted to
+// deals whose issue was updated on/after `sinceISO` (start-of-month cutoff
+// for "won this month"; empty string = all time). Caveat: issues.updated_at
+// is a proxy for the won/lost date — any later edit re-bumps the month.
+export async function aggregateTerminalSince(
+  db: DbClient,
+  projectId: string,
+  group: string,
+  sinceISO: string,
+): Promise<{ currency: string; totalCents: number; count: number }[]> {
+  const conditions = [
+    eq(schema.issues.projectId, projectId),
+    isNull(schema.issues.deletedAt),
+    eq(schema.states.groupName, group),
+  ];
+  if (sinceISO) conditions.push(gte(schema.issues.updatedAt, sinceISO));
+  const rows = await db
+    .select({
+      currency: schema.deals.currency,
+      totalCents: sql<number>`COALESCE(SUM(${schema.deals.amountCents}), 0)`,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(schema.deals)
+    .innerJoin(schema.issues, eq(schema.issues.id, schema.deals.issueId))
+    .innerJoin(schema.states, eq(schema.states.id, schema.issues.stateId))
+    .where(and(...conditions))
+    .groupBy(schema.deals.currency);
   return rows;
 }
