@@ -2,9 +2,11 @@ import { useEffect } from "react";
 import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
+import WorkspaceRail from "./WorkspaceRail";
 import BottomNav from "@/components/mobile/BottomNav";
 import CommandPalette from "./CommandPalette";
 import { useSidebarStore } from "@/stores/sidebar";
+import { useUiPrefsStore } from "@/stores/ui";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 
 // Toggle sidebar collapse with Cmd/Ctrl+B
@@ -54,6 +56,7 @@ function useAllModeGuard() {
 
 export default function AppShell() {
   useAllModeGuard();
+  const workspaceRail = useUiPrefsStore((s) => s.workspaceRail);
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-background">
@@ -63,6 +66,9 @@ export default function AppShell() {
       >
         Skip to content
       </a>
+
+      {/* Experimental workspace rail — far left, replaces the switcher dropdown */}
+      {workspaceRail && <WorkspaceRail />}
 
       {/* Sidebar rail (md+; mobile uses BottomNav) */}
       <Sidebar />

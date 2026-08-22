@@ -25,6 +25,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useThemeStore } from "@/stores/theme";
+import { useUiPrefsStore } from "@/stores/ui";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useNavigate, useParams } from "react-router-dom";
@@ -44,6 +45,7 @@ type CreateKeyForm = z.infer<typeof createKeySchema>;
 export default function ProfilePage() {
   const qc = useQueryClient();
   const { theme, setTheme } = useThemeStore();
+  const { workspaceRail, setWorkspaceRail } = useUiPrefsStore();
   const { i18n } = useTranslation();
   const { data: workspaces = [] } = useWorkspaces();
   const { currentSlug, switchWorkspace } = useWorkspaceStore();
@@ -376,6 +378,34 @@ export default function ProfilePage() {
                   <SelectItem value="id">Bahasa Indonesia</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Experimental */}
+            <div className="flex items-center justify-between gap-4 mt-4 pt-4 border-t">
+              <div>
+                <p className="text-sm font-medium">Workspace rail</p>
+                <p className="text-xs text-muted-foreground">
+                  Show workspaces as a persistent left rail instead of the
+                  dropdown switcher
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={workspaceRail}
+                onClick={() => setWorkspaceRail(!workspaceRail)}
+                className={cn(
+                  "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none",
+                  workspaceRail ? "bg-primary" : "bg-muted",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                    workspaceRail ? "translate-x-[18px]" : "translate-x-0.5",
+                  )}
+                />
+              </button>
             </div>
           </CardContent>
         </Card>
