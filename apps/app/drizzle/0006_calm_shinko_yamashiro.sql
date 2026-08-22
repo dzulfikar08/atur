@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `is_pipeline` integer DEFAULT 0 NOT NULL;
