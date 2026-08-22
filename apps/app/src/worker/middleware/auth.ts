@@ -1,4 +1,4 @@
-import type { Context, Next } from "hono";
+import type { Context, Next, ExecutionContext } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { getCookie } from "hono/cookie";
 import { and, eq, isNull } from "drizzle-orm";
@@ -62,12 +62,14 @@ function isSessionExpired(expiresAt: string | null | undefined): boolean {
 // Sliding-window extension: when a session token is still valid but inside the
 // back half of its TTL, push the expiry back out to a full SESSION_TTL_SECONDS
 // and return the new expiry so the caller can refresh the cookie Max-Age.
-// Fire-and-forget best effort — a failed write never fails the request.
+// Best-effort: registered with ctx.waitUntil so the write persists after the
+// response returns. A failed write never fails the request.
 function refreshSessionIfNeeded(
   db: DbClient,
   userId: string,
   token: string,
   expiresAt: string | null | undefined,
+  ctx?: ExecutionContext,
 ): string | null {
   if (!expiresAt) return null;
   const expires = Date.parse(expiresAt);
@@ -77,10 +79,17 @@ function refreshSessionIfNeeded(
   if (now < refreshAt) return null; // still in the front half — no extension needed
 
   const nextExpiry = sessionExpiryISO();
-  db.update(schema.users)
+  const updatePromise = db.update(schema.users)
     .set({ sessionExpiresAt: nextExpiry, updatedAt: new Date().toISOString() })
     .where(and(eq(schema.users.id, userId), eq(schema.users.token, token)))
     .catch(() => {});
+  // Register the write with the Workers event context so it survives past the
+  // response. Without waitUntil the runtime freezes/cancels this promise when
+  // the response returns, so sessionExpiresAt never actually advances and an
+  // active user gets logged out 24h after their last login. fire-and-forget
+  // after the response keeps the request fast (zero added latency) while the
+  // write still persists — active sessions slide, idle ones expire.
+  ctx?.waitUntil(updatePromise);
   return nextExpiry;
 }
 
@@ -150,7 +159,14 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   // Sliding session window: extend the expiry (DB + cookie Max-Age) when the
   // session has entered the back half of its TTL.
   if (!token.startsWith("pk_live_")) {
-    const nextExpiry = refreshSessionIfNeeded(db, user.id, token, user.sessionExpiresAt);
+    // c.executionCtx throws if absent (e.g. unit tests); fall back to no-op.
+    let execCtx: ExecutionContext | undefined;
+    try {
+      execCtx = c.executionCtx;
+    } catch {
+      /* no Workers execution context — session extension skipped */
+    }
+    const nextExpiry = refreshSessionIfNeeded(db, user.id, token, user.sessionExpiresAt, execCtx);
     if (nextExpiry) {
       const isHttps = c.req.url.startsWith("https://");
       c.header(
