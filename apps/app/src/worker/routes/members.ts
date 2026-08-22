@@ -11,17 +11,6 @@ import { z } from "zod";
 import { v4 as uuid } from "uuid";
 import { nowISO } from "../lib/pagination";
 
-async function resolveWorkspaceId(env: Env["DB"], slug: string): Promise<string> {
-  const db = getDb(env);
-  const [ws] = await db
-    .select({ id: schema.workspaces.id })
-    .from(schema.workspaces)
-    .where(eq(schema.workspaces.slug, slug))
-    .limit(1);
-  if (!ws) throw new HTTPException(404, { message: "Workspace not found" });
-  return ws.id;
-}
-
 const addMemberSchema = z.object({
   member_id: z.string().uuid(),
   role: z.number().int().optional(),
@@ -33,17 +22,15 @@ const inviteSchema = z.object({
 });
 
 export const memberRoutes = new Hono<{ Bindings: Env }>({ strict: false })
-  .get("/", async (c) => {
+  .get("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
-    const slug = c.req.param("slug")!;
-    const workspaceId = await resolveWorkspaceId(c.env.DB, slug);
+    const workspaceId = c.get("workspace").id;
     const result = await membersService.listWorkspaceMembers(db, workspaceId);
     return c.json(result);
   })
   .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
-    const slug = c.req.param("slug")!;
-    const workspaceId = await resolveWorkspaceId(c.env.DB, slug);
+    const workspaceId = c.get("workspace").id;
     const body = addMemberSchema.parse(await c.req.json());
     const result = await membersService.addWorkspaceMember(
       db,
@@ -55,8 +42,7 @@ export const memberRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   })
   .post("/invite", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
-    const slug = c.req.param("slug")!;
-    const workspaceId = await resolveWorkspaceId(c.env.DB, slug);
+    const workspaceId = c.get("workspace").id;
     const body = inviteSchema.parse(await c.req.json());
     const email = body.email.toLowerCase();
 
@@ -108,6 +94,10 @@ export const memberRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .delete("/:memberId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const memberId = c.req.param("memberId")!;
-    await membersService.removeWorkspaceMember(db, memberId);
+    // Scoped to the caller's workspace: a foreign member UUID (from another
+    // workspace) matches no row here → 404 instead of silently kicking that
+    // workspace's member out (cross-workspace IDOR).
+    const removed = await membersService.removeWorkspaceMember(db, c.get("workspace").id, memberId);
+    if (!removed) throw new HTTPException(404, { message: "Member not found" });
     return c.body(null, 204);
   });

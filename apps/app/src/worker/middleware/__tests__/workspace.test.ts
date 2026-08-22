@@ -18,16 +18,24 @@ vi.mock("../../middleware/auth", () => ({
   },
 }));
 
+// Rows returned by each db.select(...).limit() call, in order. An empty queue
+// falls back to a workspace-id row (sibling routes' local workspace-id
+// lookups). Tests hitting raw db selects (workspaces assertCanManage) push
+// the exact rows they want per select.
+const { selectQueue } = vi.hoisted(() => ({ selectQueue: [] as unknown[][] }));
+
 vi.mock("../../db/index", () => ({
   getDb: vi.fn(() => ({
-    // Minimal chain for the sibling routes' local resolveWorkspaceId helpers.
-    select: () => ({
-      from: () => ({
-        where: () => ({
-          limit: async () => [{ id: "ws-1" }],
+    select: () => {
+      const rows = selectQueue.length > 0 ? selectQueue.shift()! : [{ id: "ws-1" }];
+      return {
+        from: () => ({
+          where: () => ({
+            limit: async () => rows,
+          }),
         }),
-      }),
-    }),
+      };
+    },
   })),
 }));
 
@@ -48,15 +56,28 @@ vi.mock("../../services/sprints", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   create: vi.fn(),
 }));
+vi.mock("../../services/members", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  listWorkspaceMembers: vi.fn(),
+  removeWorkspaceMember: vi.fn(),
+}));
+vi.mock("../../services/workspaces", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  update: vi.fn(),
+}));
 
 import { projectRoutes } from "../../routes/projects";
 import { labelRoutes } from "../../routes/labels";
 import { sprintRoutes } from "../../routes/sprints";
+import { memberRoutes } from "../../routes/members";
+import { workspaceRoutes } from "../../routes/workspaces";
 import * as workspaceRepo from "../../repositories/workspaces";
 import * as membersRepo from "../../repositories/members";
 import * as projectService from "../../services/projects";
 import * as labelsService from "../../services/labels";
 import * as sprintsService from "../../services/sprints";
+import * as membersService from "../../services/members";
+import * as workspaceService from "../../services/workspaces";
 
 const WORKSPACE = {
   id: "ws-1",
@@ -69,6 +90,8 @@ const WORKSPACE = {
 // Mount the real route files exactly as app.ts mounts them.
 function testApp() {
   const app = new Hono<{ Bindings: Env }>();
+  app.route("/api/workspaces", workspaceRoutes);
+  app.route("/api/workspaces/:slug/members", memberRoutes);
   app.route("/api/workspaces/:slug/projects", projectRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/labels", labelRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/sprints", sprintRoutes);
@@ -90,6 +113,7 @@ function req(app: Hono<{ Bindings: Env }>, path: string, init?: RequestInit) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  selectQueue.length = 0;
   vi.mocked(workspaceRepo.findBySlug).mockResolvedValue(WORKSPACE as never);
   vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(false);
 });
@@ -192,5 +216,83 @@ describe("sibling routes enforce workspace membership", () => {
     );
     expect(res.status).toBe(403);
     expect(sprintsService.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("workspace member routes", () => {
+  it("rejects member listing by a non-member with 403", async () => {
+    const app = testApp();
+
+    const res = await req(app, "/api/workspaces/acme/members");
+    expect(res.status).toBe(403);
+    expect(membersService.listWorkspaceMembers).not.toHaveBeenCalled();
+  });
+
+  it("lists members for an active member using the guard's workspace", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    vi.mocked(membersService.listWorkspaceMembers).mockResolvedValue({
+      results: [{ id: "m-1" }],
+    } as never);
+    const app = testApp();
+
+    const res = await req(app, "/api/workspaces/acme/members");
+    expect(res.status).toBe(200);
+    expect(membersService.listWorkspaceMembers).toHaveBeenCalledWith(expect.anything(), "ws-1");
+  });
+
+  it("scopes member removal to the caller's workspace (cross-workspace IDOR)", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    const app = testApp();
+    // "victim-uuid" belongs to another workspace: the workspace-scoped delete
+    // matches no row in ws-1 and reports false → route answers 404, so the
+    // victim workspace's membership is never touched.
+    vi.mocked(membersService.removeWorkspaceMember).mockResolvedValue(false);
+    const victimUuid = "11111111-2222-3333-4444-555555555555";
+
+    const denied = await req(app, `/api/workspaces/acme/members/${victimUuid}`, {
+      method: "DELETE",
+    });
+    expect(denied.status).toBe(404);
+    expect(membersService.removeWorkspaceMember).toHaveBeenCalledWith(
+      expect.anything(),
+      "ws-1", // the guard's workspace — never one derived from the raw UUID
+      victimUuid,
+    );
+
+    // A membership in THIS workspace is removed normally.
+    vi.mocked(membersService.removeWorkspaceMember).mockResolvedValue(true);
+    const allowed = await req(app, "/api/workspaces/acme/members/m-1", { method: "DELETE" });
+    expect(allowed.status).toBe(204);
+    expect(membersService.removeWorkspaceMember).toHaveBeenCalledWith(
+      expect.anything(),
+      "ws-1",
+      "m-1",
+    );
+  });
+});
+
+describe("workspace management requires an active admin", () => {
+  // assertCanManage runs two raw selects: the workspace row, then the member row.
+  it("rejects a suspended admin (is_active = 0) with 403", async () => {
+    selectQueue.push([WORKSPACE], [{ role: 20, isActive: 0, deletedAt: null }]);
+    const app = testApp();
+
+    const res = await req(
+      app,
+      "/api/workspaces/acme",
+      jsonInit("PATCH", { name: "Hostile Rename" }),
+    );
+    expect(res.status).toBe(403);
+    expect(workspaceService.update).not.toHaveBeenCalled();
+  });
+
+  it("allows an active admin to rename", async () => {
+    selectQueue.push([WORKSPACE], [{ role: 20, isActive: 1, deletedAt: null }]);
+    vi.mocked(workspaceService.update).mockResolvedValue({ id: "ws-1" } as never);
+    const app = testApp();
+
+    const res = await req(app, "/api/workspaces/acme", jsonInit("PATCH", { name: "New Name" }));
+    expect(res.status).toBe(200);
+    expect(workspaceService.update).toHaveBeenCalledTimes(1);
   });
 });
