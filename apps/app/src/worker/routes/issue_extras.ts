@@ -9,6 +9,7 @@ import { and, eq, isNull, desc } from "drizzle-orm";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import { HTTPException } from "hono/http-exception";
 import { v4 as uuid } from "uuid";
 import { nowISO } from "../lib/pagination";
@@ -51,7 +52,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       })),
     });
   })
-  .post("/attachments", authMiddleware, async (c: C) => {
+  .post("/attachments", authMiddleware, requireWorkspaceMember, async (c: C) => {
     const { db, issue } = await resolveIssue(c);
     const body = (await c.req.json().catch(() => ({}))) as {
       asset?: string | null;
@@ -78,7 +79,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       201,
     );
   })
-  .delete("/attachments/:attachmentId", authMiddleware, async (c: C) => {
+  .delete("/attachments/:attachmentId", authMiddleware, requireWorkspaceMember, async (c: C) => {
     // Scope to the path issue so a caller can't delete another issue's
     // attachment by guessing its id (IDOR).
     const { db, issue } = await resolveIssue(c);
@@ -104,7 +105,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       .orderBy(desc(schema.issues.createdAt));
     return c.json({ results: rows });
   })
-  .post("/sub-issues", authMiddleware, async (c: C) => {
+  .post("/sub-issues", authMiddleware, requireWorkspaceMember, async (c: C) => {
     const { db, issue: parent } = await resolveIssue(c);
     const user = c.get("user");
     const body = (await c.req.json().catch(() => ({}))) as { name?: string };
@@ -156,7 +157,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       .orderBy(desc(schema.issueRelations.createdAt));
     return c.json({ results: rows });
   })
-  .post("/relations", authMiddleware, async (c: C) => {
+  .post("/relations", authMiddleware, requireWorkspaceMember, async (c: C) => {
     const { db, issue } = await resolveIssue(c);
     const body = (await c.req.json().catch(() => ({}))) as {
       related_issue_id?: string;
@@ -185,7 +186,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       201,
     );
   })
-  .delete("/relations/:relationId", authMiddleware, async (c: C) => {
+  .delete("/relations/:relationId", authMiddleware, requireWorkspaceMember, async (c: C) => {
     const { db, issue } = await resolveIssue(c);
     await db
       .update(schema.issueRelations)
@@ -218,7 +219,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       .where(and(eq(schema.moduleIssues.issueId, issue.id), isNull(schema.moduleIssues.deletedAt)));
     return c.json({ results: rows });
   })
-  .post("/modules", authMiddleware, async (c: C) => {
+  .post("/modules", authMiddleware, requireWorkspaceMember, async (c: C) => {
     const { db, issue } = await resolveIssue(c);
     const body = (await c.req.json().catch(() => ({}))) as { module_id?: string };
     if (!body.module_id) throw new HTTPException(400, { message: "module_id is required" });
@@ -244,7 +245,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     }
     return c.json({ ok: true });
   })
-  .delete("/modules/:moduleId", authMiddleware, async (c: C) => {
+  .delete("/modules/:moduleId", authMiddleware, requireWorkspaceMember, async (c: C) => {
     const { db, issue } = await resolveIssue(c);
     await db
       .delete(schema.moduleIssues)
@@ -287,7 +288,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
 
   // ---- Custom values (no table — stub) ----
   .get("/custom-values", authMiddleware, (c: C) => c.json([]))
-  .post("/custom-values", authMiddleware, (c: C) => c.json({ ok: true }))
+  .post("/custom-values", authMiddleware, requireWorkspaceMember, (c: C) => c.json({ ok: true }))
 
   // ---- Time entries ----
   .get("/time-entries", authMiddleware, async (c: C) => {
@@ -295,7 +296,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await timeEntriesService.list(db, issue, c);
     return c.json(result);
   })
-  .post("/time-entries", authMiddleware, async (c: C) => {
+  .post("/time-entries", authMiddleware, requireWorkspaceMember, async (c: C) => {
     const { db, issue } = await resolveIssue(c);
     const user = c.get("user");
     const body = timeEntriesService.createTimeEntrySchema.parse(
@@ -317,7 +318,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       201,
     );
   })
-  .delete("/time-entries/:entryId", authMiddleware, async (c: C) => {
+  .delete("/time-entries/:entryId", authMiddleware, requireWorkspaceMember, async (c: C) => {
     // Scope delete to the path issue so a caller can't delete another issue's
     // entry by guessing its id (IDOR).
     const { db, issue } = await resolveIssue(c);

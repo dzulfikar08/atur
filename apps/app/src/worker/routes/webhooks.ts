@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import * as schema from "../db/schema";
 import * as webhookService from "../services/webhooks";
 
@@ -20,7 +21,7 @@ export const webhookRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const webhooks = await webhookService.list(db, workspace.id);
     return c.json(webhooks);
   })
-  .post("/", authMiddleware, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const [workspace] = await db
@@ -33,7 +34,7 @@ export const webhookRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const webhook = await webhookService.create(db, workspace.id, body);
     return c.json(webhook, 201);
   })
-  .patch("/:webhookId", authMiddleware, async (c) => {
+  .patch("/:webhookId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const webhookId = c.req.param("webhookId")!;
@@ -47,7 +48,7 @@ export const webhookRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const webhook = await webhookService.update(db, webhookId, body);
     return c.json(webhook);
   })
-  .delete("/:webhookId", authMiddleware, async (c) => {
+  .delete("/:webhookId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const webhookId = c.req.param("webhookId")!;

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import * as statesService from "../services/states";
 import { HTTPException } from "hono/http-exception";
 import { eq } from "drizzle-orm";
@@ -25,7 +26,7 @@ export const stateRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await statesService.list(db, projectId);
     return c.json(result);
   })
-  .post("/", authMiddleware, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const projectId = c.req.param("projectId")!;
@@ -40,14 +41,14 @@ export const stateRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await statesService.getById(db, stateId);
     return c.json(result);
   })
-  .patch("/:stateId", authMiddleware, async (c) => {
+  .patch("/:stateId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const stateId = c.req.param("stateId")!;
     const body = statesService.updateStateSchema.parse(await c.req.json());
     const result = await statesService.update(db, stateId, body);
     return c.json(result);
   })
-  .delete("/:stateId", authMiddleware, async (c) => {
+  .delete("/:stateId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const stateId = c.req.param("stateId")!;
     await statesService.remove(db, stateId);

@@ -1,12 +1,10 @@
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
 import { z } from "zod";
-import { and, eq, isNull } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
-import * as schema from "../db/schema";
-import * as workspaceRepo from "../repositories/workspaces";
+import { resolveWorkspaceForCaller } from "../middleware/workspace";
 import * as projectsRepo from "../repositories/projects";
 import * as portalSettingsRepo from "../repositories/portalSettings";
 
@@ -17,32 +15,9 @@ const updateSchema = z.object({
   is_enabled: z.boolean(),
 });
 
-// Workspace admin/member gate: caller must own or be an active member.
-async function requireMember(c: Context<{ Bindings: Env }>, workspaceId: string, userId: string) {
-  const db = getDb(c.env.DB);
-  const [member] = await db
-    .select()
-    .from(schema.workspaceMembers)
-    .where(
-      and(
-        eq(schema.workspaceMembers.workspaceId, workspaceId),
-        eq(schema.workspaceMembers.memberId, userId),
-        isNull(schema.workspaceMembers.deletedAt),
-      ),
-    )
-    .limit(1);
-  return !!member;
-}
-
 portalSettingsRoutes.get("/", authMiddleware, async (c) => {
   const db = getDb(c.env.DB);
-  const slug = c.req.param("slug")!;
-  const user = c.get("user");
-  const workspace = await workspaceRepo.findBySlug(db, slug);
-  if (!workspace) throw new HTTPException(404, { message: "Workspace not found" });
-  if (!(await requireMember(c, workspace.id, user.sub))) {
-    throw new HTTPException(403, { message: "Not a member of this workspace" });
-  }
+  const workspace = await resolveWorkspaceForCaller(c);
   const settings = await portalSettingsRepo.get(db, workspace.id);
   return c.json(
     settings ?? { workspace_id: workspace.id, support_project_id: null, is_enabled: 0 },
@@ -51,13 +26,7 @@ portalSettingsRoutes.get("/", authMiddleware, async (c) => {
 
 portalSettingsRoutes.put("/", authMiddleware, async (c) => {
   const db = getDb(c.env.DB);
-  const slug = c.req.param("slug")!;
-  const user = c.get("user");
-  const workspace = await workspaceRepo.findBySlug(db, slug);
-  if (!workspace) throw new HTTPException(404, { message: "Workspace not found" });
-  if (!(await requireMember(c, workspace.id, user.sub))) {
-    throw new HTTPException(403, { message: "Not a member of this workspace" });
-  }
+  const workspace = await resolveWorkspaceForCaller(c);
 
   const body = updateSchema.parse(await c.req.json());
 

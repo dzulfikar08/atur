@@ -162,7 +162,8 @@ export async function removeMember(
   const project = await projectRepo.findById(db, projectId);
   if (!project || project.workspaceId !== workspace.id)
     throw new HTTPException(404, { message: "Project not found" });
-  await projectRepo.removeMember(db, memberId);
+  const removed = await projectRepo.removeMember(db, project.id, memberId);
+  if (!removed) throw new HTTPException(404, { message: "Member not found" });
 }
 
 export async function listMembers(db: DbClient, workspaceSlug: string, projectId: string) {

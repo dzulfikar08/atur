@@ -8,8 +8,10 @@ import { eq, and, isNull } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { HTTPException } from "hono/http-exception";
 
-// Only the workspace owner or an admin member (role >= 20) may mutate or
-// delete a workspace. Throws 403 otherwise (404 if the workspace is unknown).
+// Only the workspace owner or an ACTIVE admin member (role >= 20) may mutate
+// or delete a workspace. Suspended members (is_active = 0) are denied even
+// with an admin role — same active-member rule as requireWorkspaceMember.
+// Throws 403 otherwise (404 if the workspace is unknown).
 async function assertCanManage(env: Env["DB"], slug: string, userId: string) {
   const db = getDb(env);
   const [ws] = await db
@@ -30,7 +32,7 @@ async function assertCanManage(env: Env["DB"], slug: string, userId: string) {
       ),
     )
     .limit(1);
-  if (m && m.role >= 20) return;
+  if (m && m.isActive === 1 && m.role >= 20) return;
   throw new HTTPException(403, {
     message: "Only the workspace owner or an admin can perform this action",
   });
