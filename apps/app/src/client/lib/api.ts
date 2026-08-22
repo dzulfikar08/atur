@@ -425,13 +425,10 @@ export const api = {
     contactId: string,
     data: { purpose: string; variant_id?: string },
   ) =>
-    apiFetch<ContactEmailResult>(
-      `/workspaces/${slug}/contacts/${contactId}/send-email/`,
-      {
-        method: "POST",
-        body: JSON.stringify(data),
-      },
-    ),
+    apiFetch<ContactEmailResult>(`/workspaces/${slug}/contacts/${contactId}/send-email/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 
   // CRM email templates: purpose registry + per-purpose variants
   listEmailTemplates: async (slug: string) => {
@@ -444,13 +441,10 @@ export const api = {
   },
   // Workspace-level {{footer}} signature (stored on the workspace).
   saveEmailFooter: (slug: string, footer: string) =>
-    apiFetch<{ footer: string }>(
-      `/workspaces/${slug}/contacts/email-templates/footer/`,
-      {
-        method: "PUT",
-        body: JSON.stringify({ footer }),
-      },
-    ),
+    apiFetch<{ footer: string }>(`/workspaces/${slug}/contacts/email-templates/footer/`, {
+      method: "PUT",
+      body: JSON.stringify({ footer }),
+    }),
   createEmailVariant: (
     slug: string,
     data: { purpose: string; name: string; subject: string; body: string; is_html?: boolean },
@@ -537,9 +531,9 @@ export const api = {
       body: JSON.stringify({ state_id: stateId }),
     }),
   listDealStats: (slug: string, projectId: string) =>
-    apiFetch<{ results: DealStats }>(
-      `/workspaces/${slug}/projects/${projectId}/deals/stats/`,
-    ).then((r) => r.results),
+    apiFetch<{ results: DealStats }>(`/workspaces/${slug}/projects/${projectId}/deals/stats/`).then(
+      (r) => r.results,
+    ),
   // Flag/unflag a project as a CRM pipeline. Never touches the project's states.
   setProjectPipeline: (slug: string, projectId: string, isPipeline: boolean) =>
     apiFetch<ProjectDetail>(`/workspaces/${slug}/projects/${projectId}/`, {

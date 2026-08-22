@@ -4,10 +4,7 @@
 
 // Escape HTML special characters for safe text rendering.
 export function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 // Escape for attribute contexts (href): neutralize quotes too.

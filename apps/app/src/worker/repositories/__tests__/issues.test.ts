@@ -13,11 +13,9 @@ const baseRow = (seq: number, projectId = "project-1"): Row =>
     workspaceId: "workspace-1",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
-  } as Row);
+  }) as Row;
 
-const UNIQUE_ERR = new Error(
-  "SQLITE_CONSTRAINT: UNIQUE constraint failed: issues.sequence_id",
-);
+const UNIQUE_ERR = new Error("SQLITE_CONSTRAINT: UNIQUE constraint failed: issues.sequence_id");
 
 // A mock D1/Drizzle client. `taken` models the sequence ids already grabbed by
 // concurrent creators. getNextSequence() reads MAX(taken)+1; an insert rejects
@@ -50,25 +48,19 @@ describe("isUniqueConstraintError", () => {
   it("matches SQLite/D1 unique-constraint messages", () => {
     expect(isUniqueConstraintError(UNIQUE_ERR)).toBe(true);
     expect(
-      isUniqueConstraintError(
-        new Error("D1_ERROR: UNIQUE constraint failed: uq_issue_sequence"),
-      ),
+      isUniqueConstraintError(new Error("D1_ERROR: UNIQUE constraint failed: uq_issue_sequence")),
     ).toBe(true);
   });
 
   it("matches Postgres duplicate-key (SQLSTATE 23505)", () => {
-    expect(
-      isUniqueConstraintError({ code: "23505", message: "duplicate key value" }),
-    ).toBe(true);
+    expect(isUniqueConstraintError({ code: "23505", message: "duplicate key value" })).toBe(true);
   });
 
   it("does NOT retry on non-unique constraint errors", () => {
-    expect(
-      isUniqueConstraintError(new Error("FOREIGN KEY constraint failed")),
-    ).toBe(false);
-    expect(
-      isUniqueConstraintError(new Error("NOT NULL constraint failed: issues.name")),
-    ).toBe(false);
+    expect(isUniqueConstraintError(new Error("FOREIGN KEY constraint failed"))).toBe(false);
+    expect(isUniqueConstraintError(new Error("NOT NULL constraint failed: issues.name"))).toBe(
+      false,
+    );
     expect(isUniqueConstraintError(new Error("something else"))).toBe(false);
   });
 });
@@ -99,9 +91,7 @@ describe("insertIssueWithRetry", () => {
       insert: () => ({
         values: () => {
           state.attempts++;
-          return Promise.reject(
-            new Error("FOREIGN KEY constraint failed: issues.stateId"),
-          );
+          return Promise.reject(new Error("FOREIGN KEY constraint failed: issues.stateId"));
         },
       }),
     } as unknown as Db;

@@ -96,18 +96,22 @@ function SendEmailDialog({ slug, contactId }: { slug: string; contactId: string 
   });
   const purposeVariants = (tpl?.variants ?? []).filter((v) => v.purpose === purpose);
 
-  const { data: preview, isLoading: previewLoading, error: previewError } = useQuery({
+  const {
+    data: preview,
+    isLoading: previewLoading,
+    error: previewError,
+  } = useQuery({
     queryKey: ["contact-email-preview", slug, contactId, purpose, variantId],
-    queryFn: () =>
-      api.previewContactEmail(slug!, contactId, purpose, resolveVariantId()),
+    queryFn: () => api.previewContactEmail(slug!, contactId, purpose, resolveVariantId()),
     enabled: open && !!slug && !!contactId,
   });
 
-  const errorMsg = previewError instanceof ApiError
-    ? `${previewError.status}: ${previewError.message}`
-    : previewError instanceof Error
-      ? previewError.message
-      : "Unknown error";
+  const errorMsg =
+    previewError instanceof ApiError
+      ? `${previewError.status}: ${previewError.message}`
+      : previewError instanceof Error
+        ? previewError.message
+        : "Unknown error";
 
   const copyBody = async () => {
     if (!preview) return;
@@ -133,8 +137,7 @@ function SendEmailDialog({ slug, contactId }: { slug: string; contactId: string 
     },
     onError: (err) =>
       toast.error("Failed to send email", {
-        description:
-          err instanceof ApiError ? `${err.status}: ${err.message}` : undefined,
+        description: err instanceof ApiError ? `${err.status}: ${err.message}` : undefined,
       }),
   });
 
@@ -220,9 +223,7 @@ function SendEmailDialog({ slug, contactId }: { slug: string; contactId: string 
             </div>
             {preview.purchase && (
               <div>
-                <label className="text-xs font-medium text-muted-foreground">
-                  Purchase info
-                </label>
+                <label className="text-xs font-medium text-muted-foreground">Purchase info</label>
                 <ul className="text-sm space-y-1">
                   <li className="flex justify-between">
                     <span>Product</span>
@@ -256,11 +257,7 @@ function SendEmailDialog({ slug, contactId }: { slug: string; contactId: string 
                 <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
                   Cancel
                 </Button>
-                <Button
-                  size="sm"
-                  disabled={sendMut.isPending}
-                  onClick={() => sendMut.mutate()}
-                >
+                <Button size="sm" disabled={sendMut.isPending} onClick={() => sendMut.mutate()}>
                   {sendMut.isPending ? "Sending…" : "Send email"}
                 </Button>
               </div>
@@ -291,7 +288,10 @@ function EmailHistoryCard({ emails }: { emails: ContactEmailLogEntry[] }) {
                 )}
                 <span className="text-muted-foreground truncate">{e.subject}</span>
               </span>
-              <span className="text-muted-foreground shrink-0" title={e.sent ? "Sent" : "Not sent (dev)"}>
+              <span
+                className="text-muted-foreground shrink-0"
+                title={e.sent ? "Sent" : "Not sent (dev)"}
+              >
                 {new Date(e.sent_at).toLocaleDateString()} {e.sent === 0 && "· draft"}
               </span>
             </li>
@@ -316,7 +316,10 @@ export default function ContactDetailPage() {
 
   return (
     <div className="space-y-4">
-      <Link to={`/${slug}/crm/contacts`} className="inline-flex items-center text-sm text-muted-foreground hover:underline">
+      <Link
+        to={`/${slug}/crm/contacts`}
+        className="inline-flex items-center text-sm text-muted-foreground hover:underline"
+      >
         <ArrowLeft className="mr-1 h-4 w-4" />
         Contacts
       </Link>

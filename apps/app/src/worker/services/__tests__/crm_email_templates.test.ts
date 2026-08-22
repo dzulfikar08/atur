@@ -61,9 +61,7 @@ describe("fillPlaceholders", () => {
 
 describe("textToHtml", () => {
   it("escapes HTML special characters", () => {
-    expect(textToHtml("<script>alert(1)</script>")).toBe(
-      "&lt;script&gt;alert(1)&lt;/script&gt;",
-    );
+    expect(textToHtml("<script>alert(1)</script>")).toBe("&lt;script&gt;alert(1)&lt;/script&gt;");
   });
 
   it("converts newlines to <br/>", () => {

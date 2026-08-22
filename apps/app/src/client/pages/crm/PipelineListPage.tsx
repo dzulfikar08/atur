@@ -41,9 +41,7 @@ export default function PipelineListPage() {
   const { data: pipelines = [], isLoading } = useQuery({
     queryKey: ["projects", slug, "pipelines"],
     queryFn: () =>
-      isAll
-        ? api.listAllProjects({ is_pipeline: 1 })
-        : api.listProjects(slug!, { is_pipeline: 1 }),
+      isAll ? api.listAllProjects({ is_pipeline: 1 }) : api.listProjects(slug!, { is_pipeline: 1 }),
     enabled: !!slug,
   });
   // …plus the unfiltered list to power "Add existing project".

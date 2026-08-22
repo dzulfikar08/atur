@@ -79,7 +79,8 @@ function refreshSessionIfNeeded(
   if (now < refreshAt) return null; // still in the front half — no extension needed
 
   const nextExpiry = sessionExpiryISO();
-  const updatePromise = db.update(schema.users)
+  const updatePromise = db
+    .update(schema.users)
     .set({ sessionExpiresAt: nextExpiry, updatedAt: new Date().toISOString() })
     .where(and(eq(schema.users.id, userId), eq(schema.users.token, token)))
     .catch(() => {});

@@ -6,12 +6,7 @@ import { CURRENCIES } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command,
@@ -46,7 +41,15 @@ interface Props {
 // One form, two modes: create (POST) and edit (PATCH with only changed keys).
 // The customer picker is the Command combobox previously inline in
 // PipelineBoardPage's create dialog.
-export function DealFormDialog({ open, onOpenChange, mode, slug, projectId, deal, contacts }: Props) {
+export function DealFormDialog({
+  open,
+  onOpenChange,
+  mode,
+  slug,
+  projectId,
+  deal,
+  contacts,
+}: Props) {
   const qc = useQueryClient();
   const [customerOpen, setCustomerOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);

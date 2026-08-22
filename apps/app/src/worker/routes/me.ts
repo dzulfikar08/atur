@@ -97,9 +97,7 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         and(
           inArray(schema.projects.workspaceId, ids),
           isNull(schema.projects.deletedAt),
-          ...(c.req.query("is_pipeline") === "1"
-            ? [eq(schema.projects.isPipeline, 1)]
-            : []),
+          ...(c.req.query("is_pipeline") === "1" ? [eq(schema.projects.isPipeline, 1)] : []),
         ),
       )
       .orderBy(desc(schema.projects.updatedAt));
