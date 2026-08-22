@@ -86,6 +86,9 @@ export const workspaces = sqliteTable(
     organizationSize: text("organization_size"),
     timezone: text("timezone").default("UTC"),
     backgroundColor: text("background_color"),
+    // Signature appended to CRM customer emails ({{footer}} placeholder).
+    // Null → fallback "Regards,\n<workspace name> team".
+    emailFooter: text("email_footer"),
     ownerId: text("owner_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -806,6 +809,8 @@ export const customers = sqliteTable(
     sessionToken: text("session_token"),
     // Polar customer id when this contact was imported from Polar.
     polarCustomerId: text("polar_customer_id"),
+    // ISO timestamp of the last CRM email sent to this contact (rate limit).
+    lastEmailAt: text("last_email_at"),
     createdAt: text("created_at"),
     updatedAt: text("updated_at"),
   },
@@ -1048,5 +1053,4 @@ export const crmEmailTemplates = sqliteTable("crm_email_templates", {
     table.workspaceId,
     table.templateName,
   ),
-  index("idx_crm_email_templates_workspace").on(table.workspaceId),
 ]);

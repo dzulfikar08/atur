@@ -169,14 +169,17 @@ export default function PipelineBoardPage() {
   };
 
   const createMut = useMutation({
-    mutationFn: () =>
-      api.createDeal(slug!, projectId!, {
+    mutationFn: () => {
+      const amount = form.amount ? parseFloat(form.amount) : undefined;
+      return api.createDeal(slug!, projectId!, {
         name: form.name,
-        amount_cents: form.amount ? Math.round(parseFloat(form.amount) * 100) : undefined,
+        amount_cents:
+          amount !== undefined && Number.isFinite(amount) ? Math.round(amount * 100) : undefined,
         currency: form.currency || undefined,
         customer_id: form.customer_id || undefined,
         expected_close_at: form.expected_close_at || undefined,
-      }),
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["deals", slug, projectId] });
       qc.invalidateQueries({ queryKey: ["deal-stats", slug, projectId] });

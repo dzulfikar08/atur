@@ -210,10 +210,29 @@ export const sendEmailSchema = z.object({
   template: z.enum(["feedback_request"]),
 });
 
+// Subjects become RFC822 headers — a newline would allow header injection
+// (buildRawEmail also strips CR/LF as defense in depth).
 export const saveTemplateSchema = z.object({
-  subject: z.string().min(1).max(300),
+  subject: z
+    .string()
+    .min(1)
+    .max(300)
+    .refine((s) => !/[\r\n]/.test(s), "Subject must not contain line breaks"),
   body: z.string().min(1).max(10000),
   is_html: z.boolean().optional(),
+});
+
+// Runtime guard for route params typed as TemplateName — a blind cast would
+// let PUT /email-templates/<garbage> persist arbitrary template_name rows.
+export function parseTemplateName(name: string): TemplateName {
+  if ((TEMPLATE_NAMES as readonly string[]).includes(name)) return name as TemplateName;
+  throw new HTTPException(404, { message: `Unknown template: ${name}` });
+}
+
+// Workspace-level email footer ({{footer}} placeholder value). Stored on
+// workspaces.email_footer; empty string clears it back to the default.
+export const saveFooterSchema = z.object({
+  footer: z.string().max(500),
 });
 
 // Find the customer's most recent paid Polar order by parsing the raw
@@ -255,14 +274,21 @@ export async function resolveTemplateSource(
   db: DbClient,
   workspaceId: string,
   template: TemplateName,
-): Promise<{ subject: string; body: string }> {
+): Promise<{ subject: string; body: string; isHtml: boolean }> {
   const row = await emailTemplatesRepo.getTemplate(db, workspaceId, template);
   if (row) {
-    return { subject: row.subject, body: row.body };
+    return { subject: row.subject, body: row.body, isHtml: row.isHtml === 1 };
   }
   const def = getDefaultTemplate(template);
   if (!def) throw new HTTPException(404, { message: `Unknown template: ${template}` });
-  return def;
+  return { ...def, isHtml: false };
+}
+
+// Workspace fields the email renderer needs. Any workspace row satisfies this.
+export interface EmailWorkspace {
+  id: string;
+  name: string;
+  emailFooter: string | null;
 }
 
 // Shared lookup + render: validates the contact belongs to the workspace,
@@ -272,11 +298,11 @@ export async function resolveTemplateSource(
 // plus the purchase info for the frontend preview.
 export async function renderTemplateEmail(
   db: DbClient,
-  workspaceId: string,
+  ws: EmailWorkspace,
   contactId: string,
   template: TemplateName,
 ): Promise<{ subject: string; text: string; html: string; to: string | null; purchase: PurchaseInfo | null }> {
-  const contact = await customersRepo.getContact(db, workspaceId, contactId);
+  const contact = await customersRepo.getContact(db, ws.id, contactId);
   if (!contact) throw new HTTPException(404, { message: "Contact not found" });
   if (!contact.email) {
     throw new HTTPException(400, { message: "Contact has no email address" });
@@ -288,28 +314,50 @@ export async function renderTemplateEmail(
     purchase = await getContactPurchaseInfo(db, contact.id);
   }
 
-  const source = await resolveTemplateSource(db, workspaceId, template);
-  const rendered: RenderedEmail = renderFromTemplateSource(source, ctx, purchase);
+  const source = await resolveTemplateSource(db, ws.id, template);
+  const footer = ws.emailFooter ?? `Regards,\n${ws.name} team`;
+  const rendered: RenderedEmail = renderFromTemplateSource(source, ctx, purchase, footer);
   return { ...rendered, to: contact.email, purchase };
 }
+
+// Minimum time between templated emails to the same contact (repeat-click
+// / fat-finger protection; not an anti-spam system).
+export const CUSTOMER_EMAIL_COOLDOWN_MS = 60 * 60 * 1000;
 
 // Render + send a CRM customer email template. Uses the saved DB template (or
 // code default) with customer + purchase data filled in. Returns the rendered
 // subject + whether the email was actually sent (false when the binding is
-// absent in local dev).
+// absent in local dev). Sends to the same contact are rate-limited to one per
+// cooldown window; the clock is only stamped when the email actually went out.
 export async function sendTemplateEmail(
   db: DbClient,
   env: Env,
-  workspaceId: string,
+  ws: EmailWorkspace,
   contactId: string,
   body: z.infer<typeof sendEmailSchema>,
 ): Promise<{ subject: string; sent: boolean; to: string | null }> {
-  const rendered = await renderTemplateEmail(db, workspaceId, contactId, body.template);
+  const contact = await customersRepo.getContact(db, ws.id, contactId);
+  if (!contact) throw new HTTPException(404, { message: "Contact not found" });
+  if (contact.lastEmailAt) {
+    const elapsed = Date.now() - Date.parse(contact.lastEmailAt);
+    if (Number.isFinite(elapsed) && elapsed < CUSTOMER_EMAIL_COOLDOWN_MS) {
+      const minutes = Math.ceil((CUSTOMER_EMAIL_COOLDOWN_MS - elapsed) / 60_000);
+      throw new HTTPException(429, {
+        message: `An email was already sent to this contact recently — try again in ~${minutes} min`,
+      });
+    }
+  }
+
+  const rendered = await renderTemplateEmail(db, ws, contactId, body.template);
   const result = await sendCustomerEmail(env, rendered.to!, {
     subject: rendered.subject,
     text: rendered.text,
     html: rendered.html,
   });
+
+  if (result.sent) {
+    await customersRepo.markEmailSent(db, contactId);
+  }
 
   return { subject: rendered.subject, sent: result.sent, to: rendered.to };
 }
@@ -322,7 +370,7 @@ export async function listEmailTemplates(
 ): Promise<
   { id: string; template_name: string; subject: string; body: string; is_html: number; created_at: string | null; updated_at: string | null }[]
 > {
-   const rows = await emailTemplatesRepo.listTemplates(db, workspaceId);
+  const rows = await emailTemplatesRepo.listTemplates(db, workspaceId);
   const customizedNames = new Set(rows.map((r) => r.templateName));
   const defaults = TEMPLATE_NAMES.filter((name) => !customizedNames.has(name)).map((name) => {
     const def = getDefaultTemplate(name)!;

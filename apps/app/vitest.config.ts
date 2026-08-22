@@ -16,6 +16,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src/client"),
+      // Stub for Cloudflare's email module — lets service tests import
+      // worker/services/email.ts outside the Workers runtime.
+      "cloudflare:email": path.resolve(__dirname, "./src/client/test/stubs/cloudflare-email.ts"),
     },
   },
 });

@@ -1,6 +1,7 @@
 import { EmailMessage } from "cloudflare:email";
 import { HTTPException } from "hono/http-exception";
 import type { Env } from "../lib/env";
+import { emailLayout } from "./email_layout";
 
 export const OTP_TTL_SECONDS = 600; // 10 minutes
 export const OTP_RATE_WINDOW_SECONDS = 900; // 15 minutes
@@ -30,6 +31,13 @@ export interface NotificationEmail {
   html: string;
 }
 
+// Strip CR/LF from a value used in an RFC822 header line. Template subjects
+// are user-editable — a newline there would let a crafted subject inject
+// extra headers (e.g. Bcc) into the raw message.
+export function sanitizeHeader(value: string): string {
+  return value.replace(/[\r\n]+/g, " ");
+}
+
 // Build a multipart/alternative (text + html) RFC822 message for the Cloudflare
 // Email binding. Envelope sender must equal the binding's verified_address.
 function buildRawEmail(
@@ -41,9 +49,9 @@ function buildRawEmail(
 ): string {
   const boundary = `atur-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return [
-    `From: Atur <${fromAddr}>`,
-    `To: ${to}`,
-    `Subject: ${subject}`,
+    `From: Atur <${sanitizeHeader(fromAddr)}>`,
+    `To: ${sanitizeHeader(to)}`,
+    `Subject: ${sanitizeHeader(subject)}`,
     "MIME-Version: 1.0",
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
     "",
@@ -127,41 +135,21 @@ export async function sendCustomerEmail(
   return sendNotificationEmail(env, to, email);
 }
 
-// Shared styled layout for notification emails. bodyHtml is the inner content;
-// cta renders a button linking back to the app.
+// Notification email body — inner content wrapped in the shared layout's
+// paragraph style. cta renders a button linking back to the app.
 export function notificationEmailHtml(opts: {
   title: string;
   bodyHtml: string;
   ctaText?: string;
   ctaUrl?: string;
 }): string {
-  const cta =
-    opts.ctaText && opts.ctaUrl
-      ? `<p style="margin:24px 0 0;"><a href="${opts.ctaUrl}" style="display:inline-block;padding:10px 20px;background:#3b82f6;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">${opts.ctaText}</a></p>`
-      : "";
-
-  return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${opts.title}</title></head>
-<body style="margin:0;padding:0;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:32px 16px;">
-<tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #ececec;">
-<tr><td style="background:#3b82f6;padding:24px 32px;color:#ffffff;">
-<h1 style="margin:0;font-size:20px;font-weight:700;letter-spacing:-0.3px;">Atur</h1>
-</td></tr>
-<tr><td style="padding:32px;">
-<p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">${opts.bodyHtml}</p>
-${cta}
-</td></tr>
-<tr><td style="padding:16px 32px;background:#f9fafb;color:#6b7280;font-size:12px;text-align:center;line-height:1.5;">
-You received this email because you follow this issue or were mentioned on Atur.
-</td></tr>
-</table>
-</td></tr>
-</table>
-</body>
-</html>`;
+  return emailLayout({
+    title: opts.title,
+    bodyHtml: `<p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">${opts.bodyHtml}</p>`,
+    ctaText: opts.ctaText,
+    ctaUrl: opts.ctaUrl,
+    footerText: "You received this email because you follow this issue or were mentioned on Atur.",
+  });
 }
 
 // The code is rendered as a single contiguous text node — CSS letter-spacing

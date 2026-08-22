@@ -104,7 +104,11 @@ function SendEmailDialog({ slug, contactId }: { slug: string; contactId: string 
       setOpen(false);
       qc.invalidateQueries({ queryKey: ["contact", slug, contactId] });
     },
-    onError: () => toast.error("Failed to send email"),
+    onError: (err) =>
+      toast.error("Failed to send email", {
+        description:
+          err instanceof ApiError ? `${err.status}: ${err.message}` : undefined,
+      }),
   });
 
   const copyEmail = async () => {

@@ -18,6 +18,8 @@ export interface CustomerRow {
   username: string | null;
   sessionToken: string | null;
   polarCustomerId: string | null;
+  // ISO timestamp of the last CRM email sent (send cooldown rate limit).
+  lastEmailAt: string | null;
 }
 
 // Contact fields live on the customers row now; users is LEFT-joined only for
@@ -35,6 +37,7 @@ const contactSelect = {
   username: schema.users.username,
   sessionToken: schema.customers.sessionToken,
   polarCustomerId: schema.customers.polarCustomerId,
+  lastEmailAt: schema.customers.lastEmailAt,
 };
 
 // Portal session lookup — mirrors usersRepo.findByToken but against
@@ -312,5 +315,14 @@ export async function clearSessionToken(db: DbClient, customerId: string) {
   await db
     .update(schema.customers)
     .set({ sessionToken: null, updatedAt: nowISO() })
+    .where(eq(schema.customers.id, customerId));
+}
+
+
+// Stamp the CRM email send-cooldown clock (customers.last_email_at).
+export async function markEmailSent(db: DbClient, customerId: string) {
+  await db
+    .update(schema.customers)
+    .set({ lastEmailAt: nowISO(), updatedAt: nowISO() })
     .where(eq(schema.customers.id, customerId));
 }
