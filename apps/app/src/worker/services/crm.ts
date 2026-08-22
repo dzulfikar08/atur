@@ -202,8 +202,58 @@ export async function moveDealStage(
   return issuesService.update(db, issueId, { state_id: stateId });
 }
 
+// Pipeline rollups for the board header + column totals. Currencies are never
+// cross-summed: every bucket is a per-currency list. "won_this_month" buckets
+// terminal completed deals whose underlying issue was updated this UTC month
+// (updated_at proxies the won date — see aggregateTerminalSince caveat).
+function startOfMonthISO(): string {
+  const d = new Date();
+  d.setUTCDate(1);
+  d.setUTCHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
 export async function pipelineStats(db: DbClient, projectId: string) {
-  return dealsRepo.aggregateByState(db, projectId);
+  const [byStageRaw, wonThisMonth, lost] = await Promise.all([
+    dealsRepo.aggregateByStageCurrency(db, projectId),
+    dealsRepo.aggregateTerminalSince(db, projectId, "completed", startOfMonthISO()),
+    dealsRepo.aggregateTerminalSince(db, projectId, "cancelled", ""),
+  ]);
+
+  const byStage = byStageRaw.map((r) => ({
+    state_id: r.stateId,
+    currency: r.currency,
+    total_cents: r.totalCents,
+    count: r.count,
+  }));
+
+  // Open = anything not in a terminal group (null group counts as open).
+  const openMap = new Map<string, { currency: string; total_cents: number; count: number }>();
+  for (const r of byStageRaw) {
+    if (r.stateGroup === "completed" || r.stateGroup === "cancelled") continue;
+    const cur = openMap.get(r.currency) ?? { currency: r.currency, total_cents: 0, count: 0 };
+    cur.total_cents += r.totalCents;
+    cur.count += r.count;
+    openMap.set(r.currency, cur);
+  }
+
+  // Route wraps this in { results: … }.
+  return {
+    by_stage: byStage,
+    totals: {
+      open: [...openMap.values()],
+      won_this_month: wonThisMonth.map((r) => ({
+        currency: r.currency,
+        total_cents: r.totalCents,
+        count: r.count,
+      })),
+      lost: lost.map((r) => ({
+        currency: r.currency,
+        total_cents: r.totalCents,
+        count: r.count,
+      })),
+    },
+  };
 }
 
 // ── Customer email ──────────────────────────────────────────────────────────
