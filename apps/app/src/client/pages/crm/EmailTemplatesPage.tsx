@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { ArrowLeft, Pencil, Plus, Star, Trash2, Info } from "@/lib/icons";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 // Placeholder variables available in template subject/body.
 const TEMPLATE_VARIABLES = [
@@ -343,8 +344,49 @@ function FooterCard({ slug, initial }: { slug: string; initial: string }) {
   );
 }
 
+// One entry in the left rail — footer or a lifecycle purpose.
+function RailItem({
+  label,
+  sub,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  sub?: string;
+  count?: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm",
+        active
+          ? "bg-accent text-accent-foreground"
+          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+      )}
+    >
+      <span className="min-w-0">
+        <span className="block truncate font-medium">{label}</span>
+        {sub && <span className="block truncate text-xs opacity-70">{sub}</span>}
+      </span>
+      {count !== undefined && (
+        <Badge variant="secondary" className="shrink-0">
+          {count}
+        </Badge>
+      )}
+    </button>
+  );
+}
+
 export default function EmailTemplatesPage() {
   const { slug } = useParams();
+  // "footer" or a purpose name — footer first since it fills every template.
+  const [selected, setSelected] = useState("footer");
+  // Mobile only: rail and detail alternate. Desktop shows both panes.
+  const [showDetail, setShowDetail] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["email-templates", slug],
@@ -368,31 +410,81 @@ export default function EmailTemplatesPage() {
     variantsByPurpose.set(v.purpose, list);
   }
 
-  return (
-    <div className="space-y-4">
-      <Link to={`/${slug}/crm`} className="inline-flex items-center text-sm text-muted-foreground hover:underline">
-        <ArrowLeft className="mr-1 h-4 w-4" />
-        CRM
-      </Link>
+  const selectedPurpose = data.purposes.find((p) => p.name === selected) ?? null;
 
-      <div>
-        <h1 className="text-2xl font-bold">Email Templates</h1>
-        <p className="text-muted-foreground text-sm">
-          One section per lifecycle purpose. Each purpose has a curated default; add variants
-          to customize — the starred variant is what sends by default.
-        </p>
+  const pick = (key: string) => {
+    setSelected(key);
+    setShowDetail(true);
+  };
+
+  return (
+    <div className="flex h-[calc(100dvh-7rem)] md:h-[calc(100dvh-3.5rem)] -m-4 md:-m-6 lg:-m-8 flex-col">
+      <div className="flex items-center gap-3 border-b px-4 py-3">
+        <Link
+          to={`/${slug}/crm`}
+          className="inline-flex shrink-0 items-center text-sm text-muted-foreground hover:underline"
+        >
+          <ArrowLeft className="mr-1 h-4 w-4" />
+          CRM
+        </Link>
+        <div className="min-w-0">
+          <h1 className="text-base font-semibold leading-tight">Email Templates</h1>
+          <p className="hidden truncate text-xs text-muted-foreground sm:block">
+            One section per lifecycle purpose. Each purpose has a curated default; add variants
+            to customize — the starred variant is what sends by default.
+          </p>
+        </div>
       </div>
 
-      {slug && <FooterCard slug={slug} initial={data.footer ?? ""} />}
+      <div className="flex min-h-0 flex-1">
+        {/* Rail — footer + one entry per purpose. Fits without scrolling. */}
+        <nav
+          className={cn(
+            "w-full shrink-0 space-y-1 overflow-y-auto border-r p-2 md:w-[260px]",
+            showDetail ? "hidden md:block" : "block",
+          )}
+        >
+          <RailItem
+            label="Email footer"
+            sub="Workspace signature"
+            active={selected === "footer"}
+            onClick={() => pick("footer")}
+          />
+          {data.purposes.map((p) => (
+            <RailItem
+              key={p.name}
+              label={p.label}
+              count={variantsByPurpose.get(p.name)?.length ?? 0}
+              active={selected === p.name}
+              onClick={() => pick(p.name)}
+            />
+          ))}
+        </nav>
 
-      {data.purposes.map((p) => (
-        <PurposeCard
-          key={p.name}
-          slug={slug!}
-          purpose={p}
-          variants={variantsByPurpose.get(p.name) ?? []}
-        />
-      ))}
+        {/* Detail — the only pane that scrolls */}
+        <div
+          className={cn(
+            "min-w-0 flex-1 overflow-y-auto",
+            showDetail ? "block" : "hidden md:block",
+          )}
+        >
+          <div className="px-4 pt-3 md:hidden">
+            <Button variant="ghost" size="sm" onClick={() => setShowDetail(false)}>
+              <ArrowLeft className="mr-1 h-4 w-4" /> Templates
+            </Button>
+          </div>
+          <div className="max-w-3xl space-y-4 p-4 md:p-6">
+            {slug && selected === "footer" && <FooterCard slug={slug} initial={data.footer ?? ""} />}
+            {slug && selectedPurpose && (
+              <PurposeCard
+                slug={slug}
+                purpose={selectedPurpose}
+                variants={variantsByPurpose.get(selectedPurpose.name) ?? []}
+              />
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
