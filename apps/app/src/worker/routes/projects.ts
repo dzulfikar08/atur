@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import { paginationParams, paginatedResponse } from "../lib/pagination";
 import * as projectService from "../services/projects";
 
@@ -19,7 +20,7 @@ export const projectRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     );
     return c.json(paginatedResponse(rows, total, offset, limit));
   })
-  .post("/", authMiddleware, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const body = projectService.createProjectSchema.parse(await c.req.json());
@@ -33,7 +34,7 @@ export const projectRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const project = await projectService.getById(db, slug, projectId);
     return c.json(project);
   })
-  .patch("/:projectId", authMiddleware, async (c) => {
+  .patch("/:projectId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const projectId = c.req.param("projectId")!;
@@ -41,7 +42,7 @@ export const projectRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const project = await projectService.update(db, slug, projectId, body);
     return c.json(project);
   })
-  .delete("/:projectId", authMiddleware, async (c) => {
+  .delete("/:projectId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const projectId = c.req.param("projectId")!;
@@ -55,7 +56,7 @@ export const projectRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const members = await projectService.listMembers(db, slug, projectId);
     return c.json({ results: members });
   })
-  .post("/:projectId/members", authMiddleware, async (c) => {
+  .post("/:projectId/members", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const projectId = c.req.param("projectId")!;
@@ -63,7 +64,7 @@ export const projectRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const member = await projectService.addMember(db, slug, projectId, body);
     return c.json(member, 201);
   })
-  .delete("/:projectId/members/:memberId", authMiddleware, async (c) => {
+  .delete("/:projectId/members/:memberId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const projectId = c.req.param("projectId")!;

@@ -3,6 +3,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import * as modulesService from "../services/modules";
 import * as schema from "../db/schema";
 
@@ -13,7 +14,7 @@ export const moduleRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await modulesService.list(db, projectId, c);
     return c.json(result);
   })
-  .post("/", authMiddleware, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
     const workspaceSlug = c.req.param("slug")!;
@@ -27,20 +28,20 @@ export const moduleRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await modulesService.getById(db, moduleId);
     return c.json(result);
   })
-  .patch("/:moduleId", authMiddleware, async (c) => {
+  .patch("/:moduleId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const moduleId = c.req.param("moduleId")!;
     const body = modulesService.updateModuleSchema.parse(await c.req.json());
     const result = await modulesService.update(db, moduleId, body);
     return c.json(result);
   })
-  .delete("/:moduleId", authMiddleware, async (c) => {
+  .delete("/:moduleId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const moduleId = c.req.param("moduleId")!;
     await modulesService.remove(db, moduleId);
     return c.json({ success: true });
   })
-  .post("/:moduleId/issues", authMiddleware, async (c) => {
+  .post("/:moduleId/issues", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const moduleId = c.req.param("moduleId")!;
     const body = modulesService.addIssueSchema.parse(await c.req.json());
@@ -57,7 +58,7 @@ export const moduleRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       .where(and(eq(schema.moduleIssues.moduleId, moduleId), isNull(schema.issues.deletedAt)));
     return c.json({ results: rows.map((r) => r.issues) });
   })
-  .delete("/:moduleId/issues/:issueId", authMiddleware, async (c) => {
+  .delete("/:moduleId/issues/:issueId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const moduleId = c.req.param("moduleId")!;
     const issueId = c.req.param("issueId")!;

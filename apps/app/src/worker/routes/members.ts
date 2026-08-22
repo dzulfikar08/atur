@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import * as membersService from "../services/members";
 import { HTTPException } from "hono/http-exception";
 import { eq, and, isNull } from "drizzle-orm";
@@ -39,7 +40,7 @@ export const memberRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await membersService.listWorkspaceMembers(db, workspaceId);
     return c.json(result);
   })
-  .post("/", authMiddleware, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const workspaceId = await resolveWorkspaceId(c.env.DB, slug);
@@ -52,7 +53,7 @@ export const memberRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     );
     return c.json(result, 201);
   })
-  .post("/invite", authMiddleware, async (c) => {
+  .post("/invite", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const workspaceId = await resolveWorkspaceId(c.env.DB, slug);
@@ -104,7 +105,7 @@ export const memberRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const member = await membersService.addWorkspaceMember(db, workspaceId, user.id, body.role);
     return c.json(member, 201);
   })
-  .delete("/:memberId", authMiddleware, async (c) => {
+  .delete("/:memberId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const memberId = c.req.param("memberId")!;
     await membersService.removeWorkspaceMember(db, memberId);

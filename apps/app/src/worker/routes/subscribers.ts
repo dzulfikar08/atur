@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import * as subscribersService from "../services/subscribers";
 import * as issuesRepo from "../repositories/issues";
 import { HTTPException } from "hono/http-exception";
@@ -18,7 +19,7 @@ subscriberRoutes.get("/", async (c) => {
   return c.json(result);
 });
 
-subscriberRoutes.post("/", authMiddleware, async (c) => {
+subscriberRoutes.post("/", authMiddleware, requireWorkspaceMember, async (c) => {
   const db = getDb(c.env.DB);
   const user = c.get("user");
   const projectId = c.req.param("projectId")!;
@@ -29,7 +30,7 @@ subscriberRoutes.post("/", authMiddleware, async (c) => {
   return c.json({ ok: true });
 });
 
-subscriberRoutes.delete("/", authMiddleware, async (c) => {
+subscriberRoutes.delete("/", authMiddleware, requireWorkspaceMember, async (c) => {
   const db = getDb(c.env.DB);
   const user = c.get("user");
   const projectId = c.req.param("projectId")!;

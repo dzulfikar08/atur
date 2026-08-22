@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import * as pagesService from "../services/pages";
 import { HTTPException } from "hono/http-exception";
 import { eq } from "drizzle-orm";
@@ -26,7 +27,7 @@ export const pageRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await pagesService.list(db, workspaceId);
     return c.json(result);
   })
-  .post("/", authMiddleware, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const workspaceId = await resolveWorkspaceId(c.env.DB, slug);
@@ -41,14 +42,14 @@ export const pageRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await pagesService.getById(db, pageId);
     return c.json(result);
   })
-  .patch("/:pageId", authMiddleware, async (c) => {
+  .patch("/:pageId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const pageId = c.req.param("pageId")!;
     const body = pagesService.updatePageSchema.parse(await c.req.json());
     const result = await pagesService.update(db, pageId, body);
     return c.json(result);
   })
-  .delete("/:pageId", authMiddleware, async (c) => {
+  .delete("/:pageId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const pageId = c.req.param("pageId")!;
     await pagesService.remove(db, pageId);

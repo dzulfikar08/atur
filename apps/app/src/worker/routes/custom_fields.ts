@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import * as customFieldsService from "../services/customFields";
 import { HTTPException } from "hono/http-exception";
 import { eq } from "drizzle-orm";
@@ -25,7 +26,7 @@ export const customFieldRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await customFieldsService.list(db, projectId);
     return c.json(result);
   })
-  .post("/", authMiddleware, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const projectId = c.req.param("projectId")!;
@@ -34,14 +35,14 @@ export const customFieldRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await customFieldsService.create(db, projectId, workspaceId, body);
     return c.json(result, 201);
   })
-  .patch("/:fieldId", authMiddleware, async (c) => {
+  .patch("/:fieldId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const fieldId = c.req.param("fieldId")!;
     const body = customFieldsService.updateCustomFieldSchema.parse(await c.req.json());
     const result = await customFieldsService.update(db, fieldId, body);
     return c.json(result);
   })
-  .delete("/:fieldId", authMiddleware, async (c) => {
+  .delete("/:fieldId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const fieldId = c.req.param("fieldId")!;
     await customFieldsService.remove(db, fieldId);
