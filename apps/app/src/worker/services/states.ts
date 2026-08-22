@@ -11,7 +11,7 @@ import { HTTPException } from "hono/http-exception";
 // Plane-style default workflow. Seeded lazily for any project that has no
 // states yet (UI-created projects start stateless). "Todo" is the default so
 // new issues land somewhere visible instead of a null state.
-const DEFAULT_STATES: { name: string; group: string; color: string; isDefault?: boolean }[] = [
+const DEFAULT_STATES: StageSeed[] = [
   { name: "Backlog", group: "backlog", color: "#9CA3AF" },
   { name: "Todo", group: "started", color: "#3B82F6", isDefault: true },
   { name: "In Progress", group: "started", color: "#F59E0B" },
@@ -19,13 +19,33 @@ const DEFAULT_STATES: { name: string; group: string; color: string; isDefault?: 
   { name: "Cancelled", group: "cancelled", color: "#EF4444" },
 ];
 
-export async function seedDefaultStates(db: DbClient, projectId: string): Promise<string | null> {
+// Canonical sales funnel for CRM pipelines (is_pipeline=1). "Lead" is the
+// default so new deals enter at the top of the funnel; Won/Lost map to the
+// terminal groups (completed/cancelled) the deal board dims and collapses.
+export const SALES_STAGES: StageSeed[] = [
+  { name: "Lead", group: "backlog", color: "#9CA3AF", isDefault: true },
+  { name: "Qualified", group: "started", color: "#3B82F6" },
+  { name: "Proposal", group: "started", color: "#8B5CF6" },
+  { name: "Negotiation", group: "started", color: "#F59E0B" },
+  { name: "Won", group: "completed", color: "#22C55E" },
+  { name: "Lost", group: "cancelled", color: "#EF4444" },
+];
+
+type StageSeed = { name: string; group: string; color: string; isDefault?: boolean };
+
+// Not transactional (D1 has no interactive transactions): a crash mid-seed
+// leaves a partial workflow that the lazy list() branch won't retry (rows > 0).
+async function seedStates(
+  db: DbClient,
+  projectId: string,
+  stages: StageSeed[],
+): Promise<string | null> {
   const project = await projectRepo.findById(db, projectId);
   if (!project) return null;
   const now = nowISO();
   let defaultId: string | null = null;
-  for (let i = 0; i < DEFAULT_STATES.length; i++) {
-    const s = DEFAULT_STATES[i];
+  for (let i = 0; i < stages.length; i++) {
+    const s = stages[i];
     const id = uuid();
     if (s.isDefault) defaultId = id;
     await db.insert(schema.states).values({
@@ -50,6 +70,14 @@ export async function seedDefaultStates(db: DbClient, projectId: string): Promis
       .where(and(eq(schema.projects.id, projectId), isNull(schema.projects.deletedAt)));
   }
   return defaultId;
+}
+
+export async function seedDefaultStates(db: DbClient, projectId: string): Promise<string | null> {
+  return seedStates(db, projectId, DEFAULT_STATES);
+}
+
+export async function seedSalesStates(db: DbClient, projectId: string): Promise<string | null> {
+  return seedStates(db, projectId, SALES_STAGES);
 }
 
 export const createStateSchema = z.object({
@@ -88,7 +116,10 @@ export async function list(db: DbClient, projectId: string) {
   // UI-created projects start with no states; seed a default workflow on first
   // fetch so the State dropdown isn't empty and new issues get a default state.
   if (rows.length === 0) {
-    await seedDefaultStates(db, projectId);
+    // Pipelines get the sales funnel; everything else the Plane-style workflow.
+    const project = await projectRepo.findById(db, projectId);
+    if (project?.isPipeline) await seedSalesStates(db, projectId);
+    else await seedDefaultStates(db, projectId);
     rows = await statesRepo.listByProject(db, projectId);
   }
   return { results: rows };

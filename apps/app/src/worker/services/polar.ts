@@ -92,6 +92,9 @@ async function findStateByGroup(
         isNull(schema.states.deletedAt),
       ),
     )
+    // Deterministic pick among same-group states (e.g. Qualified vs Proposal
+    // for "started" in sales-seeded pipelines): lowest sequence wins.
+    .orderBy(schema.states.sequence)
     .limit(1);
   return state?.id ?? null;
 }
@@ -104,10 +107,13 @@ async function pickPipelineProject(db: DbClient, workspaceId: string): Promise<s
       id: schema.projects.id,
       name: schema.projects.name,
       createdAt: schema.projects.createdAt,
+      isPipeline: schema.projects.isPipeline,
     })
     .from(schema.projects)
     .where(and(eq(schema.projects.workspaceId, workspaceId), isNull(schema.projects.deletedAt)));
   if (projects.length === 0) return null;
+  const flagged = projects.find((p) => p.isPipeline === 1);
+  if (flagged) return flagged.id;
   const hinted = projects.find((p) => /crm|deal|pipeline|sales/i.test(p.name ?? ""));
   if (hinted) return hinted.id;
   return (

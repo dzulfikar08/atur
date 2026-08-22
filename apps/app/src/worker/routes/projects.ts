@@ -10,7 +10,13 @@ export const projectRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const { offset, limit } = paginationParams(c);
-    const { rows, total } = await projectService.listByWorkspace(db, slug, offset, limit);
+    const { rows, total } = await projectService.listByWorkspace(
+      db,
+      slug,
+      offset,
+      limit,
+      c.req.query("is_pipeline") === "1" ? { isPipeline: true } : undefined,
+    );
     return c.json(paginatedResponse(rows, total, offset, limit));
   })
   .post("/", authMiddleware, async (c) => {
