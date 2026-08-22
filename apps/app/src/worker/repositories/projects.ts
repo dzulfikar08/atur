@@ -135,11 +135,17 @@ export async function addMember(
   return member;
 }
 
-export async function removeMember(db: DbClient, id: string) {
-  await db
+// Soft-delete a project membership scoped to the resolved project. A
+// bare-UUID delete let a workspace member remove project memberships in
+// OTHER projects/workspaces (cross-workspace IDOR). Returns true when a
+// row in THIS project matched.
+export async function removeMember(db: DbClient, projectId: string, id: string) {
+  const rows = await db
     .update(schema.projectMembers)
     .set({ deletedAt: nowISO(), updatedAt: nowISO() })
-    .where(eq(schema.projectMembers.id, id));
+    .where(and(eq(schema.projectMembers.id, id), eq(schema.projectMembers.projectId, projectId)))
+    .returning({ id: schema.projectMembers.id });
+  return rows.length > 0;
 }
 
 export async function listMembers(db: DbClient, projectId: string) {

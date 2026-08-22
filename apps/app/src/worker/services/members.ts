@@ -28,8 +28,8 @@ export async function addProjectMember(
   return membersRepo.addProjectMember(db, projectId, workspaceId, memberId, role);
 }
 
-export async function removeProjectMember(db: DbClient, id: string) {
-  await membersRepo.removeProjectMember(db, id);
+export async function removeProjectMember(db: DbClient, projectId: string, id: string) {
+  return membersRepo.removeProjectMember(db, projectId, id);
 }
 
 export async function listProjectMembers(db: DbClient, projectId: string) {
