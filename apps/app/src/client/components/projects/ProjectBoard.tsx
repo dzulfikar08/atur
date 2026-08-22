@@ -135,7 +135,7 @@ function DroppableColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`min-w-[260px] sm:min-w-[280px] w-[260px] sm:w-[280px] flex-shrink-0 snap-start rounded-lg transition-colors ${
+      className={`min-w-[260px] sm:min-w-[280px] w-[260px] sm:w-[280px] flex-shrink-0 snap-start rounded-lg transition-colors flex flex-col max-h-full ${
         isOver ? "bg-muted/40 ring-2 ring-primary/20" : ""
       }`}
     >
@@ -146,7 +146,7 @@ function DroppableColumn({
         <span className="text-xs text-muted-foreground">{stateIssues.length}</span>
       </div>
       <SortableContext items={stateIssues.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-        <div className="space-y-2 min-h-[60px]">{children}</div>
+        <div className="flex-1 min-h-[60px] space-y-2 overflow-y-auto pr-1">{children}</div>
       </SortableContext>
     </div>
   );
@@ -604,7 +604,7 @@ export default function ProjectBoard() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-[calc(100dvh-7rem)] md:h-[calc(100dvh-3.5rem)] -m-4 md:-m-6 lg:-m-8">
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b">
         <div className="flex flex-wrap items-center gap-2">
           <Tabs value={view} onValueChange={setView}>
@@ -1004,7 +1004,7 @@ export default function ProjectBoard() {
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex gap-4 p-4 overflow-x-auto flex-1 snap-x">
+          <div className="flex gap-4 p-4 overflow-x-auto flex-1 min-h-0 snap-x">
             {groupedByState.map(({ state, issues: stateIssues }) => (
               <DroppableColumn key={state.id} state={state} stateIssues={stateIssues}>
                 {stateIssues.map((issue) => (
@@ -1027,10 +1027,10 @@ export default function ProjectBoard() {
       )}
 
       {view === "list" && (
-        <div className="p-4">
-          <div className="border rounded-lg overflow-x-auto">
+        <div className="flex flex-1 min-h-0 flex-col p-4">
+          <div className="flex-1 min-h-0 overflow-auto rounded-lg border">
             <table className="w-full text-sm min-w-[600px]">
-              <thead className="bg-muted/50">
+              <thead className="sticky top-0 bg-muted/50">
                 <tr>
                   <th className="text-left p-2 font-medium text-muted-foreground w-16">ID</th>
                   <th className="text-left p-2 font-medium text-muted-foreground">Title</th>
@@ -1146,7 +1146,7 @@ export default function ProjectBoard() {
       )}
 
       {view === "sheet" && (
-        <div className="p-4 overflow-auto flex-1">
+        <div className="min-h-0 flex-1 overflow-auto p-4">
           <table className="w-full text-sm border-collapse min-w-[800px]">
             <thead>
               <tr className="bg-muted/50 border-b">
@@ -1245,7 +1245,7 @@ export default function ProjectBoard() {
       )}
 
       {view === "calendar" && (
-        <div className="flex-1 overflow-auto p-4">
+        <div className="min-h-0 flex-1 overflow-auto p-4">
           {/* Month navigation */}
           <div className="flex items-center justify-between mb-4">
             <Button variant="ghost" size="sm" onClick={() => setCalMonth(subMonths(calMonth, 1))}>
@@ -1374,7 +1374,7 @@ export default function ProjectBoard() {
           const PADDING = 2;
 
           return (
-            <div className="flex-1 overflow-auto p-4">
+            <div className="min-h-0 flex-1 overflow-auto p-4">
               <div className="border rounded-lg overflow-hidden">
                 {/* Header with date markers */}
                 <div className="flex border-b bg-muted/50">
