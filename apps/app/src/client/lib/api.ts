@@ -40,8 +40,13 @@ export const api = {
     apiFetch<{ active_sprints: SprintData[] }>(`/workspaces/${slug}/analytics/sprints`).then(
       (r) => r.active_sprints,
     ),
-  listProjects: async (slug: string) => {
-    const data = await apiFetch<{ results: Project[] }>(`/workspaces/${slug}/projects/`);
+  listProjects: async (slug: string, params?: { is_pipeline?: 1 }) => {
+    const qs = new URLSearchParams();
+    if (params?.is_pipeline) qs.set("is_pipeline", "1");
+    const query = qs.toString();
+    const data = await apiFetch<{ results: Project[] }>(
+      `/workspaces/${slug}/projects/${query ? `?${query}` : ""}`,
+    );
     return data.results;
   },
   listIssues: async (slug: string, projectId: string): Promise<Issue[]> => {
@@ -472,14 +477,27 @@ export const api = {
       method: "PUT",
     }),
 
-  // CRM deals (a pipeline is just a project)
-  listDeals: async (slug: string, projectId: string, params?: { state_id?: string }) => {
+  // CRM deals (a pipeline is a project flagged is_pipeline)
+  // Fetches ALL pages — boards with >50 deals must not silently truncate.
+  listDeals: async (
+    slug: string,
+    projectId: string,
+    params?: { state_id?: string },
+  ): Promise<Deal[]> => {
     const qs = new URLSearchParams();
     if (params?.state_id) qs.set("state_id", params.state_id);
-    const query = qs.toString();
-    return apiFetch<PaginatedResponse<Deal>>(
-      `/workspaces/${slug}/projects/${projectId}/deals/${query ? `?${query}` : ""}`,
-    );
+    const all: Deal[] = [];
+    let offset = 0;
+    const limit = 100;
+    while (true) {
+      const page = await apiFetch<PaginatedResponse<Deal>>(
+        `/workspaces/${slug}/projects/${projectId}/deals/?limit=${limit}&offset=${offset}&${qs.toString()}`,
+      );
+      all.push(...page.results);
+      if (!page.total || page.results.length === 0 || all.length >= page.total) break;
+      offset += limit;
+    }
+    return all;
   },
   createDeal: (
     slug: string,
@@ -497,7 +515,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  updateDeal: (slug: string, projectId: string, issueId: string, data: Record<string, unknown>) =>
+  updateDeal: (
+    slug: string,
+    projectId: string,
+    issueId: string,
+    data: Partial<{
+      name: string;
+      amount_cents: number;
+      currency: string;
+      expected_close_at: string | null;
+      customer_id: string | null;
+    }>,
+  ) =>
     apiFetch<Deal>(`/workspaces/${slug}/projects/${projectId}/deals/${issueId}/`, {
       method: "PATCH",
       body: JSON.stringify(data),
@@ -508,9 +537,15 @@ export const api = {
       body: JSON.stringify({ state_id: stateId }),
     }),
   listDealStats: (slug: string, projectId: string) =>
-    apiFetch<{ results: DealStat[] }>(
+    apiFetch<{ results: DealStats }>(
       `/workspaces/${slug}/projects/${projectId}/deals/stats/`,
     ).then((r) => r.results),
+  // Flag/unflag a project as a CRM pipeline. Never touches the project's states.
+  setProjectPipeline: (slug: string, projectId: string, isPipeline: boolean) =>
+    apiFetch<ProjectDetail>(`/workspaces/${slug}/projects/${projectId}/`, {
+      method: "PATCH",
+      body: JSON.stringify({ isPipeline }),
+    }),
 
   // --- Cross-workspace ("All Workspaces") endpoints — /api/me/* ---
   listAllIssues: async (params?: {
@@ -534,8 +569,13 @@ export const api = {
     );
     return data.results;
   },
-  listAllProjects: async () => {
-    const data = await apiFetch<{ results: AllProject[] }>(`/me/projects/`);
+  listAllProjects: async (params?: { is_pipeline?: 1 }) => {
+    const qs = new URLSearchParams();
+    if (params?.is_pipeline) qs.set("is_pipeline", "1");
+    const query = qs.toString();
+    const data = await apiFetch<{ results: AllProject[] }>(
+      `/me/projects/${query ? `?${query}` : ""}`,
+    );
     return data.results;
   },
   listAllPages: async () => {
@@ -603,6 +643,7 @@ export interface Project {
   id: string;
   name: string;
   slug: string;
+  is_pipeline?: number;
 }
 
 export interface ProjectDetail {
@@ -613,6 +654,7 @@ export interface ProjectDetail {
   cover_image?: string;
   emoji?: string;
   slug?: string;
+  is_pipeline?: number;
 }
 
 export interface Issue {
@@ -874,6 +916,7 @@ export type AllProject = Project & {
   workspace_id: string;
   workspace_slug: string;
   workspace_name: string;
+  is_pipeline?: number;
 };
 export type AllPage = Page & {
   workspace_slug: string;
@@ -901,14 +944,33 @@ export interface Deal {
   state_group: string | null;
   priority: string | null;
   sort_order: number;
+  // Enriched board fields (customer join + issue freshness).
+  customer_name: string | null;
+  issue_updated_at: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
 
-export interface DealStat {
+export interface DealStageStat {
   state_id: string | null;
+  currency: string;
   total_cents: number;
   count: number;
+}
+
+export interface DealCurrencyTotal {
+  currency: string;
+  total_cents: number;
+  count: number;
+}
+
+export interface DealStats {
+  by_stage: DealStageStat[];
+  totals: {
+    open: DealCurrencyTotal[];
+    won_this_month: DealCurrencyTotal[];
+    lost: DealCurrencyTotal[];
+  };
 }
 
 export interface ContactEmailLogEntry {

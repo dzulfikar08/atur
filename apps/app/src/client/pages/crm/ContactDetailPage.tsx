@@ -23,13 +23,7 @@ import {
 import { ArrowLeft, Mail } from "@/lib/icons";
 import { toast } from "sonner";
 
-function money(cents: number, currency = "USD") {
-  try {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
-  } catch {
-    return `${cents}`;
-  }
-}
+import { money } from "@/lib/format";
 
 function PolarPanel({ slug, contactId }: { slug: string; contactId: string }) {
   const { data } = useQuery({
