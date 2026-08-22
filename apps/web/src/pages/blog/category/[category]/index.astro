@@ -1,0 +1,60 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import Breadcrumbs from "@/components/Breadcrumbs.astro";
+import LdJson from "@/components/LdJson.astro";
+import PostCard from "@/components/PostCard.astro";
+import { getCollection } from "astro:content";
+import {
+  allCategories,
+  byCategory,
+  newestFirst,
+  type Post,
+} from "@/lib/blog";
+
+export async function getStaticPaths() {
+  const posts = await getCollection("blog");
+  return allCategories(posts).map((c) => ({
+    params: { category: c.key },
+    props: { label: c.label, posts: byCategory(posts, c.key) },
+  }));
+}
+
+const { category } = Astro.params;
+const { label, posts } = Astro.props as { label: string; posts: Post[] };
+const sorted = newestFirst(posts);
+const site = Astro.site ?? new URL("https://diatur.com");
+---
+
+<BaseLayout
+  title={`${label} — Atur Blog`}
+  description={`${label} articles from the Atur team.`}
+  canonical={`/blog/category/${category}`}
+>
+  <LdJson
+    slot="head"
+    data={{
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Atur", item: new URL("/", site).href },
+        { "@type": "ListItem", position: 2, name: "Blog", item: new URL("/blog", site).href },
+        { "@type": "ListItem", position: 3, name: label },
+      ],
+    }}
+  />
+  <div class="article">
+    <Breadcrumbs
+      crumbs={[{ name: "Atur", href: "/" }, { name: "Blog", href: "/blog" }, { name: label }]}
+    />
+    <p class="section-kicker">Blog</p>
+    <h1>{label}</h1>
+    <p class="article-meta">
+      {sorted.length} {sorted.length === 1 ? "article" : "articles"}
+    </p>
+    <div class="blog-list">
+      {sorted.map((post) => (
+        <PostCard post={post} />
+      ))}
+    </div>
+  </div>
+</BaseLayout>

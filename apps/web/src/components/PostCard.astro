@@ -1,0 +1,27 @@
+---
+import { CATEGORY_LABELS, readMins, type Post } from "@/lib/blog";
+
+// One blog card, shared by the blog index, category/tag listings, and the
+// related-posts section. `heading` picks h2 (top-level lists) or h3 (related,
+// under the article's h1) for correct outline order.
+const { post, heading = "h2" } = Astro.props as {
+  post: Post;
+  heading?: "h2" | "h3";
+};
+const Tag = heading;
+---
+<a class="blog-card" href={`/blog/${post.id}`}>
+  <div class="article-meta">
+    <span class="badge">{CATEGORY_LABELS[post.data.category]}</span>
+    <time datetime={post.data.pubDate.toISOString()}>
+      {post.data.pubDate.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })}
+    </time>
+    <span>· {readMins(post.body)} min read</span>
+  </div>
+  <Tag>{post.data.title}</Tag>
+  <p>{post.data.description}</p>
+</a>

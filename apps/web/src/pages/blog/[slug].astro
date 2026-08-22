@@ -1,6 +1,10 @@
 ---
-import BaseLayout from "../../layouts/BaseLayout.astro";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import Breadcrumbs from "@/components/Breadcrumbs.astro";
+import LdJson from "@/components/LdJson.astro";
+import PostCard from "@/components/PostCard.astro";
 import { getCollection, render } from "astro:content";
+import { CATEGORY_LABELS, readMins, relatedPosts, tagSlug } from "@/lib/blog";
 
 export async function getStaticPaths() {
   const posts = await getCollection("blog");
@@ -12,6 +16,15 @@ export async function getStaticPaths() {
 
 const { post } = Astro.props;
 const { Content } = await render(post);
+
+const all = await getCollection("blog");
+const related = relatedPosts(all, post);
+const site = Astro.site ?? new URL("https://diatur.com");
+const url = new URL(`/blog/${post.id}`, site).href;
+const image = new URL("/og-atur.webp", site).href;
+const modified = post.data.updatedDate ?? post.data.pubDate;
+const fmt = (d: Date) =>
+  d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 ---
 
 <BaseLayout
@@ -20,14 +33,74 @@ const { Content } = await render(post);
   canonical={`/blog/${post.id}`}
   ogType="article"
 >
+  <LdJson
+    slot="head"
+    data={{
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: post.data.title,
+      description: post.data.description,
+      url,
+      mainEntityOfPage: { "@type": "WebPage", "@id": url },
+      datePublished: post.data.pubDate.toISOString(),
+      dateModified: modified.toISOString(),
+      inLanguage: "en-US",
+      keywords: post.data.keywords?.join(", "),
+      image,
+      author: { "@type": "Organization", name: post.data.author ?? "Atur" },
+      publisher: { "@type": "Organization", name: "Atur" },
+    }}
+  />
+  <LdJson
+    slot="head"
+    data={{
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Atur", item: new URL("/", site).href },
+        { "@type": "ListItem", position: 2, name: "Blog", item: new URL("/blog", site).href },
+        { "@type": "ListItem", position: 3, name: post.data.title },
+      ],
+    }}
+  />
+  <meta slot="head" property="article:published_time" content={post.data.pubDate.toISOString()} />
+  <meta slot="head" property="article:modified_time" content={modified.toISOString()} />
+
   <article class="article">
+    <Breadcrumbs
+      crumbs={[{ name: "Atur", href: "/" }, { name: "Blog", href: "/blog" }, { name: post.data.title }]}
+    />
     <p class="section-kicker">Blog</p>
     <h1>{post.data.title}</h1>
-    <time datetime={post.data.pubDate.toISOString()}>
-      {post.data.pubDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-    </time>
+    <div class="article-meta">
+      <a class="badge" href={`/blog/category/${post.data.category}`}>
+        {CATEGORY_LABELS[post.data.category]}
+      </a>
+      <time datetime={post.data.pubDate.toISOString()}>{fmt(post.data.pubDate)}</time>
+      {post.data.updatedDate && <span>Updated {fmt(post.data.updatedDate)}</span>}
+      <span>· {readMins(post.body)} min read</span>
+    </div>
     <div class="prose">
       <Content />
     </div>
+    {post.data.tags && post.data.tags.length > 0 && (
+      <div class="tag-row">
+        {post.data.tags.map((t) => (
+          <a class="chip" href={`/blog/tag/${tagSlug(t)}`}>
+            #{t}
+          </a>
+        ))}
+      </div>
+    )}
+    {related.length > 0 && (
+      <section class="related">
+        <h2>Related</h2>
+        <div class="blog-list">
+          {related.map((p) => (
+            <PostCard post={p} heading="h3" />
+          ))}
+        </div>
+      </section>
+    )}
   </article>
 </BaseLayout>
