@@ -65,6 +65,10 @@ vi.mock("../../services/workspaces", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   update: vi.fn(),
 }));
+vi.mock("../../repositories/projects", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  removeMember: vi.fn(),
+}));
 
 import { projectRoutes } from "../../routes/projects";
 import { labelRoutes } from "../../routes/labels";
@@ -73,6 +77,7 @@ import { memberRoutes } from "../../routes/members";
 import { workspaceRoutes } from "../../routes/workspaces";
 import * as workspaceRepo from "../../repositories/workspaces";
 import * as membersRepo from "../../repositories/members";
+import * as projectRepo from "../../repositories/projects";
 import * as projectService from "../../services/projects";
 import * as labelsService from "../../services/labels";
 import * as sprintsService from "../../services/sprints";
@@ -294,5 +299,48 @@ describe("workspace management requires an active admin", () => {
     const res = await req(app, "/api/workspaces/acme", jsonInit("PATCH", { name: "New Name" }));
     expect(res.status).toBe(200);
     expect(workspaceService.update).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("project member removal is scoped to the resolved project", () => {
+  const victimUuid = "11111111-2222-3333-4444-555555555555";
+  const memberPath = (id: string) => `/api/workspaces/acme/projects/p-1/members/${id}`;
+
+  it("404s a foreign member UUID and deletes nothing (cross-project IDOR)", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    // projectRepo.findById (real) resolves p-1 under the guard's workspace.
+    selectQueue.push([{ id: "p-1", workspaceId: "ws-1" }]);
+    // The victim row lives in another project: scoped delete matches nothing.
+    vi.mocked(projectRepo.removeMember).mockResolvedValue(false);
+    const app = testApp();
+
+    const res = await req(app, memberPath(victimUuid), { method: "DELETE" });
+    expect(res.status).toBe(404);
+    expect(projectRepo.removeMember).toHaveBeenCalledWith(
+      expect.anything(),
+      "p-1", // the guard/workspace-resolved project — never from the raw UUID
+      victimUuid,
+    );
+  });
+
+  it("removes a membership of the resolved project normally", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    selectQueue.push([{ id: "p-1", workspaceId: "ws-1" }]);
+    vi.mocked(projectRepo.removeMember).mockResolvedValue(true);
+    const app = testApp();
+
+    const res = await req(app, memberPath("pm-1"), { method: "DELETE" });
+    expect(res.status).toBe(204);
+    expect(projectRepo.removeMember).toHaveBeenCalledWith(expect.anything(), "p-1", "pm-1");
+  });
+
+  it("404s when the project belongs to a different workspace", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    selectQueue.push([{ id: "p-1", workspaceId: "ws-other" }]);
+    const app = testApp();
+
+    const res = await req(app, memberPath("pm-1"), { method: "DELETE" });
+    expect(res.status).toBe(404);
+    expect(projectRepo.removeMember).not.toHaveBeenCalled();
   });
 });

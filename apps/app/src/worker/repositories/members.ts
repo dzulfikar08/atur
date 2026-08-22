@@ -113,11 +113,16 @@ export async function addProjectMember(
   return member;
 }
 
-export async function removeProjectMember(db: DbClient, id: string) {
-  await db
+// Soft-delete a project membership scoped to the resolved project — same
+// cross-workspace IDOR guard as removeWorkspaceMember above. Returns true
+// when a row in THIS project matched.
+export async function removeProjectMember(db: DbClient, projectId: string, id: string) {
+  const rows = await db
     .update(projectMembers)
     .set({ deletedAt: nowISO(), updatedAt: nowISO() })
-    .where(eq(projectMembers.id, id));
+    .where(and(eq(projectMembers.id, id), eq(projectMembers.projectId, projectId)))
+    .returning({ id: projectMembers.id });
+  return rows.length > 0;
 }
 
 // Active membership check used for asset authorization (portal assets visible to
