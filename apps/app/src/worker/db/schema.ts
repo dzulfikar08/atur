@@ -161,6 +161,8 @@ export const projects = sqliteTable(
     pageView: integer("page_view").notNull().default(1),
     intakeView: integer("intake_view").notNull().default(1),
     isTimeTrackingEnabled: integer("is_time_tracking_enabled").notNull().default(0),
+    // CRM: this project doubles as a sales pipeline (deal board + seeded sales stages).
+    isPipeline: integer("is_pipeline").notNull().default(0),
     archiveIn: integer("archive_in"),
     closeIn: integer("close_in"),
     timezone: text("timezone").default("UTC"),
