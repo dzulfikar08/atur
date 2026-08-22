@@ -8,6 +8,7 @@ import CrmDemo from "../components/CrmDemo.astro";
 
 const APP_URL = "https://app.diatur.com";
 const features = [
+  { icon: "flow", title: "A workspace that connects", description: "A page can lead to an issue. An issue can lead to a customer. Your context stays connected as work changes." },
   { icon: "kanban", title: "Plan and ship", description: "Projects, issues, cycles, and kanban boards give the team one clear place to move work forward." },
   { icon: "comment", title: "Listen to customers", description: "Collect feedback and support tickets in a portal your customers can actually use." },
   { icon: "contactBook", title: "Keep relationships warm", description: "Contacts, companies, and pipeline stages stay close to the work they influence." },
@@ -34,7 +35,7 @@ const reasons = [
 ];
 const plans = [
   ["Starter", "$9", "For individuals and small teams building a calmer operating system.", ["Projects, issues, and cycles", "Support portal and feedback", "CRM contacts and pipeline", "Pages and knowledge graph", "Time tracking", "MCP access"]],
-  ["Team", "$29", "For growing teams bringing delivery and customer work together.", ["Everything in Starter", "Unlimited team members", "Custom domain", "Daily automatic backups", "Priority support", "Onboarding assistance"]],
+  ["Team", "$29", "For growing teams bringing delivery and customer work together.", ["Everything in Starter", "Unlimited team members", "Flat price — not per seat", "Custom domain", "Daily automatic backups", "Priority support", "Onboarding assistance"]],
 ];
 ---
 
@@ -50,9 +51,9 @@ const plans = [
     <section class="landing-hero">
       <div class="landing-grid-lines"></div><div class="landing-noise"></div>
       <div class="landing-container landing-hero-content">
-        <span class="landing-badge"><i></i> Built for teams that do more than one kind of work</span>
+        <span class="landing-badge"><i></i> Built for small teams that do more than one kind of work</span>
         <h1>Work moves better<br /><em>when context stays close</em></h1>
-        <p>Atur brings projects, customer feedback, CRM, docs, time tracking, and AI workflows into one connected workspace — so your team can spend less time updating tools and more time doing the work.</p>
+        <p>Atur is the connected workspace for small teams. Projects, customer feedback, CRM, docs, and time tracking live in one place — so your team can spend less time updating tools and more time doing the work.</p>
         <div class="landing-hero-actions"><a class="landing-button large" href={`${APP_URL}/auth/login`}>Start with Atur <b>→</b></a><a class="landing-outline large" href="#workflow">See how it works <b>↓</b></a></div>
 
         <InteractiveBoard />
@@ -60,7 +61,7 @@ const plans = [
       </div>
     </section>
 
-    <section id="features" class="landing-section"><div class="landing-container"><div class="landing-heading"><small>One connected workspace</small><h2>Everything your team needs<br /><em>to keep momentum</em></h2><p>Atur is designed for teams whose work does not fit neatly into one category. Bring the operating pieces together without making everyone learn five systems.</p></div><div class="landing-feature-grid">{features.map((f) => <article><span class="feature-icon"><Icon name={f.icon} size={20} /></span><h3>{f.title}</h3><p>{f.description}</p></article>)}</div></div></section>
+    <section id="features" class="landing-section"><div class="landing-container"><div class="landing-heading"><small>One connected workspace</small><h2>Everything your team needs,<br /><em>connected for small teams</em></h2><p>Atur is designed for small teams whose work does not fit neatly into one category. Bring the operating pieces together without making everyone learn five systems.</p></div><div class="landing-feature-grid">{features.map((f) => <article><span class="feature-icon"><Icon name={f.icon} size={20} /></span><h3>{f.title}</h3><p>{f.description}</p></article>)}</div></div></section>
 
     <section id="workflow" class="landing-section landing-workflow"><div class="landing-container"><div class="landing-heading"><small>A simpler operating rhythm</small><h2>From signal to shipped<br /><em>without losing the thread</em></h2></div><div class="workflow-grid">{workflow.map(([number, title, description]) => <article><span>{number}</span><h3>{title}</h3><p>{description}</p></article>)}</div></div></section>
 
@@ -72,7 +73,7 @@ const plans = [
 
     <section class="landing-section landing-reasons"><div class="landing-container"><div class="landing-heading"><small>Why Atur</small><h2>Make the whole picture<br /><em>easier to see</em></h2></div><div class="reason-grid">{reasons.map((r) => <article><span><Icon name={r.icon} size={18} /></span><h3>{r.title}</h3><p>{r.description}</p></article>)}</div></div></section>
 
-    <section id="pricing" class="landing-section"><div class="landing-container"><div class="landing-heading"><small>Pricing</small><h2>Start small. Keep everything.</h2><p>Simple plans for a connected workspace. No feature scavenger hunt, and no credit card required to try it.</p></div><div class="plans">{plans.map(([name, price, blurb, items], i) => <article class={i === 1 ? "popular" : ""}>{i === 1 && <label>For growing teams</label>}<h3>{name}</h3><strong>{price}<small>/month</small></strong><p>{blurb}</p><ul>{items.map((item) => <li><Icon name="check" size={13} /> {item}</li>)}</ul><a class={i === 1 ? "landing-button" : "landing-outline"} href={`${APP_URL}/auth/login`}>{i === 1 ? "Start with Team →" : "Start with Starter"}</a></article>)}</div><p class="trial-note">Try Atur without a credit card. Upgrade when the workspace earns its place.</p></div></section>
+    <section id="pricing" class="landing-section"><div class="landing-container"><div class="landing-heading"><small>Pricing</small><h2>A flat price,<br /><em>not a per-seat tax</em></h2><p>Simple plans for a connected workspace. Pay one flat rate for the whole team — no per-seat math as you grow, and no credit card required to try it.</p></div><div class="plans">{plans.map(([name, price, blurb, items], i) => <article class={i === 1 ? "popular" : ""}>{i === 1 && <label>For growing teams</label>}<h3>{name}</h3><strong>{price}<small>/month</small></strong><p>{blurb}</p><ul>{items.map((item) => <li><Icon name="check" size={13} /> {item}</li>)}</ul><a class={i === 1 ? "landing-button" : "landing-outline"} href={`${APP_URL}/auth/login`}>{i === 1 ? "Start with Team →" : "Start with Starter"}</a></article>)}</div><p class="trial-note">Try Atur without a credit card. Upgrade when the workspace earns its place.</p></div></section>
 
     <section class="landing-section landing-cta"><div class="landing-container"><h2>Give your work<br /><em>one place to land.</em></h2><p>Open a workspace, invite your team, and see how much easier the day feels when the context is already there.</p><a class="landing-button large" href={`${APP_URL}/auth/login`}>Open Atur <b>→</b></a></div></section>
     <section class="landing-section landing-mcp"><div class="landing-container"><span><Icon name="bot" size={26} /></span><h2>Your AI editor can work with Atur</h2><p>Atur includes an MCP server for AI-assisted workflows. Connect a compatible client, then create issues, retrieve context, and update work without leaving your editor.</p><div><a class="landing-button large" href={`${APP_URL}/auth/login`}>Explore MCP in Atur <b>→</b></a><small>Find setup commands in <strong>AI / MCP</strong> inside the app.</small></div></div></section>

@@ -3,8 +3,8 @@ title: "Tracking billable hours without hating your timesheet"
 description: "Friday-memory timesheets overbill some projects and underbill others. Contemporaneous logging, increments, and project-level reports fix it."
 pubDate: 2026-08-19
 category: "time"
-tags: ["time-tracking","billing"]
-keywords: ["how to track billable hours","billable hours best practices"]
+tags: ["time-tracking", "billing"]
+keywords: ["how to track billable hours", "billable hours best practices"]
 ---
 
 The reason people hate their timesheet is not the interface — it is the memory problem. By Friday, a developer who spent three sprints on a feature remembers two big blocks of work and one interruption, and fills the gaps with whatever sounds reasonable. The result is a timesheet that bills the wrong projects, rewards busy work, and turns time tracking into an adversarial ritual between billing and delivery.

@@ -3,8 +3,8 @@ title: "Atur vs Jira: when a smaller tracker is the right call"
 description: "Atur and Jira solve different scales. Jira wins on enterprise depth; Atur wins on setup speed, built-in CRM and MCP, and flat $9/$29 pricing."
 pubDate: 2026-08-21
 category: "comparisons"
-tags: ["jira","comparison"]
-keywords: ["atur vs jira","jira alternative for small teams"]
+tags: ["jira", "comparison"]
+keywords: ["atur vs jira", "jira alternative for small teams"]
 ---
 
 Jira is built for the problems of large organizations: thousands of engineers, layered permission schemes, release trains with dozens of moving parts. Atur is built for teams that need to keep the whole operation visible in one place — issues, support, CRM, time, and a wiki — without spending weeks on configuration. The choice between them is mostly a question of which set of problems you actually have.
@@ -39,7 +39,7 @@ Atur is the wrong choice when your team is large enough that a single workspace 
 
 Atur is $9/month Starter, $29/month Team, with no credit card required to try the full workspace. Jira's pricing is per user, with the final cost depending on headcount and add-ons — see their site for the current number.
 
-*Accurate as of August 2026.*
+_Accurate as of August 2026._
 
 Read how Linear fits into the same comparison on the [pricing overview][p], and for the other end of the spectrum see [Atur vs Linear][l] and [Atur vs Notion][n].
 

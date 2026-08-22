@@ -3,8 +3,8 @@ title: "Helpdesk metrics that matter (and two that mislead)"
 description: "Not all helpdesk metrics are equal. First response time and CSAT drive outcomes, while ticket counts and handle time can mislead small teams into busy work."
 pubDate: 2026-08-18
 category: "support"
-tags: ["helpdesk","metrics"]
-keywords: ["helpdesk metrics","first response time","csat"]
+tags: ["helpdesk", "metrics"]
+keywords: ["helpdesk metrics", "first response time", "csat"]
 ---
 
 Measuring support feels like measuring everything at once. Volume rises, response time wobbles, CSAT dips after an outage, and suddenly the whole team is chasing the wrong number. The discipline is to pick the few metrics that actually move customer outcomes, and ignore the rest until they earn their place.

@@ -3,8 +3,8 @@ title: "Shared inbox vs ticketing system: when to switch"
 description: "Shared inbox works for two people. Beyond that, missing states, SLAs, and per-customer history cause collisions and missed deadlines."
 pubDate: 2026-08-18
 category: "support"
-tags: ["helpdesk","email"]
-keywords: ["shared inbox vs ticketing","shared inbox vs helpdesk"]
+tags: ["helpdesk", "email"]
+keywords: ["shared inbox vs ticketing", "shared inbox vs helpdesk"]
 ---
 
 A shared inbox is the most forgiving tool on the planet: anyone with the password can read, reply, and delete. It is cheap, familiar, and genuinely fine for some teams. The trouble is that it stops scaling long before most teams notice, and the handoff to a proper ticketing system always takes longer than planned because the breakdown is gradual, not sudden.

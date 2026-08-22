@@ -3,8 +3,8 @@ title: "MCP for project management: AI agents in your tracker"
 description: "MCP lets AI agents act on your tracker, not just read it. Triage inboxes, write release notes, and answer what-is-blocked — practical uses today."
 pubDate: 2026-08-20
 category: "ai"
-tags: ["mcp","ai"]
-keywords: ["model context protocol","ai agents project management"]
+tags: ["mcp", "ai"]
+keywords: ["model context protocol", "ai agents project management"]
 ---
 
 Most integrations between AI assistants and project management tools top out at "read a value and paste it somewhere." The agent can summarize your board, but it cannot move a card, update a deal stage, or acknowledge a customer. The Model Context Protocol (MCP) changes that boundary: it is an open protocol that lets an AI agent act on your data through the same tools your team uses every day, rather than a parallel set of read-only endpoints.

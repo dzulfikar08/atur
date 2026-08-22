@@ -9,7 +9,7 @@ keywords: ["kanban wip limits", "work in progress limits", "limit work in progre
 
 Most kanban boards die the same quiet death. Work flows in from every
 direction, every column fills up, and the board becomes a wall of sticky notes
-nobody wants to look at. Plenty is *in progress* — almost nothing is *done*.
+nobody wants to look at. Plenty is _in progress_ — almost nothing is _done_.
 Cycle time creeps up, blockers hide in plain sight, and the team's calendar
 fills with status meetings that exist only to compensate for a board no one
 trusts.
@@ -56,7 +56,7 @@ This is where most teams waver, so decide the policy up front:
 2. **Surface the blocker.** If the item is stuck for an external reason, move
    it to a Blocked state with a note. A blocked item doesn't count against the
    limit — hiding it in "In Progress" does.
-3. **Finish, don't start.** The one thing you may *not* do is pull new work
+3. **Finish, don't start.** The one thing you may _not_ do is pull new work
    into a full column. Every workaround that violates this turns the limit
    into decoration.
 
@@ -73,8 +73,8 @@ This is where most teams waver, so decide the policy up front:
 ## Tune on a cadence
 
 Review limits every few weeks with the team, not top-down. Two questions are
-enough: *which column was full most often?* and *where did items wait the
-longest?* The answers tell you whether to adjust a limit, fix an upstream
+enough: _which column was full most often?_ and _where did items wait the
+longest?_ The answers tell you whether to adjust a limit, fix an upstream
 problem (unclear specs? slow reviews?), or add capacity to a genuine
 bottleneck.
 

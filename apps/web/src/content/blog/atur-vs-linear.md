@@ -3,8 +3,8 @@ title: "Atur vs Linear: issue tracking plus the rest of the operation"
 description: "Linear stays sharper as a pure issue tracker. Atur is for teams juggling issues, support, CRM, and timesheets in one workspace instead of many."
 pubDate: 2026-08-21
 category: "comparisons"
-tags: ["linear","comparison"]
-keywords: ["atur vs linear","linear alternative"]
+tags: ["linear", "comparison"]
+keywords: ["atur vs linear", "linear alternative"]
 ---
 
 Linear is a better issue tracker than Atur, and it is worth saying so up front. For teams whose work is almost entirely issues, cycles, and roadmaps, Linear's speed, polish, and keyboard-first flow are hard to beat. Atur is not trying to be the sharpest tool for that job — it is trying to be the only tool a small operation needs, even when the work is not just engineering.
@@ -33,7 +33,7 @@ Atur is the wrong choice for a product or engineering team that only needs issue
 
 Atur is $9/month Starter, $29/month Team, with no credit card required to try the full workspace. Linear's pricing is per editor, with the final cost depending on seat count and optional add-ons — see their site for the current number.
 
-*Accurate as of August 2026.*
+_Accurate as of August 2026._
 
 For the similar argument about Jira, read [Atur vs Jira][j], and for how far a single workspace can stretch on documentation, see [Atur vs Notion][n]. See the [features overview][f] for how states, projects, and cycles fit together.
 
