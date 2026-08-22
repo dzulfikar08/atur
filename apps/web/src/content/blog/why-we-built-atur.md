@@ -35,3 +35,9 @@ encrypted in transit and at rest.
 Atur ships a built-in MCP server. Any AI agent — Claude Code, Cursor, Copilot —
 can create issues, answer tickets, and update deals through the same 35+ tools
 your team uses every day.
+
+Curious how the product itself is put together — the Astro marketing site, the
+Bun monorepo, the single Cloudflare Worker? Read
+[how Atur is built][h].
+
+[h]: /blog/how-atur-is-built

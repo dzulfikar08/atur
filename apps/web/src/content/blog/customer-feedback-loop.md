@@ -3,8 +3,8 @@ title: "How to close the customer feedback loop"
 description: "Closing feedback means more than listening. Collect, triage, route, act, then tell customers what changed — the skipped step that builds trust."
 pubDate: 2026-08-19
 category: "support"
-tags: ["feedback","helpdesk"]
-keywords: ["customer feedback loop","customer feedback process"]
+tags: ["feedback", "helpdesk"]
+keywords: ["customer feedback loop", "customer feedback process"]
 ---
 
 Most teams collect feedback well enough — a survey here, a tweet there — but few close the loop. And by "close the loop" I mean the part nobody plans for: telling customers what you actually did with their words. That final step is usually skipped, not by accident, but because there is no clear owner for it. Yet it is the only step that converts input into trust.

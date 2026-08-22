@@ -3,8 +3,8 @@ title: "How many stages should a sales pipeline have?"
 description: "Four to seven stages, each with clear exit criteria, beats both bloated funnels and lazy pipelines. Audit aging deals and stage history."
 pubDate: 2026-08-19
 category: "crm"
-tags: ["pipeline","sales"]
-keywords: ["sales pipeline stages","b2b pipeline stages"]
+tags: ["pipeline", "sales"]
+keywords: ["sales pipeline stages", "b2b pipeline stages"]
 ---
 
 Most pipeline reviews spend the first ten minutes arguing about stages instead of deals. Teams disagree on whether a proposal counts as a stage or a task, whether "qualified" means interest or budget, and whether "negotiation" starts before or after legal gets involved. The fix is to stop negotiating the funnel and start auditing it against reality: every stage should end with evidence a customer could verify, and the whole funnel should fit on a slide.

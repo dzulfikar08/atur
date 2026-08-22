@@ -3,8 +3,8 @@ title: "Why team wikis die (and how to keep yours alive)"
 description: "Wikis die from orphans and decay, not good intentions. Backlinks, a knowledge graph, and docs next to the work keep a wiki useful long enough to matter."
 pubDate: 2026-08-20
 category: "pages"
-tags: ["wiki","docs"]
-keywords: ["team wiki best practices","internal knowledge base"]
+tags: ["wiki", "docs"]
+keywords: ["team wiki best practices", "internal knowledge base"]
 ---
 
 Team wikis almost always die the same way: they start with enthusiasm, accumulate a few good pages, then slowly fill with orphans — documents that nobody links to and nobody remembers. By the time anyone hunts for an answer, the wiki's last edit was six months ago and the person who might know the answer left the company last quarter. The technology is rarely the failure; the habits around linking and updating are.
