@@ -161,7 +161,13 @@ contactsRoutes.get("/:id/email-preview", async (c) => {
     purpose: c.req.query("purpose") || "feedback_request",
     variant_id: c.req.query("variant_id") || undefined,
   });
-  const result = await crmService.renderTemplateEmail(db, ws, c.req.param("id")!, purpose, variant_id);
+  const result = await crmService.renderTemplateEmail(
+    db,
+    ws,
+    c.req.param("id")!,
+    purpose,
+    variant_id,
+  );
   return c.json(result);
 });
 
@@ -171,12 +177,6 @@ contactsRoutes.post("/:id/send-email", async (c) => {
   const ws = await resolveWorkspace(c);
   await assertMember(db, ws, c.get("user").sub);
   const body = crmService.sendEmailSchema.parse(await c.req.json());
-  const result = await crmService.sendTemplateEmail(
-    db,
-    c.env,
-    ws,
-    c.req.param("id")!,
-    body,
-  );
+  const result = await crmService.sendTemplateEmail(db, c.env, ws, c.req.param("id")!, body);
   return c.json(result);
 });

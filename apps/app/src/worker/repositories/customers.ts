@@ -318,7 +318,6 @@ export async function clearSessionToken(db: DbClient, customerId: string) {
     .where(eq(schema.customers.id, customerId));
 }
 
-
 // Stamp the CRM email send-cooldown clock (customers.last_email_at).
 export async function markEmailSent(db: DbClient, customerId: string) {
   await db

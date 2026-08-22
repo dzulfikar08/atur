@@ -46,7 +46,12 @@ export const addMemberSchema = z.object({
 // Derive a project identifier (uppercase alnum, <=12 chars) from the name for
 // callers that only send a name (e.g. the CRM pipeline dialog).
 function deriveIdentifier(name: string): string {
-  return name.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12) || "PIPE";
+  return (
+    name
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 12) || "PIPE"
+  );
 }
 
 export async function create(
@@ -62,7 +67,11 @@ export async function create(
     identifier = base;
     // Keep <=12 chars while suffixing 2..99 on collisions with the unique
     // (identifier, workspace_id) constraint.
-    for (let n = 2; n <= 99 && (await projectRepo.identifierExists(db, workspace.id, identifier)); n++) {
+    for (
+      let n = 2;
+      n <= 99 && (await projectRepo.identifierExists(db, workspace.id, identifier));
+      n++
+    ) {
       identifier = `${base.slice(0, 10)}${n}`;
     }
   }

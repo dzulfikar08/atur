@@ -51,10 +51,7 @@ describe("create with is_pipeline", () => {
     const data = projectService.createProjectSchema.parse({ name: "Website" });
     await projectService.create(db, "ws", data);
 
-    expect(projectRepo.create).toHaveBeenCalledWith(
-      db,
-      expect.objectContaining({ isPipeline: 0 }),
-    );
+    expect(projectRepo.create).toHaveBeenCalledWith(db, expect.objectContaining({ isPipeline: 0 }));
     expect(statesService.seedSalesStates).not.toHaveBeenCalled();
   });
 });

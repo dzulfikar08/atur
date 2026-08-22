@@ -36,7 +36,10 @@ export async function getVariant(
     .select()
     .from(schema.crmEmailVariants)
     .where(
-      and(eq(schema.crmEmailVariants.id, variantId), eq(schema.crmEmailVariants.workspaceId, workspaceId)),
+      and(
+        eq(schema.crmEmailVariants.id, variantId),
+        eq(schema.crmEmailVariants.workspaceId, workspaceId),
+      ),
     )
     .limit(1);
   return row ?? null;
@@ -114,15 +117,25 @@ export async function updateVariant(
       updatedAt: nowISO(),
     })
     .where(
-      and(eq(schema.crmEmailVariants.id, variantId), eq(schema.crmEmailVariants.workspaceId, workspaceId)),
+      and(
+        eq(schema.crmEmailVariants.id, variantId),
+        eq(schema.crmEmailVariants.workspaceId, workspaceId),
+      ),
     );
 }
 
-export async function deleteVariant(db: DbClient, workspaceId: string, variantId: string): Promise<void> {
+export async function deleteVariant(
+  db: DbClient,
+  workspaceId: string,
+  variantId: string,
+): Promise<void> {
   await db
     .delete(schema.crmEmailVariants)
     .where(
-      and(eq(schema.crmEmailVariants.id, variantId), eq(schema.crmEmailVariants.workspaceId, workspaceId)),
+      and(
+        eq(schema.crmEmailVariants.id, variantId),
+        eq(schema.crmEmailVariants.workspaceId, workspaceId),
+      ),
     );
 }
 
@@ -150,7 +163,12 @@ export async function setDefaultVariant(
   await db
     .update(schema.crmEmailVariants)
     .set({ isDefault: 1, updatedAt: nowISO() })
-    .where(and(eq(schema.crmEmailVariants.id, variantId), eq(schema.crmEmailVariants.workspaceId, workspaceId)));
+    .where(
+      and(
+        eq(schema.crmEmailVariants.id, variantId),
+        eq(schema.crmEmailVariants.workspaceId, workspaceId),
+      ),
+    );
 }
 
 // Resolve the variant to send: the requested one (validated to belong to the

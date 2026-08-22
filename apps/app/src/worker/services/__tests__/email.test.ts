@@ -9,8 +9,6 @@ describe("sanitizeHeader", () => {
   });
 
   it("leaves clean values untouched", () => {
-    expect(sanitizeHeader("How was your experience, Ada?")).toBe(
-      "How was your experience, Ada?",
-    );
+    expect(sanitizeHeader("How was your experience, Ada?")).toBe("How was your experience, Ada?");
   });
 });

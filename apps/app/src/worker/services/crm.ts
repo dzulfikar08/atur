@@ -309,10 +309,7 @@ export async function getContactPurchaseInfo(
         return null;
       }
     })
-    .filter(
-      (o): o is PolarOrder =>
-        o !== null && (o.status === "paid" || o.status === undefined),
-    )
+    .filter((o): o is PolarOrder => o !== null && (o.status === "paid" || o.status === undefined))
     .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
 
   if (orders.length === 0) return null;
@@ -335,13 +332,19 @@ export async function resolveTemplateSource(
   workspaceId: string,
   purpose: TemplatePurpose,
   variantId?: string,
-): Promise<{ source: { subject: string; body: string; isHtml: boolean }; variant: emailVariantsRepo.EmailVariantRow | null }> {
+): Promise<{
+  source: { subject: string; body: string; isHtml: boolean };
+  variant: emailVariantsRepo.EmailVariantRow | null;
+}> {
   const def = getPurpose(purpose);
   if (!def) throw new HTTPException(404, { message: `Unknown email purpose: ${purpose}` });
 
   const variant = await emailVariantsRepo.resolveVariant(db, workspaceId, purpose, variantId);
   if (variant) {
-    return { source: { subject: variant.subject, body: variant.body, isHtml: variant.isHtml === 1 }, variant };
+    return {
+      source: { subject: variant.subject, body: variant.body, isHtml: variant.isHtml === 1 },
+      variant,
+    };
   }
   return { source: { ...def.default, isHtml: false }, variant: null };
 }
@@ -522,7 +525,9 @@ export async function updateEmailVariant(
     });
   } catch (err) {
     if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
-      throw new HTTPException(409, { message: `A variant named "${data.name}" already exists for this purpose` });
+      throw new HTTPException(409, {
+        message: `A variant named "${data.name}" already exists for this purpose`,
+      });
     }
     throw err;
   }

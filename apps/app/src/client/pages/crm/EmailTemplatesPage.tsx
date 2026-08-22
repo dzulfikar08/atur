@@ -8,12 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArrowLeft, Pencil, Plus, Star, Trash2, Info } from "@/lib/icons";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -108,8 +103,7 @@ function VariantEditor({
               ))}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Variables are replaced with the customer's data at send time. Unknown ones stay
-              as-is.
+              Variables are replaced with the customer's data at send time. Unknown ones stay as-is.
             </p>
           </div>
 
@@ -215,21 +209,25 @@ function PurposeCard({
               {purpose.description}
             </span>
           </span>
-          <Badge variant="secondary">{variants.length} variant{variants.length === 1 ? "" : "s"}</Badge>
+          <Badge variant="secondary">
+            {variants.length} variant{variants.length === 1 ? "" : "s"}
+          </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {purpose.requires_purchase && (
           <p className="text-xs text-muted-foreground">
             <Info className="h-3.5 w-3.5 inline mr-1" />
-            Fills purchase variables ({"{{product}}"}, {"{{date}}"}) from the customer's
-            most recent Polar order.
+            Fills purchase variables ({"{{product}}"}, {"{{date}}"}) from the customer's most recent
+            Polar order.
           </p>
         )}
 
         <div>
           <span className="text-xs font-medium text-muted-foreground">Curated default</span>
-          <p className="text-sm mt-1 font-mono bg-muted/50 p-2 rounded">{purpose.default.subject}</p>
+          <p className="text-sm mt-1 font-mono bg-muted/50 p-2 rounded">
+            {purpose.default.subject}
+          </p>
           <pre className="text-sm mt-1 font-mono bg-muted/50 p-2 rounded whitespace-pre-wrap">
             {purpose.default.body}
           </pre>
@@ -430,8 +428,8 @@ export default function EmailTemplatesPage() {
         <div className="min-w-0">
           <h1 className="text-base font-semibold leading-tight">Email Templates</h1>
           <p className="hidden truncate text-xs text-muted-foreground sm:block">
-            One section per lifecycle purpose. Each purpose has a curated default; add variants
-            to customize — the starred variant is what sends by default.
+            One section per lifecycle purpose. Each purpose has a curated default; add variants to
+            customize — the starred variant is what sends by default.
           </p>
         </div>
       </div>
@@ -463,10 +461,7 @@ export default function EmailTemplatesPage() {
 
         {/* Detail — the only pane that scrolls */}
         <div
-          className={cn(
-            "min-w-0 flex-1 overflow-y-auto",
-            showDetail ? "block" : "hidden md:block",
-          )}
+          className={cn("min-w-0 flex-1 overflow-y-auto", showDetail ? "block" : "hidden md:block")}
         >
           <div className="px-4 pt-3 md:hidden">
             <Button variant="ghost" size="sm" onClick={() => setShowDetail(false)}>
@@ -474,7 +469,9 @@ export default function EmailTemplatesPage() {
             </Button>
           </div>
           <div className="max-w-3xl space-y-4 p-4 md:p-6">
-            {slug && selected === "footer" && <FooterCard slug={slug} initial={data.footer ?? ""} />}
+            {slug && selected === "footer" && (
+              <FooterCard slug={slug} initial={data.footer ?? ""} />
+            )}
             {slug && selectedPurpose && (
               <PurposeCard
                 slug={slug}

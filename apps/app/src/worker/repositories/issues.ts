@@ -140,17 +140,15 @@ export async function create(
   // uq_issue_sequence collision instead of surfacing a 500 to the caller.
   await insertIssueWithRetry(db, row);
 
-  await db
-    .insert(issueSequences)
-    .values({
-      id: uuid(),
-      sequence: row.sequenceId,
-      issueId: data.id,
-      projectId: data.projectId,
-      isDeleted: 0,
-      createdAt: now,
-      updatedAt: now,
-    });
+  await db.insert(issueSequences).values({
+    id: uuid(),
+    sequence: row.sequenceId,
+    issueId: data.id,
+    projectId: data.projectId,
+    isDeleted: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
 
   return findById(db, data.id);
 }
@@ -281,17 +279,14 @@ export function isUniqueConstraintError(error: unknown): boolean {
   const cause = (error as { cause?: unknown })?.cause as
     | { message?: string; code?: string }
     | undefined;
-  const msg =
-    (error as { message?: string })?.message ?? cause?.message ?? "";
-  const code =
-    (error as { code?: string })?.code ?? cause?.code ?? "";
+  const msg = (error as { message?: string })?.message ?? cause?.message ?? "";
+  const code = (error as { code?: string })?.code ?? cause?.code ?? "";
   return /(^|[^a-z])23505($|[^a-z])|unique|uq_issue_sequence/i.test(`${code} ${msg}`);
 }
 
 const MAX_SEQUENCE_RETRIES = 10;
 
-const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Inserts an issue row, re-deriving a fresh sequenceId (via getNextSequence) and

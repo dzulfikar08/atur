@@ -125,7 +125,11 @@ function Column({
       )}
     >
       <div className="flex items-center justify-between mb-3">
-        <button className="flex items-center gap-2 text-left" onClick={onToggle} disabled={!terminal}>
+        <button
+          className="flex items-center gap-2 text-left"
+          onClick={onToggle}
+          disabled={!terminal}
+        >
           {terminal &&
             (collapsed ? (
               <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
@@ -211,10 +215,13 @@ export default function PipelineBoardPage() {
   });
 
   // Terminal columns render last, dimmed + collapsed by default.
-  const { openStates, terminalStates } = useMemo(() => ({
-    openStates: states.filter((s) => isOpenGroup(s.group)),
-    terminalStates: states.filter((s) => !isOpenGroup(s.group)),
-  }), [states]);
+  const { openStates, terminalStates } = useMemo(
+    () => ({
+      openStates: states.filter((s) => isOpenGroup(s.group)),
+      terminalStates: states.filter((s) => !isOpenGroup(s.group)),
+    }),
+    [states],
+  );
 
   const stageTotals = useMemo(() => {
     const m = new Map<string, DealCurrencyTotal[]>();
