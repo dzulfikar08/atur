@@ -72,7 +72,20 @@ contactsRoutes.get("/email-templates", async (c) => {
   const ws = await resolveWorkspace(c);
   await assertMember(db, ws, c.get("user").sub);
   const result = await crmService.listEmailTemplates(db, ws.id);
-  return c.json({ results: result });
+  return c.json({ results: result, footer: ws.emailFooter ?? "" });
+});
+
+// Workspace-level {{footer}} signature. Registered before /:name so "footer"
+// isn't matched as the parametric segment (same radix-tree rule as above).
+contactsRoutes.put("/email-templates/footer", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspace(c);
+  await assertMember(db, ws, c.get("user").sub);
+  const body = crmService.saveFooterSchema.parse(await c.req.json());
+  await workspaceRepo.update(db, ws.id, {
+    emailFooter: body.footer === "" ? null : body.footer,
+  });
+  return c.json({ footer: body.footer });
 });
 
 // Get a specific template (default or custom).
@@ -80,7 +93,11 @@ contactsRoutes.get("/email-templates/:name", async (c) => {
   const db = getDb(c.env.DB);
   const ws = await resolveWorkspace(c);
   await assertMember(db, ws, c.get("user").sub);
-  const result = await crmService.getEmailTemplate(db, ws.id, c.req.param("name") as "feedback_request");
+  const result = await crmService.getEmailTemplate(
+    db,
+    ws.id,
+    crmService.parseTemplateName(c.req.param("name")!),
+  );
   if (!result) throw new HTTPException(404, { message: "Template not found" });
   return c.json(result);
 });
@@ -94,7 +111,7 @@ contactsRoutes.put("/email-templates/:name", async (c) => {
   const result = await crmService.saveEmailTemplate(
     db,
     ws.id,
-    c.req.param("name") as "feedback_request",
+    crmService.parseTemplateName(c.req.param("name")!),
     body,
   );
   return c.json(result);
@@ -105,7 +122,11 @@ contactsRoutes.delete("/email-templates/:name", async (c) => {
   const db = getDb(c.env.DB);
   const ws = await resolveWorkspace(c);
   await assertMember(db, ws, c.get("user").sub);
-  await crmService.deleteEmailTemplate(db, ws.id, c.req.param("name") as "feedback_request");
+  await crmService.deleteEmailTemplate(
+    db,
+    ws.id,
+    crmService.parseTemplateName(c.req.param("name")!),
+  );
   return c.body(null, 204);
 });
 
@@ -142,7 +163,7 @@ contactsRoutes.get("/:id/email-preview", async (c) => {
   const template = crmService.sendEmailSchema.parse({
     template: c.req.query("template") || "feedback_request",
   }).template;
-  const result = await crmService.renderTemplateEmail(db, ws.id, c.req.param("id")!, template);
+  const result = await crmService.renderTemplateEmail(db, ws, c.req.param("id")!, template);
   return c.json(result);
 });
 
@@ -155,7 +176,7 @@ contactsRoutes.post("/:id/send-email", async (c) => {
   const result = await crmService.sendTemplateEmail(
     db,
     c.env,
-    ws.id,
+    ws,
     c.req.param("id")!,
     body,
   );

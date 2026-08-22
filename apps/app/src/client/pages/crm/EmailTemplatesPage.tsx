@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Pencil, Trash2, RefreshCw, Info } from "@/lib/icons";
+import { ArrowLeft, Pencil, RefreshCw, Info } from "@/lib/icons";
 import { toast } from "sonner";
 
 // Placeholder variables available in template subject/body.
@@ -47,12 +47,14 @@ function TemplateEditor({
   const isCustom = !template.id.startsWith("default:");
   const [subject, setSubject] = useState(template.subject);
   const [body, setBody] = useState(template.body);
+  const [isHtml, setIsHtml] = useState(!!template.is_html);
 
   // Reset form when the dialog opens or the template prop changes.
   useEffect(() => {
     if (open) {
       setSubject(template.subject);
       setBody(template.body);
+      setIsHtml(!!template.is_html);
     }
   }, [open, template]);
 
@@ -61,7 +63,7 @@ function TemplateEditor({
       api.saveEmailTemplate(slug!, template.template_name, {
         subject,
         body,
-        is_html: !!template.is_html,
+        is_html: isHtml,
       }),
     onSuccess: () => {
       toast.success("Template saved");
@@ -112,22 +114,33 @@ function TemplateEditor({
           </div>
 
           <div>
+            <label className="text-xs font-medium text-muted-foreground">
+              Body ({isHtml ? "HTML" : "plain text"})
+            </label>
+            <Textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              className="mt-1 min-h-[240px] font-mono text-sm"
+              placeholder="Hi {{name}},&#10;&#10;We noticed you purchased {{product}} on {{date}}..."
+            />
+            <label className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={isHtml}
+                onChange={(e) => setIsHtml(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              Body is HTML — sent as-is (placeholders still filled), not escaped
+            </label>
+          </div>
+
+          <div>
             <label className="text-xs font-medium text-muted-foreground">Subject</label>
             <Input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               className="mt-1"
               placeholder="Hi {{name}}, quick question..."
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Body (plain text)</label>
-            <Textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              className="mt-1 min-h-[240px] font-mono text-sm"
-              placeholder="Hi {{name}},&#10;&#10;We noticed you purchased {{product}} on {{date}}..."
             />
           </div>
 
@@ -168,6 +181,53 @@ function TemplateEditor({
   );
 }
 
+// Workspace-level {{footer}} signature editor.
+function FooterCard({ slug, initial }: { slug: string; initial: string }) {
+  const qc = useQueryClient();
+  const [footer, setFooter] = useState(initial);
+
+  useEffect(() => setFooter(initial), [initial]);
+
+  const saveMut = useMutation({
+    mutationFn: () => api.saveEmailFooter(slug, footer),
+    onSuccess: () => {
+      toast.success("Footer saved");
+      qc.invalidateQueries({ queryKey: ["email-templates", slug] });
+    },
+    onError: () => toast.error("Failed to save footer"),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center justify-between">
+          <span>Email footer</span>
+          <Badge variant="secondary">Workspace</Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div>
+          <span className="text-xs font-medium text-muted-foreground">
+            Signature — fills the {"{{footer}}"} placeholder in every template
+          </span>
+          <Textarea
+            value={footer}
+            onChange={(e) => setFooter(e.target.value)}
+            className="mt-1 min-h-[90px] font-mono text-sm"
+            placeholder={"Regards,\nAcme team"}
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Empty falls back to "Regards, &lt;workspace name&gt; team".
+          </p>
+        </div>
+        <Button size="sm" disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
+          {saveMut.isPending ? "Saving…" : "Save footer"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function EmailTemplatesPage() {
   const { slug } = useParams();
   const [editing, setEditing] = useState<ContactEmailTemplate | null>(null);
@@ -202,7 +262,9 @@ export default function EmailTemplatesPage() {
         </p>
       </div>
 
-      {templates.map((t) => {
+      {slug && <FooterCard slug={slug} initial={templates.footer ?? ""} />}
+
+      {templates.results.map((t) => {
         const isCustom = !t.id.startsWith("default:");
         const label = TEMPLATE_LABELS[t.template_name] || t.template_name;
         return (
@@ -235,18 +297,6 @@ export default function EmailTemplatesPage() {
                   open={editing?.id === t.id}
                   onOpenChange={(o) => setEditing(o ? t : null)}
                 />
-                {isCustom && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={async () => {
-                      await api.deleteEmailTemplate(slug!, t.template_name);
-                      toast.success("Template reset to default");
-                    }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 mr-1" /> Reset
-                  </Button>
-                )}
               </div>
             </CardContent>
           </Card>

@@ -426,11 +426,20 @@ export const api = {
 
   // CRM email template management (edit subject + body with {{placeholders}})
   listEmailTemplates: async (slug: string) => {
-    const data = await apiFetch<{ results: ContactEmailTemplate[] }>(
+    const data = await apiFetch<{ results: ContactEmailTemplate[]; footer: string }>(
       `/workspaces/${slug}/contacts/email-templates/`,
     );
-    return data.results;
+    return data;
   },
+  // Workspace-level {{footer}} signature (stored on the workspace).
+  saveEmailFooter: (slug: string, footer: string) =>
+    apiFetch<{ footer: string }>(
+      `/workspaces/${slug}/contacts/email-templates/footer/`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ footer }),
+      },
+    ),
   getEmailTemplate: (slug: string, name: string) =>
     apiFetch<ContactEmailTemplate>(
       `/workspaces/${slug}/contacts/email-templates/${name}/`,
