@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import { paginationParams } from "../lib/pagination";
 import * as issuesService from "../services/issues";
 import * as issuesRepo from "../repositories/issues";
@@ -38,7 +39,7 @@ export const issueRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     return c.json(result);
   })
 
-  .post("/", authMiddleware, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
     const body = issuesService.createIssueSchema.parse(await c.req.json());
@@ -65,7 +66,7 @@ export const issueRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     return c.json(result);
   })
 
-  .patch("/:issueId", authMiddleware, async (c) => {
+  .patch("/:issueId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
     const issue = await issuesRepo.resolveIssue(db, projectId, c.req.param("issueId")!);
@@ -83,7 +84,7 @@ export const issueRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     return c.json(result);
   })
 
-  .delete("/:issueId", authMiddleware, async (c) => {
+  .delete("/:issueId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
     const issue = await issuesRepo.resolveIssue(db, projectId, c.req.param("issueId")!);
@@ -92,7 +93,7 @@ export const issueRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     return c.json({ ok: true });
   })
 
-  .post("/:issueId/labels", authMiddleware, async (c) => {
+  .post("/:issueId/labels", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
     const issue = await issuesRepo.resolveIssue(db, projectId, c.req.param("issueId")!);
@@ -102,7 +103,7 @@ export const issueRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     return c.json({ ok: true });
   })
 
-  .delete("/:issueId/labels/:labelId", authMiddleware, async (c) => {
+  .delete("/:issueId/labels/:labelId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
     const issue = await issuesRepo.resolveIssue(db, projectId, c.req.param("issueId")!);
@@ -112,7 +113,7 @@ export const issueRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     return c.json({ ok: true });
   })
 
-  .post("/:issueId/assignees", authMiddleware, async (c) => {
+  .post("/:issueId/assignees", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
     const issue = await issuesRepo.resolveIssue(db, projectId, c.req.param("issueId")!);
@@ -122,7 +123,7 @@ export const issueRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     return c.json({ ok: true });
   })
 
-  .delete("/:issueId/assignees/:assigneeId", authMiddleware, async (c) => {
+  .delete("/:issueId/assignees/:assigneeId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
     const issue = await issuesRepo.resolveIssue(db, projectId, c.req.param("issueId")!);

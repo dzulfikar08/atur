@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import * as sprintsService from "../services/sprints";
 
 export const sprintRoutes = new Hono<{ Bindings: Env }>({ strict: false })
@@ -11,7 +12,7 @@ export const sprintRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await sprintsService.list(db, projectId, c);
     return c.json(result);
   })
-  .post("/", authMiddleware, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
     const workspaceSlug = c.req.param("slug")!;
@@ -26,27 +27,27 @@ export const sprintRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await sprintsService.getById(db, sprintId);
     return c.json(result);
   })
-  .patch("/:sprintId", authMiddleware, async (c) => {
+  .patch("/:sprintId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const sprintId = c.req.param("sprintId")!;
     const body = sprintsService.updateSprintSchema.parse(await c.req.json());
     const result = await sprintsService.update(db, sprintId, body);
     return c.json(result);
   })
-  .delete("/:sprintId", authMiddleware, async (c) => {
+  .delete("/:sprintId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const sprintId = c.req.param("sprintId")!;
     await sprintsService.remove(db, sprintId);
     return c.json({ success: true });
   })
-  .post("/:sprintId/issues", authMiddleware, async (c) => {
+  .post("/:sprintId/issues", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const sprintId = c.req.param("sprintId")!;
     const body = sprintsService.addIssueSchema.parse(await c.req.json());
     await sprintsService.addIssue(db, sprintId, body);
     return c.json({ success: true }, 201);
   })
-  .delete("/:sprintId/issues/:issueId", authMiddleware, async (c) => {
+  .delete("/:sprintId/issues/:issueId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const sprintId = c.req.param("sprintId")!;
     const issueId = c.req.param("issueId")!;

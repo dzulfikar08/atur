@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import * as schema from "../db/schema";
 import * as exportService from "../services/exports";
 
@@ -20,7 +21,7 @@ export const exportRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const exports = await exportService.list(db, workspace.id);
     return c.json(exports);
   })
-  .post("/", authMiddleware, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const user = c.get("user");
     const slug = c.req.param("slug")!;

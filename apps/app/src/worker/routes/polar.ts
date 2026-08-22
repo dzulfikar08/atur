@@ -1,5 +1,5 @@
-import { Hono, type Context } from "hono";
-import { and, eq, isNull } from "drizzle-orm";
+import { Hono } from "hono";
+import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
@@ -8,6 +8,7 @@ import * as workspaceRepo from "../repositories/workspaces";
 import * as polarRepo from "../repositories/polar";
 import * as polarService from "../services/polar";
 import { verifyWebhookEvent } from "../lib/polar";
+import { resolveWorkspaceForCaller } from "../middleware/workspace";
 import { z } from "zod";
 
 // ── Public Polar webhook receiver ────────────────────────────────────────────
@@ -54,30 +55,6 @@ const settingsSchema = z.object({
   webhook_enabled: z.boolean().optional(),
 });
 
-async function resolveWorkspace(c: Context<{ Bindings: Env }>) {
-  const db = getDb(c.env.DB);
-  const slug = c.req.param("slug")!;
-  const ws = await workspaceRepo.findBySlug(db, slug);
-  if (!ws) throw new HTTPException(404, { message: "Workspace not found" });
-  const userId = c.get("user").sub;
-  if (ws.ownerId !== userId) {
-    const [m] = await db
-      .select({ id: schema.workspaceMembers.id })
-      .from(schema.workspaceMembers)
-      .where(
-        and(
-          eq(schema.workspaceMembers.workspaceId, ws.id),
-          eq(schema.workspaceMembers.memberId, userId),
-          eq(schema.workspaceMembers.isActive, 1),
-          isNull(schema.workspaceMembers.deletedAt),
-        ),
-      )
-      .limit(1);
-    if (!m) throw new HTTPException(403, { message: "Not a member of this workspace" });
-  }
-  return ws;
-}
-
 // API responses are snake_case DTOs (the rest of the API is snake_case; the
 // drizzle rows are camelCase). Secrets are write-only — return a masked hint
 // so the UI can tell "stored" from "empty" without handing values back out.
@@ -117,14 +94,14 @@ function linkToDTO(l: PolarLinkRow) {
 
 polarRoutes.get("/settings", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
+  const ws = await resolveWorkspaceForCaller(c);
   const settings = await polarRepo.getSettings(db, ws.id);
   return c.json(settingsToDTO(ws.id, settings));
 });
 
 polarRoutes.put("/settings", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
+  const ws = await resolveWorkspaceForCaller(c);
   const body = settingsSchema.parse(await c.req.json());
   // Fail early: enabling the receiver without a stored secret would 404 every
   // webhook anyway.
@@ -149,7 +126,7 @@ polarRoutes.put("/settings", async (c) => {
 // access token. Returns import counts.
 polarRoutes.post("/sync", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
+  const ws = await resolveWorkspaceForCaller(c);
   const settings = await polarRepo.getSettings(db, ws.id);
   if (!settings?.accessToken) {
     throw new HTTPException(400, { message: "Polar access token not configured" });
@@ -161,7 +138,7 @@ polarRoutes.post("/sync", async (c) => {
 // List imported Polar entities for this workspace.
 polarRoutes.get("/links", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
+  const ws = await resolveWorkspaceForCaller(c);
   const links = await polarRepo.listLinksByWorkspace(db, ws.id);
   return c.json({ results: links.map(linkToDTO) });
 });
@@ -169,7 +146,7 @@ polarRoutes.get("/links", async (c) => {
 // List Polar activity for a contact (used by the contact-detail panel).
 polarRoutes.get("/contacts/:contactId/links", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
+  const ws = await resolveWorkspaceForCaller(c);
   const contactId = c.req.param("contactId")!;
   const [contact] = await db
     .select({ id: schema.customers.id })
