@@ -112,6 +112,16 @@ const STATE_COLORS: Record<string, string> = {
   cancelled: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
 };
 
+// Column-level treatment per state group: subtle tinted surface + top accent bar,
+// so adjacent columns read as distinct regions at a glance.
+const COLUMN_STYLES: Record<string, string> = {
+  backlog: "border-t-gray-300 bg-gray-50 dark:border-t-gray-600 dark:bg-gray-900/40",
+  unstarted: "border-t-blue-400 bg-blue-50/70 dark:border-t-blue-600 dark:bg-blue-950/30",
+  started: "border-t-yellow-400 bg-yellow-50/70 dark:border-t-yellow-600 dark:bg-yellow-950/30",
+  completed: "border-t-green-400 bg-green-50/70 dark:border-t-green-600 dark:bg-green-950/30",
+  cancelled: "border-t-red-400 bg-red-50/70 dark:border-t-red-600 dark:bg-red-950/30",
+};
+
 const PRIORITY_COLORS: Record<string, string> = {
   urgent: "text-red-600 bg-red-50 dark:bg-red-950",
   high: "text-orange-600 bg-orange-50 dark:bg-orange-950",
@@ -135,9 +145,9 @@ function DroppableColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`min-w-[260px] sm:min-w-[280px] w-[260px] sm:w-[280px] flex-shrink-0 snap-start rounded-lg transition-colors flex flex-col max-h-full ${
-        isOver ? "bg-muted/40 ring-2 ring-primary/20" : ""
-      }`}
+      className={`min-w-[260px] sm:min-w-[280px] w-[260px] sm:w-[280px] flex-shrink-0 snap-start rounded-lg border border-border border-t-2 p-2 transition-colors flex flex-col max-h-full ${
+        COLUMN_STYLES[state.group] ?? COLUMN_STYLES.backlog
+      } ${isOver ? "ring-2 ring-primary/50" : ""}`}
     >
       <div className="flex items-center gap-2 mb-3">
         <Badge className={STATE_COLORS[state.group] || STATE_COLORS.backlog} variant="secondary">
@@ -146,7 +156,7 @@ function DroppableColumn({
         <span className="text-xs text-muted-foreground">{stateIssues.length}</span>
       </div>
       <SortableContext items={stateIssues.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-        <div className="flex-1 min-h-[60px] space-y-2 overflow-y-auto pr-1">{children}</div>
+        <div className="flex-1 min-h-[60px] space-y-2 overflow-y-auto">{children}</div>
       </SortableContext>
     </div>
   );
