@@ -1,14 +1,135 @@
-// ── Template registry ────────────────────────────────────────────────────────
-// Each template maps to a renderer. New templates (e.g. "follow_up") extend
-// this registry — the send-email endpoint dispatches by name.
+// ── Purpose registry ─────────────────────────────────────────────────────────
+// A "purpose" is a stage of the CRM customer lifecycle (cold outreach,
+// welcome, feedback, follow-up, thank-you, win-back). Purposes live in code:
+// each carries a curated default template plus metadata. Workspaces can save
+// arbitrary VARIANTS per purpose (crm_email_variants table); one variant per
+// (workspace, purpose) can be flagged default. At send time the resolution
+// order is: requested variant → default-flagged variant → curated default.
 
 import { emailLayout, escapeHtml } from "./email_layout";
 
-export const TEMPLATE_NAMES = ["feedback_request"] as const;
-export type TemplateName = (typeof TEMPLATE_NAMES)[number];
+export interface TemplatePurposeDef {
+  name: string;
+  label: string;
+  description: string;
+  // Purpose emails that only make sense with the customer's most-recent paid
+  // order loaded ({{product}}, {{date}}, {{amount}} filled from Polar data).
+  requiresPurchase: boolean;
+  default: { subject: string; body: string };
+}
 
-// Templates that need the customer's most-recent paid order to render.
-export const TEMPLATES_REQUIRING_PURCHASE = new Set<TemplateName>(["feedback_request"]);
+export const TEMPLATE_PURPOSES = [
+  {
+    name: "cold_outreach",
+    label: "Cold Outreach",
+    description: "First contact to a new lead",
+    requiresPurchase: false,
+    default: {
+      subject: "Quick question, {{name}}",
+      body: `Hi {{name}},
+
+I came across {{company}} and thought we might be able to help with what you're building.
+
+Worth a quick chat? Just reply to this email and we'll take it from there.
+
+{{footer}}`,
+    },
+  },
+  {
+    name: "welcome",
+    label: "Welcome",
+    description: "Greet a new customer after signup or first purchase",
+    requiresPurchase: false,
+    default: {
+      subject: "Welcome, {{name}}!",
+      body: `Hi {{name}},
+
+Welcome aboard! Great to have you.
+
+If anything comes up — questions, ideas, or things that don't work the way you expect — just reply to this email. We read everything.
+
+{{footer}}`,
+    },
+  },
+  {
+    name: "feedback_request",
+    label: "Feedback Request",
+    description: "Ask how their purchase went",
+    requiresPurchase: true,
+    default: {
+      subject: "How was your experience, {{name}}?",
+      body: `Hi {{name}},
+
+We noticed you purchased {{product}} on {{date}}. How was your experience?
+
+We'd love to hear your feedback — what went well, what could be better, or any questions you might have.
+
+Just reply to this email with your thoughts.
+
+{{footer}}`,
+    },
+  },
+  {
+    name: "follow_up",
+    label: "Follow-up",
+    description: "Nudge after no reply, or check in later",
+    requiresPurchase: false,
+    default: {
+      subject: "Following up, {{name}}",
+      body: `Hi {{name}},
+
+Just circling back on my last note in case it got buried.
+
+If you have any questions — or if the timing isn't right — a one-line reply is all it takes.
+
+{{footer}}`,
+    },
+  },
+  {
+    name: "thank_you",
+    label: "Thank You",
+    description: "Acknowledge a closed deal or purchase",
+    requiresPurchase: true,
+    default: {
+      subject: "Thank you, {{name}}!",
+      body: `Hi {{name}},
+
+Thank you for purchasing {{product}} — it genuinely means a lot.
+
+If you hit any bumps or have questions along the way, just reply here. We're happy to help.
+
+{{footer}}`,
+    },
+  },
+  {
+    name: "win_back",
+    label: "Win-back",
+    description: "Re-engage a churned or quiet customer",
+    requiresPurchase: false,
+    default: {
+      subject: "We miss you, {{name}}",
+      body: `Hi {{name}},
+
+It's been a while — we noticed you haven't been around lately.
+
+If something went wrong, we'd love the chance to fix it. If your needs changed, tell us — no hard feelings either way.
+
+Just reply to this email.
+
+{{footer}}`,
+    },
+  },
+] as const satisfies readonly TemplatePurposeDef[];
+
+export type TemplatePurpose = (typeof TEMPLATE_PURPOSES)[number]["name"];
+
+export function getPurpose(name: string): TemplatePurposeDef | null {
+  return TEMPLATE_PURPOSES.find((p) => p.name === name) ?? null;
+}
+
+export function isKnownPurpose(name: string): name is TemplatePurpose {
+  return getPurpose(name) !== null;
+}
 
 // Fallback footer when a workspace has no custom footer configured
 // (workspaces.email_footer). Falls back further to "<workspace name> team"
@@ -22,6 +143,7 @@ export const DEFAULT_EMAIL_FOOTER = "Regards";
 export const TEMPLATE_VARIABLES = [
   { key: "name", label: "Customer name" },
   { key: "email", label: "Customer email" },
+  { key: "company", label: "Customer company" },
   { key: "product", label: "Product name (most recent paid purchase)" },
   { key: "date", label: "Purchase date" },
   { key: "amount", label: "Purchase amount" },
@@ -45,27 +167,6 @@ export interface RenderedEmail {
   subject: string;
   text: string;
   html: string;
-}
-
-// ── Default templates (used when no custom template is stored in the DB) ────
-
-const DEFAULT_TEMPLATES: Record<TemplateName, { subject: string; body: string }> = {
-  feedback_request: {
-    subject: "How was your experience, {{name}}?",
-    body: `Hi {{name}},
-
-We noticed you purchased {{product}} on {{date}}. How was your experience?
-
-We'd love to hear your feedback — what went well, what could be better, or any questions you might have.
-
-Just reply to this email with your thoughts.
-
-{{footer}}`,
-  },
-};
-
-export function getDefaultTemplate(template: TemplateName): { subject: string; body: string } | null {
-  return DEFAULT_TEMPLATES[template] ?? null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -121,6 +222,7 @@ export function buildTemplateVars(
   return {
     name: displayName(ctx),
     email: ctx.email ?? "",
+    company: ctx.company ?? "",
     product: purchase?.productName ?? "",
     date: purchase ? formatDate(purchase.date) : "",
     amount: purchase ? formatCurrency(purchase.amountCents, purchase.currency) : "",
@@ -141,11 +243,12 @@ export function customerEmailHtml(opts: { title: string; bodyHtml: string }): st
 }
 
 // ── Template rendering ────────────────────────────────────────────────────────
-// Pure function: takes a template source (subject + body, e.g. from DB or default)
-// and customer context + optional purchase, fills placeholders, returns the
-// rendered email. Plain-text sources are escaped and newline-converted; an
-// is_html source is the workspace owner's own markup and passes through
-// verbatim (they control their own customer emails, like any ESP).
+// Pure function: takes a template source (subject + body, e.g. from a variant
+// row or curated default) and customer context + optional purchase, fills
+// placeholders, returns the rendered email. Plain-text sources are escaped and
+// newline-converted; an is_html source is the workspace owner's own markup and
+// passes through verbatim (they control their own customer emails, like any
+// ESP).
 
 export function renderFromTemplateSource(
   source: { subject: string; body: string; isHtml?: boolean },

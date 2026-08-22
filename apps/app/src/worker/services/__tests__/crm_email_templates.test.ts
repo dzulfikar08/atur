@@ -1,10 +1,49 @@
 import { describe, expect, it } from "vitest";
 import {
   fillPlaceholders,
-  getDefaultTemplate,
+  getPurpose,
+  isKnownPurpose,
   renderFromTemplateSource,
+  TEMPLATE_PURPOSES,
+  TEMPLATE_VARIABLES,
   textToHtml,
 } from "../crm_email_templates";
+
+describe("purpose registry", () => {
+  it("has all six CRM lifecycle purposes with curated defaults", () => {
+    const names = TEMPLATE_PURPOSES.map((p) => p.name);
+    expect(names).toEqual([
+      "cold_outreach",
+      "welcome",
+      "feedback_request",
+      "follow_up",
+      "thank_you",
+      "win_back",
+    ]);
+    for (const p of TEMPLATE_PURPOSES) {
+      expect(p.label.length).toBeGreaterThan(0);
+      expect(p.default.subject.length).toBeGreaterThan(0);
+      expect(p.default.body).toContain("{{footer}}");
+    }
+  });
+
+  it("getPurpose / isKnownPurpose resolve and reject", () => {
+    expect(getPurpose("cold_outreach")?.label).toBe("Cold Outreach");
+    expect(isKnownPurpose("follow_up")).toBe(true);
+    expect(getPurposeSafe("nope")).toBeNull();
+    expect(isKnownPurpose("nope")).toBe(false);
+  });
+
+  it("every {{variable}} used by curated defaults is declared in TEMPLATE_VARIABLES", () => {
+    const declared = new Set<string>(TEMPLATE_VARIABLES.map((v) => v.key));
+    for (const p of TEMPLATE_PURPOSES) {
+      const used = `${p.default.subject} ${p.default.body}`.match(/\{\{(\w+)\}\}/g) ?? [];
+      for (const u of used) {
+        expect(declared.has(u.slice(2, -2)), `${p.name} uses undeclared ${u}`).toBe(true);
+      }
+    }
+  });
+});
 
 describe("fillPlaceholders", () => {
   it("substitutes known keys", () => {
@@ -82,7 +121,7 @@ describe("renderFromTemplateSource", () => {
 });
 
 describe("renderFromTemplateSource — footer + is_html", () => {
-  const ctx = { name: "Ada", email: "ada@example.com", company: null };
+  const ctx = { name: "Ada", email: "ada@example.com", company: "Acme" };
 
   it("fills {{footer}} from the workspace footer param", () => {
     const rendered = renderFromTemplateSource(
@@ -110,17 +149,15 @@ describe("renderFromTemplateSource — footer + is_html", () => {
     expect(rendered.html).toContain("<b>Hi Ada</b>");
     expect(rendered.html).toContain('<img src="x">');
   });
-});
 
-describe("getDefaultTemplate", () => {
-  it("returns the feedback_request default", () => {
-    const def = getDefaultTemplate("feedback_request");
-    expect(def).not.toBeNull();
-    expect(def!.subject).toContain("{{name}}");
-  });
-
-  it("returns null for unknown names", () => {
-    // @ts-expect-error runtime guard for route params cast to TemplateName
-    expect(getDefaultTemplate("nope")).toBeNull();
+  it("fills {{company}} for cold outreach", () => {
+    const def = getPurpose("cold_outreach")!;
+    const rendered = renderFromTemplateSource(def.default, ctx, null);
+    expect(rendered.text).toContain("Acme");
   });
 });
+
+// Local helper so the null-case reads without ts-expect-error noise.
+function getPurposeSafe(name: string) {
+  return getPurpose(name);
+}

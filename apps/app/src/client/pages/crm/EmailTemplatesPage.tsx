@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
-import type { ContactEmailTemplate } from "@/lib/api";
+import type { EmailPurpose, EmailVariant } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,87 +13,86 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Pencil, RefreshCw, Info } from "@/lib/icons";
+import { ArrowLeft, Pencil, Plus, Star, Trash2, Info } from "@/lib/icons";
 import { toast } from "sonner";
 
 // Placeholder variables available in template subject/body.
 const TEMPLATE_VARIABLES = [
   { key: "name", label: "Customer name" },
   { key: "email", label: "Customer email" },
+  { key: "company", label: "Customer company" },
   { key: "product", label: "Product name (most recent paid purchase)" },
   { key: "date", label: "Purchase date" },
   { key: "amount", label: "Purchase amount" },
   { key: "footer", label: "Email footer signature" },
 ];
 
-const TEMPLATE_LABELS: Record<string, string> = {
-  feedback_request: "Feedback Request",
-};
-
-function TemplateEditor({
+// Create/edit dialog for one variant. mode "create" seeds from the purpose's
+// curated default; mode "edit" seeds from the existing variant row.
+function VariantEditor({
   slug,
-  template,
+  purpose,
+  variant,
   open,
   onOpenChange,
 }: {
   slug: string;
-  template: ContactEmailTemplate;
+  purpose: EmailPurpose;
+  variant: EmailVariant | null; // null = create mode
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const qc = useQueryClient();
-  const isCustom = !template.id.startsWith("default:");
-  const [subject, setSubject] = useState(template.subject);
-  const [body, setBody] = useState(template.body);
-  const [isHtml, setIsHtml] = useState(!!template.is_html);
+  const isEdit = variant !== null;
+  const [name, setName] = useState("");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [isHtml, setIsHtml] = useState(false);
 
-  // Reset form when the dialog opens or the template prop changes.
   useEffect(() => {
     if (open) {
-      setSubject(template.subject);
-      setBody(template.body);
-      setIsHtml(!!template.is_html);
+      setName(variant?.name ?? "");
+      setSubject(variant?.subject ?? purpose.default.subject);
+      setBody(variant?.body ?? purpose.default.body);
+      setIsHtml(!!variant?.is_html);
     }
-  }, [open, template]);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- reset only on open
+  }, [open, variant, purpose]);
 
   const saveMut = useMutation({
     mutationFn: () =>
-      api.saveEmailTemplate(slug!, template.template_name, {
-        subject,
-        body,
-        is_html: isHtml,
+      isEdit
+        ? api.updateEmailVariant(slug, variant!.id, {
+            name,
+            subject,
+            body,
+            is_html: isHtml,
+          })
+        : api.createEmailVariant(slug, {
+            purpose: purpose.name,
+            name,
+            subject,
+            body,
+            is_html: isHtml,
+          }),
+    onSuccess: () => {
+      toast.success(isEdit ? "Variant saved" : "Variant created");
+      qc.invalidateQueries({ queryKey: ["email-templates", slug] });
+      onOpenChange(false);
+    },
+    onError: (err) =>
+      toast.error(isEdit ? "Failed to save variant" : "Failed to create variant", {
+        description: err instanceof ApiError ? `${err.status}: ${err.message}` : undefined,
       }),
-    onSuccess: () => {
-      toast.success("Template saved");
-      qc.invalidateQueries({ queryKey: ["email-templates", slug] });
-      onOpenChange(false);
-    },
-    onError: () => toast.error("Failed to save template"),
-  });
-
-  const resetMut = useMutation({
-    mutationFn: () => api.deleteEmailTemplate(slug!, template.template_name),
-    onSuccess: () => {
-      toast.success("Template reset to default");
-      qc.invalidateQueries({ queryKey: ["email-templates", slug] });
-      onOpenChange(false);
-    },
-    onError: () => toast.error("Failed to reset template"),
   });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="sm">
-          <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
-        </Button>
-      </DialogTrigger>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            Edit "{TEMPLATE_LABELS[template.template_name] || template.template_name}" template
+            {isEdit ? "Edit" : "New"} "{purpose.label}" variant
           </DialogTitle>
         </DialogHeader>
 
@@ -108,30 +107,19 @@ function TemplateEditor({
               ))}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Insert these variables in the subject or body — they'll be replaced with the
-              customer's data at send time.
+              Variables are replaced with the customer's data at send time. Unknown ones stay
+              as-is.
             </p>
           </div>
 
           <div>
-            <label className="text-xs font-medium text-muted-foreground">
-              Body ({isHtml ? "HTML" : "plain text"})
-            </label>
-            <Textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              className="mt-1 min-h-[240px] font-mono text-sm"
-              placeholder="Hi {{name}},&#10;&#10;We noticed you purchased {{product}} on {{date}}..."
+            <label className="text-xs font-medium text-muted-foreground">Variant name</label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mt-1"
+              placeholder={isEdit ? "Name" : "e.g. Short v2"}
             />
-            <label className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={isHtml}
-                onChange={(e) => setIsHtml(e.target.checked)}
-                className="h-3.5 w-3.5"
-              />
-              Body is HTML — sent as-is (placeholders still filled), not escaped
-            </label>
           </div>
 
           <div>
@@ -144,40 +132,167 @@ function TemplateEditor({
             />
           </div>
 
-          <div className="flex justify-between items-center pt-2 border-t">
-            <div className="flex items-start gap-2 text-xs text-muted-foreground">
-              <Info className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>
-                This template is used for the feedback request email. The same template is
-                sent to every customer with their data auto-filled — no per-customer editing needed.
-              </span>
-            </div>
-            <div className="flex gap-2">
-              {isCustom && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={resetMut.isPending}
-                  onClick={() => resetMut.mutate()}
-                >
-                  {resetMut.isPending ? "Resetting…" : <><RefreshCw className="h-3.5 w-3.5 mr-1" /> Reset to default</>}
-                </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                disabled={saveMut.isPending || !subject || !body}
-                onClick={() => saveMut.mutate()}
-              >
-                {saveMut.isPending ? "Saving…" : "Save template"}
-              </Button>
-            </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">
+              Body ({isHtml ? "HTML" : "plain text"})
+            </label>
+            <Textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              className="mt-1 min-h-[240px] font-mono text-sm"
+              placeholder="Hi {{name}},&#10;&#10;…"
+            />
+            <label className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={isHtml}
+                onChange={(e) => setIsHtml(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              Body is HTML — sent as-is (variables still filled), not escaped
+            </label>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={saveMut.isPending || !name || !subject || !body}
+              onClick={() => saveMut.mutate()}
+            >
+              {saveMut.isPending ? "Saving…" : isEdit ? "Save variant" : "Create variant"}
+            </Button>
           </div>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PurposeCard({
+  slug,
+  purpose,
+  variants,
+}: {
+  slug: string;
+  purpose: EmailPurpose;
+  variants: EmailVariant[];
+}) {
+  const qc = useQueryClient();
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<EmailVariant | null>(null);
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["email-templates", slug] });
+
+  const setDefaultMut = useMutation({
+    mutationFn: (id: string) => api.setDefaultEmailVariant(slug, id),
+    onSuccess: () => {
+      toast.success("Default variant set");
+      invalidate();
+    },
+    onError: () => toast.error("Failed to set default"),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.deleteEmailVariant(slug, id),
+    onSuccess: () => {
+      toast.success("Variant deleted");
+      invalidate();
+    },
+    onError: () => toast.error("Failed to delete variant"),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center justify-between">
+          <span>
+            {purpose.label}
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              {purpose.description}
+            </span>
+          </span>
+          <Badge variant="secondary">{variants.length} variant{variants.length === 1 ? "" : "s"}</Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {purpose.requires_purchase && (
+          <p className="text-xs text-muted-foreground">
+            <Info className="h-3.5 w-3.5 inline mr-1" />
+            Fills purchase variables ({"{{product}}"}, {"{{date}}"}) from the customer's
+            most recent Polar order.
+          </p>
+        )}
+
+        <div>
+          <span className="text-xs font-medium text-muted-foreground">Curated default</span>
+          <p className="text-sm mt-1 font-mono bg-muted/50 p-2 rounded">{purpose.default.subject}</p>
+          <pre className="text-sm mt-1 font-mono bg-muted/50 p-2 rounded whitespace-pre-wrap">
+            {purpose.default.body}
+          </pre>
+        </div>
+
+        {variants.map((v) => (
+          <div key={v.id} className="border rounded-md p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-sm font-medium truncate">{v.name}</span>
+                {v.is_default === 1 && <Badge>Default</Badge>}
+                {v.is_html === 1 && <Badge variant="outline">HTML</Badge>}
+              </div>
+              <div className="flex gap-1 shrink-0">
+                <Button variant="ghost" size="sm" onClick={() => setEditing(v)}>
+                  <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                </Button>
+                {v.is_default !== 1 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={setDefaultMut.isPending}
+                    onClick={() => setDefaultMut.mutate(v.id)}
+                  >
+                    <Star className="h-3.5 w-3.5 mr-1" /> Set default
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive"
+                  disabled={deleteMut.isPending}
+                  onClick={() => deleteMut.mutate(v.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+            <p className="text-sm font-mono bg-muted/50 p-2 rounded truncate">{v.subject}</p>
+          </div>
+        ))}
+
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+            <Plus className="h-4 w-4 mr-1" /> Add variant
+          </Button>
+        </div>
+
+        {(creating || editing) && (
+          <VariantEditor
+            slug={slug}
+            purpose={purpose}
+            variant={editing}
+            open={creating || editing !== null}
+            onOpenChange={(o) => {
+              if (!o) {
+                setCreating(false);
+                setEditing(null);
+              }
+            }}
+          />
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -208,7 +323,7 @@ function FooterCard({ slug, initial }: { slug: string; initial: string }) {
       <CardContent className="space-y-3">
         <div>
           <span className="text-xs font-medium text-muted-foreground">
-            Signature — fills the {"{{footer}}"} placeholder in every template
+            Signature — fills the {"{{footer}}"} variable in every template
           </span>
           <Textarea
             value={footer}
@@ -230,9 +345,8 @@ function FooterCard({ slug, initial }: { slug: string; initial: string }) {
 
 export default function EmailTemplatesPage() {
   const { slug } = useParams();
-  const [editing, setEditing] = useState<ContactEmailTemplate | null>(null);
 
-  const { data: templates, isLoading, error: templatesError } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["email-templates", slug],
     queryFn: () => api.listEmailTemplates(slug!),
     enabled: !!slug,
@@ -240,12 +354,19 @@ export default function EmailTemplatesPage() {
 
   if (isLoading) return <p className="text-muted-foreground">Loading…</p>;
   const errMsg =
-    templatesError instanceof ApiError
-      ? `${templatesError.status}: ${templatesError.message}`
-      : templatesError instanceof Error
-        ? templatesError.message
+    error instanceof ApiError
+      ? `${error.status}: ${error.message}`
+      : error instanceof Error
+        ? error.message
         : "Unknown error";
-  if (!templates) return <p className="text-sm text-red-500">Error: {errMsg}</p>;
+  if (!data) return <p className="text-sm text-red-500">Error: {errMsg}</p>;
+
+  const variantsByPurpose = new Map<string, EmailVariant[]>();
+  for (const v of data.variants) {
+    const list = variantsByPurpose.get(v.purpose) ?? [];
+    list.push(v);
+    variantsByPurpose.set(v.purpose, list);
+  }
 
   return (
     <div className="space-y-4">
@@ -257,51 +378,21 @@ export default function EmailTemplatesPage() {
       <div>
         <h1 className="text-2xl font-bold">Email Templates</h1>
         <p className="text-muted-foreground text-sm">
-          Pre-fill templates with placeholder variables (e.g. <code className="bg-muted px-1 rounded">{"{{name}}"}</code>).
-          They'll be replaced with each customer's data when sent.
+          One section per lifecycle purpose. Each purpose has a curated default; add variants
+          to customize — the starred variant is what sends by default.
         </p>
       </div>
 
-      {slug && <FooterCard slug={slug} initial={templates.footer ?? ""} />}
+      {slug && <FooterCard slug={slug} initial={data.footer ?? ""} />}
 
-      {templates.results.map((t) => {
-        const isCustom = !t.id.startsWith("default:");
-        const label = TEMPLATE_LABELS[t.template_name] || t.template_name;
-        return (
-          <Card key={t.id}>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center justify-between">
-                <span>{label}</span>
-                {isCustom ? (
-                  <Badge variant="default">Customized</Badge>
-                ) : (
-                  <Badge variant="secondary">Default</Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <span className="text-xs font-medium text-muted-foreground">Subject</span>
-                <p className="text-sm mt-1 font-mono bg-muted/50 p-2 rounded">{t.subject}</p>
-              </div>
-              <div>
-                <span className="text-xs font-medium text-muted-foreground">Body</span>
-                <pre className="text-sm mt-1 font-mono bg-muted/50 p-2 rounded whitespace-pre-wrap">
-                  {t.body}
-                </pre>
-              </div>
-              <div className="flex gap-2">
-                <TemplateEditor
-                  slug={slug!}
-                  template={t}
-                  open={editing?.id === t.id}
-                  onOpenChange={(o) => setEditing(o ? t : null)}
-                />
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+      {data.purposes.map((p) => (
+        <PurposeCard
+          key={p.name}
+          slug={slug!}
+          purpose={p}
+          variants={variantsByPurpose.get(p.name) ?? []}
+        />
+      ))}
     </div>
   );
 }

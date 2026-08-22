@@ -14,15 +14,16 @@ import { paginatedResponse } from "../lib/pagination";
 import { sendCustomerEmail } from "./email";
 import {
   renderFromTemplateSource,
-  getDefaultTemplate,
-  TEMPLATES_REQUIRING_PURCHASE,
-  TEMPLATE_NAMES,
+  getPurpose,
+  isKnownPurpose,
+  TEMPLATE_PURPOSES,
   TEMPLATE_VARIABLES,
   type PurchaseInfo,
-  type TemplateName,
+  type TemplatePurpose,
   type RenderedEmail,
 } from "./crm_email_templates";
-import * as emailTemplatesRepo from "../repositories/crm_email_templates";
+import * as emailVariantsRepo from "../repositories/crm_email_variants";
+import * as emailLogRepo from "../repositories/crm_email_log";
 
 // ── Contact (lead / customer) schemas ──
 export const createContactSchema = z.object({
@@ -78,11 +79,12 @@ export async function listContacts(
 export async function getContact(db: DbClient, workspaceId: string, customerId: string) {
   const contact = await customersRepo.getContact(db, workspaceId, customerId);
   if (!contact) throw new HTTPException(404, { message: "Contact not found" });
-  const [deals, tickets] = await Promise.all([
+  const [deals, tickets, emails] = await Promise.all([
     dealsRepo.listByCustomer(db, customerId),
     supportTicketsRepo.listByCustomer(db, customerId, { offset: 0, limit: 50 }),
+    emailLogRepo.listByCustomer(db, customerId, 20),
   ]);
-  return { contact, deals, tickets: tickets.rows };
+  return { contact, deals, tickets: tickets.rows, emails };
 }
 
 export async function updateContact(
@@ -207,12 +209,15 @@ export async function pipelineStats(db: DbClient, projectId: string) {
 // ── Customer email ──────────────────────────────────────────────────────────
 
 export const sendEmailSchema = z.object({
-  template: z.enum(["feedback_request"]),
+  purpose: z.string().refine(isKnownPurpose, "Unknown email purpose"),
+  variant_id: z.string().uuid().optional(),
 });
 
-// Subjects become RFC822 headers — a newline would allow header injection
-// (buildRawEmail also strips CR/LF as defense in depth).
-export const saveTemplateSchema = z.object({
+// Variant create/update. Subjects become RFC822 headers — a newline would
+// allow header injection (buildRawEmail also strips CR/LF in defense).
+export const saveVariantSchema = z.object({
+  purpose: z.string().refine(isKnownPurpose, "Unknown email purpose"),
+  name: z.string().min(1).max(80),
   subject: z
     .string()
     .min(1)
@@ -222,11 +227,13 @@ export const saveTemplateSchema = z.object({
   is_html: z.boolean().optional(),
 });
 
-// Runtime guard for route params typed as TemplateName — a blind cast would
-// let PUT /email-templates/<garbage> persist arbitrary template_name rows.
-export function parseTemplateName(name: string): TemplateName {
-  if ((TEMPLATE_NAMES as readonly string[]).includes(name)) return name as TemplateName;
-  throw new HTTPException(404, { message: `Unknown template: ${name}` });
+export const updateVariantSchema = saveVariantSchema.omit({ purpose: true }).partial();
+
+// Runtime guard for route params / request bodies typed as TemplatePurpose —
+// a blind cast would persist arbitrary purpose strings.
+export function parsePurposeName(name: string): TemplatePurpose {
+  if (isKnownPurpose(name)) return name;
+  throw new HTTPException(404, { message: `Unknown email purpose: ${name}` });
 }
 
 // Workspace-level email footer ({{footer}} placeholder value). Stored on
@@ -268,20 +275,25 @@ export async function getContactPurchaseInfo(
   };
 }
 
-// Resolve which template source to use: a custom one from the DB, or the
-// code-defined default. Throws 404 for unknown template names.
+// Resolve which template source to send: the requested variant (validated
+// against workspace + purpose), else the purpose's default-flagged variant,
+// else the curated code default. Unknown purposes throw 404. Returns the
+// resolved variant row too (null = curated default) so the send log can
+// record exactly what went out.
 export async function resolveTemplateSource(
   db: DbClient,
   workspaceId: string,
-  template: TemplateName,
-): Promise<{ subject: string; body: string; isHtml: boolean }> {
-  const row = await emailTemplatesRepo.getTemplate(db, workspaceId, template);
-  if (row) {
-    return { subject: row.subject, body: row.body, isHtml: row.isHtml === 1 };
+  purpose: TemplatePurpose,
+  variantId?: string,
+): Promise<{ source: { subject: string; body: string; isHtml: boolean }; variant: emailVariantsRepo.EmailVariantRow | null }> {
+  const def = getPurpose(purpose);
+  if (!def) throw new HTTPException(404, { message: `Unknown email purpose: ${purpose}` });
+
+  const variant = await emailVariantsRepo.resolveVariant(db, workspaceId, purpose, variantId);
+  if (variant) {
+    return { source: { subject: variant.subject, body: variant.body, isHtml: variant.isHtml === 1 }, variant };
   }
-  const def = getDefaultTemplate(template);
-  if (!def) throw new HTTPException(404, { message: `Unknown template: ${template}` });
-  return { ...def, isHtml: false };
+  return { source: { ...def.default, isHtml: false }, variant: null };
 }
 
 // Workspace fields the email renderer needs. Any workspace row satisfies this.
@@ -292,16 +304,25 @@ export interface EmailWorkspace {
 }
 
 // Shared lookup + render: validates the contact belongs to the workspace,
-// loads the template (DB override or code default), enriches with the
-// most-recent paid order (when the template requires it), and fills
-// {{placeholders}} with customer + purchase data. Returns the rendered email
-// plus the purchase info for the frontend preview.
+// resolves the variant (or curated default), enriches with the most-recent
+// paid order (when the purpose requires it), and fills {{placeholders}} with
+// customer + purchase data. Returns the rendered email plus purchase info and
+// which variant resolved (null = curated default) for the frontend preview.
 export async function renderTemplateEmail(
   db: DbClient,
   ws: EmailWorkspace,
   contactId: string,
-  template: TemplateName,
-): Promise<{ subject: string; text: string; html: string; to: string | null; purchase: PurchaseInfo | null }> {
+  purpose: TemplatePurpose,
+  variantId?: string,
+): Promise<{
+  subject: string;
+  text: string;
+  html: string;
+  to: string | null;
+  purchase: PurchaseInfo | null;
+  variant_id: string | null;
+  variant_name: string | null;
+}> {
   const contact = await customersRepo.getContact(db, ws.id, contactId);
   if (!contact) throw new HTTPException(404, { message: "Contact not found" });
   if (!contact.email) {
@@ -310,25 +331,32 @@ export async function renderTemplateEmail(
 
   const ctx = { name: contact.name, email: contact.email, company: contact.company };
   let purchase: PurchaseInfo | null = null;
-  if (TEMPLATES_REQUIRING_PURCHASE.has(template)) {
+  const def = getPurpose(purpose);
+  if (def?.requiresPurchase) {
     purchase = await getContactPurchaseInfo(db, contact.id);
   }
 
-  const source = await resolveTemplateSource(db, ws.id, template);
+  const { source, variant } = await resolveTemplateSource(db, ws.id, purpose, variantId);
   const footer = ws.emailFooter ?? `Regards,\n${ws.name} team`;
   const rendered: RenderedEmail = renderFromTemplateSource(source, ctx, purchase, footer);
-  return { ...rendered, to: contact.email, purchase };
+  return {
+    ...rendered,
+    to: contact.email,
+    purchase,
+    variant_id: variant?.id ?? null,
+    variant_name: variant?.name ?? null,
+  };
 }
 
 // Minimum time between templated emails to the same contact (repeat-click
 // / fat-finger protection; not an anti-spam system).
 export const CUSTOMER_EMAIL_COOLDOWN_MS = 60 * 60 * 1000;
 
-// Render + send a CRM customer email template. Uses the saved DB template (or
-// code default) with customer + purchase data filled in. Returns the rendered
-// subject + whether the email was actually sent (false when the binding is
-// absent in local dev). Sends to the same contact are rate-limited to one per
-// cooldown window; the clock is only stamped when the email actually went out.
+// Render + send a CRM customer email for a purpose (variant optional — falls
+// back to the purpose's default variant or the curated default). Returns the
+// rendered subject + whether the email was actually sent (false when the
+// binding is absent in local dev). Sends to the same contact are rate-limited
+// to one per cooldown window; every attempt is recorded in crm_email_log.
 export async function sendTemplateEmail(
   db: DbClient,
   env: Env,
@@ -348,13 +376,22 @@ export async function sendTemplateEmail(
     }
   }
 
-  const rendered = await renderTemplateEmail(db, ws, contactId, body.template);
+  const rendered = await renderTemplateEmail(db, ws, contactId, body.purpose, body.variant_id);
   const result = await sendCustomerEmail(env, rendered.to!, {
     subject: rendered.subject,
     text: rendered.text,
     html: rendered.html,
   });
 
+  await emailLogRepo.logSend(db, {
+    workspaceId: ws.id,
+    customerId: contactId,
+    purpose: body.purpose,
+    variantId: rendered.variant_id,
+    variantName: rendered.variant_name,
+    subject: rendered.subject,
+    sent: result.sent,
+  });
   if (result.sent) {
     await customersRepo.markEmailSent(db, contactId);
   }
@@ -362,114 +399,103 @@ export async function sendTemplateEmail(
   return { subject: rendered.subject, sent: result.sent, to: rendered.to };
 }
 
-// ── Template management (CRUD) ────────────────────────────────────────────────
+// ── Variant management (per-purpose template CRUD) ───────────────────────────
 
-export async function listEmailTemplates(
-  db: DbClient,
-  workspaceId: string,
-): Promise<
-  { id: string; template_name: string; subject: string; body: string; is_html: number; created_at: string | null; updated_at: string | null }[]
-> {
-  const rows = await emailTemplatesRepo.listTemplates(db, workspaceId);
-  const customizedNames = new Set(rows.map((r) => r.templateName));
-  const defaults = TEMPLATE_NAMES.filter((name) => !customizedNames.has(name)).map((name) => {
-    const def = getDefaultTemplate(name)!;
-    return {
-      id: `default:${name}`,
-      template_name: name,
-      subject: def.subject,
-      body: def.body,
-      is_html: 0,
-      created_at: null,
-      updated_at: null,
-    };
-  });
-  const customized = rows.map((r) => ({
+function variantWire(r: emailVariantsRepo.EmailVariantRow) {
+  return {
     id: r.id,
-    template_name: r.templateName,
+    purpose: r.purpose,
+    name: r.name,
     subject: r.subject,
     body: r.body,
     is_html: r.isHtml,
+    is_default: r.isDefault,
     created_at: r.createdAt,
     updated_at: r.updatedAt,
-  }));
-  return [...customized, ...defaults];
+  };
 }
 
-export async function getEmailTemplate(
+// Purpose registry (curated defaults + metadata) + this workspace's variants.
+export async function listEmailTemplates(db: DbClient, workspaceId: string) {
+  const variants = await emailVariantsRepo.listVariants(db, workspaceId);
+  return {
+    purposes: TEMPLATE_PURPOSES.map((p) => ({
+      name: p.name,
+      label: p.label,
+      description: p.description,
+      requires_purchase: p.requiresPurchase,
+      default: p.default,
+    })),
+    variants: variants.map(variantWire),
+  };
+}
+
+export async function createEmailVariant(
   db: DbClient,
   workspaceId: string,
-  template: TemplateName,
-): Promise<{
-  id: string;
-  template_name: string;
-  subject: string;
-  body: string;
-  is_html: number;
-  created_at: string | null;
-  updated_at: string | null;
-} | null> {
-  const row = await emailTemplatesRepo.getTemplate(db, workspaceId, template);
-  if (!row) {
-    const def = getDefaultTemplate(template);
-    if (!def) return null;
-    return {
-      id: `default:${template}`,
-      template_name: template,
-      subject: def.subject,
-      body: def.body,
-      is_html: 0,
-      created_at: null,
-      updated_at: null,
-    };
+  data: z.infer<typeof saveVariantSchema>,
+): Promise<ReturnType<typeof variantWire>> {
+  try {
+    const row = await emailVariantsRepo.createVariant(db, workspaceId, {
+      purpose: data.purpose,
+      name: data.name,
+      subject: data.subject,
+      body: data.body,
+      isHtml: data.is_html,
+    });
+    return variantWire(row);
+  } catch (err) {
+    // UNIQUE(workspace_id, purpose, name) violation → friendly 409.
+    if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
+      throw new HTTPException(409, {
+        message: `A variant named "${data.name}" already exists for this purpose`,
+      });
+    }
+    throw err;
   }
-  return {
-    id: row.id,
-    template_name: row.templateName,
-    subject: row.subject,
-    body: row.body,
-    is_html: row.isHtml,
-    created_at: row.createdAt,
-    updated_at: row.updatedAt,
-  };
 }
 
-export async function saveEmailTemplate(
+export async function updateEmailVariant(
   db: DbClient,
   workspaceId: string,
-  template: TemplateName,
-  data: z.infer<typeof saveTemplateSchema>,
-): Promise<{
-  id: string;
-  template_name: string;
-  subject: string;
-  body: string;
-  is_html: number;
-  created_at: string | null;
-  updated_at: string | null;
-}> {
-  const row = await emailTemplatesRepo.upsertTemplate(db, workspaceId, template, {
-    subject: data.subject,
-    body: data.body,
-    isHtml: data.is_html,
-  });
-  return {
-    id: row.id,
-    template_name: row.templateName,
-    subject: row.subject,
-    body: row.body,
-    is_html: row.isHtml,
-    created_at: row.createdAt,
-    updated_at: row.updatedAt,
-  };
-}
-
-export async function deleteEmailTemplate(
-  db: DbClient,
-  workspaceId: string,
-  template: TemplateName,
+  variantId: string,
+  data: z.infer<typeof updateVariantSchema>,
 ): Promise<void> {
-  await emailTemplatesRepo.deleteTemplate(db, workspaceId, template);
+  const existing = await emailVariantsRepo.getVariant(db, workspaceId, variantId);
+  if (!existing) throw new HTTPException(404, { message: "Variant not found" });
+  try {
+    await emailVariantsRepo.updateVariant(db, workspaceId, variantId, {
+      name: data.name,
+      subject: data.subject,
+      body: data.body,
+      isHtml: data.is_html,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
+      throw new HTTPException(409, { message: `A variant named "${data.name}" already exists for this purpose` });
+    }
+    throw err;
+  }
+}
+
+export async function deleteEmailVariant(
+  db: DbClient,
+  workspaceId: string,
+  variantId: string,
+): Promise<void> {
+  const existing = await emailVariantsRepo.getVariant(db, workspaceId, variantId);
+  if (!existing) throw new HTTPException(404, { message: "Variant not found" });
+  await emailVariantsRepo.deleteVariant(db, workspaceId, variantId);
+}
+
+export async function setDefaultEmailVariant(
+  db: DbClient,
+  workspaceId: string,
+  variantId: string,
+): Promise<void> {
+  const existing = await emailVariantsRepo.getVariant(db, workspaceId, variantId);
+  if (!existing) throw new HTTPException(404, { message: "Variant not found" });
+  await emailVariantsRepo.setDefaultVariant(db, workspaceId, variantId);
 }
 
 // Re-export template variables for the frontend editor UI.

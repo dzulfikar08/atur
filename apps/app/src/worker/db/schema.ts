@@ -1034,23 +1034,52 @@ export const polarSettings = sqliteTable("polar_settings", {
 });
 
 // ── CRM customer email templates ──────────────────────────────────────────────
-// Per-workspace, per-template-name. Uses {{placeholder}} variables filled with
-// customer + purchase data at render time. Falls back to code defaults when
-// no row exists for a (workspace, template_name) pair.
-export const crmEmailTemplates = sqliteTable("crm_email_templates", {
-  id: text("id").primaryKey(),
-  workspaceId: text("workspace_id")
-    .notNull()
-    .references(() => workspaces.id, { onDelete: "cascade" }),
-  templateName: text("template_name").notNull(),
-  subject: text("subject").notNull(),
-  body: text("body").notNull(),
-  isHtml: integer("is_html").notNull().default(0),
-  createdAt: text("created_at"),
-  updatedAt: text("updated_at"),
-}, (table) => [
-  uniqueIndex("uq_crm_email_templates_workspace").on(
-    table.workspaceId,
-    table.templateName,
-  ),
-]);
+// Purposes (cold_outreach, welcome, …) live in a code registry
+// (services/crm_email_templates.ts); users save arbitrary VARIANTS per
+// purpose here, one flagged default per (workspace, purpose). When no
+// variant exists the curated code default is used.
+
+export const crmEmailVariants = sqliteTable(
+  "crm_email_variants",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    purpose: text("purpose").notNull(),
+    name: text("name").notNull(),
+    subject: text("subject").notNull(),
+    body: text("body").notNull(),
+    isHtml: integer("is_html").notNull().default(0),
+    isDefault: integer("is_default").notNull().default(0),
+    createdAt: text("created_at"),
+    updatedAt: text("updated_at"),
+  },
+  (table) => [
+    uniqueIndex("uq_crm_email_variants").on(table.workspaceId, table.purpose, table.name),
+    index("idx_crm_email_variants_workspace").on(table.workspaceId, table.purpose),
+  ],
+);
+
+// One row per templated-email send attempt (history + per-contact visibility).
+export const crmEmailLog = sqliteTable(
+  "crm_email_log",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    customerId: text("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    purpose: text("purpose").notNull(),
+    // Null when the curated code default was sent (no variant row).
+    variantId: text("variant_id"),
+    variantName: text("variant_name"),
+    subject: text("subject").notNull(),
+    sentAt: text("sent_at").notNull(),
+    // 0 = attempt logged but the email didn't go out (SEND_EMAIL absent in dev).
+    sent: integer("sent").notNull().default(1),
+  },
+  (table) => [index("idx_crm_email_log_customer").on(table.customerId, table.sentAt)],
+);
