@@ -3,6 +3,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import * as cyclesService from "../services/cycles";
 import * as schema from "../db/schema";
 
@@ -13,7 +14,7 @@ export const cycleRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await cyclesService.list(db, projectId, c);
     return c.json(result);
   })
-  .post("/", authMiddleware, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
     const workspaceSlug = c.req.param("slug")!;
@@ -28,20 +29,20 @@ export const cycleRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await cyclesService.getById(db, cycleId);
     return c.json(result);
   })
-  .patch("/:cycleId", authMiddleware, async (c) => {
+  .patch("/:cycleId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const cycleId = c.req.param("cycleId")!;
     const body = cyclesService.updateCycleSchema.parse(await c.req.json());
     const result = await cyclesService.update(db, cycleId, body);
     return c.json(result);
   })
-  .delete("/:cycleId", authMiddleware, async (c) => {
+  .delete("/:cycleId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const cycleId = c.req.param("cycleId")!;
     await cyclesService.remove(db, cycleId);
     return c.json({ success: true });
   })
-  .post("/:cycleId/issues", authMiddleware, async (c) => {
+  .post("/:cycleId/issues", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const cycleId = c.req.param("cycleId")!;
     const body = cyclesService.addIssueSchema.parse(await c.req.json());
@@ -68,7 +69,7 @@ export const cycleRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       .where(and(eq(schema.cycleIssues.cycleId, cycleId), isNull(schema.issues.deletedAt)));
     return c.json({ results: rows.map((r) => r.issues) });
   })
-  .delete("/:cycleId/issues/:issueId", authMiddleware, async (c) => {
+  .delete("/:cycleId/issues/:issueId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const cycleId = c.req.param("cycleId")!;
     const issueId = c.req.param("issueId")!;

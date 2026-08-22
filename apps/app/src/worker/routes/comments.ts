@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import { paginationParams, paginatedResponse } from "../lib/pagination";
 import * as commentsService from "../services/comments";
 import * as issuesRepo from "../repositories/issues";
@@ -23,7 +24,7 @@ export const commentRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const comments = await commentsService.list(db, issueId, offset, limit);
     return c.json(paginatedResponse(comments, comments.length, offset, limit));
   })
-  .post("/", authMiddleware, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const user = c.get("user");
     const issueId = await resolveIssueId(c);
@@ -31,7 +32,7 @@ export const commentRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const comment = await commentsService.create(db, c.env, user.sub, issueId, body, user);
     return c.json(comment, 201);
   })
-  .patch("/:commentId", authMiddleware, async (c) => {
+  .patch("/:commentId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const user = c.get("user");
     const commentId = c.req.param("commentId")!;
@@ -39,7 +40,7 @@ export const commentRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const comment = await commentsService.update(db, user.sub, commentId, body);
     return c.json(comment);
   })
-  .delete("/:commentId", authMiddleware, async (c) => {
+  .delete("/:commentId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const user = c.get("user");
     const commentId = c.req.param("commentId")!;

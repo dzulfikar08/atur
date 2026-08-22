@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import * as labelsService from "../services/labels";
 import { HTTPException } from "hono/http-exception";
 import { eq } from "drizzle-orm";
@@ -27,7 +28,7 @@ export const labelRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await labelsService.list(db, projectId, workspaceId);
     return c.json(result);
   })
-  .post("/", authMiddleware, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const projectId = c.req.param("projectId")!;
@@ -42,14 +43,14 @@ export const labelRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await labelsService.getById(db, labelId);
     return c.json(result);
   })
-  .patch("/:labelId", authMiddleware, async (c) => {
+  .patch("/:labelId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const labelId = c.req.param("labelId")!;
     const body = labelsService.updateLabelSchema.parse(await c.req.json());
     const result = await labelsService.update(db, labelId, body);
     return c.json(result);
   })
-  .delete("/:labelId", authMiddleware, async (c) => {
+  .delete("/:labelId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const labelId = c.req.param("labelId")!;
     await labelsService.remove(db, labelId);

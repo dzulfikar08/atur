@@ -1,10 +1,8 @@
-import { Hono, type Context } from "hono";
-import { and, eq, isNull } from "drizzle-orm";
-import { HTTPException } from "hono/http-exception";
+import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { paginationParams } from "../lib/pagination";
-import * as schema from "../db/schema";
+import { resolveWorkspaceForCaller } from "../middleware/workspace";
 import * as workspaceRepo from "../repositories/workspaces";
 import * as crmService from "../services/crm";
 
@@ -12,39 +10,9 @@ import * as crmService from "../services/crm";
 // global authMiddleware already applies; each handler re-checks membership.
 export const contactsRoutes = new Hono<{ Bindings: Env }>({ strict: false });
 
-async function resolveWorkspace(c: Context<{ Bindings: Env }>) {
-  const db = getDb(c.env.DB);
-  const slug = c.req.param("slug")!;
-  const ws = await workspaceRepo.findBySlug(db, slug);
-  if (!ws) throw new HTTPException(404, { message: "Workspace not found" });
-  return ws;
-}
-
-async function assertMember(
-  db: ReturnType<typeof getDb>,
-  ws: { id: string; ownerId: string },
-  userId: string,
-) {
-  if (ws.ownerId === userId) return;
-  const [m] = await db
-    .select({ id: schema.workspaceMembers.id })
-    .from(schema.workspaceMembers)
-    .where(
-      and(
-        eq(schema.workspaceMembers.workspaceId, ws.id),
-        eq(schema.workspaceMembers.memberId, userId),
-        eq(schema.workspaceMembers.isActive, 1),
-        isNull(schema.workspaceMembers.deletedAt),
-      ),
-    )
-    .limit(1);
-  if (!m) throw new HTTPException(403, { message: "Not a member of this workspace" });
-}
-
 contactsRoutes.get("/", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
+  const ws = await resolveWorkspaceForCaller(c);
   const { offset, limit } = paginationParams(c);
   const result = await crmService.listContacts(db, ws.id, {
     status: c.req.query("status"),
@@ -57,8 +25,7 @@ contactsRoutes.get("/", async (c) => {
 
 contactsRoutes.post("/", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
+  const ws = await resolveWorkspaceForCaller(c);
   const body = crmService.createContactSchema.parse(await c.req.json());
   const contact = await crmService.createContact(db, ws.id, body);
   return c.json(contact, 201);
@@ -69,8 +36,7 @@ contactsRoutes.post("/", async (c) => {
 // radix tree doesn't match "email-templates" as the :id parametric segment.
 contactsRoutes.get("/email-templates", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
+  const ws = await resolveWorkspaceForCaller(c);
   const result = await crmService.listEmailTemplates(db, ws.id);
   return c.json({ ...result, footer: ws.emailFooter ?? "" });
 });
@@ -80,8 +46,7 @@ contactsRoutes.get("/email-templates", async (c) => {
 // rule: static segments must be registered first).
 contactsRoutes.put("/email-templates/footer", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
+  const ws = await resolveWorkspaceForCaller(c);
   const body = crmService.saveFooterSchema.parse(await c.req.json());
   await workspaceRepo.update(db, ws.id, {
     emailFooter: body.footer === "" ? null : body.footer,
@@ -92,8 +57,7 @@ contactsRoutes.put("/email-templates/footer", async (c) => {
 // Create a variant under a purpose.
 contactsRoutes.post("/email-templates/variants", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
+  const ws = await resolveWorkspaceForCaller(c);
   const body = crmService.saveVariantSchema.parse(await c.req.json());
   const result = await crmService.createEmailVariant(db, ws.id, body);
   return c.json(result, 201);
@@ -102,8 +66,7 @@ contactsRoutes.post("/email-templates/variants", async (c) => {
 // Update a variant.
 contactsRoutes.put("/email-templates/variants/:id", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
+  const ws = await resolveWorkspaceForCaller(c);
   const body = crmService.updateVariantSchema.parse(await c.req.json());
   await crmService.updateEmailVariant(db, ws.id, c.req.param("id")!, body);
   return c.body(null, 204);
@@ -112,8 +75,7 @@ contactsRoutes.put("/email-templates/variants/:id", async (c) => {
 // Delete a variant.
 contactsRoutes.delete("/email-templates/variants/:id", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
+  const ws = await resolveWorkspaceForCaller(c);
   await crmService.deleteEmailVariant(db, ws.id, c.req.param("id")!);
   return c.body(null, 204);
 });
@@ -121,24 +83,21 @@ contactsRoutes.delete("/email-templates/variants/:id", async (c) => {
 // Flag a variant as its purpose's default.
 contactsRoutes.put("/email-templates/variants/:id/default", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
+  const ws = await resolveWorkspaceForCaller(c);
   await crmService.setDefaultEmailVariant(db, ws.id, c.req.param("id")!);
   return c.body(null, 204);
 });
 
 contactsRoutes.get("/:id", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
+  const ws = await resolveWorkspaceForCaller(c);
   const result = await crmService.getContact(db, ws.id, c.req.param("id")!);
   return c.json(result);
 });
 
 contactsRoutes.patch("/:id", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
+  const ws = await resolveWorkspaceForCaller(c);
   const body = crmService.updateContactSchema.parse(await c.req.json());
   const contact = await crmService.updateContact(db, ws.id, c.req.param("id")!, body);
   return c.json(contact);
@@ -146,8 +105,7 @@ contactsRoutes.patch("/:id", async (c) => {
 
 contactsRoutes.delete("/:id", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
+  const ws = await resolveWorkspaceForCaller(c);
   await crmService.deleteContact(db, ws.id, c.req.param("id")!);
   return c.body(null, 204);
 });
@@ -155,8 +113,7 @@ contactsRoutes.delete("/:id", async (c) => {
 // Preview a CRM customer email template for a contact (no email is sent).
 contactsRoutes.get("/:id/email-preview", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
+  const ws = await resolveWorkspaceForCaller(c);
   const { purpose, variant_id } = crmService.sendEmailSchema.parse({
     purpose: c.req.query("purpose") || "feedback_request",
     variant_id: c.req.query("variant_id") || undefined,
@@ -174,8 +131,7 @@ contactsRoutes.get("/:id/email-preview", async (c) => {
 // Send a templated customer email (e.g. feedback request) to a contact.
 contactsRoutes.post("/:id/send-email", async (c) => {
   const db = getDb(c.env.DB);
-  const ws = await resolveWorkspace(c);
-  await assertMember(db, ws, c.get("user").sub);
+  const ws = await resolveWorkspaceForCaller(c);
   const body = crmService.sendEmailSchema.parse(await c.req.json());
   const result = await crmService.sendTemplateEmail(db, c.env, ws, c.req.param("id")!, body);
   return c.json(result);

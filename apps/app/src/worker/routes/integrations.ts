@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import * as schema from "../db/schema";
 import * as integrationService from "../services/integrations";
 
@@ -20,7 +21,7 @@ export const integrationRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const integrations = await integrationService.list(db, workspace.id);
     return c.json(integrations);
   })
-  .post("/", authMiddleware, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const user = c.get("user");
     const slug = c.req.param("slug")!;
@@ -39,7 +40,7 @@ export const integrationRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const integration = await integrationService.getById(db, c.req.param("integrationId")!);
     return c.json(integration);
   })
-  .delete("/:integrationId", authMiddleware, async (c) => {
+  .delete("/:integrationId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     await integrationService.remove(db, c.req.param("integrationId")!);
     return c.json({ ok: true });
