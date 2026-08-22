@@ -89,10 +89,19 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         updatedAt: schema.projects.updatedAt,
         workspaceSlug: schema.workspaces.slug,
         workspaceName: schema.workspaces.name,
+        isPipeline: schema.projects.isPipeline,
       })
       .from(schema.projects)
       .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.projects.workspaceId))
-      .where(and(inArray(schema.projects.workspaceId, ids), isNull(schema.projects.deletedAt)))
+      .where(
+        and(
+          inArray(schema.projects.workspaceId, ids),
+          isNull(schema.projects.deletedAt),
+          ...(c.req.query("is_pipeline") === "1"
+            ? [eq(schema.projects.isPipeline, 1)]
+            : []),
+        ),
+      )
       .orderBy(desc(schema.projects.updatedAt));
 
     return c.json({ results: rows });

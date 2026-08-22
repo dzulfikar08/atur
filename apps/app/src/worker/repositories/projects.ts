@@ -18,10 +18,14 @@ export async function listByWorkspace(
   workspaceId: string,
   offset: number,
   limit: number,
+  opts?: { isPipeline?: boolean },
 ) {
   const where = and(
     eq(schema.projects.workspaceId, workspaceId),
     isNull(schema.projects.deletedAt),
+    ...(opts?.isPipeline !== undefined
+      ? [eq(schema.projects.isPipeline, opts.isPipeline ? 1 : 0)]
+      : []),
   );
   const rows = await db.select().from(schema.projects).where(where).limit(limit).offset(offset);
   const [{ count }] = await db
@@ -29,6 +33,20 @@ export async function listByWorkspace(
     .from(schema.projects)
     .where(where);
   return { rows, total: count };
+}
+
+// Mirrors the uq_project_identifier constraint: (identifier, workspace_id)
+// unique including soft-deleted rows, so collision checks must not filter
+// deleted_at.
+export async function identifierExists(db: DbClient, workspaceId: string, identifier: string) {
+  const [row] = await db
+    .select({ id: schema.projects.id })
+    .from(schema.projects)
+    .where(
+      and(eq(schema.projects.identifier, identifier), eq(schema.projects.workspaceId, workspaceId)),
+    )
+    .limit(1);
+  return !!row;
 }
 
 export async function create(
@@ -45,6 +63,7 @@ export async function create(
     timezone?: string;
     projectLeadId?: string | null;
     defaultAssigneeId?: string | null;
+    isPipeline?: number;
   },
 ) {
   const id = uuid();
@@ -62,6 +81,7 @@ export async function create(
     timezone: data.timezone ?? "UTC",
     projectLeadId: data.projectLeadId ?? null,
     defaultAssigneeId: data.defaultAssigneeId ?? null,
+    isPipeline: data.isPipeline ?? 0,
     createdAt: now,
     updatedAt: now,
   });
