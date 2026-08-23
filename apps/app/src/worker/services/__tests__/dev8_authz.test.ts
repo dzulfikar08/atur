@@ -97,6 +97,15 @@ describe("DEV-8 relations both-sided checks", () => {
     expect(db.updates).toHaveLength(1);
   });
 
+  it("remove: self-relation (issueId === relatedIssueId) is deletable", async () => {
+    // SQL IN dedupes, so a self-relation matches ONE row — the expectation
+    // must shrink to 1 or such rows become permanently undeletable.
+    const self = [{ id: "r2", issueId: "i1", relatedIssueId: "i1" }];
+    const db = mockDb([self, [{ id: "i1" }]]);
+    await relationsService.remove(db.db, "r2", MINE);
+    expect(db.updates).toHaveLength(1);
+  });
+
   it("list: foreign issue id is a 404, relation graph never queried", async () => {
     const db = mockDb([[]]);
     await expect404(() => relationsService.list(db.db, "i-foreign", MINE));

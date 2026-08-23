@@ -10,6 +10,7 @@ import * as customersRepo from "../repositories/customers";
 import * as portalSettingsRepo from "../repositories/portalSettings";
 import * as supportTicketsRepo from "../repositories/supportTickets";
 import * as activitiesRepo from "../repositories/activities";
+import * as crmActivitiesService from "./crm_activities";
 import { generateToken } from "../lib/token";
 import type { Env } from "../lib/env";
 import {
@@ -179,6 +180,14 @@ export async function createTicket(
     verb: "created",
     issueId: issue.id,
     actorId: customer.userId,
+  });
+  // CRM timeline: the ticket shows up on the contact's timeline too.
+  await crmActivitiesService.recordActivity(db, customer.workspaceId, {
+    customerId: customer.id,
+    type: "NOTE",
+    subject: "Support ticket created",
+    body: issue.name,
+    createdBy: customer.userId,
   });
 
   return issue;

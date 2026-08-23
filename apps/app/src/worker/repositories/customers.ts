@@ -4,6 +4,7 @@ import * as schema from "../db/schema";
 import { v4 as uuid } from "uuid";
 import { nowISO } from "../lib/pagination";
 import * as usersRepo from "./users";
+import * as companiesRepo from "./companies";
 
 export interface CustomerRow {
   id: string;
@@ -12,6 +13,14 @@ export interface CustomerRow {
   email: string | null;
   name: string | null;
   company: string | null;
+  companyId: string | null;
+  title: string | null;
+  seniority: string | null;
+  function: string | null;
+  linkedinUrl: string | null;
+  imageUrl: string | null;
+  lastActivityAt: string | null;
+  enrichedAt: string | null;
   phone: string | null;
   status: string;
   source: string | null;
@@ -20,10 +29,14 @@ export interface CustomerRow {
   polarCustomerId: string | null;
   // ISO timestamp of the last CRM email sent (send cooldown rate limit).
   lastEmailAt: string | null;
+  // Joined from companies (nullable when the contact has no company link).
+  companyName: string | null;
+  companyDomain: string | null;
 }
 
 // Contact fields live on the customers row now; users is LEFT-joined only for
-// the legacy username (portal customers) and the soft-delete filter.
+// the legacy username (portal customers) and the soft-delete filter; companies
+// is LEFT-joined for the account label on contact rows.
 const contactSelect = {
   id: schema.customers.id,
   workspaceId: schema.customers.workspaceId,
@@ -31,6 +44,14 @@ const contactSelect = {
   email: schema.customers.email,
   name: schema.customers.name,
   company: schema.customers.company,
+  companyId: schema.customers.companyId,
+  title: schema.customers.title,
+  seniority: schema.customers.seniority,
+  function: schema.customers.function,
+  linkedinUrl: schema.customers.linkedinUrl,
+  imageUrl: schema.customers.imageUrl,
+  lastActivityAt: schema.customers.lastActivityAt,
+  enrichedAt: schema.customers.enrichedAt,
   phone: schema.customers.phone,
   status: schema.customers.status,
   source: schema.customers.source,
@@ -38,6 +59,8 @@ const contactSelect = {
   sessionToken: schema.customers.sessionToken,
   polarCustomerId: schema.customers.polarCustomerId,
   lastEmailAt: schema.customers.lastEmailAt,
+  companyName: schema.companies.name,
+  companyDomain: schema.companies.domain,
 };
 
 // Portal session lookup — mirrors usersRepo.findByToken but against
@@ -47,6 +70,10 @@ export async function findBySessionToken(db: DbClient, token: string): Promise<C
     .select(contactSelect)
     .from(schema.customers)
     .leftJoin(schema.users, eq(schema.users.id, schema.customers.userId))
+    .leftJoin(
+      schema.companies,
+      and(eq(schema.companies.id, schema.customers.companyId), isNull(schema.companies.deletedAt)),
+    )
     .where(and(eq(schema.customers.sessionToken, token), isNull(schema.users.deletedAt)))
     .limit(1);
   return row ?? null;
@@ -78,6 +105,10 @@ export async function findByWorkspaceEmail(
     .select(contactSelect)
     .from(schema.customers)
     .leftJoin(schema.users, eq(schema.users.id, schema.customers.userId))
+    .leftJoin(
+      schema.companies,
+      and(eq(schema.companies.id, schema.customers.companyId), isNull(schema.companies.deletedAt)),
+    )
     .where(
       and(
         eq(schema.customers.workspaceId, workspaceId),
@@ -100,6 +131,20 @@ function deriveUsername(email: string): string {
   const suffix = uuid().slice(0, 8);
   const base = `${local}-${suffix}`.slice(0, 48);
   return base;
+}
+
+// Resolve a company_id from a free-text company string (seeded dedupe per
+// DEV-9: importing a contact whose company string matches an existing org
+// links them). Returns null when there's no match — the contact just keeps
+// the string with no FK.
+async function resolveCompanyId(
+  db: DbClient,
+  workspaceId: string,
+  company?: string | null,
+): Promise<string | null> {
+  if (!company) return null;
+  const found = await companiesRepo.findByName(db, workspaceId, company);
+  return found?.id ?? null;
 }
 
 // Idempotent: return the existing customer for (workspace, email) or create a
@@ -189,6 +234,12 @@ export async function createLead(
     if (!existing.company && opts.company) patch.company = opts.company;
     if (!existing.phone && opts.phone) patch.phone = opts.phone;
     if (!existing.source && opts.source) patch.source = opts.source;
+    // Seeded dedupe: link the company FK when the string matches an org and
+    // the contact isn't linked yet.
+    if (!existing.companyId && opts.company) {
+      const companyId = await resolveCompanyId(db, workspaceId, opts.company);
+      if (companyId) patch.companyId = companyId;
+    }
     if (Object.keys(patch).length > 1) {
       await db.update(schema.customers).set(patch).where(eq(schema.customers.id, existing.id));
     }
@@ -196,6 +247,7 @@ export async function createLead(
   }
 
   const now = nowISO();
+  const companyId = await resolveCompanyId(db, workspaceId, opts.company);
   await db.insert(schema.customers).values({
     id: uuid(),
     workspaceId,
@@ -203,6 +255,7 @@ export async function createLead(
     email: opts.email,
     name: opts.name ?? null,
     company: opts.company ?? null,
+    companyId,
     phone: opts.phone ?? null,
     status: "lead",
     source: opts.source ?? null,
@@ -242,6 +295,10 @@ export async function listContacts(
     .select(contactSelect)
     .from(schema.customers)
     .leftJoin(schema.users, eq(schema.users.id, schema.customers.userId))
+    .leftJoin(
+      schema.companies,
+      and(eq(schema.companies.id, schema.customers.companyId), isNull(schema.companies.deletedAt)),
+    )
     .where(where)
     .orderBy(desc(schema.customers.createdAt))
     .offset(opts.offset)
@@ -259,6 +316,10 @@ export async function getContact(
     .select(contactSelect)
     .from(schema.customers)
     .leftJoin(schema.users, eq(schema.users.id, schema.customers.userId))
+    .leftJoin(
+      schema.companies,
+      and(eq(schema.companies.id, schema.customers.companyId), isNull(schema.companies.deletedAt)),
+    )
     .where(and(eq(schema.customers.id, customerId), eq(schema.customers.workspaceId, workspaceId)))
     .limit(1);
   return row ?? null;
@@ -271,19 +332,33 @@ export async function updateContact(
   patch: {
     name?: string | null;
     company?: string | null;
+    companyId?: string | null;
+    title?: string | null;
+    seniority?: string | null;
+    function?: string | null;
+    linkedinUrl?: string | null;
+    imageUrl?: string | null;
     phone?: string | null;
     status?: string;
     source?: string | null;
     email?: string | null;
+    enrichedAt?: string | null;
   },
 ): Promise<CustomerRow | null> {
   const set: Record<string, unknown> = { updatedAt: nowISO() };
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.company !== undefined) set.company = patch.company;
+  if (patch.companyId !== undefined) set.companyId = patch.companyId;
+  if (patch.title !== undefined) set.title = patch.title;
+  if (patch.seniority !== undefined) set.seniority = patch.seniority;
+  if (patch.function !== undefined) set.function = patch.function;
+  if (patch.linkedinUrl !== undefined) set.linkedinUrl = patch.linkedinUrl;
+  if (patch.imageUrl !== undefined) set.imageUrl = patch.imageUrl;
   if (patch.phone !== undefined) set.phone = patch.phone;
   if (patch.status !== undefined) set.status = patch.status;
   if (patch.source !== undefined) set.source = patch.source;
   if (patch.email !== undefined) set.email = patch.email;
+  if (patch.enrichedAt !== undefined) set.enrichedAt = patch.enrichedAt;
   await db
     .update(schema.customers)
     .set(set)

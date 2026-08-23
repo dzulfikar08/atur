@@ -28,9 +28,8 @@ export async function create(
   });
 }
 
-// workspaceId is the caller's workspace (route guard). A custom field in
-// another workspace is indistinguishable from a missing one → 404, never a
-// leaky 200. (Currently unused by routes — kept scoped for future callers.)
+// workspaceId is the caller's workspace (route guard). A field in another
+// workspace is indistinguishable from a missing one → 404, never a leaky 200.
 export async function getById(db: DbClient, id: string, workspaceId: string) {
   const field = await customFieldsRepo.findById(db, id);
   if (!field || field.workspaceId !== workspaceId) {

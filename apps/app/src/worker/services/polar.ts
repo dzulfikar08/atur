@@ -6,6 +6,7 @@ import * as customersRepo from "../repositories/customers";
 import * as dealsRepo from "../repositories/deals";
 import * as crmService from "./crm";
 import * as issuesService from "./issues";
+import * as activitiesService from "./crm_activities";
 import {
   polarListAll,
   type PolarCustomer,
@@ -247,6 +248,13 @@ export async function upsertCustomer(
     customerId: row.id,
     lastEvent: eventType,
     raw: JSON.stringify(customer),
+  });
+  // CRM timeline: a Polar import event on the contact.
+  await activitiesService.recordActivity(db, workspaceId, {
+    customerId: row.id,
+    type: "NOTE",
+    subject: "Polar import",
+    body: eventType,
   });
   return row;
 }

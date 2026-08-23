@@ -36,6 +36,7 @@ import { mcpRoutes } from "./routes/mcp/index";
 import { portalRoutes } from "./routes/portal";
 import { portalSettingsRoutes } from "./routes/portal_settings";
 import { contactsRoutes } from "./routes/contacts";
+import { companiesRoutes } from "./routes/companies";
 import { dealsRoutes } from "./routes/deals";
 import { feedbackRoutes } from "./routes/feedback";
 import { feedbackAdminRoutes } from "./routes/feedback_admin";
@@ -80,6 +81,7 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/api/workspaces/:slug/projects", projectRoutes);
   app.route("/api/workspaces/:slug/portal-settings", portalSettingsRoutes);
   app.route("/api/workspaces/:slug/contacts", contactsRoutes);
+  app.route("/api/workspaces/:slug/companies", companiesRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/deals", dealsRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/issues", issueRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/cycles", cycleRoutes);

@@ -1,26 +1,28 @@
 import type { DbClient } from "../db/index";
 import * as searchRepo from "../repositories/search";
 
-// `workspace` is a slug; resolve to id. Returns {issues, projects} to match the
-// frontend SearchResult contract. Without a workspace the search is bounded to
-// the caller: userId restricts results to workspaces they own or are an
-// active member of — never every workspace on the instance.
+// `workspace` is a slug; resolve to id. A workspace-less search scopes to the
+// caller's accessible workspaces (owner + active member) — never all
+// workspaces. Returns {issues, projects} to match the frontend SearchResult
+// contract.
 export async function search(
   db: DbClient,
   query: string,
-  workspace?: string,
-  project?: string,
-  limit = 50,
-  userId?: string,
+  workspace: string | undefined,
+  project: string | undefined,
+  limit: number,
+  userId: string,
 ) {
   let workspaceId: string | undefined;
+  let workspaceIds: string[] | undefined;
   if (workspace) {
     const id = await searchRepo.findWorkspaceIdBySlug(db, workspace);
     workspaceId = id ?? undefined;
-  }
-  let workspaceIds: string[] | undefined;
-  if (!workspaceId && userId) {
-    workspaceIds = await searchRepo.listWorkspaceIdsForUser(db, userId);
+  } else {
+    workspaceIds = await searchRepo.findAccessibleWorkspaceIds(db, userId);
+    // A caller with no accessible workspaces gets empty results — the repo's
+    // `else if (workspaceIds?.length)` would otherwise drop the filter
+    // entirely and fall back to a GLOBAL search.
     if (workspaceIds.length === 0) return { issues: [], projects: [] };
   }
   const [issues, projects] = await Promise.all([
