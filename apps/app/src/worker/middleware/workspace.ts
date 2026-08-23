@@ -4,11 +4,13 @@ import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import * as schema from "../db/schema";
 import * as workspaceRepo from "../repositories/workspaces";
+import { and, eq, isNull } from "drizzle-orm";
 import * as membersRepo from "../repositories/members";
 
 declare module "hono" {
   interface ContextVariableMap {
     workspace: typeof schema.workspaces.$inferSelect;
+    project: typeof schema.projects.$inferSelect;
   }
 }
 
@@ -65,5 +67,34 @@ export async function requireWorkspaceAdmin(c: Context<{ Bindings: Env }>, next:
       });
     }
   }
+  await next();
+}
+
+// Project binding for routes mounted under /api/workspaces/:slug/projects/:projectId/...
+// (issues, comments, issue_extras, subscribers — deals carries its own copy in
+// resolveProject). The :projectId path param is a raw UUID from the request:
+// without this check a member of workspace A could point it at workspace B's
+// project and read/mutate every issue under it (cross-workspace IDOR).
+// Resolves the project AND requires it to live in the caller's workspace —
+// a foreign or unknown project 404s before any handler runs.
+export async function requireWorkspaceProject(c: Context<{ Bindings: Env }>, next: Next) {
+  const ws =
+    (c.get("workspace") as typeof schema.workspaces.$inferSelect | undefined) ??
+    (await resolveWorkspaceForCaller(c));
+  c.set("workspace", ws);
+  const db = getDb(c.env.DB);
+  const [proj] = await db
+    .select()
+    .from(schema.projects)
+    .where(
+      and(
+        eq(schema.projects.id, c.req.param("projectId")!),
+        eq(schema.projects.workspaceId, ws.id),
+        isNull(schema.projects.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!proj) throw new HTTPException(404, { message: "Project not found" });
+  c.set("project", proj);
   await next();
 }

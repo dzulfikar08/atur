@@ -15,6 +15,10 @@ export async function findById(db: DbClient, id: string) {
 
 // Frontend addresses issues by sequence id in URLs (e.g. /issues/1) but also by
 // UUID elsewhere. Resolve either form to the issue row within a project.
+// BOTH branches are scoped to the bound project — the UUID branch used to fall
+// through to a bare findById, letting a caller resolve a foreign workspace's
+// issue by pasting its UUID under their own project path (cross-workspace
+// IDOR). A UUID from another project now resolves to nothing (→ 404).
 export async function resolveIssue(db: DbClient, projectId: string, identifier: string) {
   if (/^\d+$/.test(identifier)) {
     const [row] = await db
@@ -30,7 +34,14 @@ export async function resolveIssue(db: DbClient, projectId: string, identifier: 
       .limit(1);
     return row ?? null;
   }
-  return findById(db, identifier);
+  const [row] = await db
+    .select()
+    .from(issues)
+    .where(
+      and(eq(issues.projectId, projectId), eq(issues.id, identifier), isNull(issues.deletedAt)),
+    )
+    .limit(1);
+  return row ?? null;
 }
 
 export async function listByProject(

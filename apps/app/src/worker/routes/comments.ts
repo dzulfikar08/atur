@@ -2,7 +2,7 @@ import { Hono, type Context } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
-import { requireWorkspaceMember } from "../middleware/workspace";
+import { requireWorkspaceMember, requireWorkspaceProject } from "../middleware/workspace";
 import { paginationParams, paginatedResponse } from "../lib/pagination";
 import * as commentsService from "../services/comments";
 import * as issuesRepo from "../repositories/issues";
@@ -17,14 +17,14 @@ async function resolveIssueId(c: Context<{ Bindings: Env }>) {
 }
 
 export const commentRoutes = new Hono<{ Bindings: Env }>({ strict: false })
-  .get("/", authMiddleware, requireWorkspaceMember, async (c) => {
+  .get("/", authMiddleware, requireWorkspaceMember, requireWorkspaceProject, async (c) => {
     const db = getDb(c.env.DB);
     const issueId = await resolveIssueId(c);
     const { offset, limit } = paginationParams(c);
     const comments = await commentsService.list(db, issueId, offset, limit);
     return c.json(paginatedResponse(comments, comments.length, offset, limit));
   })
-  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, requireWorkspaceProject, async (c) => {
     const db = getDb(c.env.DB);
     const user = c.get("user");
     const issueId = await resolveIssueId(c);
@@ -32,18 +32,30 @@ export const commentRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const comment = await commentsService.create(db, c.env, user.sub, issueId, body, user);
     return c.json(comment, 201);
   })
-  .patch("/:commentId", authMiddleware, requireWorkspaceMember, async (c) => {
-    const db = getDb(c.env.DB);
-    const user = c.get("user");
-    const commentId = c.req.param("commentId")!;
-    const body = commentsService.updateCommentSchema.parse(await c.req.json());
-    const comment = await commentsService.update(db, user.sub, commentId, body);
-    return c.json(comment);
-  })
-  .delete("/:commentId", authMiddleware, requireWorkspaceMember, async (c) => {
-    const db = getDb(c.env.DB);
-    const user = c.get("user");
-    const commentId = c.req.param("commentId")!;
-    await commentsService.remove(db, user.sub, commentId);
-    return c.json({ success: true });
-  });
+  .patch(
+    "/:commentId",
+    authMiddleware,
+    requireWorkspaceMember,
+    requireWorkspaceProject,
+    async (c) => {
+      const db = getDb(c.env.DB);
+      const user = c.get("user");
+      const commentId = c.req.param("commentId")!;
+      const body = commentsService.updateCommentSchema.parse(await c.req.json());
+      const comment = await commentsService.update(db, user.sub, commentId, body);
+      return c.json(comment);
+    },
+  )
+  .delete(
+    "/:commentId",
+    authMiddleware,
+    requireWorkspaceMember,
+    requireWorkspaceProject,
+    async (c) => {
+      const db = getDb(c.env.DB);
+      const user = c.get("user");
+      const commentId = c.req.param("commentId")!;
+      await commentsService.remove(db, user.sub, commentId);
+      return c.json({ success: true });
+    },
+  );
