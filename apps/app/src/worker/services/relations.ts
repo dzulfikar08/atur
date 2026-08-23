@@ -42,23 +42,26 @@ export async function list(db: DbClient, issueId: string) {
   return relationsRepo.listByIssue(db, issueId);
 }
 
-// issue_relations has no workspace column, so scope via the primary issue:
-// the relation is only removable when its issue belongs to the caller's
-// workspace (route guard). Otherwise 404 — same as a missing relation.
+// issue_relations has no workspace column, so scope via the issues: the
+// relation is only removable when BOTH endpoints belong to the caller's
+// workspace (route guard). Because relations are directional, a foreign issue
+// can sit on either side — scoping only the primary (relation.issueId) lets a
+// member of that side's workspace delete a relation linking their local issue
+// to a foreign one (and leak the reference via the related list). Otherwise
+// 404 — same as a missing relation.
 export async function remove(db: DbClient, id: string, workspaceId: string) {
   const relation = await relationsRepo.findById(db, id);
   if (!relation) throw new HTTPException(404, { message: "Relation not found" });
-  const [issue] = await db
+  const rows = await db
     .select({ id: schema.issues.id })
     .from(schema.issues)
     .where(
       and(
-        eq(schema.issues.id, relation.issueId),
+        inArray(schema.issues.id, [relation.issueId, relation.relatedIssueId]),
         eq(schema.issues.workspaceId, workspaceId),
         isNull(schema.issues.deletedAt),
       ),
-    )
-    .limit(1);
-  if (!issue) throw new HTTPException(404, { message: "Relation not found" });
+    );
+  if (rows.length !== 2) throw new HTTPException(404, { message: "Relation not found" });
   await relationsRepo.removeRelation(db, id);
 }

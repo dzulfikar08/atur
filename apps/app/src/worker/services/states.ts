@@ -105,9 +105,13 @@ export async function create(
   });
 }
 
-export async function getById(db: DbClient, id: string) {
+// workspaceId is the caller's workspace (route guard). A state in another
+// workspace is indistinguishable from a missing one → 404, never a leaky 200.
+export async function getById(db: DbClient, id: string, workspaceId: string) {
   const state = await statesRepo.findById(db, id);
-  if (!state) throw new HTTPException(404, { message: "State not found" });
+  if (!state || state.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "State not found" });
+  }
   return state;
 }
 

@@ -26,9 +26,13 @@ export async function create(
   });
 }
 
-export async function getById(db: DbClient, id: string) {
+// workspaceId is the caller's workspace (route guard). A label in another
+// workspace is indistinguishable from a missing one → 404, never a leaky 200.
+export async function getById(db: DbClient, id: string, workspaceId: string) {
   const label = await labelsRepo.findById(db, id);
-  if (!label) throw new HTTPException(404, { message: "Label not found" });
+  if (!label || label.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Label not found" });
+  }
   return label;
 }
 

@@ -41,9 +41,13 @@ export async function create(
   return mod;
 }
 
-export async function getById(db: DbClient, id: string) {
+// workspaceId is the caller's workspace (route guard). A module in another
+// workspace is indistinguishable from a missing one → 404, never a leaky 200.
+export async function getById(db: DbClient, id: string, workspaceId: string) {
   const mod = await modulesRepo.findById(db, id);
-  if (!mod) throw new HTTPException(404, { message: "Module not found" });
+  if (!mod || mod.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Module not found" });
+  }
   return mod;
 }
 

@@ -28,9 +28,13 @@ export async function create(
   });
 }
 
-export async function getById(db: DbClient, id: string) {
+// workspaceId is the caller's workspace (route guard). A field in another
+// workspace is indistinguishable from a missing one → 404, never a leaky 200.
+export async function getById(db: DbClient, id: string, workspaceId: string) {
   const field = await customFieldsRepo.findById(db, id);
-  if (!field) throw new HTTPException(404, { message: "Custom field not found" });
+  if (!field || field.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Custom field not found" });
+  }
   return field;
 }
 
