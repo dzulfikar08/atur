@@ -15,6 +15,8 @@ import { v4 as uuid } from "uuid";
 import { nowISO } from "../lib/pagination";
 import * as schema from "../db/schema";
 import * as issuesRepo from "../repositories/issues";
+import * as modulesRepo from "../repositories/modules";
+import * as relationsService from "../services/relations";
 import * as timeEntriesService from "../services/timeEntries";
 
 type C = Context<{ Bindings: Env }>;
@@ -208,26 +210,15 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         throw new HTTPException(400, {
           message: "related_issue_id and relation_type are required",
         });
-      const id = uuid();
-      const now = nowISO();
-      await db.insert(schema.issueRelations).values({
-        id,
-        issueId: issue.id,
-        relatedIssueId: body.related_issue_id,
-        relationType: body.relation_type,
-        createdAt: now,
-        updatedAt: now,
+      // Route through relationsService.create — it validates that BOTH issues
+      // live in the caller's workspace before inserting. A raw insert here
+      // would let a foreign issue UUID be attached as the related side.
+      const relation = await relationsService.create(db, c.get("workspace").id, {
+        issue_id: issue.id,
+        related_issue_id: body.related_issue_id,
+        relation_type: body.relation_type as "blocks" | "blocked_by" | "relates_to" | "duplicates",
       });
-      return c.json(
-        (
-          await db
-            .select()
-            .from(schema.issueRelations)
-            .where(eq(schema.issueRelations.id, id))
-            .limit(1)
-        )[0],
-        201,
-      );
+      return c.json(relation, 201);
     },
   )
   .delete(
@@ -286,6 +277,12 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       const { db, issue } = await resolveIssue(c);
       const body = (await c.req.json().catch(() => ({}))) as { module_id?: string };
       if (!body.module_id) throw new HTTPException(400, { message: "module_id is required" });
+      // The module must live in the issue's (caller's) workspace — otherwise a
+      // foreign module UUID could be attached to a local issue.
+      const mod = await modulesRepo.findById(db, body.module_id);
+      if (!mod || mod.workspaceId !== issue.workspaceId) {
+        throw new HTTPException(404, { message: "Module not found" });
+      }
       const [existing] = await db
         .select()
         .from(schema.moduleIssues)
