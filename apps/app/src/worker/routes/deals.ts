@@ -80,6 +80,12 @@ dealsRoutes.post("/:issueId/move", async (c) => {
   const db = getDb(c.env.DB);
   const { proj } = await resolveProject(c);
   const body = crmService.moveDealSchema.parse(await c.req.json());
-  const issue = await crmService.moveDealStage(db, proj.id, c.req.param("issueId")!, body.state_id);
+  const issue = await crmService.moveDealStage(
+    db,
+    proj.id,
+    c.req.param("issueId")!,
+    body.state_id,
+    c.get("user").sub,
+  );
   return c.json(issue);
 });

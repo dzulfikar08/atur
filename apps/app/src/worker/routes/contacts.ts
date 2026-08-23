@@ -5,6 +5,7 @@ import { paginationParams } from "../lib/pagination";
 import { resolveWorkspaceForCaller } from "../middleware/workspace";
 import * as workspaceRepo from "../repositories/workspaces";
 import * as crmService from "../services/crm";
+import * as factsService from "../services/contact_facts";
 
 // Admin CRM contacts API. Mounted under /api/workspaces/:slug/contacts, so the
 // global authMiddleware already applies; each handler re-checks membership.
@@ -95,6 +96,69 @@ contactsRoutes.get("/:id", async (c) => {
   return c.json(result);
 });
 
+// ── Evidence ledger (DEV-11): facts for a contact ────────────────────────────
+// Registered before the /:id/email-preview + /:id/send-email static routes'
+// parametric sibling /:id so the radix tree resolves these first.
+
+// Facts for this contact (paginated; includes PROPOSED/APPLIED/DISMISSED).
+contactsRoutes.get("/:id/facts", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspaceForCaller(c);
+  const { offset, limit } = paginationParams(c);
+  const result = await factsService.listFacts(db, ws.id, {
+    customerId: c.req.param("id")!,
+    status: c.req.query("status") || undefined,
+    offset,
+    limit,
+  });
+  return c.json(result);
+});
+
+// Suggestions = PROPOSED facts waiting for a rep decision, with enrichment
+// coverage for the contact.
+contactsRoutes.get("/:id/facts/suggestions", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspaceForCaller(c);
+  const result = await factsService.listFacts(db, ws.id, {
+    customerId: c.req.param("id")!,
+    status: "PROPOSED",
+    offset: 0,
+    limit: 10,
+  });
+  const contact = await crmService.getContact(db, ws.id, c.req.param("id")!);
+  return c.json({
+    suggestions: result.results,
+    coverage: { enriched_at: contact.contact.enrichedAt },
+  });
+});
+
+// Record a fact through the ledger (agent + rep path share this).
+contactsRoutes.post("/:id/facts", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspaceForCaller(c);
+  const body = factsService.recordFactSchema.parse(await c.req.json());
+  const fact = await factsService.recordFact(db, ws.id, c.get("user").sub, {
+    ...body,
+    customer_id: c.req.param("id")!,
+  });
+  return c.json(fact, 201);
+});
+
+// Rep decisions on a PROPOSED fact.
+contactsRoutes.post("/:id/facts/:factId/apply", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspaceForCaller(c);
+  const fact = await factsService.applyFact(db, ws.id, c.get("user").sub, c.req.param("factId")!);
+  return c.json(fact);
+});
+
+contactsRoutes.post("/:id/facts/:factId/dismiss", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspaceForCaller(c);
+  const fact = await factsService.dismissFact(db, ws.id, c.get("user").sub, c.req.param("factId")!);
+  return c.json(fact);
+});
+
 contactsRoutes.patch("/:id", async (c) => {
   const db = getDb(c.env.DB);
   const ws = await resolveWorkspaceForCaller(c);
@@ -133,6 +197,13 @@ contactsRoutes.post("/:id/send-email", async (c) => {
   const db = getDb(c.env.DB);
   const ws = await resolveWorkspaceForCaller(c);
   const body = crmService.sendEmailSchema.parse(await c.req.json());
-  const result = await crmService.sendTemplateEmail(db, c.env, ws, c.req.param("id")!, body);
+  const result = await crmService.sendTemplateEmail(
+    db,
+    c.env,
+    ws,
+    c.req.param("id")!,
+    body,
+    c.get("user").sub,
+  );
   return c.json(result);
 });

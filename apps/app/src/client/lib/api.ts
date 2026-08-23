@@ -424,6 +424,66 @@ export const api = {
   deleteContact: (slug: string, contactId: string) =>
     apiFetch(`/workspaces/${slug}/contacts/${contactId}/`, { method: "DELETE" }),
 
+  // Evidence ledger (facts) for a contact
+  listContactFacts: (slug: string, contactId: string, status?: string) => {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+    return apiFetch<PaginatedResponse<Fact>>(`/workspaces/${slug}/contacts/${contactId}/facts/${qs}`);
+  },
+  applyFact: (slug: string, contactId: string, factId: string) =>
+    apiFetch<Fact>(`/workspaces/${slug}/contacts/${contactId}/facts/${factId}/apply/`, {
+      method: "POST",
+    }),
+  dismissFact: (slug: string, contactId: string, factId: string) =>
+    apiFetch<Fact>(`/workspaces/${slug}/contacts/${contactId}/facts/${factId}/dismiss/`, {
+      method: "POST",
+    }),
+
+  // CRM companies (accounts)
+  listCompanies: async (
+    slug: string,
+    params?: { search?: string },
+  ): Promise<Company[]> => {
+    const qs = new URLSearchParams();
+    if (params?.search) qs.set("search", params.search);
+    const all: Company[] = [];
+    let offset = 0;
+    const limit = 100;
+    while (true) {
+      const page = await apiFetch<PaginatedResponse<Company>>(
+        `/workspaces/${slug}/companies/?limit=${limit}&offset=${offset}&${qs.toString()}`,
+      );
+      all.push(...page.results);
+      if (!page.total || page.results.length === 0 || all.length >= page.total) break;
+      offset += limit;
+    }
+    return all;
+  },
+  createCompany: (
+    slug: string,
+    data: {
+      name: string;
+      domain?: string;
+      industry?: string;
+      website?: string;
+      logo_url?: string;
+      brand_color?: string;
+      description?: string;
+    },
+  ) =>
+    apiFetch<Company>(`/workspaces/${slug}/companies/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getCompany: (slug: string, companyId: string) =>
+    apiFetch<Company>(`/workspaces/${slug}/companies/${companyId}/`),
+  updateCompany: (slug: string, companyId: string, data: Partial<Company>) =>
+    apiFetch<Company>(`/workspaces/${slug}/companies/${companyId}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteCompany: (slug: string, companyId: string) =>
+    apiFetch(`/workspaces/${slug}/companies/${companyId}/`, { method: "DELETE" }),
+
   // CRM customer email (e.g. feedback-request templates)
   // CRM customer email (purpose + optional variant)
   previewContactEmail: (slug: string, contactId: string, purpose: string, variantId?: string) => {
@@ -593,8 +653,19 @@ export const api = {
     const qs = new URLSearchParams();
     if (params?.status) qs.set("status", params.status);
     if (params?.search) qs.set("search", params.search);
-    const query = qs.toString();
-    return apiFetch<PaginatedResponse<AllContact>>(`/me/contacts/${query ? `?${query}` : ""}`);
+    const all: AllContact[] = [];
+    let offset = 0;
+    const limit = 100;
+    while (true) {
+      const query = qs.toString();
+      const page = await apiFetch<PaginatedResponse<AllContact>>(
+        `/me/contacts/?limit=${limit}&offset=${offset}${query ? `&${query}` : ""}`,
+      );
+      all.push(...page.results);
+      if (!page.total || page.results.length === 0 || all.length >= page.total) break;
+      offset += limit;
+    }
+    return all;
   },
   allAnalyticsOverview: () => apiFetch<AnalyticsOverview>(`/me/analytics/overview`),
   allCompletionTrend: () =>
@@ -900,10 +971,21 @@ export interface Contact {
   email: string | null;
   name: string | null;
   company: string | null;
+  company_id: string | null;
+  title: string | null;
+  seniority: string | null;
+  function: string | null;
+  linkedin_url: string | null;
+  image_url: string | null;
+  last_activity_at: string | null;
+  enriched_at: string | null;
   phone: string | null;
   status: string;
   source: string | null;
   session_token: string | null;
+  // Joined from companies (nullable when unlinked).
+  company_name: string | null;
+  company_domain: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -990,8 +1072,64 @@ export interface ContactEmailLogEntry {
   sent: number;
 }
 
+export interface Company {
+  id: string;
+  workspace_id: string;
+  name: string;
+  domain: string | null;
+  industry: string | null;
+  website: string | null;
+  logo_url: string | null;
+  brand_color: string | null;
+  description: string | null;
+  owner_id: string | null;
+  primary_contact_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface FactEvidenceEntry {
+  source: string;
+  method: string;
+  url?: string;
+}
+
+export interface Fact {
+  id: string;
+  workspace_id: string;
+  customer_id: string;
+  company_id: string | null;
+  field: string;
+  value: string;
+  score: number;
+  band: "VERIFIED" | "PROBABLE" | "POSSIBLE";
+  evidence: string | null;
+  method: string | null;
+  source_url: string | null;
+  status: "PROPOSED" | "APPLIED" | "DISMISSED" | "SUPERSEDED";
+  decided_by: string | null;
+  decided_at: string | null;
+  observed_at: string;
+  superseded_at: string | null;
+  created_at: string | null;
+}
+
+export interface CrmActivity {
+  id: string;
+  workspace_id: string;
+  customer_id: string | null;
+  deal_id: string | null;
+  type: "NOTE" | "CALL" | "EMAIL" | "MEETING" | "TASK" | "STAGE_CHANGE" | "ENRICHMENT";
+  subject: string | null;
+  body: string | null;
+  occurred_at: string;
+  created_by: string | null;
+  created_at: string | null;
+}
+
 export interface ContactDetail {
   contact: Contact;
+  company: Company | null;
   deals: Deal[];
   tickets: {
     id: string;
@@ -1002,6 +1140,9 @@ export interface ContactDetail {
     created_at: string | null;
   }[];
   emails: ContactEmailLogEntry[];
+  activities: CrmActivity[];
+  facts: Fact[];
+  suggestions: Fact[];
 }
 
 export interface ContactEmailResult {
