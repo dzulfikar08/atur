@@ -123,6 +123,7 @@ async function enrichItems(
   db: DbClient,
   rows: IssueRow[],
   voterHash: string,
+  workspaceId: string,
 ): Promise<FeedbackItem[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
@@ -141,7 +142,16 @@ async function enrichItems(
             group: schema.states.groupName,
           })
           .from(schema.states)
-          .where(and(isNull(schema.states.deletedAt), inArray(schema.states.id, stateIds)))
+          // Workspace-scoped: issues created under a poisoned board config
+          // must render stateless, not leak a foreign state's name/color —
+          // this endpoint is public (token-only).
+          .where(
+            and(
+              isNull(schema.states.deletedAt),
+              inArray(schema.states.id, stateIds),
+              eq(schema.states.workspaceId, workspaceId),
+            ),
+          )
       : Promise.resolve([]),
     db.select().from(schema.feedbackMeta).where(inArray(schema.feedbackMeta.issueId, ids)),
   ]);
@@ -167,7 +177,7 @@ async function enrichItems(
 export async function getBoard(db: DbClient, token: string, voterHash: string) {
   const board = await resolveBoard(db, token);
   const rows = await feedbackRepo.listFeedbackIssues(db, board.projectId);
-  const items = await enrichItems(db, rows, voterHash);
+  const items = await enrichItems(db, rows, voterHash, board.workspaceId);
   items.sort((a, b) => b.votes - a.votes || b.sequence_id - a.sequence_id);
 
   const boardConfig: PublicBoardConfig = {
@@ -188,7 +198,7 @@ export async function getItem(db: DbClient, token: string, issueId: string, vote
   if (!issue) throw new HTTPException(404, { message: "Feedback item not found" });
 
   const [items, comments, meta] = await Promise.all([
-    enrichItems(db, [issue], voterHash),
+    enrichItems(db, [issue], voterHash, board.workspaceId),
     feedbackRepo.listExternalComments(db, issue.id),
     feedbackRepo.getFeedbackMeta(db, issue.id),
   ]);
