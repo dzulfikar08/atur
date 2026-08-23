@@ -134,16 +134,57 @@ async function ensureSettings(
   return settings!;
 }
 
+// Config-poisoning guard: the STORED pipeline_project_id must resolve to
+// this workspace's non-deleted project before any consumer mints issues with
+// it — otherwise fall back to the auto-pick, never a foreign project. Falls
+// back silently: the webhook path can't surface 4xx to Polar, and a poisoned
+// row shouldn't halt sync.
+async function boundPipelineProject(
+  db: DbClient,
+  settings: NonNullable<Awaited<ReturnType<typeof polarRepo.getSettings>>>,
+): Promise<string | null> {
+  if (settings.pipelineProjectId) {
+    const [proj] = await db
+      .select({ id: schema.projects.id })
+      .from(schema.projects)
+      .where(
+        and(
+          eq(schema.projects.id, settings.pipelineProjectId),
+          eq(schema.projects.workspaceId, settings.workspaceId),
+          isNull(schema.projects.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (proj) return proj.id;
+  }
+  return pickPipelineProject(db, settings.workspaceId);
+}
+
 async function resolvePipeline(
   db: DbClient,
   settings: NonNullable<Awaited<ReturnType<typeof polarRepo.getSettings>>>,
 ): Promise<{ projectId: string; defaultStateId: string | null }> {
-  let projectId = settings.pipelineProjectId;
-  if (!projectId) projectId = await pickPipelineProject(db, settings.workspaceId);
+  const projectId = await boundPipelineProject(db, settings);
   if (!projectId) {
     throw new Error("No pipeline project configured for Polar sync");
   }
+  // Same guard for the stored default_state_id: it must belong to this
+  // workspace (and be alive) or it is dropped in favor of the group pick.
   let defaultStateId = settings.defaultStateId ?? null;
+  if (defaultStateId) {
+    const [st] = await db
+      .select({ id: schema.states.id })
+      .from(schema.states)
+      .where(
+        and(
+          eq(schema.states.id, defaultStateId),
+          eq(schema.states.workspaceId, settings.workspaceId),
+          isNull(schema.states.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!st) defaultStateId = null;
+  }
   if (!defaultStateId) {
     defaultStateId = await findStateByGroup(db, projectId, "started");
   }
@@ -224,8 +265,7 @@ async function moveDealToGroup(
   issueId: string,
   group: string,
 ) {
-  const projectId =
-    settings.pipelineProjectId ?? (await pickPipelineProject(db, settings.workspaceId));
+  const projectId = await boundPipelineProject(db, settings);
   if (!projectId) return;
   const stateId = await findStateByGroup(db, projectId, group);
   if (!stateId) return;

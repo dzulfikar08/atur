@@ -209,6 +209,7 @@ export async function createItem(
   if (board.requireEmail && !data.email) {
     throw new HTTPException(400, { message: "Email is required" });
   }
+  const { stateId: boardStateId, labelId: boardLabelId } = await sanitizeBoardConfig(db, board);
 
   const id = uuid();
   // sequenceId allocated atomically inside createFeedbackIssue (per-project
@@ -220,8 +221,8 @@ export async function createItem(
     workspaceId: board.workspaceId,
     descriptionHtml: data.description ? toHtml(data.description) : null,
     descriptionStripped: data.description ?? null,
-    stateId: board.defaultStateId,
-    submitLabelId: board.submitLabelId,
+    stateId: boardStateId,
+    submitLabelId: boardLabelId,
   });
   await feedbackRepo.insertFeedbackMeta(db, {
     issueId: id,
@@ -309,6 +310,85 @@ async function assertWorkspaceMember(db: DbClient, workspaceId: string, userId: 
   if (!m) throw new HTTPException(403, { message: "Not a member of this workspace" });
 }
 
+// Config-poisoning guard (store side): caller-supplied entity ids on the
+// admin board config must resolve in the board's workspace (and be alive)
+// before they're persisted — 404 otherwise.
+async function assertBoardIdsInWorkspace(
+  db: DbClient,
+  workspaceId: string,
+  ids: { stateId?: string; labelId?: string },
+) {
+  if (ids.stateId) {
+    const [st] = await db
+      .select({ id: schema.states.id })
+      .from(schema.states)
+      .where(
+        and(
+          eq(schema.states.id, ids.stateId),
+          eq(schema.states.workspaceId, workspaceId),
+          isNull(schema.states.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!st) throw new HTTPException(404, { message: "State not found" });
+  }
+  if (ids.labelId) {
+    const [lb] = await db
+      .select({ id: schema.labels.id })
+      .from(schema.labels)
+      .where(
+        and(
+          eq(schema.labels.id, ids.labelId),
+          eq(schema.labels.workspaceId, workspaceId),
+          isNull(schema.labels.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!lb) throw new HTTPException(404, { message: "Label not found" });
+  }
+}
+
+// Belt-and-braces (consume side) for pre-existing poisoned config rows: ids
+// on the board that don't resolve in the board's workspace are DROPPED — the
+// item is created stateless/unlabeled. The public path must neither 5xx nor
+// link foreign entities.
+async function sanitizeBoardConfig(
+  db: DbClient,
+  board: { workspaceId: string; defaultStateId: string | null; submitLabelId: string | null },
+): Promise<{ stateId: string | null; labelId: string | null }> {
+  let stateId = board.defaultStateId ?? null;
+  if (stateId) {
+    const [st] = await db
+      .select({ id: schema.states.id })
+      .from(schema.states)
+      .where(
+        and(
+          eq(schema.states.id, stateId),
+          eq(schema.states.workspaceId, board.workspaceId),
+          isNull(schema.states.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!st) stateId = null;
+  }
+  let labelId = board.submitLabelId ?? null;
+  if (labelId) {
+    const [lb] = await db
+      .select({ id: schema.labels.id })
+      .from(schema.labels)
+      .where(
+        and(
+          eq(schema.labels.id, labelId),
+          eq(schema.labels.workspaceId, board.workspaceId),
+          isNull(schema.labels.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!lb) labelId = null;
+  }
+  return { stateId, labelId };
+}
+
 async function resolveProject(db: DbClient, slug: string, projectId: string) {
   const [workspace] = await db
     .select()
@@ -349,6 +429,13 @@ export async function upsertAdminConfig(
 ) {
   const { workspace, project } = await resolveProject(db, slug, projectId);
   await assertWorkspaceMember(db, workspace.id, userId);
+
+  // Config poisoning: caller-supplied entity ids must belong to this
+  // workspace before they're stored — the public board consumes them raw.
+  await assertBoardIdsInWorkspace(db, workspace.id, {
+    stateId: data.default_state_id ?? undefined,
+    labelId: data.submit_label_id ?? undefined,
+  });
 
   const existing = await feedbackRepo.findBoardByProject(db, project.id);
 
