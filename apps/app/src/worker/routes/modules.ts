@@ -24,7 +24,7 @@ export const moduleRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .get("/:moduleId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const moduleId = c.req.param("moduleId")!;
-    const result = await modulesService.getById(db, moduleId);
+    const result = await modulesService.getById(db, moduleId, c.get("workspace").id);
     return c.json(result);
   })
   // update/remove (and their issue-link mutations) take the guard's workspace
@@ -53,6 +53,8 @@ export const moduleRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .get("/:moduleId/issues", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const moduleId = c.req.param("moduleId")!;
+    // Scope the join key: a foreign module UUID must 404, not list its issues.
+    await modulesService.getById(db, moduleId, c.get("workspace").id);
     const rows = await db
       .select()
       .from(schema.issues)

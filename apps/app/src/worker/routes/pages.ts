@@ -21,7 +21,7 @@ export const pageRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .get("/:pageId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const pageId = c.req.param("pageId")!;
-    const result = await pagesService.getById(db, pageId);
+    const result = await pagesService.getById(db, pageId, c.get("workspace").id);
     return c.json(result);
   })
   // update/remove take the guard's workspace id: a page UUID from another

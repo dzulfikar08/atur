@@ -24,9 +24,14 @@ export async function create(
   });
 }
 
-export async function getById(db: DbClient, id: string) {
+// workspaceId is the caller's workspace (route guard). An integration in
+// another workspace is indistinguishable from a missing one → 404, never a
+// leaky 200.
+export async function getById(db: DbClient, id: string, workspaceId: string) {
   const integration = await integrationsRepo.findById(db, id);
-  if (!integration) throw new HTTPException(404, { message: "Integration not found" });
+  if (!integration || integration.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Integration not found" });
+  }
   return integration;
 }
 

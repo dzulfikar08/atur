@@ -39,9 +39,13 @@ export async function create(
   return sprint;
 }
 
-export async function getById(db: DbClient, id: string) {
+// workspaceId is the caller's workspace (route guard). A sprint in another
+// workspace is indistinguishable from a missing one → 404, never a leaky 200.
+export async function getById(db: DbClient, id: string, workspaceId: string) {
   const sprint = await sprintsRepo.findById(db, id);
-  if (!sprint) throw new HTTPException(404, { message: "Sprint not found" });
+  if (!sprint || sprint.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Sprint not found" });
+  }
   return sprint;
 }
 
