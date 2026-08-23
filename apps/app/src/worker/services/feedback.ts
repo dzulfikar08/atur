@@ -352,7 +352,8 @@ async function assertBoardIdsInWorkspace(
 // on the board that don't resolve in the board's workspace are DROPPED — the
 // item is created stateless/unlabeled. The public path must neither 5xx nor
 // link foreign entities.
-async function sanitizeBoardConfig(
+// Exported for tests (DEV-20 config-poisoning coverage).
+export async function sanitizeBoardConfig(
   db: DbClient,
   board: { workspaceId: string; defaultStateId: string | null; submitLabelId: string | null },
 ): Promise<{ stateId: string | null; labelId: string | null }> {
