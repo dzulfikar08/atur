@@ -5,12 +5,16 @@ import { authMiddleware } from "../../middleware/auth";
 import { nowISO } from "../../lib/pagination";
 import { v4 as uuid } from "uuid";
 import { HTTPException } from "hono/http-exception";
-import { eq, and, desc, isNull, like, or, inArray } from "drizzle-orm";
+import { eq, and, desc, isNull, like, or, inArray, asc, sql } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import * as customersRepo from "../../repositories/customers";
 import * as dealsRepo from "../../repositories/deals";
 import * as crmService from "../../services/crm";
 import * as issuesRepo from "../../repositories/issues";
+import * as companiesRepo from "../../repositories/companies";
+import * as companiesService from "../../services/companies";
+import * as factsRepo from "../../repositories/contact_facts";
+import * as factsService from "../../services/contact_facts";
 
 interface JsonRpcRequest {
   jsonrpc: string;
@@ -659,18 +663,150 @@ const TOOLS = [
         currency: { type: "string" },
         expected_close_at: { type: "string" },
         customer_id: { type: "string" },
+        company_id: { type: "string" },
       },
       required: ["workspace", "project_id", "issue_id"],
+    },
+  },
+  {
+    name: "list_companies",
+    description: "List companies (accounts) in a workspace",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        search: { type: "string" },
+        limit: { type: "integer" },
+        offset: { type: "integer" },
+      },
+      required: ["workspace"],
+    },
+  },
+  {
+    name: "create_company",
+    description: "Create a company (account) in a workspace",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        name: { type: "string" },
+        domain: { type: "string" },
+        industry: { type: "string" },
+        website: { type: "string" },
+        logo_url: { type: "string" },
+        brand_color: { type: "string" },
+        description: { type: "string" },
+      },
+      required: ["workspace", "name"],
+    },
+  },
+  {
+    name: "get_company",
+    description: "Get a company by ID",
+    inputSchema: {
+      type: "object",
+      properties: { workspace: { type: "string" }, company_id: { type: "string" } },
+      required: ["workspace", "company_id"],
+    },
+  },
+  {
+    name: "update_company",
+    description: "Update a company (name/domain/industry/website/description)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        company_id: { type: "string" },
+        name: { type: "string" },
+        domain: { type: "string" },
+        industry: { type: "string" },
+        website: { type: "string" },
+        logo_url: { type: "string" },
+        brand_color: { type: "string" },
+        description: { type: "string" },
+      },
+      required: ["workspace", "company_id"],
+    },
+  },
+  {
+    name: "record_fact",
+    description:
+      "Record an evidence-led fact about a contact or company. Strong evidence (score >= 1.0 across independent sources) auto-applies to the record; weaker evidence is stored as a PROPOSED suggestion a human can apply/dismiss. Never write contact fields directly — use this.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        customer_id: { type: "string" },
+        company_id: { type: "string" },
+        field: { type: "string" },
+        value: { type: "string" },
+        evidence: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              source: { type: "string" },
+              method: {
+                type: "string",
+                enum: ["signature", "email_thread", "social", "web_search", "manual", "unknown"],
+              },
+              url: { type: "string" },
+            },
+            required: ["source", "method"],
+          },
+        },
+        method: { type: "string" },
+        source_url: { type: "string" },
+        observed_at: { type: "string" },
+      },
+      required: ["workspace", "field", "value", "evidence"],
+    },
+  },
+  {
+    name: "list_facts",
+    description: "List evidence facts for a contact or company",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        customer_id: { type: "string" },
+        company_id: { type: "string" },
+        status: { type: "string", enum: ["PROPOSED", "APPLIED", "DISMISSED", "SUPERSEDED"] },
+        limit: { type: "integer" },
+        offset: { type: "integer" },
+      },
+      required: ["workspace"],
     },
   },
 ];
 
 async function getWorkspaceId(db: ReturnType<typeof getDb>, slug: string, userId?: string) {
-  const [ws] = await db
+  // Slugs are the canonical identifier; workspace display names are accepted as
+  // a convenience fallback so callers don't have to remember the slug.
+  let [ws] = await db
     .select({ id: schema.workspaces.id, ownerId: schema.workspaces.ownerId })
     .from(schema.workspaces)
     .where(and(eq(schema.workspaces.slug, slug), isNull(schema.workspaces.deletedAt)))
     .limit(1);
+  if (!ws) {
+    // Names are not unique — prefer an exact-case match, else a
+    // case-insensitive exact match among active workspaces. Uses lower()
+    // rather than LIKE so names containing % or _ can't wildcard-match.
+    [ws] = await db
+      .select({ id: schema.workspaces.id, ownerId: schema.workspaces.ownerId })
+      .from(schema.workspaces)
+      .where(
+        and(
+          or(
+            eq(schema.workspaces.name, slug),
+            sql`lower(${schema.workspaces.name}) = lower(${slug})`,
+          ),
+          isNull(schema.workspaces.deletedAt),
+        ),
+      )
+      .orderBy(asc(schema.workspaces.createdAt))
+      .limit(1);
+  }
   if (!ws) throw new HTTPException(404, { message: `Workspace "${slug}" not found` });
   if (userId) {
     const ok = ws.ownerId === userId || (await isWorkspaceMember(db, ws.id, userId));
@@ -912,15 +1048,16 @@ async function handleTool(
         priority: (params.priority as string) ?? "none",
         stateId: (params.state_id as string) ?? null,
         parentId: (params.parent_id as string) ?? null,
-        sequenceId: await issuesRepo.getNextSequence(db, projectId),
+        sequenceId: await issuesRepo.allocateNextSequence(db, projectId),
         projectId,
         workspaceId,
         createdAt: now,
         updatedAt: now,
       };
-      // sequenceId is MAX+1 and collides under concurrent creators;
-      // insertIssueWithRetry re-derives it and retries on uq_issue_sequence.
-      await issuesRepo.insertIssueWithRetry(db, row);
+      // sequenceId comes from the atomic per-project counter (UPDATE ...
+      // RETURNING), so concurrent creators get distinct ids — no collisions,
+      // no retry loop.
+      await db.insert(schema.issues).values(row);
       if (params.label_ids && Array.isArray(params.label_ids)) {
         for (const labelId of params.label_ids as string[]) {
           await db
@@ -1546,6 +1683,7 @@ async function handleTool(
         params.project_id as string,
         params.issue_id as string,
         params.state_id as string,
+        userId,
       );
     }
     case "update_deal": {
@@ -1556,7 +1694,77 @@ async function handleTool(
         currency: params.currency as string | undefined,
         expected_close_at: (params.expected_close_at as string | null) ?? undefined,
         customer_id: (params.customer_id as string | null) ?? undefined,
+        company_id: (params.company_id as string | null) ?? undefined,
       });
+    }
+    case "list_companies": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      const limit = Math.min(Number(params.limit) || 50, 100);
+      const offset = Number(params.offset) || 0;
+      const { rows, total } = await companiesRepo.listCompanies(db, workspaceId, {
+        search: params.search as string | undefined,
+        offset,
+        limit,
+      });
+      return { results: rows, total };
+    }
+    case "create_company": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      return companiesService.createCompany(db, workspaceId, {
+        name: params.name as string,
+        domain: (params.domain as string) ?? undefined,
+        industry: (params.industry as string) ?? undefined,
+        website: (params.website as string) ?? undefined,
+        logoUrl: (params.logo_url as string) ?? undefined,
+        brandColor: (params.brand_color as string) ?? undefined,
+        description: (params.description as string) ?? undefined,
+      });
+    }
+    case "get_company": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      return companiesService.getCompany(db, workspaceId, params.company_id as string);
+    }
+    case "update_company": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      return companiesService.updateCompany(db, workspaceId, params.company_id as string, {
+        name: params.name as string | undefined,
+        domain: (params.domain as string | null) ?? undefined,
+        industry: (params.industry as string | null) ?? undefined,
+        website: (params.website as string | null) ?? undefined,
+        logoUrl: (params.logo_url as string | null) ?? undefined,
+        brandColor: (params.brand_color as string | null) ?? undefined,
+        description: (params.description as string | null) ?? undefined,
+      });
+    }
+    case "record_fact": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      return factsService.recordFact(db, workspaceId, userId, {
+        customer_id: params.customer_id as string | undefined,
+        company_id: params.company_id as string | undefined,
+        field: params.field as string,
+        value: params.value as string,
+        evidence: params.evidence as {
+          source: string;
+          method: string;
+          url?: string;
+        }[],
+        method: params.method as string | undefined,
+        source_url: params.source_url as string | undefined,
+        observed_at: params.observed_at as string | undefined,
+      });
+    }
+    case "list_facts": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      const limit = Math.min(Number(params.limit) || 50, 100);
+      const offset = Number(params.offset) || 0;
+      const { rows, total } = await factsRepo.listFacts(db, workspaceId, {
+        customerId: params.customer_id as string | undefined,
+        companyId: params.company_id as string | undefined,
+        status: params.status as string | undefined,
+        offset,
+        limit,
+      });
+      return { results: rows, total };
     }
     default:
       throw new HTTPException(400, { message: `Unknown tool: ${toolName}` });

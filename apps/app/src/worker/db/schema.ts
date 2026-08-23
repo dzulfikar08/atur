@@ -6,6 +6,7 @@ import {
   blob,
   index,
   uniqueIndex,
+  type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable(
@@ -303,6 +304,17 @@ export const issues = sqliteTable(
     index("idx_issues_deleted_at").on(table.deletedAt),
   ],
 );
+
+// Per-project atomic sequence counter for issues. One row per project;
+// allocateNextSequence bumps it with a single UPDATE...RETURNING, which D1
+// executes atomically, so concurrent creators get distinct sequence ids
+// without retry loops. Seeded lazily from MAX(issues.sequence_id).
+export const issueSequenceCounters = sqliteTable("issue_sequence_counters", {
+  projectId: text("project_id").primaryKey(),
+  nextSequence: integer("next_sequence").notNull(),
+  createdAt: text("created_at"),
+  updatedAt: text("updated_at"),
+});
 
 export const issueAssignees = sqliteTable(
   "issue_assignees",
@@ -813,6 +825,22 @@ export const customers = sqliteTable(
     polarCustomerId: text("polar_customer_id"),
     // ISO timestamp of the last CRM email sent to this contact (rate limit).
     lastEmailAt: text("last_email_at"),
+    // Enrichment fields (DEV-9/DEV-12): optional company link + profile data.
+    // company stays as a denormalized convenience; company_id is the FK.
+    // Forward reference: companies is declared below (circular FK via
+    // companies.primary_contact_id) — AnySQLiteColumn breaks the type cycle.
+    companyId: text("company_id").references((): AnySQLiteColumn => companies.id, {
+      onDelete: "set null",
+    }),
+    title: text("title"),
+    seniority: text("seniority"),
+    function: text("function"),
+    linkedinUrl: text("linkedin_url"),
+    imageUrl: text("image_url"),
+    // Rollup stamped by the CRM activity timeline (crm_activities).
+    lastActivityAt: text("last_activity_at"),
+    // When the evidence ledger (contact_facts) last wrote to this contact.
+    enrichedAt: text("enriched_at"),
     createdAt: text("created_at"),
     updatedAt: text("updated_at"),
   },
@@ -820,6 +848,7 @@ export const customers = sqliteTable(
     uniqueIndex("uq_customers_workspace_user").on(table.workspaceId, table.userId),
     uniqueIndex("uq_customers_workspace_email").on(table.workspaceId, table.email),
     index("idx_customers_session_token").on(table.sessionToken),
+    index("idx_customers_company").on(table.companyId),
   ],
 );
 
@@ -961,6 +990,8 @@ export const deals = sqliteTable(
       .unique()
       .references(() => issues.id, { onDelete: "cascade" }),
     customerId: text("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    // Optional account-level link so the pipeline can filter by company.
+    companyId: text("company_id").references(() => companies.id, { onDelete: "set null" }),
     workspaceId: text("workspace_id").notNull(),
     amountCents: integer("amount_cents").notNull().default(0),
     currency: text("currency").notNull().default("USD"),
@@ -974,6 +1005,117 @@ export const deals = sqliteTable(
   (table) => [
     index("idx_deals_customer").on(table.customerId),
     index("idx_deals_workspace").on(table.workspaceId),
+  ],
+);
+
+// ── CRM Companies (DEV-9) ────────────────────────────────────────────────────
+// First-class org entity borrowed conceptually from trycompai/crm's Company.
+// Contacts hang off a company via customers.company_id; deals optionally via
+// deals.company_id. Soft-deleted (deleted_at) like projects; a deleted company
+// set-nulls customer/deal links (no data loss).
+export const companies = sqliteTable(
+  "companies",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // Nullable-unique per workspace: SQLite unique indexes treat NULLs as
+    // distinct, so multiple rows may share a NULL domain.
+    domain: text("domain"),
+    industry: text("industry"),
+    website: text("website"),
+    logoUrl: text("logo_url"),
+    brandColor: text("brand_color"),
+    description: text("description"),
+    ownerId: text("owner_id").references(() => users.id, { onDelete: "set null" }),
+    // Forward reference: customers is declared above (circular FK via
+    // customers.company_id) — AnySQLiteColumn breaks the type cycle.
+    primaryContactId: text("primary_contact_id").references((): AnySQLiteColumn => customers.id, {
+      onDelete: "set null",
+    }),
+    createdAt: text("created_at"),
+    updatedAt: text("updated_at"),
+    deletedAt: text("deleted_at"),
+  },
+  (table) => [
+    index("idx_companies_workspace").on(table.workspaceId),
+    uniqueIndex("uq_companies_workspace_domain").on(table.workspaceId, table.domain),
+  ],
+);
+
+// ── CRM evidence ledger (DEV-11) ──────────────────────────────────────────────
+// Drizzle/D1 port of trycompai/crm's ContactFact concept (Prisma/Postgres
+// there — concept only, no code). Every write to a contact/company field from
+// an agent goes through this ledger: facts whose evidence score clears
+// FACT_APPLY_THRESHOLD auto-apply; weaker ones stay PROPOSED until a rep
+// applies/dismisses them. Superseded facts are flagged, never deleted.
+export const contactFacts = sqliteTable(
+  "contact_facts",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    // A fact targets exactly one entity: either a customer OR a company.
+    // customer_id is nullable because company-targeted facts have no contact.
+    customerId: text("customer_id").references(() => customers.id, { onDelete: "cascade" }),
+    // Optional company target (facts can enrich companies too).
+    companyId: text("company_id").references(() => companies.id, { onDelete: "set null" }),
+    field: text("field").notNull(),
+    value: text("value").notNull(),
+    score: real("score").notNull().default(0),
+    // VERIFIED | PROBABLE | POSSIBLE (derived from score).
+    band: text("band").notNull().default("POSSIBLE"),
+    // JSON array of { source, method, url } — the evidence that backs this fact.
+    evidence: text("evidence"),
+    method: text("method"),
+    sourceUrl: text("source_url"),
+    // PROPOSED | APPLIED | DISMISSED | SUPERSEDED.
+    status: text("status").notNull().default("PROPOSED"),
+    decidedBy: text("decided_by").references(() => users.id, { onDelete: "set null" }),
+    decidedAt: text("decided_at"),
+    observedAt: text("observed_at").notNull(),
+    supersededAt: text("superseded_at"),
+    createdAt: text("created_at"),
+  },
+  (table) => [
+    index("idx_contact_facts_customer_field_status").on(
+      table.customerId,
+      table.field,
+      table.status,
+    ),
+    index("idx_contact_facts_status_observed").on(table.status, table.observedAt),
+    index("idx_contact_facts_company").on(table.companyId),
+  ],
+);
+
+// ── CRM activity timeline (DEV-12) ────────────────────────────────────────────
+// Unified per-contact (and per-deal) timeline. Emitted at CRM mutation points:
+// contact created/updated, deal created/stage moved, templated email sent,
+// support ticket created, Polar import, ledger enrichment. customers.last_activity_at
+// is the rollup for "stale contact" flags in list views.
+export const crmActivities = sqliteTable(
+  "crm_activities",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    customerId: text("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    dealId: text("deal_id").references(() => deals.id, { onDelete: "set null" }),
+    // NOTE | CALL | EMAIL | MEETING | TASK | STAGE_CHANGE | ENRICHMENT.
+    type: text("type").notNull(),
+    subject: text("subject"),
+    body: text("body"),
+    occurredAt: text("occurred_at").notNull(),
+    createdBy: text("created_by"),
+    createdAt: text("created_at"),
+  },
+  (table) => [
+    index("idx_crm_activities_customer").on(table.customerId, table.occurredAt),
+    index("idx_crm_activities_deal").on(table.dealId, table.occurredAt),
   ],
 );
 

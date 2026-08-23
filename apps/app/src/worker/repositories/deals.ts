@@ -8,6 +8,7 @@ export interface DealRow {
   id: string;
   issueId: string;
   customerId: string | null;
+  companyId: string | null;
   workspaceId: string;
   amountCents: number;
   currency: string;
@@ -28,6 +29,7 @@ export interface DealBoardRow extends DealRow {
   priority: string | null;
   sortOrder: number;
   customerName: string | null;
+  companyName: string | null;
   issueUpdatedAt: string | null;
 }
 
@@ -35,6 +37,7 @@ const dealSelect = {
   id: schema.deals.id,
   issueId: schema.deals.issueId,
   customerId: schema.deals.customerId,
+  companyId: schema.deals.companyId,
   workspaceId: schema.deals.workspaceId,
   amountCents: schema.deals.amountCents,
   currency: schema.deals.currency,
@@ -56,6 +59,7 @@ const boardSelect = {
   // Contact display name (falls back to email) + issue freshness for the
   // board's stale-deal indicator.
   customerName: sql<string | null>`COALESCE(${schema.customers.name}, ${schema.customers.email})`,
+  companyName: schema.companies.name,
   issueUpdatedAt: schema.issues.updatedAt,
 };
 
@@ -64,6 +68,7 @@ export async function create(
   data: {
     issueId: string;
     customerId?: string | null;
+    companyId?: string | null;
     workspaceId: string;
     amountCents: number;
     currency: string;
@@ -76,6 +81,7 @@ export async function create(
     id,
     issueId: data.issueId,
     customerId: data.customerId ?? null,
+    companyId: data.companyId ?? null,
     workspaceId: data.workspaceId,
     amountCents: data.amountCents,
     currency: data.currency,
@@ -130,6 +136,10 @@ export async function listByProject(
     .innerJoin(schema.issues, eq(schema.issues.id, schema.deals.issueId))
     .leftJoin(schema.states, eq(schema.states.id, schema.issues.stateId))
     .leftJoin(schema.customers, eq(schema.customers.id, schema.deals.customerId))
+    .leftJoin(
+      schema.companies,
+      and(eq(schema.companies.id, schema.deals.companyId), isNull(schema.companies.deletedAt)),
+    )
     .where(where)
     .orderBy(schema.issues.sortOrder)
     .offset(opts.offset)
@@ -145,6 +155,10 @@ export async function listByCustomer(db: DbClient, customerId: string): Promise<
     .innerJoin(schema.issues, eq(schema.issues.id, schema.deals.issueId))
     .leftJoin(schema.states, eq(schema.states.id, schema.issues.stateId))
     .leftJoin(schema.customers, eq(schema.customers.id, schema.deals.customerId))
+    .leftJoin(
+      schema.companies,
+      and(eq(schema.companies.id, schema.deals.companyId), isNull(schema.companies.deletedAt)),
+    )
     .where(and(eq(schema.deals.customerId, customerId), isNull(schema.issues.deletedAt)))
     .orderBy(desc(schema.issues.sequenceId));
 }
@@ -157,6 +171,7 @@ export async function update(
     currency?: string;
     expectedCloseAt?: string | null;
     customerId?: string | null;
+    companyId?: string | null;
   },
 ): Promise<DealRow | null> {
   const set: Record<string, unknown> = { updatedAt: nowISO() };
@@ -164,6 +179,7 @@ export async function update(
   if (patch.currency !== undefined) set.currency = patch.currency;
   if (patch.expectedCloseAt !== undefined) set.expectedCloseAt = patch.expectedCloseAt;
   if (patch.customerId !== undefined) set.customerId = patch.customerId;
+  if (patch.companyId !== undefined) set.companyId = patch.companyId;
   await db.update(schema.deals).set(set).where(eq(schema.deals.issueId, issueId));
   return getByIssue(db, issueId);
 }

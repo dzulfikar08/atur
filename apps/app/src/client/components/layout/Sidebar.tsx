@@ -6,6 +6,7 @@ import {
   Timer,
   FileText,
   Users,
+  Building2,
   Puzzle,
   Shield,
   Settings,
@@ -60,6 +61,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Manage",
     items: [
       { to: "crm", icon: Users, label: "CRM" },
+      { to: "crm/companies", icon: Building2, label: "Companies" },
       { to: "integrations", icon: Puzzle, label: "Integrations" },
       { to: "admin", icon: Shield, label: "Admin" },
       { to: "settings", icon: Settings, label: "Settings" },
