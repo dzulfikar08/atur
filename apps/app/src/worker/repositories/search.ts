@@ -1,6 +1,6 @@
 import type { DbClient } from "../db/index";
 import * as schema from "../db/schema";
-import { eq, and, or, like, isNull } from "drizzle-orm";
+import { eq, and, or, like, isNull, inArray } from "drizzle-orm";
 
 export async function findWorkspaceIdBySlug(db: DbClient, slug: string) {
   const [row] = await db
@@ -11,11 +11,34 @@ export async function findWorkspaceIdBySlug(db: DbClient, slug: string) {
   return row?.id ?? null;
 }
 
+// Workspaces a user may see in an unscoped search: owned, or an active
+// (non-deleted) membership row. Mirrors the MCP list_workspaces scoping.
+export async function listWorkspaceIdsForUser(db: DbClient, userId: string) {
+  const [memberRows, ownedRows] = await Promise.all([
+    db
+      .select({ id: schema.workspaceMembers.workspaceId })
+      .from(schema.workspaceMembers)
+      .where(
+        and(
+          eq(schema.workspaceMembers.memberId, userId),
+          eq(schema.workspaceMembers.isActive, 1),
+          isNull(schema.workspaceMembers.deletedAt),
+        ),
+      ),
+    db
+      .select({ id: schema.workspaces.id })
+      .from(schema.workspaces)
+      .where(and(eq(schema.workspaces.ownerId, userId), isNull(schema.workspaces.deletedAt))),
+  ]);
+  return [...new Set([...memberRows.map((r) => r.id), ...ownedRows.map((r) => r.id)])];
+}
+
 export async function searchIssues(
   db: DbClient,
   params: {
     query: string;
     workspaceId?: string;
+    workspaceIds?: string[];
     projectId?: string;
     limit: number;
   },
@@ -30,6 +53,9 @@ export async function searchIssues(
   ];
   if (params.workspaceId) {
     conditions.push(eq(schema.issues.workspaceId, params.workspaceId));
+  }
+  if (params.workspaceIds) {
+    conditions.push(inArray(schema.issues.workspaceId, params.workspaceIds));
   }
   if (params.projectId) {
     conditions.push(eq(schema.issues.projectId, params.projectId));
@@ -46,6 +72,7 @@ export async function searchProjects(
   params: {
     query: string;
     workspaceId?: string;
+    workspaceIds?: string[];
     limit: number;
   },
 ) {
@@ -56,6 +83,9 @@ export async function searchProjects(
   ];
   if (params.workspaceId) {
     conditions.push(eq(schema.projects.workspaceId, params.workspaceId));
+  }
+  if (params.workspaceIds) {
+    conditions.push(inArray(schema.projects.workspaceId, params.workspaceIds));
   }
   return db
     .select()
