@@ -349,4 +349,16 @@ describe("DEV-19 round 2 — HTTP create/update id binding", () => {
     );
     expect(db.inserts).toHaveLength(0);
   });
+  it("HTTP create: parent issue outside the workspace is a 404, nothing inserted", async () => {
+    // Select order: project (query.findFirst), parent issue (validation).
+    const db = mockDb([[]], project);
+    await expect404(() =>
+      issuesService.create(db.db, "p1", {
+        name: "Issue",
+        priority: "none",
+        parent_id: "i-foreign",
+      }),
+    );
+    expect(db.inserts).toHaveLength(0);
+  });
 });
