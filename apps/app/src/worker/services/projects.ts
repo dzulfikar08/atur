@@ -74,6 +74,10 @@ export async function create(
     ) {
       identifier = `${base.slice(0, 10)}${n}`;
     }
+    // Loop exit can leave the final candidate unchecked (suffix 99) — when
+    // every candidate collides, fail with 409 instead of a UNIQUE 500.
+    if (await projectRepo.identifierExists(db, workspace.id, identifier))
+      throw new HTTPException(409, { message: "Could not derive a unique identifier" });
   }
   const project = await projectRepo.create(db, {
     ...data,

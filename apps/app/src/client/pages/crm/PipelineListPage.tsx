@@ -74,8 +74,20 @@ export default function PipelineListPage() {
   });
 
   const updateMut = useMutation({
-    mutationFn: (body: { name: string; description?: string }) =>
-      api.updateProject(editing.workspace_slug || slug!, editing.id, body),
+    // Send only changed keys (same pattern as DealFormDialog's edit mode) —
+    // an untouched null description stays null instead of being sent as "".
+    mutationFn: () => {
+      if (!editing) throw new Error("No pipeline");
+      const body: { name?: string; description?: string } = {};
+      if (name !== (editing.name ?? "")) body.name = name;
+      if (description !== (editing.description ?? "")) body.description = description;
+      if (Object.keys(body).length === 0) {
+        setEditing(null);
+        resetForm();
+        return Promise.resolve(null);
+      }
+      return api.updateProject(editing.workspace_slug || slug!, editing.id, body);
+    },
     onSuccess: () => {
       invalidateAll();
       setEditing(null);
@@ -229,7 +241,7 @@ export default function PipelineListPage() {
                   <Button
                     size="sm"
                     disabled={!name || updateMut.isPending}
-                    onClick={() => updateMut.mutate({ name, description })}
+                    onClick={() => updateMut.mutate()}
                   >
                     {updateMut.isPending ? "Saving…" : "Save changes"}
                   </Button>

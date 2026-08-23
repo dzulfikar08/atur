@@ -367,14 +367,27 @@ export const api = {
       method: "DELETE",
     }),
   // CRM contacts (leads + customers)
-  listContacts: async (slug: string, params?: { status?: string; search?: string }) => {
+  // Fetches ALL pages — the deal-form customer combobox must see every
+  // contact, not just the first server page (server default 50, cap 100).
+  listContacts: async (
+    slug: string,
+    params?: { status?: string; search?: string },
+  ): Promise<Contact[]> => {
     const qs = new URLSearchParams();
     if (params?.status) qs.set("status", params.status);
     if (params?.search) qs.set("search", params.search);
-    const query = qs.toString();
-    return apiFetch<PaginatedResponse<Contact>>(
-      `/workspaces/${slug}/contacts/${query ? `?${query}` : ""}`,
-    );
+    const all: Contact[] = [];
+    let offset = 0;
+    const limit = 100;
+    while (true) {
+      const page = await apiFetch<PaginatedResponse<Contact>>(
+        `/workspaces/${slug}/contacts/?limit=${limit}&offset=${offset}&${qs.toString()}`,
+      );
+      all.push(...page.results);
+      if (!page.total || page.results.length === 0 || all.length >= page.total) break;
+      offset += limit;
+    }
+    return all;
   },
 
   // Polar (payments → CRM import)

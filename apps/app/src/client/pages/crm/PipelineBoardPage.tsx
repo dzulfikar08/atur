@@ -210,7 +210,7 @@ export default function PipelineBoardPage() {
   });
   const { data: contacts = [] } = useQuery({
     queryKey: ["contacts-all", slug],
-    queryFn: async () => (await api.listContacts(slug!)).results,
+    queryFn: () => api.listContacts(slug!),
     enabled: !!slug,
   });
 
@@ -243,7 +243,6 @@ export default function PipelineBoardPage() {
       g[sid].push(d);
     }
     return g;
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- deals/states are react-query results (referentially stable unless refetched)
   }, [deals, states]);
 
   const moveMut = useMutation({
