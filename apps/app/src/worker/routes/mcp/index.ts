@@ -845,7 +845,7 @@ async function assertProjectAccess(
   const [proj] = await db
     .select({ workspaceId: schema.projects.workspaceId })
     .from(schema.projects)
-    .where(eq(schema.projects.id, projectId))
+    .where(and(eq(schema.projects.id, projectId), isNull(schema.projects.deletedAt)))
     .limit(1);
   if (!proj) throw new HTTPException(404, { message: "Project not found" });
   const [ws] = await db
@@ -890,7 +890,7 @@ async function assertIssueAccess(db: ReturnType<typeof getDb>, issueId: string, 
   const [iss] = await db
     .select({ projectId: schema.issues.projectId })
     .from(schema.issues)
-    .where(eq(schema.issues.id, issueId))
+    .where(and(eq(schema.issues.id, issueId), isNull(schema.issues.deletedAt)))
     .limit(1);
   if (!iss) throw new HTTPException(404, { message: "Issue not found" });
   await assertProjectAccess(db, iss.projectId, userId);
@@ -900,7 +900,7 @@ async function assertCycleAccess(db: ReturnType<typeof getDb>, cycleId: string, 
   const [cyc] = await db
     .select({ projectId: schema.cycles.projectId })
     .from(schema.cycles)
-    .where(eq(schema.cycles.id, cycleId))
+    .where(and(eq(schema.cycles.id, cycleId), isNull(schema.cycles.deletedAt)))
     .limit(1);
   if (!cyc) throw new HTTPException(404, { message: "Sprint not found" });
   await assertProjectAccess(db, cyc.projectId, userId);
@@ -910,7 +910,7 @@ async function assertModuleAccess(db: ReturnType<typeof getDb>, moduleId: string
   const [mod] = await db
     .select({ projectId: schema.modules.projectId })
     .from(schema.modules)
-    .where(eq(schema.modules.id, moduleId))
+    .where(and(eq(schema.modules.id, moduleId), isNull(schema.modules.deletedAt)))
     .limit(1);
   if (!mod) throw new HTTPException(404, { message: "Module not found" });
   await assertProjectAccess(db, mod.projectId, userId);
@@ -1649,7 +1649,13 @@ async function handleTool(
     }
     case "create_deal": {
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
-      await assertProjectAccess(db, params.project_id as string, userId);
+      // Bound to the named workspace: the deal's workspaceId comes from the
+      // slug but its projectId from the param. assertProjectAccess alone only
+      // proves membership of the project's OWN workspace, so a member of ws A
+      // naming ws A + a ws B project could cross-link the deal (workspaceId=A,
+      // projectId=B). assertProjectInWorkspace requires the project to live in
+      // the named workspace.
+      await assertProjectInWorkspace(db, params.project_id as string, workspaceId);
       return crmService.createDeal(
         db,
         workspaceId,

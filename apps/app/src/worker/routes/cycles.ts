@@ -25,7 +25,7 @@ export const cycleRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .get("/:cycleId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const cycleId = c.req.param("cycleId")!;
-    const result = await cyclesService.getById(db, cycleId);
+    const result = await cyclesService.getById(db, cycleId, c.get("workspace").id);
     return c.json(result);
   })
   // update/remove (and their issue-link mutations) take the guard's workspace

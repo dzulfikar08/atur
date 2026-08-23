@@ -23,7 +23,7 @@ export const labelRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .get("/:labelId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const labelId = c.req.param("labelId")!;
-    const result = await labelsService.getById(db, labelId);
+    const result = await labelsService.getById(db, labelId, c.get("workspace").id);
     return c.json(result);
   })
   // update/remove take the guard's workspace id: a label UUID from another

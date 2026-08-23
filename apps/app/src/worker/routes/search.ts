@@ -16,6 +16,6 @@ export const searchRoutes = new Hono<{ Bindings: Env }>({ strict: false }).get("
   if (workspace) await resolveWorkspaceForCaller(c, workspace);
   const project = c.req.query("project");
   const limit = Math.min(parseInt(c.req.query("limit") || "50", 10), 100);
-  const results = await searchService.search(db, q, workspace, project, limit);
+  const results = await searchService.search(db, q, workspace, project, limit, c.get("user").sub);
   return c.json(results);
 });

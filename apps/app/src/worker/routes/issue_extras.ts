@@ -209,6 +209,22 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         throw new HTTPException(400, {
           message: "related_issue_id and relation_type are required",
         });
+      // related_issue_id must be an issue in the caller's workspace — a raw
+      // insert here bypasses relationsService.create's both-sided check and
+      // would let a member attach a foreign-workspace issue as the related side
+      // (leaking the reference back via that issue's relation list).
+      const [related] = await db
+        .select({ id: schema.issues.id })
+        .from(schema.issues)
+        .where(
+          and(
+            eq(schema.issues.id, body.related_issue_id),
+            eq(schema.issues.workspaceId, c.get("workspace").id),
+            isNull(schema.issues.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!related) throw new HTTPException(404, { message: "Issue not found" });
       const id = uuid();
       const now = nowISO();
       await db.insert(schema.issueRelations).values({
@@ -287,6 +303,21 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       const { db, issue } = await resolveIssue(c);
       const body = (await c.req.json().catch(() => ({}))) as { module_id?: string };
       if (!body.module_id) throw new HTTPException(400, { message: "module_id is required" });
+      // module_id must belong to the caller's workspace — otherwise a foreign
+      // module could be attached to a local issue via this raw insert (it
+      // bypasses modulesService.addIssue's workspace compare).
+      const [mod] = await db
+        .select({ id: schema.modules.id })
+        .from(schema.modules)
+        .where(
+          and(
+            eq(schema.modules.id, body.module_id),
+            eq(schema.modules.workspaceId, c.get("workspace").id),
+            isNull(schema.modules.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!mod) throw new HTTPException(404, { message: "Module not found" });
       const [existing] = await db
         .select()
         .from(schema.moduleIssues)
