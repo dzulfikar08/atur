@@ -991,7 +991,7 @@ async function assertPageAccess(db: ReturnType<typeof getDb>, pageId: string, us
   const [pg] = await db
     .select({ workspaceId: schema.pages.workspaceId })
     .from(schema.pages)
-    .where(eq(schema.pages.id, pageId))
+    .where(and(eq(schema.pages.id, pageId), isNull(schema.pages.deletedAt)))
     .limit(1);
   if (!pg) throw new HTTPException(404, { message: "Page not found" });
   const [ws] = await db
@@ -1124,6 +1124,22 @@ export async function handleTool(
       }
       if (Array.isArray(params.assignee_ids) && (params.assignee_ids as string[]).length > 0) {
         await assertAssigneesInWorkspace(db, params.assignee_ids as string[], workspaceId);
+      }
+      if (params.parent_id) {
+        // The parent issue must live in the named workspace too — else a
+        // member of ws A could nest their issue under ws B's issue tree.
+        const [parent] = await db
+          .select({ id: schema.issues.id })
+          .from(schema.issues)
+          .where(
+            and(
+              eq(schema.issues.id, params.parent_id as string),
+              eq(schema.issues.workspaceId, workspaceId),
+              isNull(schema.issues.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (!parent) throw new HTTPException(404, { message: "Parent issue not found" });
       }
       const id = uuid();
       const now = nowISO();
