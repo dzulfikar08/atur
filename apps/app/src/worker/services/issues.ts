@@ -46,7 +46,7 @@ export const updateIssueSchema = z.object({
 async function assertIdsInWorkspace(
   db: DbClient,
   workspaceId: string,
-  ids: { stateId?: string; labelIds?: string[]; assigneeIds?: string[] },
+  ids: { stateId?: string; labelIds?: string[]; assigneeIds?: string[]; parentId?: string },
 ) {
   if (ids.stateId) {
     const state = await statesRepo.findById(db, ids.stateId);
@@ -86,6 +86,23 @@ async function assertIdsInWorkspace(
       throw new HTTPException(404, { message: "Assignee not found in this workspace" });
     }
   }
+  if (ids.parentId) {
+    // The parent issue must live in the same workspace — else a member could
+    // nest their issue under a foreign workspace's issue tree (and leak its
+    // name via the post-create activity lookup).
+    const [parent] = await db
+      .select({ id: schema.issues.id })
+      .from(schema.issues)
+      .where(
+        and(
+          eq(schema.issues.id, ids.parentId),
+          eq(schema.issues.workspaceId, workspaceId),
+          isNull(schema.issues.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!parent) throw new HTTPException(404, { message: "Parent issue not found" });
+  }
 }
 
 export async function create(
@@ -104,6 +121,7 @@ export async function create(
     stateId: data.state_id,
     labelIds: data.label_ids,
     assigneeIds: data.assignee_ids,
+    parentId: data.parent_id ?? undefined,
   });
 
   // Default state: caller choice → project default → project's isDefault state.
@@ -154,7 +172,16 @@ export async function create(
     const [parent] = await db
       .select({ name: schema.issues.name })
       .from(schema.issues)
-      .where(and(eq(schema.issues.id, data.parent_id), isNull(schema.issues.deletedAt)))
+      // Workspace-scoped belt-and-braces: the pre-insert validation already
+      // rejected foreign parents; this filter keeps the trail lookup from
+      // ever reading (and recording) a foreign issue's name.
+      .where(
+        and(
+          eq(schema.issues.id, data.parent_id),
+          eq(schema.issues.workspaceId, project.workspaceId),
+          isNull(schema.issues.deletedAt),
+        ),
+      )
       .limit(1);
     await activitiesRepo.create(db, {
       verb: "updated",
