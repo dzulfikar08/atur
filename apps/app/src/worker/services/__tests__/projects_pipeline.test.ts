@@ -84,6 +84,19 @@ describe("identifier auto-derivation", () => {
     expect(identifier).toBe("SALES2");
     expect(identifier.length).toBeLessThanOrEqual(12);
   });
+
+  it("throws 409 when every candidate identifier is taken", async () => {
+    // Every probe (base + suffixes 2..99) reports a collision — the suffix
+    // loop is exhausted and must surface a 409, not a UNIQUE-constraint 500.
+    vi.mocked(projectRepo.identifierExists).mockResolvedValue(true);
+
+    const data = projectService.createProjectSchema.parse({ name: "Sales" });
+    await expect(projectService.create(db, "ws", data)).rejects.toMatchObject({
+      status: 409,
+      message: "Could not derive a unique identifier",
+    });
+    expect(projectRepo.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("update with is_pipeline", () => {

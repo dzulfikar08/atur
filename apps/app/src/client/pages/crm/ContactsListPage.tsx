@@ -52,9 +52,10 @@ export default function ContactsListPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["contacts", slug, search, status],
-    queryFn: () =>
+    queryFn: async () =>
       isAll
-        ? api.listAllContacts({ search: search || undefined, status: status || undefined })
+        ? (await api.listAllContacts({ search: search || undefined, status: status || undefined }))
+            .results
         : api.listContacts(slug!, { search: search || undefined, status: status || undefined }),
     enabled: !!slug,
   });
@@ -291,7 +292,7 @@ export default function ContactsListPage() {
                 </tr>
               </thead>
               <tbody>
-                {data?.results.map((c: any) => (
+                {data?.map((c: any) => (
                   <tr key={c.id} className="border-t hover:bg-muted/30">
                     <td className="p-3">
                       <Link
@@ -336,7 +337,7 @@ export default function ContactsListPage() {
                     )}
                   </tr>
                 ))}
-                {data?.results.length === 0 && (
+                {data?.length === 0 && (
                   <tr>
                     <td colSpan={isAll ? 6 : 5} className="p-6 text-center text-muted-foreground">
                       No contacts yet.
