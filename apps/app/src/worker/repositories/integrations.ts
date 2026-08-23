@@ -2,7 +2,7 @@ import type { DbClient } from "../db/index";
 import * as schema from "../db/schema";
 import { v4 as uuid } from "uuid";
 import { nowISO } from "../lib/pagination";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 export async function listByWorkspace(db: DbClient, workspaceId: string) {
   return db
@@ -15,7 +15,7 @@ export async function findById(db: DbClient, id: string) {
   const [token] = await db
     .select()
     .from(schema.integrationTokens)
-    .where(eq(schema.integrationTokens.id, id))
+    .where(and(eq(schema.integrationTokens.id, id), isNull(schema.integrationTokens.deletedAt)))
     .limit(1);
   return token;
 }

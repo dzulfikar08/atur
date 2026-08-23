@@ -201,7 +201,18 @@ export async function update(
     updateData.priority = data.priority;
     events.push({ field: "priority", oldValue: issue.priority ?? null, newValue: data.priority });
   }
+  // Set when the state changes below and reused for the activity trail, so
+  // the workspace-validation fetch is not repeated after the write.
+  let newState: Awaited<ReturnType<typeof statesRepo.findById>> | undefined;
   if (data.state_id !== undefined && data.state_id !== issue.stateId) {
+    // The new state must live in the issue's workspace — otherwise a member
+    // could point their issue at a foreign workspace's state (cross-workspace
+    // linkage plus name leak via the activity trail).
+    const state = await statesRepo.findById(db, data.state_id);
+    if (!state || state.workspaceId !== issue.workspaceId) {
+      throw new HTTPException(404, { message: "State not found" });
+    }
+    newState = state;
     updateData.stateId = data.state_id;
     events.push({ field: "state", oldValue: null, newValue: null }); // names resolved below
   }
@@ -234,10 +245,9 @@ export async function update(
 
   // State changes are stored by id; resolve human-readable names for the trail.
   if (events.some((e) => e.field === "state")) {
-    const [oldState, newState] = await Promise.all([
-      issue.stateId ? statesRepo.findById(db, issue.stateId) : Promise.resolve(undefined),
-      data.state_id ? statesRepo.findById(db, data.state_id) : Promise.resolve(undefined),
-    ]);
+    // newState was already fetched (and workspace-validated) above — only the
+    // previous state still needs resolving.
+    const oldState = issue.stateId ? await statesRepo.findById(db, issue.stateId) : undefined;
     for (const e of events) {
       if (e.field === "state") {
         e.oldValue = oldState?.name ?? null;
