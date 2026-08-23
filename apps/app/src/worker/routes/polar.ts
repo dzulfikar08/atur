@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
@@ -111,6 +111,37 @@ polarRoutes.put("/settings", async (c) => {
     throw new HTTPException(400, {
       message: "Store a webhook secret before enabling the receiver",
     });
+  }
+  // Config poisoning: entity ids must belong to THIS workspace before they're
+  // stored — a foreign pipeline_project_id would make the webhook consumer
+  // mint deals in someone else's project.
+  if (body.pipeline_project_id) {
+    const [proj] = await db
+      .select({ id: schema.projects.id })
+      .from(schema.projects)
+      .where(
+        and(
+          eq(schema.projects.id, body.pipeline_project_id),
+          eq(schema.projects.workspaceId, ws.id),
+          isNull(schema.projects.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!proj) throw new HTTPException(404, { message: "Project not found" });
+  }
+  if (body.default_state_id) {
+    const [st] = await db
+      .select({ id: schema.states.id })
+      .from(schema.states)
+      .where(
+        and(
+          eq(schema.states.id, body.default_state_id),
+          eq(schema.states.workspaceId, ws.id),
+          isNull(schema.states.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!st) throw new HTTPException(404, { message: "State not found" });
   }
   const updated = await polarRepo.upsertSettings(db, ws.id, {
     accessToken: body.access_token,

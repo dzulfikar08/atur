@@ -489,7 +489,11 @@ async function enrichIssue(
         group: schema.states.groupName,
       })
       .from(schema.states)
-      .where(eq(schema.states.id, issue.stateId))
+      // Workspace-scoped: a legacy row pointing at a foreign state must
+      // render as stateless, not leak the foreign state's name/color.
+      .where(
+        and(eq(schema.states.id, issue.stateId), eq(schema.states.workspaceId, issue.workspaceId)),
+      )
       .limit(1);
     state = s ?? null;
   }
@@ -519,6 +523,7 @@ export async function enrichIssues(
             name: schema.states.name,
             color: schema.states.color,
             group: schema.states.groupName,
+            workspaceId: schema.states.workspaceId,
           })
           .from(schema.states)
           .where(inArray(schema.states.id, stateIds))
@@ -583,7 +588,13 @@ export async function enrichIssues(
         name: l.name,
         color: l.color,
       })) ?? [];
-    const state = issue.stateId ? (stateMap.get(issue.stateId) ?? null) : null;
+    // Only render a state whose workspace matches the issue's — legacy
+    // cross-workspace rows render stateless instead of leaking foreign names.
+    const stateRow = issue.stateId ? stateMap.get(issue.stateId) : undefined;
+    const state =
+      stateRow && stateRow.workspaceId === issue.workspaceId
+        ? { id: stateRow.id, name: stateRow.name, color: stateRow.color, group: stateRow.group }
+        : null;
     return { ...issue, labels, assignees, state };
   });
 }
