@@ -6,7 +6,6 @@ import type { DbClient } from "../db/index";
 import * as schema from "../db/schema";
 import * as feedbackRepo from "../repositories/feedback";
 import * as labelsRepo from "../repositories/labels";
-import { getNextSequence } from "../repositories/issues";
 
 // Fixed id of the seeded feedback-bot user (see migration). All public comments
 // are authored by it since issue_comments.actor_id is NOT NULL FK -> users.
@@ -211,12 +210,12 @@ export async function createItem(
     throw new HTTPException(400, { message: "Email is required" });
   }
 
-  const sequenceId = await getNextSequence(db, board.projectId);
   const id = uuid();
-  await feedbackRepo.createFeedbackIssue(db, {
+  // sequenceId allocated atomically inside createFeedbackIssue (per-project
+  // counter) — public portal bursts get distinct ids, no collision 500s.
+  const sequenceId = await feedbackRepo.createFeedbackIssue(db, {
     id,
     name: data.title,
-    sequenceId,
     projectId: board.projectId,
     workspaceId: board.workspaceId,
     descriptionHtml: data.description ? toHtml(data.description) : null,

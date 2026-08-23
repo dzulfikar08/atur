@@ -144,7 +144,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       const row: typeof schema.issues.$inferInsert = {
         id,
         name: body.name,
-        sequenceId: await issuesRepo.getNextSequence(db, parent.projectId),
+        sequenceId: await issuesRepo.allocateNextSequence(db, parent.projectId),
         parentId: parent.id,
         projectId: parent.projectId,
         workspaceId: parent.workspaceId,
@@ -152,9 +152,10 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         createdAt: now,
         updatedAt: now,
       };
-      // sequenceId is MAX+1 and collides under concurrent creators;
-      // insertIssueWithRetry re-derives it and retries on uq_issue_sequence.
-      await issuesRepo.insertIssueWithRetry(db, row);
+      // sequenceId comes from the atomic per-project counter (UPDATE ...
+      // RETURNING), so concurrent creators get distinct ids — no collisions,
+      // no retry loop.
+      await db.insert(schema.issues).values(row);
       return c.json(
         (
           await db

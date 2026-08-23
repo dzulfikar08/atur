@@ -49,18 +49,17 @@ export async function create(
   });
   if (!project) throw new HTTPException(404, { message: "Project not found" });
 
-  const sequenceId = await issuesRepo.getNextSequence(db, projectId);
-
   // Default state: caller choice → project default → project's isDefault state.
   let stateId = data.state_id ?? project.defaultStateId ?? undefined;
   if (!stateId) {
     stateId = (await feedbackRepo.pickDefaultStateId(db, projectId)) ?? undefined;
   }
 
+  // sequenceId allocated atomically inside issuesRepo.create (per-project
+  // counter) — concurrent creators get distinct ids, no retry loop needed.
   const issue = await issuesRepo.create(db, {
     id: uuid(),
     name: data.name,
-    sequenceId,
     projectId,
     workspaceId: project.workspaceId,
     priority: data.priority,
