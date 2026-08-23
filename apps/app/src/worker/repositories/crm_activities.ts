@@ -67,10 +67,16 @@ export async function createActivity(
 
 export async function listByCustomer(
   db: DbClient,
+  workspaceId: string,
   customerId: string,
   opts: { offset: number; limit: number },
 ): Promise<{ rows: ActivityRow[]; total: number }> {
-  const conditions = [eq(schema.crmActivities.customerId, customerId)];
+  // Workspace-scoped on every query — a bare customer UUID from another
+  // workspace must not leak its timeline (same class as DEV-8 bare-ID reads).
+  const conditions = [
+    eq(schema.crmActivities.workspaceId, workspaceId),
+    eq(schema.crmActivities.customerId, customerId),
+  ];
   const where = and(...conditions);
   const [countRow] = await db
     .select({ total: sql<number>`count(*)` })
@@ -88,10 +94,14 @@ export async function listByCustomer(
 
 export async function listByDeal(
   db: DbClient,
+  workspaceId: string,
   dealId: string,
   opts: { offset: number; limit: number },
 ): Promise<{ rows: ActivityRow[]; total: number }> {
-  const conditions = [eq(schema.crmActivities.dealId, dealId)];
+  const conditions = [
+    eq(schema.crmActivities.workspaceId, workspaceId),
+    eq(schema.crmActivities.dealId, dealId),
+  ];
   const where = and(...conditions);
   const [countRow] = await db
     .select({ total: sql<number>`count(*)` })

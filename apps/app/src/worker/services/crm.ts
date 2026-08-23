@@ -96,7 +96,7 @@ export async function getContact(db: DbClient, workspaceId: string, customerId: 
     supportTicketsRepo.listByCustomer(db, customerId, { offset: 0, limit: 50 }),
     emailLogRepo.listByCustomer(db, customerId, 20),
     contact.companyId ? companiesRepo.getCompany(db, workspaceId, contact.companyId) : null,
-    activitiesRepo.listByCustomer(db, customerId, { offset: 0, limit: 50 }),
+    activitiesRepo.listByCustomer(db, workspaceId, customerId, { offset: 0, limit: 50 }),
     factsRepo.listFacts(db, workspaceId, { customerId, offset: 0, limit: 20 }),
     factsRepo.listFacts(db, workspaceId, { customerId, status: "PROPOSED", offset: 0, limit: 10 }),
   ]);
@@ -158,6 +158,27 @@ export async function deleteContact(db: DbClient, workspaceId: string, customerI
 
 // A deal is an issue (external_source='crm') plus a deals side row. The
 // pipeline is the issue's project; the stage is the issue's state.
+
+// Bind a deal's customer/company links to the deal's workspace (the same
+// DEV-19 class as issue state/label ids): a foreign UUID that merely exists
+// must not be attachable to a deal — the board joins customer/company names
+// and get_contact rolls deals up, so a cross-workspace link leaks data.
+async function assertDealLinksInWorkspace(
+  db: DbClient,
+  workspaceId: string,
+  customerId?: string | null,
+  companyId?: string | null,
+) {
+  if (customerId) {
+    const contact = await customersRepo.getContact(db, workspaceId, customerId);
+    if (!contact) throw new HTTPException(404, { message: "Customer not found" });
+  }
+  if (companyId) {
+    const company = await companiesRepo.getCompany(db, workspaceId, companyId);
+    if (!company) throw new HTTPException(404, { message: "Company not found" });
+  }
+}
+
 export async function createDeal(
   db: DbClient,
   workspaceId: string,
@@ -165,6 +186,9 @@ export async function createDeal(
   data: z.infer<typeof createDealSchema>,
   createdById?: string | null,
 ) {
+  // Bind customer/company to this workspace BEFORE the issue is minted, so a
+  // foreign id fails fast instead of leaving an orphan issue + deal row.
+  await assertDealLinksInWorkspace(db, workspaceId, data.customer_id, data.company_id);
   const issue = await issuesService.create(
     db,
     projectId,
@@ -229,6 +253,9 @@ export async function updateDeal(
   const existing = await dealsRepo.getByIssue(db, issueId, projectId);
   if (!existing) throw new HTTPException(404, { message: "Deal not found" });
 
+  // Same binding on update: relinking a deal to a foreign customer/company
+  // must 404, scoped to the deal's own workspace.
+  await assertDealLinksInWorkspace(db, existing.workspaceId, data.customer_id, data.company_id);
   if (data.name) {
     await issuesService.update(db, issueId, { name: data.name });
   }

@@ -49,11 +49,16 @@ export async function listActivities(
   },
 ) {
   if (opts.customerId) {
-    const { rows, total } = await activitiesRepo.listByCustomer(db, opts.customerId, opts);
+    const { rows, total } = await activitiesRepo.listByCustomer(
+      db,
+      workspaceId,
+      opts.customerId,
+      opts,
+    );
     return paginatedResponse(rows, total, opts.offset, opts.limit);
   }
   if (opts.dealId) {
-    const { rows, total } = await activitiesRepo.listByDeal(db, opts.dealId, opts);
+    const { rows, total } = await activitiesRepo.listByDeal(db, workspaceId, opts.dealId, opts);
     return paginatedResponse(rows, total, opts.offset, opts.limit);
   }
   throw new HTTPException(400, { message: "customerId or dealId is required" });

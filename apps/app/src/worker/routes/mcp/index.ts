@@ -15,6 +15,7 @@ import * as companiesRepo from "../../repositories/companies";
 import * as companiesService from "../../services/companies";
 import * as factsRepo from "../../repositories/contact_facts";
 import * as factsService from "../../services/contact_facts";
+import * as activitiesService from "../../services/crm_activities";
 
 interface JsonRpcRequest {
   jsonrpc: string;
@@ -760,6 +761,21 @@ const TOOLS = [
         observed_at: { type: "string" },
       },
       required: ["workspace", "field", "value", "evidence"],
+    },
+  },
+  {
+    name: "list_activities",
+    description: "List CRM activity timeline entries for a contact or a deal (workspace-scoped)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        customer_id: { type: "string" },
+        deal_id: { type: "string" },
+        limit: { type: "integer" },
+        offset: { type: "integer" },
+      },
+      required: ["workspace"],
     },
   },
   {
@@ -1904,6 +1920,17 @@ export async function handleTool(
         limit,
       });
       return { results: rows, total };
+    }
+    case "list_activities": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      const limit = Math.min(Number(params.limit) || 50, 100);
+      const offset = Number(params.offset) || 0;
+      return activitiesService.listActivities(db, workspaceId, {
+        customerId: params.customer_id as string | undefined,
+        dealId: params.deal_id as string | undefined,
+        offset,
+        limit,
+      });
     }
     default:
       throw new HTTPException(400, { message: `Unknown tool: ${toolName}` });

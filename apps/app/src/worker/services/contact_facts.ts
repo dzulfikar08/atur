@@ -20,16 +20,15 @@ import { nowISO } from "../lib/pagination";
 // Agents can only write through this mapping — no arbitrary keys. Contact
 // fields map to customers columns; company fields to companies columns.
 // owner_id / primary_contact_id are deliberately excluded (assignment is a
-// human decision, not an enrichment).
+// human decision, not an enrichment). industry/website/logo_url exist only
+// on companies — customers has no such columns, so a contact fact naming
+// them is rejected here instead of silently "applying" a write that no-ops.
 const CONTACT_FIELD_COLUMNS: Record<string, string> = {
   title: "title",
   seniority: "seniority",
   function: "function",
   linkedin_url: "linkedinUrl",
   company: "company",
-  industry: "industry",
-  website: "website",
-  logo_url: "logoUrl",
   phone: "phone",
   email: "email",
 };

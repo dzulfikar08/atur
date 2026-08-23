@@ -137,6 +137,24 @@ describe("recordFact", () => {
     expect(createFactMock).not.toHaveBeenCalled();
   });
 
+  it("rejects company-only fields (industry/website/logo_url) on contacts — no silent no-op apply", async () => {
+    // customers has no such columns; before the fix these auto-applied while
+    // updateContact silently dropped the write (ledger claimed enrichment).
+    await expect(
+      recordFact(db, WS, ACTOR, {
+        customer_id: "c1",
+        field: "industry",
+        value: "FinTech",
+        evidence: [
+          { source: "mailbox", method: "signature" },
+          { source: "crunchbase", method: "web_search" },
+        ],
+      }),
+    ).rejects.toThrow(HTTPException);
+    expect(createFactMock).not.toHaveBeenCalled();
+    expect(updateContactMock).not.toHaveBeenCalled();
+  });
+
   it("rejects a foreign contact uuid (workspace scoped)", async () => {
     getContactMock.mockResolvedValue(null);
     await expect(
