@@ -26,13 +26,15 @@ function chainy(rows: any[]) {
 }
 
 // Like the dev8 mock, but also captures inserts (activity trail assertions)
-// and every where() condition (soft-delete filter assertions).
-function mockDb(selectFixtures: any[][]) {
+// and every where() condition (soft-delete filter assertions). projectRow
+// backs db.query.projects.findFirst for issuesService.create tests.
+function mockDb(selectFixtures: any[][], projectRow?: any) {
   const updates: any[] = [];
   const inserts: any[] = [];
   const wheres: unknown[] = [];
   let selectIdx = 0;
   const db: any = {
+    query: { projects: { findFirst: async () => projectRow } },
     select: () => {
       const rows = selectFixtures[Math.min(selectIdx, selectFixtures.length - 1)] ?? [];
       selectIdx++;
@@ -261,5 +263,90 @@ describe("DEV-19 repo findById soft-delete filters", () => {
     await findById(db.db, "x1");
     expect(db.wheres.length).toBeGreaterThan(0);
     expect(db.wheres.some((cond) => referencesColumn(cond, "deleted_at"))).toBe(true);
+  });
+});
+
+describe("DEV-19 round 2 — HTTP create/update id binding", () => {
+  const project = { id: "p1", workspaceId: MINE, defaultStateId: "s-def" };
+  const issue = {
+    id: "i1",
+    workspaceId: MINE,
+    stateId: "s-old",
+    name: "Some issue",
+    priority: "none",
+    startDate: null,
+    targetDate: null,
+    estimatePoints: null,
+    descriptionHtml: null,
+  };
+
+  it("create: foreign-workspace state_id is a 404, nothing inserted", async () => {
+    // Select order: project (query.findFirst), state (validation).
+    const db = mockDb([[{ id: "s-foreign", workspaceId: FOREIGN, name: "Foreign" }]], project);
+    await expect404(() =>
+      issuesService.create(db.db, "p1", {
+        name: "Issue",
+        priority: "none",
+        state_id: "s-foreign",
+      }),
+    );
+    expect(db.inserts).toHaveLength(0);
+  });
+
+  it("create: foreign-workspace label id is a 404, nothing inserted", async () => {
+    const db = mockDb([[]], project);
+    await expect404(() =>
+      issuesService.create(db.db, "p1", {
+        name: "Issue",
+        priority: "none",
+        label_ids: ["l-foreign"],
+      }),
+    );
+    expect(db.inserts).toHaveLength(0);
+  });
+
+  it("create: non-member assignee is a 404, nothing inserted", async () => {
+    const db = mockDb([[]], project);
+    await expect404(() =>
+      issuesService.create(db.db, "p1", {
+        name: "Issue",
+        priority: "none",
+        assignee_ids: ["u-stranger"],
+      }),
+    );
+    expect(db.inserts).toHaveLength(0);
+  });
+
+  it("update: foreign-workspace label in label_ids is a 404, no update issued", async () => {
+    // Select order: issue, label rows (validation).
+    const db = mockDb([[issue], []]);
+    await expect404(() => issuesService.update(db.db, "i1", { label_ids: ["l-foreign"] }));
+    expect(db.updates).toHaveLength(0);
+  });
+
+  it("update: non-member assignee in assignee_ids is a 404, no update issued", async () => {
+    const db = mockDb([[issue], []]);
+    await expect404(() => issuesService.update(db.db, "i1", { assignee_ids: ["u-stranger"] }));
+    expect(db.updates).toHaveLength(0);
+  });
+
+  it("MCP create_issue: parent issue outside the workspace is a 404, nothing inserted", async () => {
+    // Select order: workspace (slug), project-in-workspace, parent issue.
+    const db = mockDb([[{ id: MINE, ownerId: "u1" }], [{ id: "p1" }], []]);
+    await expect404(() =>
+      handleTool(
+        db.db,
+        {} as any,
+        "create_issue",
+        {
+          workspace: "mine",
+          project_id: "p1",
+          name: "Issue",
+          parent_id: "i-foreign",
+        },
+        "u1",
+      ),
+    );
+    expect(db.inserts).toHaveLength(0);
   });
 });
