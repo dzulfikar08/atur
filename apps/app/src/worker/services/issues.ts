@@ -38,6 +38,56 @@ export const updateIssueSchema = z.object({
   assignee_ids: z.array(z.string().uuid()).optional(),
 });
 
+// Bind caller-supplied state/label/assignee ids to the issue's workspace —
+// same rules as the MCP asserts (DEV-19): an id from another workspace (or a
+// soft-deleted one) is indistinguishable from a missing one → 404 before any
+// write. update() validates its state_id inline instead, so the fetched row
+// can be reused for the activity trail.
+async function assertIdsInWorkspace(
+  db: DbClient,
+  workspaceId: string,
+  ids: { stateId?: string; labelIds?: string[]; assigneeIds?: string[] },
+) {
+  if (ids.stateId) {
+    const state = await statesRepo.findById(db, ids.stateId);
+    if (!state || state.workspaceId !== workspaceId) {
+      throw new HTTPException(404, { message: "State not found" });
+    }
+  }
+  if (ids.labelIds && ids.labelIds.length > 0) {
+    const rows = await db
+      .select({ id: schema.labels.id })
+      .from(schema.labels)
+      .where(
+        and(
+          inArray(schema.labels.id, ids.labelIds),
+          eq(schema.labels.workspaceId, workspaceId),
+          isNull(schema.labels.deletedAt),
+        ),
+      );
+    if (rows.length !== new Set(ids.labelIds).size) {
+      throw new HTTPException(404, { message: "Label not found" });
+    }
+  }
+  if (ids.assigneeIds && ids.assigneeIds.length > 0) {
+    const unique = [...new Set(ids.assigneeIds)];
+    const rows = await db
+      .select({ memberId: schema.workspaceMembers.memberId })
+      .from(schema.workspaceMembers)
+      .where(
+        and(
+          eq(schema.workspaceMembers.workspaceId, workspaceId),
+          inArray(schema.workspaceMembers.memberId, unique),
+          eq(schema.workspaceMembers.isActive, 1),
+          isNull(schema.workspaceMembers.deletedAt),
+        ),
+      );
+    if (rows.length !== unique.length) {
+      throw new HTTPException(404, { message: "Assignee not found in this workspace" });
+    }
+  }
+}
+
 export async function create(
   db: DbClient,
   projectId: string,
@@ -48,6 +98,13 @@ export async function create(
     where: and(eq(schema.projects.id, projectId), isNull(schema.projects.deletedAt)),
   });
   if (!project) throw new HTTPException(404, { message: "Project not found" });
+  // Caller-supplied ids must belong to the project's workspace before any
+  // insert — mirrors the MCP create_issue binding (DEV-19).
+  await assertIdsInWorkspace(db, project.workspaceId, {
+    stateId: data.state_id,
+    labelIds: data.label_ids,
+    assigneeIds: data.assignee_ids,
+  });
 
   // Default state: caller choice → project default → project's isDefault state.
   let stateId = data.state_id ?? project.defaultStateId ?? undefined;
@@ -180,6 +237,13 @@ export async function update(
 ) {
   const issue = await issuesRepo.findById(db, issueId);
   if (!issue) throw new HTTPException(404, { message: "Issue not found" });
+  // Replacement label/assignee lists must belong to the issue's workspace
+  // before any write (state_id is validated inline below so the fetch feeds
+  // the activity trail) — DEV-19.
+  await assertIdsInWorkspace(db, issue.workspaceId, {
+    labelIds: data.label_ids,
+    assigneeIds: data.assignee_ids,
+  });
 
   // Track only fields whose value actually changed so the activity trail
   // records real edits, not no-op PATCHes.

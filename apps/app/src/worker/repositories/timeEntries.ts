@@ -8,7 +8,7 @@ export async function findById(db: DbClient, id: string) {
   const [entry] = await db
     .select()
     .from(schema.timeEntries)
-    .where(eq(schema.timeEntries.id, id))
+    .where(and(eq(schema.timeEntries.id, id), isNull(schema.timeEntries.deletedAt)))
     .limit(1);
   return entry ?? null;
 }
