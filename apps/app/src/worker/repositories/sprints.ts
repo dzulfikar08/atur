@@ -5,7 +5,11 @@ import { v4 as uuid } from "uuid";
 import { nowISO } from "../lib/pagination";
 
 export async function findById(db: DbClient, id: string) {
-  const [sprint] = await db.select().from(schema.sprints).where(eq(schema.sprints.id, id)).limit(1);
+  const [sprint] = await db
+    .select()
+    .from(schema.sprints)
+    .where(and(eq(schema.sprints.id, id), isNull(schema.sprints.deletedAt)))
+    .limit(1);
   return sprint ?? null;
 }
 
