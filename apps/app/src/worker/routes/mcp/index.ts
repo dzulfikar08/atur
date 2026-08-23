@@ -884,6 +884,77 @@ async function assertProjectInWorkspace(
   if (!proj) throw new HTTPException(404, { message: "Project not found" });
 }
 
+// Bind client-supplied state/label/assignee ids to the workspace a tool call
+// already resolved + membership-checked. Without this a member of ws A could
+// attach ws B's state or label UUIDs to their own issues — cross-workspace
+// linkage plus name leaks through the returned rows and activity trail.
+async function assertStateInWorkspace(
+  db: ReturnType<typeof getDb>,
+  stateId: string,
+  workspaceId: string,
+) {
+  const [state] = await db
+    .select({ id: schema.states.id })
+    .from(schema.states)
+    .where(
+      and(
+        eq(schema.states.id, stateId),
+        eq(schema.states.workspaceId, workspaceId),
+        isNull(schema.states.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!state) throw new HTTPException(404, { message: "State not found" });
+}
+
+// Labels carry workspaceId directly (they are workspace-scoped, not
+// project-scoped), so the same id + workspace + not-deleted shape applies.
+async function assertLabelInWorkspace(
+  db: ReturnType<typeof getDb>,
+  labelId: string,
+  workspaceId: string,
+) {
+  const [label] = await db
+    .select({ id: schema.labels.id })
+    .from(schema.labels)
+    .where(
+      and(
+        eq(schema.labels.id, labelId),
+        eq(schema.labels.workspaceId, workspaceId),
+        isNull(schema.labels.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!label) throw new HTTPException(404, { message: "Label not found" });
+}
+
+// Assignees must be ACTIVE members of the workspace. The workspace owner is
+// seeded into workspace_members at creation time, so a membership-row check
+// covers owners too. Any unknown id → 404 before a row is written.
+async function assertAssigneesInWorkspace(
+  db: ReturnType<typeof getDb>,
+  assigneeIds: string[],
+  workspaceId: string,
+) {
+  const unique = [...new Set(assigneeIds)];
+  const rows = await db
+    .select({ memberId: schema.workspaceMembers.memberId })
+    .from(schema.workspaceMembers)
+    .where(
+      and(
+        eq(schema.workspaceMembers.workspaceId, workspaceId),
+        inArray(schema.workspaceMembers.memberId, unique),
+        eq(schema.workspaceMembers.isActive, 1),
+        isNull(schema.workspaceMembers.deletedAt),
+      ),
+    );
+  const found = new Set(rows.map((r) => r.memberId));
+  const missing = unique.filter((id) => !found.has(id));
+  if (missing.length > 0) {
+    throw new HTTPException(404, { message: "Assignee not found in this workspace" });
+  }
+}
+
 // Entity-resolve helpers: map an entity id to its project/workspace, then
 // run the same owner-or-member check. Close IDOR on tools keyed only by id.
 async function assertIssueAccess(db: ReturnType<typeof getDb>, issueId: string, userId: string) {
@@ -932,8 +1003,9 @@ async function assertPageAccess(db: ReturnType<typeof getDb>, pageId: string, us
   if (ws.ownerId !== userId && !(await isWorkspaceMember(db, pg.workspaceId, userId)))
     throw new HTTPException(403, { message: "Not a member of this workspace" });
 }
-
-async function handleTool(
+// Exported for tests: DEV-19 authz suites drive the tool handler directly
+// with a mocked db instead of standing up the whole MCP HTTP transport.
+export async function handleTool(
   db: ReturnType<typeof getDb>,
   env: Env,
   toolName: string,
@@ -1039,6 +1111,20 @@ async function handleTool(
       // The project must belong to the named workspace — otherwise a member of
       // ws A could mint issues inside ws B by passing its project UUID.
       await assertProjectInWorkspace(db, projectId, workspaceId);
+      // Same binding for the optional state/label/assignee ids: they must
+      // belong to the named workspace, else the issue row (or its join rows)
+      // would reference a foreign workspace's entities.
+      if (params.state_id) {
+        await assertStateInWorkspace(db, params.state_id as string, workspaceId);
+      }
+      if (Array.isArray(params.label_ids)) {
+        for (const labelId of params.label_ids as string[]) {
+          await assertLabelInWorkspace(db, labelId, workspaceId);
+        }
+      }
+      if (Array.isArray(params.assignee_ids) && (params.assignee_ids as string[]).length > 0) {
+        await assertAssigneesInWorkspace(db, params.assignee_ids as string[], workspaceId);
+      }
       const id = uuid();
       const now = nowISO();
       const row: typeof schema.issues.$inferInsert = {
@@ -1088,7 +1174,11 @@ async function handleTool(
     case "update_issue": {
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
       const updates: Record<string, unknown> = { updatedAt: nowISO() };
-      if (params.state_id !== undefined) updates.stateId = params.state_id;
+      if (params.state_id !== undefined) {
+        // The new state must live in the named workspace before any write.
+        await assertStateInWorkspace(db, params.state_id as string, workspaceId);
+        updates.stateId = params.state_id;
+      }
       if (params.priority !== undefined) updates.priority = params.priority;
       if (params.name !== undefined) updates.name = params.name;
       if (params.description_html !== undefined) updates.descriptionHtml = params.description_html;
@@ -1239,6 +1329,17 @@ async function handleTool(
     }
     case "set_assignee": {
       await assertIssueAccess(db, params.issue_id as string, userId);
+      // assertIssueAccess checks the CALLER, not the assignee — resolve the
+      // issue's workspace and require the assignee be an active member of it.
+      const [iss] = await db
+        .select({ workspaceId: schema.issues.workspaceId })
+        .from(schema.issues)
+        .where(
+          and(eq(schema.issues.id, params.issue_id as string), isNull(schema.issues.deletedAt)),
+        )
+        .limit(1);
+      if (!iss) throw new HTTPException(404, { message: "Issue not found" });
+      await assertAssigneesInWorkspace(db, [params.assignee_id as string], iss.workspaceId);
       const id = uuid();
       const now = nowISO();
       await db.insert(schema.issueAssignees).values({
