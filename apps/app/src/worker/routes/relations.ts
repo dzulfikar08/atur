@@ -9,7 +9,7 @@ export const relationRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .get("/:issueId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const issueId = c.req.param("issueId")!;
-    const relations = await relationsService.list(db, issueId);
+    const relations = await relationsService.list(db, issueId, c.get("workspace").id);
     return c.json(relations);
   })
   .post("/", authMiddleware, requireWorkspaceMember, async (c) => {

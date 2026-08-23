@@ -38,27 +38,42 @@ export async function create(
   });
 }
 
-export async function list(db: DbClient, issueId: string) {
-  return relationsRepo.listByIssue(db, issueId);
-}
-
-// issue_relations has no workspace column, so scope via the primary issue:
-// the relation is only removable when its issue belongs to the caller's
-// workspace (route guard). Otherwise 404 — same as a missing relation.
-export async function remove(db: DbClient, id: string, workspaceId: string) {
-  const relation = await relationsRepo.findById(db, id);
-  if (!relation) throw new HTTPException(404, { message: "Relation not found" });
+// List an issue's relations under the caller's workspace (route guard):
+// resolve the issue first — a foreign issue UUID must 404, not leak its
+// relation graph.
+export async function list(db: DbClient, issueId: string, workspaceId: string) {
   const [issue] = await db
     .select({ id: schema.issues.id })
     .from(schema.issues)
     .where(
       and(
-        eq(schema.issues.id, relation.issueId),
+        eq(schema.issues.id, issueId),
         eq(schema.issues.workspaceId, workspaceId),
         isNull(schema.issues.deletedAt),
       ),
     )
     .limit(1);
-  if (!issue) throw new HTTPException(404, { message: "Relation not found" });
+  if (!issue) throw new HTTPException(404, { message: "Issue not found" });
+  return relationsRepo.listByIssue(db, issueId);
+}
+
+// issue_relations has no workspace column, so scope via BOTH sides: the
+// relation is only removable when its issue AND its related issue belong to
+// the caller's workspace (route guard) — mirror of create's both-sided check.
+// Otherwise 404 — same as a missing relation.
+export async function remove(db: DbClient, id: string, workspaceId: string) {
+  const relation = await relationsRepo.findById(db, id);
+  if (!relation) throw new HTTPException(404, { message: "Relation not found" });
+  const rows = await db
+    .select({ id: schema.issues.id })
+    .from(schema.issues)
+    .where(
+      and(
+        inArray(schema.issues.id, [relation.issueId, relation.relatedIssueId]),
+        eq(schema.issues.workspaceId, workspaceId),
+        isNull(schema.issues.deletedAt),
+      ),
+    );
+  if (rows.length !== 2) throw new HTTPException(404, { message: "Relation not found" });
   await relationsRepo.removeRelation(db, id);
 }
