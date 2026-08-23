@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { DbClient } from "../db/index";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import * as schema from "../db/schema";
 import * as workspaceRepo from "../repositories/workspaces";
 import * as projectRepo from "../repositories/projects";
 import { HTTPException } from "hono/http-exception";
@@ -54,6 +56,54 @@ function deriveIdentifier(name: string): string {
   );
 }
 
+// Config-id binding (DEV-21): defaultStateId must resolve in the project's
+// workspace (alive), and lead/assignee ids must be the workspace owner or an
+// active member — project config is consumed by every issue created in the
+// project, so a foreign id would leak into all of them.
+async function assertProjectIdsInWorkspace(
+  db: DbClient,
+  workspaceId: string,
+  ids: { stateId?: string | null; userIds?: (string | null | undefined)[] },
+) {
+  if (ids.stateId) {
+    const [st] = await db
+      .select({ id: schema.states.id })
+      .from(schema.states)
+      .where(
+        and(
+          eq(schema.states.id, ids.stateId),
+          eq(schema.states.workspaceId, workspaceId),
+          isNull(schema.states.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!st) throw new HTTPException(404, { message: "State not found" });
+  }
+  const users = [...new Set((ids.userIds ?? []).filter((u): u is string => !!u))];
+  if (users.length === 0) return;
+  const [ws] = await db
+    .select({ ownerId: schema.workspaces.ownerId })
+    .from(schema.workspaces)
+    .where(eq(schema.workspaces.id, workspaceId))
+    .limit(1);
+  if (!ws) throw new HTTPException(404, { message: "Workspace not found" });
+  const rows = await db
+    .select({ id: schema.workspaceMembers.memberId })
+    .from(schema.workspaceMembers)
+    .where(
+      and(
+        eq(schema.workspaceMembers.workspaceId, workspaceId),
+        inArray(schema.workspaceMembers.memberId, users),
+        eq(schema.workspaceMembers.isActive, 1),
+        isNull(schema.workspaceMembers.deletedAt),
+      ),
+    );
+  const ok = new Set([...rows.map((r) => r.id), ws.ownerId]);
+  if (users.some((u) => !ok.has(u))) {
+    throw new HTTPException(404, { message: "Assignee not found" });
+  }
+}
+
 export async function create(
   db: DbClient,
   workspaceSlug: string,
@@ -79,6 +129,9 @@ export async function create(
     if (await projectRepo.identifierExists(db, workspace.id, identifier))
       throw new HTTPException(409, { message: "Could not derive a unique identifier" });
   }
+  await assertProjectIdsInWorkspace(db, workspace.id, {
+    userIds: [data.projectLeadId, data.defaultAssigneeId],
+  });
   const project = await projectRepo.create(db, {
     ...data,
     identifier,
@@ -123,6 +176,10 @@ export async function update(
   const project = await projectRepo.findById(db, projectId);
   if (!project || project.workspaceId !== workspace.id)
     throw new HTTPException(404, { message: "Project not found" });
+  await assertProjectIdsInWorkspace(db, workspace.id, {
+    stateId: data.defaultStateId,
+    userIds: [data.projectLeadId, data.defaultAssigneeId],
+  });
   // Boolean → 0/1 int for the sqlite column; never reseeds states — flagging an
   // existing project must not touch its workflow.
   const { isPipeline, ...rest } = data;

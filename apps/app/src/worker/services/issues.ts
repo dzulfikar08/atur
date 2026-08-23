@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { v4 as uuid } from "uuid";
 import { HTTPException } from "hono/http-exception";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { DbClient } from "../db/index";
 import * as schema from "../db/schema";
 import * as issuesRepo from "../repositories/issues";
@@ -476,8 +476,10 @@ async function enrichIssue(
   db: DbClient,
   issue: NonNullable<Awaited<ReturnType<typeof issuesRepo.findById>>>,
 ) {
-  const labels = issue ? await issuesRepo.listLabels(db, issue.id) : [];
-  const assignees = issue ? await issuesRepo.listAssignees(db, issue.id) : [];
+  // Workspace-scoped reads (DEV-21 belt-and-braces): legacy cross-workspace
+  // link rows render empty instead of leaking foreign names/emails.
+  const labels = issue ? await issuesRepo.listLabels(db, issue.id, issue.workspaceId) : [];
+  const assignees = issue ? await issuesRepo.listAssignees(db, issue.id, issue.workspaceId) : [];
 
   let state = null;
   if (issue?.stateId) {
@@ -541,10 +543,15 @@ export async function enrichIssues(
     })
     .from(schema.issueAssignees)
     .innerJoin(schema.users, eq(schema.issueAssignees.assigneeId, schema.users.id))
+    .innerJoin(schema.issues, eq(schema.issueAssignees.issueId, schema.issues.id))
     .where(
       and(
         inArray(schema.issueAssignees.issueId, issueIds),
         isNull(schema.issueAssignees.deletedAt),
+        // Belt-and-braces (DEV-21): an assignee only renders when they are an
+        // active member of the OWNING issue's workspace (correlated to the
+        // joined issues row). Legacy foreign link rows drop out here.
+        sql`EXISTS (SELECT 1 FROM workspace_members wm WHERE wm.member_id = ${schema.users.id} AND wm.workspace_id = ${schema.issues.workspaceId} AND wm.is_active = 1 AND wm.deleted_at IS NULL)`,
       ),
     );
 
@@ -560,6 +567,7 @@ export async function enrichIssues(
       id: schema.labels.id,
       name: schema.labels.name,
       color: schema.labels.color,
+      workspaceId: schema.labels.workspaceId,
     })
     .from(schema.issueLabels)
     .innerJoin(schema.labels, eq(schema.issueLabels.labelId, schema.labels.id))
@@ -582,12 +590,17 @@ export async function enrichIssues(
         displayName: a.displayName,
         avatar: a.avatar,
       })) ?? [];
+    // Workspace filter mirrors the state rule: legacy foreign label links
+    // render empty instead of leaking names/colors.
     const labels =
-      labelMap.get(issue.id)?.map((l) => ({
-        id: l.id,
-        name: l.name,
-        color: l.color,
-      })) ?? [];
+      labelMap
+        .get(issue.id)
+        ?.filter((l) => l.workspaceId === issue.workspaceId)
+        .map((l) => ({
+          id: l.id,
+          name: l.name,
+          color: l.color,
+        })) ?? [];
     // Only render a state whose workspace matches the issue's — legacy
     // cross-workspace rows render stateless instead of leaking foreign names.
     const stateRow = issue.stateId ? stateMap.get(issue.stateId) : undefined;

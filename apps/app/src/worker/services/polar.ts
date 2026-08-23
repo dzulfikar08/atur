@@ -180,6 +180,9 @@ export async function resolvePipeline(
         and(
           eq(schema.states.id, defaultStateId),
           eq(schema.states.workspaceId, settings.workspaceId),
+          // Project-scoped (DEV-21): a state from a DIFFERENT project in the
+          // same workspace must not become the pipeline default.
+          eq(schema.states.projectId, projectId),
           isNull(schema.states.deletedAt),
         ),
       )
@@ -266,9 +269,16 @@ async function moveDealToGroup(
   issueId: string,
   group: string,
 ) {
-  const projectId = await boundPipelineProject(db, settings);
-  if (!projectId) return;
-  const stateId = await findStateByGroup(db, projectId, group);
+  // Stage moves key on the ISSUE's own project (DEV-21), not the configured
+  // pipeline project — after a config fallback these can differ, and a
+  // cross-project state would be stamped on the issue.
+  const [issue] = await db
+    .select({ projectId: schema.issues.projectId })
+    .from(schema.issues)
+    .where(and(eq(schema.issues.id, issueId), isNull(schema.issues.deletedAt)))
+    .limit(1);
+  if (!issue) return;
+  const stateId = await findStateByGroup(db, issue.projectId, group);
   if (!stateId) return;
   await issuesService.update(db, issueId, { state_id: stateId });
 }
