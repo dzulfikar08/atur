@@ -172,13 +172,7 @@ async function applyFactWrite(
   }
   // Supersede older open facts for this (target, field) — the newest evidence
   // wins; history is kept via SUPERSEDED rows.
-  await factsRepo.supersedeFacts(
-    db,
-    workspaceId,
-    { customerId, companyId },
-    fact.field,
-    fact.id,
-  );
+  await factsRepo.supersedeFacts(db, workspaceId, { customerId, companyId }, fact.field, fact.id);
 }
 
 // ── Rep decisions ────────────────────────────────────────────────────────────
@@ -241,4 +235,3 @@ export async function listFacts(
   const { rows, total } = await factsRepo.listFacts(db, workspaceId, opts);
   return paginatedResponse(rows, total, opts.offset, opts.limit);
 }
-

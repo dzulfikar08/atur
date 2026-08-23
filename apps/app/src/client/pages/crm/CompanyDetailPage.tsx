@@ -44,7 +44,9 @@ export default function CompanyDetailPage() {
       </div>
       {data.description && (
         <Card>
-          <CardContent className="p-4 text-sm text-muted-foreground">{data.description}</CardContent>
+          <CardContent className="p-4 text-sm text-muted-foreground">
+            {data.description}
+          </CardContent>
         </Card>
       )}
     </div>

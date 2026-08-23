@@ -553,11 +553,7 @@ export default function ContactDetailPage() {
       )}
 
       {slug && id && (
-        <SuggestionsCard
-          slug={slug}
-          contactId={id}
-          suggestions={data.suggestions ?? []}
-        />
+        <SuggestionsCard slug={slug} contactId={id} suggestions={data.suggestions ?? []} />
       )}
 
       {slug && id && <ActivityTimelineCard activities={data.activities ?? []} />}

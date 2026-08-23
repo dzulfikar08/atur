@@ -427,7 +427,9 @@ export const api = {
   // Evidence ledger (facts) for a contact
   listContactFacts: (slug: string, contactId: string, status?: string) => {
     const qs = status ? `?status=${encodeURIComponent(status)}` : "";
-    return apiFetch<PaginatedResponse<Fact>>(`/workspaces/${slug}/contacts/${contactId}/facts/${qs}`);
+    return apiFetch<PaginatedResponse<Fact>>(
+      `/workspaces/${slug}/contacts/${contactId}/facts/${qs}`,
+    );
   },
   applyFact: (slug: string, contactId: string, factId: string) =>
     apiFetch<Fact>(`/workspaces/${slug}/contacts/${contactId}/facts/${factId}/apply/`, {
@@ -439,10 +441,7 @@ export const api = {
     }),
 
   // CRM companies (accounts)
-  listCompanies: async (
-    slug: string,
-    params?: { search?: string },
-  ): Promise<Company[]> => {
+  listCompanies: async (slug: string, params?: { search?: string }): Promise<Company[]> => {
     const qs = new URLSearchParams();
     if (params?.search) qs.set("search", params.search);
     const all: Company[] = [];

@@ -46,9 +46,9 @@ describe("scoreEvidence", () => {
 
   it("maps unknown methods to the unknown weight", () => {
     expect(evidenceMethod("carrier-pigeon")).toBe("unknown");
-    expect(
-      scoreEvidence([{ source: "x", method: "carrier-pigeon" as never }]),
-    ).toBeCloseTo(EVIDENCE_WEIGHTS.unknown);
+    expect(scoreEvidence([{ source: "x", method: "carrier-pigeon" as never }])).toBeCloseTo(
+      EVIDENCE_WEIGHTS.unknown,
+    );
   });
 });
 

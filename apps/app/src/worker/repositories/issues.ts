@@ -305,10 +305,7 @@ export async function getNextSequence(db: DbClient, projectId: string): Promise<
  * The row is seeded lazily (INSERT OR IGNORE from MAX(sequence_id)+1) so it
  * stays correct for rows created before this table existed.
  */
-export async function allocateNextSequence(
-  db: DbClient,
-  projectId: string,
-): Promise<number> {
+export async function allocateNextSequence(db: DbClient, projectId: string): Promise<number> {
   const now = nowISO();
   // Seed the counter row if it doesn't exist yet. Concurrent first-callers
   // race here; INSERT OR IGNORE means exactly one wins and the rest no-op.

@@ -53,4 +53,3 @@ companiesRoutes.delete("/:id", authMiddleware, async (c) => {
   await companiesService.deleteCompany(db, ws.id, c.req.param("id")!);
   return c.body(null, 204);
 });
-

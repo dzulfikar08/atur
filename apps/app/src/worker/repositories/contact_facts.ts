@@ -84,7 +84,9 @@ export async function getFact(
   const [row] = await db
     .select(factSelect)
     .from(schema.contactFacts)
-    .where(and(eq(schema.contactFacts.id, factId), eq(schema.contactFacts.workspaceId, workspaceId)))
+    .where(
+      and(eq(schema.contactFacts.id, factId), eq(schema.contactFacts.workspaceId, workspaceId)),
+    )
     .limit(1);
   return row ?? null;
 }
