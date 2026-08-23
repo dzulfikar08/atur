@@ -70,7 +70,16 @@ async function assertIdsInWorkspace(
     }
   }
   if (ids.assigneeIds && ids.assigneeIds.length > 0) {
+    // Owner-or-member: every other auth path accepts the workspace owner, so
+    // a workspace whose owner row is missing (or soft-deleted) from
+    // workspace_members can still have the owner assigned.
     const unique = [...new Set(ids.assigneeIds)];
+    const [ws] = await db
+      .select({ ownerId: schema.workspaces.ownerId })
+      .from(schema.workspaces)
+      .where(eq(schema.workspaces.id, workspaceId))
+      .limit(1);
+    if (!ws) throw new HTTPException(404, { message: "Workspace not found" });
     const rows = await db
       .select({ memberId: schema.workspaceMembers.memberId })
       .from(schema.workspaceMembers)
@@ -82,7 +91,9 @@ async function assertIdsInWorkspace(
           isNull(schema.workspaceMembers.deletedAt),
         ),
       );
-    if (rows.length !== unique.length) {
+    const found = new Set(rows.map((r) => r.memberId));
+    const missing = unique.filter((id) => !found.has(id) && id !== ws.ownerId);
+    if (missing.length > 0) {
       throw new HTTPException(404, { message: "Assignee not found in this workspace" });
     }
   }
@@ -412,6 +423,10 @@ export async function remove(db: DbClient, issueId: string) {
 export async function addLabel(db: DbClient, issueId: string, labelId: string) {
   const issue = await issuesRepo.findById(db, issueId);
   if (!issue) throw new HTTPException(404, { message: "Issue not found" });
+  // The label must belong to the issue's workspace — POST /:issueId/labels
+  // used to raw-insert any label UUID, and enriched reads then served the
+  // foreign label's name/color back (cross-workspace leak).
+  await assertIdsInWorkspace(db, issue.workspaceId, { labelIds: [labelId] });
   await issuesRepo.addLabel(db, issueId, labelId);
 }
 
@@ -424,6 +439,10 @@ export async function removeLabel(db: DbClient, issueId: string, labelId: string
 export async function addAssignee(db: DbClient, issueId: string, assigneeId: string) {
   const issue = await issuesRepo.findById(db, issueId);
   if (!issue) throw new HTTPException(404, { message: "Issue not found" });
+  // The assignee must be an active member (or the owner) of the issue's
+  // workspace — POST /:issueId/assignees used to raw-insert any user UUID,
+  // leaking name/email/avatar via enriched reads.
+  await assertIdsInWorkspace(db, issue.workspaceId, { assigneeIds: [assigneeId] });
   await issuesRepo.addAssignee(db, issueId, assigneeId);
   await subscribersRepo.autoFollow(db, issueId, assigneeId);
 }
@@ -437,6 +456,9 @@ export async function removeAssignee(db: DbClient, issueId: string, assigneeId: 
 export async function setAssignees(db: DbClient, issueId: string, assigneeIds: string[]) {
   const issue = await issuesRepo.findById(db, issueId);
   if (!issue) throw new HTTPException(404, { message: "Issue not found" });
+  // Whole-list validation before any mutation (dormant today, but the same
+  // binding applies if callers appear): all ids must be workspace members.
+  await assertIdsInWorkspace(db, issue.workspaceId, { assigneeIds: assigneeIds });
 
   const currentAssignees = await issuesRepo.listAssignees(db, issueId);
   const currentAssigneeIds = currentAssignees.map((a) => a.id);
