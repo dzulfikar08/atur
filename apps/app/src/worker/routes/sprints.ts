@@ -29,7 +29,7 @@ export const sprintRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .get("/:sprintId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const sprintId = c.req.param("sprintId")!;
-    const result = await sprintsService.getById(db, sprintId);
+    const result = await sprintsService.getById(db, sprintId, c.get("workspace").id);
     return c.json(result);
   })
   // update/remove (and their issue-link mutations) take the guard's workspace

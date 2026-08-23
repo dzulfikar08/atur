@@ -22,7 +22,7 @@ export const stateRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .get("/:stateId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const stateId = c.req.param("stateId")!;
-    const result = await statesService.getById(db, stateId);
+    const result = await statesService.getById(db, stateId, c.get("workspace").id);
     return c.json(result);
   })
   // update/remove take the guard's workspace id: a state UUID from another

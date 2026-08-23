@@ -20,7 +20,11 @@ export const integrationRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   })
   .get("/:integrationId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
-    const integration = await integrationService.getById(db, c.req.param("integrationId")!);
+    const integration = await integrationService.getById(
+      db,
+      c.req.param("integrationId")!,
+      c.get("workspace").id,
+    );
     return c.json(integration);
   })
   // remove takes the guard's workspace id: an integration UUID from another
