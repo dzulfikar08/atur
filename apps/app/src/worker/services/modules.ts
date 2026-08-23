@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { DbClient } from "../db/index";
 import * as modulesRepo from "../repositories/modules";
+import { and, eq, isNull } from "drizzle-orm";
+import * as schema from "../db/schema";
 import { HTTPException } from "hono/http-exception";
 import { paginationParams, paginatedResponse } from "../lib/pagination";
 import type { Context } from "hono";
@@ -99,6 +101,21 @@ export async function addIssue(
   if (!mod || mod.workspaceId !== workspaceId) {
     throw new HTTPException(404, { message: "Module not found" });
   }
+  // The issue must live in the caller's workspace too — the container check
+  // alone let a member link a foreign issue UUID into their local module
+  // (GET /:moduleId/issues then served that foreign issue's rows back).
+  const [issue] = await db
+    .select({ id: schema.issues.id })
+    .from(schema.issues)
+    .where(
+      and(
+        eq(schema.issues.id, parsed.issue_id),
+        eq(schema.issues.workspaceId, workspaceId),
+        isNull(schema.issues.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!issue) throw new HTTPException(404, { message: "Issue not found" });
   await modulesRepo.addIssue(db, moduleId, parsed.issue_id);
 }
 

@@ -487,6 +487,59 @@ describe("cross-workspace object writes are scoped to the caller's workspace", (
   });
 });
 
+// GET /:id on the bare-ID repos was workspace-unfiltered: a member of ws A
+// could read a foreign object UUID through their own slug (read-only IDOR).
+// The REAL service getById now resolve-then-compares against the guard's
+// workspace, so a foreign row 404s while a local one resolves.
+describe("bare-ID GET reads are scoped to the caller's workspace", () => {
+  const victimUuid = "11111111-2222-3333-4444-555555555555";
+
+  it("404s a foreign label UUID on GET (labels)", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    // The label exists — but in another workspace.
+    vi.mocked(labelsRepo.findById).mockResolvedValue({
+      id: victimUuid,
+      workspaceId: "ws-other",
+      deletedAt: null,
+    } as never);
+    const app = testApp();
+
+    const res = await req(app, `/api/workspaces/acme/projects/p-1/labels/${victimUuid}`);
+    expect(res.status).toBe(404);
+
+    // A label in the caller's own workspace resolves normally.
+    vi.mocked(labelsRepo.findById).mockResolvedValue({
+      id: "l-1",
+      workspaceId: "ws-1",
+      deletedAt: null,
+    } as never);
+    const allowed = await req(app, "/api/workspaces/acme/projects/p-1/labels/l-1");
+    expect(allowed.status).toBe(200);
+  });
+
+  it("404s a foreign sprint UUID on GET (sprints)", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    vi.mocked(sprintsRepo.findById).mockResolvedValue({
+      id: victimUuid,
+      workspaceId: "ws-other",
+      deletedAt: null,
+    } as never);
+    const app = testApp();
+
+    const res = await req(app, `/api/workspaces/acme/projects/p-1/sprints/${victimUuid}`);
+    expect(res.status).toBe(404);
+
+    // Same UUID in the caller's workspace resolves.
+    vi.mocked(sprintsRepo.findById).mockResolvedValue({
+      id: "s-1",
+      workspaceId: "ws-1",
+      deletedAt: null,
+    } as never);
+    const allowed = await req(app, "/api/workspaces/acme/projects/p-1/sprints/s-1");
+    expect(allowed.status).toBe(200);
+  });
+});
+
 describe("read routes enforce workspace membership", () => {
   it("rejects issue listing and detail by a non-member with 403", async () => {
     const app = testApp();

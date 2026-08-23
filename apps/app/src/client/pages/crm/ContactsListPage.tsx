@@ -36,7 +36,17 @@ const STATUS_COLORS: Record<string, string> = {
   churned: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
 };
 
-const EMPTY = { email: "", name: "", company: "", phone: "", source: "" };
+const EMPTY = {
+  email: "",
+  name: "",
+  company: "",
+  title: "",
+  seniority: "",
+  function: "",
+  linkedin_url: "",
+  phone: "",
+  source: "",
+};
 
 export default function ContactsListPage() {
   const { slug } = useParams();
@@ -54,8 +64,7 @@ export default function ContactsListPage() {
     queryKey: ["contacts", slug, search, status],
     queryFn: async () =>
       isAll
-        ? (await api.listAllContacts({ search: search || undefined, status: status || undefined }))
-            .results
+        ? api.listAllContacts({ search: search || undefined, status: status || undefined })
         : api.listContacts(slug!, { search: search || undefined, status: status || undefined }),
     enabled: !!slug,
   });
@@ -98,6 +107,10 @@ export default function ContactsListPage() {
         email: editing.email ?? "",
         name: editing.name ?? "",
         company: editing.company ?? "",
+        title: editing.title ?? "",
+        seniority: editing.seniority ?? "",
+        function: editing.function ?? "",
+        linkedin_url: editing.linkedin_url ?? "",
         phone: editing.phone ?? "",
         source: editing.source ?? "",
       });
@@ -143,6 +156,40 @@ export default function ContactsListPage() {
                 <Input
                   value={form.company}
                   onChange={(e) => setForm({ ...form, company: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Title</label>
+                <Input
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  placeholder="CEO, Founder, …"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium">Seniority</label>
+                  <Input
+                    value={form.seniority}
+                    onChange={(e) => setForm({ ...form, seniority: e.target.value })}
+                    placeholder="executive, senior…"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Function</label>
+                  <Input
+                    value={form.function}
+                    onChange={(e) => setForm({ ...form, function: e.target.value })}
+                    placeholder="sales, eng…"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium">LinkedIn</label>
+                <Input
+                  value={form.linkedin_url}
+                  onChange={(e) => setForm({ ...form, linkedin_url: e.target.value })}
+                  placeholder="https://linkedin.com/in/…"
                 />
               </div>
               <div>
@@ -196,6 +243,40 @@ export default function ContactsListPage() {
                 <Input
                   value={form.company}
                   onChange={(e) => setForm({ ...form, company: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Title</label>
+                <Input
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  placeholder="CEO, Founder, …"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium">Seniority</label>
+                  <Input
+                    value={form.seniority}
+                    onChange={(e) => setForm({ ...form, seniority: e.target.value })}
+                    placeholder="executive, senior…"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Function</label>
+                  <Input
+                    value={form.function}
+                    onChange={(e) => setForm({ ...form, function: e.target.value })}
+                    placeholder="sales, eng…"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium">LinkedIn</label>
+                <Input
+                  value={form.linkedin_url}
+                  onChange={(e) => setForm({ ...form, linkedin_url: e.target.value })}
+                  placeholder="https://linkedin.com/in/…"
                 />
               </div>
               <div>
@@ -292,51 +373,63 @@ export default function ContactsListPage() {
                 </tr>
               </thead>
               <tbody>
-                {data?.map((c: any) => (
-                  <tr key={c.id} className="border-t hover:bg-muted/30">
-                    <td className="p-3">
-                      <Link
-                        to={`/${c.workspace_slug || slug}/crm/contacts/${c.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {c.name || c.email || "—"}
-                      </Link>
-                    </td>
-                    <td className="p-3 text-muted-foreground">{c.email || "—"}</td>
-                    <td className="p-3 text-muted-foreground">{c.company || "—"}</td>
-                    <td className="p-3">
-                      <Badge variant="secondary" className={STATUS_COLORS[c.status] || ""}>
-                        {c.status}
-                      </Badge>
-                    </td>
-                    {isAll && (
-                      <td className="p-3 text-muted-foreground">{c.workspace_name || "—"}</td>
-                    )}
-                    {!isAll && (
+                {data?.map((c: any) => {
+                  const stale =
+                    !!c.last_activity_at &&
+                    Date.now() - Date.parse(c.last_activity_at) > 30 * 24 * 60 * 60 * 1000;
+                  return (
+                    <tr key={c.id} className="border-t hover:bg-muted/30">
                       <td className="p-3">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-7 w-7">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setEditing(c)}>
-                              <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => setDeleteTarget(c)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <Link
+                          to={`/${c.workspace_slug || slug}/crm/contacts/${c.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {c.name || c.email || "—"}
+                        </Link>
+                        {stale && (
+                          <Badge variant="destructive" className="ml-2 text-[10px]">
+                            stale
+                          </Badge>
+                        )}
                       </td>
-                    )}
-                  </tr>
-                ))}
+                      <td className="p-3 text-muted-foreground">{c.email || "—"}</td>
+                      <td className="p-3 text-muted-foreground">
+                        {c.company_name || c.company || "—"}
+                      </td>
+                      <td className="p-3">
+                        <Badge variant="secondary" className={STATUS_COLORS[c.status] || ""}>
+                          {c.status}
+                        </Badge>
+                      </td>
+                      {isAll && (
+                        <td className="p-3 text-muted-foreground">{c.workspace_name || "—"}</td>
+                      )}
+                      {!isAll && (
+                        <td className="p-3">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-7 w-7">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => setEditing(c)}>
+                                <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => setDeleteTarget(c)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
                 {data?.length === 0 && (
                   <tr>
                     <td colSpan={isAll ? 6 : 5} className="p-6 text-center text-muted-foreground">

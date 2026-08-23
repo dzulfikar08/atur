@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
-import type { ContactEmailLogEntry, PolarLink } from "@/lib/api";
+import type { ContactEmailLogEntry, CrmActivity, Fact, PolarLink } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
@@ -20,8 +21,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Mail } from "@/lib/icons";
+import { ArrowLeft, Mail, ExternalLink } from "@/lib/icons";
 import { toast } from "sonner";
+import { formatDistanceToNow } from "date-fns";
 
 import { money } from "@/lib/format";
 
@@ -302,6 +304,168 @@ function EmailHistoryCard({ emails }: { emails: ContactEmailLogEntry[] }) {
   );
 }
 
+const ACTIVITY_LABELS: Record<CrmActivity["type"], string> = {
+  NOTE: "Note",
+  CALL: "Call",
+  EMAIL: "Email",
+  MEETING: "Meeting",
+  TASK: "Task",
+  STAGE_CHANGE: "Stage change",
+  ENRICHMENT: "Enrichment",
+};
+
+const ACTIVITY_COLORS: Record<CrmActivity["type"], string> = {
+  NOTE: "bg-slate-400",
+  CALL: "bg-violet-500",
+  EMAIL: "bg-blue-500",
+  MEETING: "bg-amber-500",
+  TASK: "bg-emerald-500",
+  STAGE_CHANGE: "bg-indigo-500",
+  ENRICHMENT: "bg-pink-500",
+};
+
+function ActivityTimelineCard({ activities }: { activities: CrmActivity[] }) {
+  if (activities.length === 0) return null;
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <p className="text-sm font-medium">Activity timeline</p>
+        <ul className="space-y-3">
+          {activities.map((a) => (
+            <li key={a.id} className="flex gap-3 text-sm">
+              <span
+                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${ACTIVITY_COLORS[a.type] ?? "bg-slate-400"}`}
+              />
+              <div className="min-w-0">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-medium">
+                    {ACTIVITY_LABELS[a.type] ?? a.type}
+                    {a.subject ? ` — ${a.subject}` : ""}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {formatDistanceToNow(new Date(a.occurred_at), { addSuffix: true })}
+                  </span>
+                </div>
+                {a.body && <p className="text-muted-foreground truncate">{a.body}</p>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+const BAND_COLORS: Record<string, string> = {
+  VERIFIED: "bg-emerald-100 text-emerald-700",
+  PROBABLE: "bg-blue-100 text-blue-700",
+  POSSIBLE: "bg-amber-100 text-amber-700",
+};
+
+function SuggestionsCard({
+  slug,
+  contactId,
+  suggestions,
+}: {
+  slug: string;
+  contactId: string;
+  suggestions: Fact[];
+}) {
+  const qc = useQueryClient();
+  if (suggestions.length === 0) return null;
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["contact", slug, contactId] });
+
+  const applyMut = useMutation({
+    mutationFn: (factId: string) => api.applyFact(slug, contactId, factId),
+    onSuccess: () => {
+      toast.success("Suggestion applied");
+      invalidate();
+    },
+    onError: (err) =>
+      toast.error("Failed to apply", {
+        description: err instanceof ApiError ? `${err.status}: ${err.message}` : undefined,
+      }),
+  });
+  const dismissMut = useMutation({
+    mutationFn: (factId: string) => api.dismissFact(slug, contactId, factId),
+    onSuccess: () => {
+      toast.success("Suggestion dismissed");
+      invalidate();
+    },
+  });
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <p className="text-sm font-medium">
+          Suggestions <span className="text-muted-foreground">({suggestions.length})</span>
+        </p>
+        <ul className="space-y-2">
+          {suggestions.map((f) => {
+            let evidence: { source: string; method: string; url?: string }[] = [];
+            try {
+              evidence = f.evidence ? JSON.parse(f.evidence) : [];
+            } catch {
+              evidence = [];
+            }
+            return (
+              <li key={f.id} className="rounded-md border p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm">
+                    <span className="font-medium">{f.field}:</span> {f.value}
+                  </span>
+                  <Badge className={BAND_COLORS[f.band] ?? ""}>{f.band}</Badge>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                  <span>score {f.score.toFixed(1)}</span>
+                  {evidence.map((e, i) => (
+                    <Badge key={i} variant="outline">
+                      {e.method}
+                      {e.url && (
+                        <a
+                          href={e.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="ml-1 inline-flex items-center hover:underline"
+                          onClick={(ev) => ev.stopPropagation()}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </Badge>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    disabled={applyMut.isPending}
+                    onClick={() => applyMut.mutate(f.id)}
+                  >
+                    Apply
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={dismissMut.isPending}
+                    onClick={() => dismissMut.mutate(f.id)}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+// A contact is "stale" when its last activity is older than 30 days.
+const STALE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
+
 export default function ContactDetailPage() {
   const { slug, id } = useParams();
   const { data, isLoading } = useQuery({
@@ -313,6 +477,9 @@ export default function ContactDetailPage() {
   if (isLoading) return <p className="text-muted-foreground">Loading…</p>;
   if (!data) return <p>Not found.</p>;
   const c = data.contact;
+  const stale =
+    !!c.last_activity_at && Date.now() - Date.parse(c.last_activity_at) > STALE_AFTER_MS;
+  const initials = (c.name || c.email || "?").slice(0, 2).toUpperCase();
 
   return (
     <div className="space-y-4">
@@ -323,14 +490,40 @@ export default function ContactDetailPage() {
         <ArrowLeft className="mr-1 h-4 w-4" />
         Contacts
       </Link>
-      <div>
-        <h1 className="text-2xl font-bold">{c.name || c.email || "Contact"}</h1>
-        <p className="text-muted-foreground text-sm">{c.email || "—"}</p>
-        <div className="flex flex-wrap gap-2 mt-2">
-          <Badge variant="secondary">{c.status}</Badge>
-          {c.company && <Badge variant="outline">{c.company}</Badge>}
-          {c.phone && <Badge variant="outline">{c.phone}</Badge>}
-          {c.source && <Badge variant="outline">src: {c.source}</Badge>}
+      <div className="flex items-start gap-3">
+        <Avatar className="h-12 w-12">
+          <AvatarImage src={c.image_url ?? undefined} alt={c.name ?? "Contact"} />
+          <AvatarFallback>{initials}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold">{c.name || c.email || "Contact"}</h1>
+          <p className="text-muted-foreground text-sm">{c.email || "—"}</p>
+          <div className="flex flex-wrap gap-2 mt-2">
+            <Badge variant="secondary">{c.status}</Badge>
+            {c.title && <Badge variant="outline">{c.title}</Badge>}
+            {c.seniority && <Badge variant="outline">{c.seniority}</Badge>}
+            {c.function && <Badge variant="outline">{c.function}</Badge>}
+            {c.company && <Badge variant="outline">{c.company}</Badge>}
+            {c.phone && <Badge variant="outline">{c.phone}</Badge>}
+            {c.source && <Badge variant="outline">src: {c.source}</Badge>}
+            {c.enriched_at && (
+              <Badge variant="outline" className="text-emerald-600">
+                enriched {formatDistanceToNow(new Date(c.enriched_at), { addSuffix: true })}
+              </Badge>
+            )}
+            {stale && <Badge variant="destructive">stale</Badge>}
+          </div>
+          {c.linkedin_url && (
+            <a
+              href={c.linkedin_url}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              LinkedIn
+            </a>
+          )}
         </div>
       </div>
 
@@ -341,6 +534,29 @@ export default function ContactDetailPage() {
       )}
 
       {slug && id && <PolarPanel slug={slug} contactId={id} />}
+
+      {data.company && (
+        <Card>
+          <CardContent className="p-4 space-y-2">
+            <p className="text-sm font-medium">Company</p>
+            <Link
+              to={`/${slug}/crm/companies/${data.company.id}`}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              {data.company.name}
+            </Link>
+            {data.company.domain && (
+              <p className="text-xs text-muted-foreground">{data.company.domain}</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {slug && id && (
+        <SuggestionsCard slug={slug} contactId={id} suggestions={data.suggestions ?? []} />
+      )}
+
+      {slug && id && <ActivityTimelineCard activities={data.activities ?? []} />}
 
       <EmailHistoryCard emails={data.emails ?? []} />
 

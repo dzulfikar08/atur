@@ -1,6 +1,14 @@
 import { eq, and, like, desc, sql, inArray, isNull } from "drizzle-orm";
 import type { DbClient } from "../db/index";
-import { issues, issueAssignees, issueLabels, labels, users, issueSequences } from "../db/schema";
+import {
+  issues,
+  issueAssignees,
+  issueLabels,
+  labels,
+  users,
+  issueSequences,
+  issueSequenceCounters,
+} from "../db/schema";
 import { v4 as uuid } from "uuid";
 import { nowISO } from "../lib/pagination";
 
@@ -113,7 +121,7 @@ export async function create(
   data: {
     id: string;
     name: string;
-    sequenceId: number;
+    sequenceId?: number;
     projectId: string;
     workspaceId: string;
     priority?: string;
@@ -128,10 +136,14 @@ export async function create(
   },
 ) {
   const now = nowISO();
+  // Atomic allocation: concurrent creators get distinct sequence ids via the
+  // per-project counter (UPDATE ... RETURNING), no retry loop needed. An
+  // explicit sequenceId is still honored for imports/backfills.
+  const sequenceId = data.sequenceId ?? (await allocateNextSequence(db, data.projectId));
   const row: typeof issues.$inferInsert = {
     id: data.id,
     name: data.name,
-    sequenceId: data.sequenceId,
+    sequenceId,
     projectId: data.projectId,
     workspaceId: data.workspaceId,
     priority: data.priority ?? "none",
@@ -146,10 +158,7 @@ export async function create(
     createdAt: now,
     updatedAt: now,
   };
-  // sequenceId is MAX(sequence_id)+1, which is not atomic across concurrent
-  // creators. insertIssueWithRetry re-derives it and retries on the
-  // uq_issue_sequence collision instead of surfacing a 500 to the caller.
-  await insertIssueWithRetry(db, row);
+  await db.insert(issues).values(row);
 
   await db.insert(issueSequences).values({
     id: uuid(),
@@ -271,8 +280,9 @@ export async function listAssignees(db: DbClient, issueId: string) {
 }
 
 export async function getNextSequence(db: DbClient, projectId: string): Promise<number> {
-  // Derive from the issues table itself (MAX sequence_id) so it stays correct
-  // for rows seeded/imported without an issue_sequences entry.
+  // Backstop for seeding/imports that predate the counter table: read the
+  // max sequence id assigned so far (never reused — soft-deleted rows keep
+  // theirs), which keeps the lazy-seeded counter ahead of existing data.
   const [row] = await db
     .select({ maxSeq: sql<number>`COALESCE(MAX(${issues.sequenceId}), 0)` })
     .from(issues)
@@ -281,31 +291,103 @@ export async function getNextSequence(db: DbClient, projectId: string): Promise<
 }
 
 /**
+ * Atomically allocate the next sequence id for a project.
+ *
+ * MAX(sequence_id)+1 is not atomic across concurrent creators: every creator
+ * reads the same MAX and proposes the same number, the unique index lets one
+ * through and the rest collide. With the old retry loop the k-th of k
+ * concurrent creators needs k-1 retries, so 12+ concurrent creators
+ * deterministically exhaust the 10-retry cap and 500.
+ *
+ * Instead a single-row counter per project is bumped with one
+ * UPDATE ... RETURNING statement, which D1/SQLite executes atomically — two
+ * concurrent callers always get two distinct numbers, no retries needed.
+ * The row is seeded lazily (INSERT OR IGNORE from MAX(sequence_id)+1) so it
+ * stays correct for rows created before this table existed.
+ */
+export async function allocateNextSequence(db: DbClient, projectId: string): Promise<number> {
+  const now = nowISO();
+  // Seed the counter row if it doesn't exist yet. Concurrent first-callers
+  // race here; INSERT OR IGNORE means exactly one wins and the rest no-op.
+  const seed = await db
+    .insert(issueSequenceCounters)
+    .values({
+      projectId,
+      nextSequence: 0, // placeholder — reconciled from MAX below
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoNothing()
+    .returning({ projectId: issueSequenceCounters.projectId });
+
+  if (seed.length === 0) {
+    // Another request created the row concurrently. Nothing to do — the
+    // UPDATE below reads whatever value it has.
+  } else {
+    // We created the row: initialize it from MAX(sequence_id)+1 so it stays
+    // ahead of any issues that predate the counter table. Guard with MAX so
+    // we never LOWER a counter a concurrent creator already bumped between
+    // our INSERT OR IGNORE and this UPDATE.
+    const [row] = await db
+      .select({ maxSeq: sql<number>`COALESCE(MAX(${issues.sequenceId}), 0)` })
+      .from(issues)
+      .where(eq(issues.projectId, projectId));
+    const maxSeq = row?.maxSeq ?? 0;
+    await db
+      .update(issueSequenceCounters)
+      .set({
+        nextSequence: sql`MAX(${issueSequenceCounters.nextSequence}, ${maxSeq + 1})`,
+        updatedAt: now,
+      })
+      .where(eq(issueSequenceCounters.projectId, projectId));
+  }
+
+  // Atomic bump: this single statement assigns a unique number even under
+  // heavy concurrency. If another request just seeded the row (we lost the
+  // INSERT OR IGNORE race), the UPDATE still finds it and returns a value.
+  const bumped = await db
+    .update(issueSequenceCounters)
+    .set({
+      nextSequence: sql`${issueSequenceCounters.nextSequence} + 1`,
+      updatedAt: now,
+    })
+    .where(eq(issueSequenceCounters.projectId, projectId))
+    .returning({ nextSequence: issueSequenceCounters.nextSequence });
+
+  const next = bumped[0]?.nextSequence;
+  if (next === undefined) {
+    // Extremely unlikely: the row was deleted between seed and bump. Fall
+    // back to the read-based allocator rather than looping.
+    return getNextSequence(db, projectId);
+  }
+  return next;
+}
+
+/**
  * True when `error` is a unique-constraint violation: SQLite/D1 reports these as
- * "UNIQUE constraint failed: ..." (the `uq_issue_sequence` index on issues), and
- * Postgres reports SQLSTATE 23505. We only retry on these — never on NOT NULL
- * or foreign-key failures.
+ * "UNIQUE constraint failed: ..." (the `uq_issue_sequence` index on issues) and
+ * Postgres reports SQLSTATE 23505. The D1 runtime wraps the driver error, so the
+ * constraint detail can be nested several `cause` levels deep — walk the whole
+ * chain before deciding. We only retry on these — never on NOT NULL or
+ * foreign-key failures.
  */
 export function isUniqueConstraintError(error: unknown): boolean {
-  const cause = (error as { cause?: unknown })?.cause as
-    | { message?: string; code?: string }
-    | undefined;
-  const msg = (error as { message?: string })?.message ?? cause?.message ?? "";
-  const code = (error as { code?: string })?.code ?? cause?.code ?? "";
-  return /(^|[^a-z])23505($|[^a-z])|unique|uq_issue_sequence/i.test(`${code} ${msg}`);
+  let current: unknown = error;
+  const parts: string[] = [];
+  for (let depth = 0; depth < 8 && current != null; depth++) {
+    const record = current as { message?: unknown; code?: unknown; cause?: unknown };
+    if (typeof record.message === "string") parts.push(record.message);
+    if (typeof record.code === "string") parts.push(record.code);
+    current = record.cause;
+  }
+  return /(^|[^a-z])23505($|[^a-z])|unique|uq_issue_sequence/i.test(parts.join(" "));
 }
 
 const MAX_SEQUENCE_RETRIES = 10;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**
- * Inserts an issue row, re-deriving a fresh sequenceId (via getNextSequence) and
- * retrying on a `uq_issue_sequence` collision. sequenceId is assigned as
- * MAX(sequence_id)+1, which is not atomic across concurrent creators; the unique
- * index turns the collision into a catchable error, and a short jittered backoff
- * desynchronizes contending writers so the loop converges.
- */
+/** @deprecated Superseded by allocateNextSequence (atomic). Kept for imports/backfills that need the read-only MAX+1 form. */
 export async function insertIssueWithRetry(
   db: DbClient,
   row: typeof issues.$inferInsert,

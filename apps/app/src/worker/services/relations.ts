@@ -57,10 +57,13 @@ export async function list(db: DbClient, issueId: string, workspaceId: string) {
   return relationsRepo.listByIssue(db, issueId);
 }
 
-// issue_relations has no workspace column, so scope via BOTH sides: the
-// relation is only removable when its issue AND its related issue belong to
-// the caller's workspace (route guard) — mirror of create's both-sided check.
-// Otherwise 404 — same as a missing relation.
+// issue_relations has no workspace column, so scope via the issues: the
+// relation is only removable when BOTH endpoints belong to the caller's
+// workspace (route guard). Because relations are directional, a foreign issue
+// can sit on either side — scoping only the primary (relation.issueId) lets a
+// member of that side's workspace delete a relation linking their local issue
+// to a foreign one (and leak the reference via the related list). Otherwise
+// 404 — same as a missing relation.
 export async function remove(db: DbClient, id: string, workspaceId: string) {
   const relation = await relationsRepo.findById(db, id);
   if (!relation) throw new HTTPException(404, { message: "Relation not found" });
@@ -74,6 +77,10 @@ export async function remove(db: DbClient, id: string, workspaceId: string) {
         isNull(schema.issues.deletedAt),
       ),
     );
-  if (rows.length !== 2) throw new HTTPException(404, { message: "Relation not found" });
+  // SQL IN dedupes, so a self-relation (issueId === relatedIssueId, mintable
+  // via MCP) matches one row, not two — size the expectation accordingly or
+  // those rows become permanently undeletable over HTTP.
+  const expected = relation.issueId === relation.relatedIssueId ? 1 : 2;
+  if (rows.length !== expected) throw new HTTPException(404, { message: "Relation not found" });
   await relationsRepo.removeRelation(db, id);
 }

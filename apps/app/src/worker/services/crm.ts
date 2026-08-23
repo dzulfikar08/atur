@@ -24,6 +24,10 @@ import {
 } from "./crm_email_templates";
 import * as emailVariantsRepo from "../repositories/crm_email_variants";
 import * as emailLogRepo from "../repositories/crm_email_log";
+import * as activitiesService from "./crm_activities";
+import * as activitiesRepo from "../repositories/crm_activities";
+import * as factsRepo from "../repositories/contact_facts";
+import * as companiesRepo from "../repositories/companies";
 
 // ── Contact (lead / customer) schemas ──
 export const createContactSchema = z.object({
@@ -35,12 +39,19 @@ export const createContactSchema = z.object({
 });
 export const updateContactSchema = createContactSchema.partial().extend({
   status: z.enum(["lead", "active", "churned"]).optional(),
+  company_id: z.string().uuid().nullable().optional(),
+  title: z.string().max(200).nullable().optional(),
+  seniority: z.string().max(60).nullable().optional(),
+  function: z.string().max(120).nullable().optional(),
+  linkedin_url: z.string().max(500).nullable().optional(),
+  image_url: z.string().max(500).nullable().optional(),
 });
 
 // ── Deal schemas (wire format is snake_case) ──
 export const createDealSchema = z.object({
   name: z.string().min(1).max(200),
   customer_id: z.string().uuid().optional(),
+  company_id: z.string().uuid().optional(),
   amount_cents: z.number().int().nonnegative().optional(),
   currency: z.string().max(8).optional(),
   expected_close_at: z.string().optional(),
@@ -52,6 +63,7 @@ export const updateDealSchema = z.object({
   currency: z.string().max(8).optional(),
   expected_close_at: z.string().nullable().optional(),
   customer_id: z.string().uuid().nullable().optional(),
+  company_id: z.string().uuid().nullable().optional(),
 });
 export const moveDealSchema = z.object({
   state_id: z.string().uuid(),
@@ -79,12 +91,25 @@ export async function listContacts(
 export async function getContact(db: DbClient, workspaceId: string, customerId: string) {
   const contact = await customersRepo.getContact(db, workspaceId, customerId);
   if (!contact) throw new HTTPException(404, { message: "Contact not found" });
-  const [deals, tickets, emails] = await Promise.all([
+  const [deals, tickets, emails, company, activities, facts, suggestions] = await Promise.all([
     dealsRepo.listByCustomer(db, customerId),
     supportTicketsRepo.listByCustomer(db, customerId, { offset: 0, limit: 50 }),
     emailLogRepo.listByCustomer(db, customerId, 20),
+    contact.companyId ? companiesRepo.getCompany(db, workspaceId, contact.companyId) : null,
+    activitiesRepo.listByCustomer(db, customerId, { offset: 0, limit: 50 }),
+    factsRepo.listFacts(db, workspaceId, { customerId, offset: 0, limit: 20 }),
+    factsRepo.listFacts(db, workspaceId, { customerId, status: "PROPOSED", offset: 0, limit: 10 }),
   ]);
-  return { contact, deals, tickets: tickets.rows, emails };
+  return {
+    contact,
+    company,
+    deals,
+    tickets: tickets.rows,
+    emails,
+    activities: activities.rows,
+    facts: facts.rows,
+    suggestions: suggestions.rows,
+  };
 }
 
 export async function updateContact(
@@ -93,7 +118,22 @@ export async function updateContact(
   customerId: string,
   data: z.infer<typeof updateContactSchema>,
 ) {
-  const contact = await customersRepo.updateContact(db, workspaceId, customerId, data);
+  // Wire keys are snake_case for the new fields (company_id etc.) — translate
+  // to the repo's camelCase patch. Legacy camelCase keys pass through as-is.
+  const contact = await customersRepo.updateContact(db, workspaceId, customerId, {
+    name: data.name,
+    company: data.company,
+    companyId: data.company_id,
+    title: data.title,
+    seniority: data.seniority,
+    function: data.function,
+    linkedinUrl: data.linkedin_url,
+    imageUrl: data.image_url,
+    phone: data.phone,
+    status: data.status,
+    source: data.source,
+    email: data.email,
+  });
   if (!contact) throw new HTTPException(404, { message: "Contact not found" });
   return contact;
 }
@@ -144,10 +184,21 @@ export async function createDeal(
   const deal = await dealsRepo.create(db, {
     issueId: issue.id,
     customerId: data.customer_id,
+    companyId: data.company_id,
     workspaceId,
     amountCents: data.amount_cents ?? 0,
     currency: data.currency ?? "USD",
     expectedCloseAt: data.expected_close_at,
+  });
+
+  // CRM timeline: the deal's creation shows up on the contact's timeline too.
+  await activitiesService.recordActivity(db, workspaceId, {
+    dealId: deal.id,
+    customerId: data.customer_id,
+    type: "NOTE",
+    subject: "Deal created",
+    body: data.name,
+    createdBy: createdById,
   });
 
   return { ...deal, issue };
@@ -186,6 +237,7 @@ export async function updateDeal(
     currency: data.currency,
     expectedCloseAt: data.expected_close_at,
     customerId: data.customer_id,
+    companyId: data.company_id,
   });
 }
 
@@ -196,10 +248,25 @@ export async function moveDealStage(
   projectId: string,
   issueId: string,
   stateId: string,
+  actorId?: string | null,
 ) {
   const existing = await dealsRepo.getByIssue(db, issueId, projectId);
   if (!existing) throw new HTTPException(404, { message: "Deal not found" });
-  return issuesService.update(db, issueId, { state_id: stateId });
+  const [state] = await db
+    .select({ name: schema.states.name })
+    .from(schema.states)
+    .where(eq(schema.states.id, stateId))
+    .limit(1);
+  const updated = await issuesService.update(db, issueId, { state_id: stateId });
+  // CRM timeline: STAGE_CHANGE on the deal (+ contact rollup when linked).
+  await activitiesService.recordActivity(db, existing.workspaceId, {
+    dealId: existing.id,
+    customerId: existing.customerId,
+    type: "STAGE_CHANGE",
+    subject: state?.name ? `Stage changed to ${state.name}` : "Stage changed",
+    createdBy: actorId,
+  });
+  return updated;
 }
 
 // Pipeline rollups for the board header + column totals. Currencies are never
@@ -416,6 +483,7 @@ export async function sendTemplateEmail(
   ws: EmailWorkspace,
   contactId: string,
   body: z.infer<typeof sendEmailSchema>,
+  actorId?: string | null,
 ): Promise<{ subject: string; sent: boolean; to: string | null }> {
   const contact = await customersRepo.getContact(db, ws.id, contactId);
   if (!contact) throw new HTTPException(404, { message: "Contact not found" });
@@ -448,6 +516,14 @@ export async function sendTemplateEmail(
   if (result.sent) {
     await customersRepo.markEmailSent(db, contactId);
   }
+  // CRM timeline: an EMAIL activity for the contact.
+  await activitiesService.recordActivity(db, ws.id, {
+    customerId: contactId,
+    type: "EMAIL",
+    subject: rendered.subject,
+    body: body.purpose,
+    createdBy: actorId,
+  });
 
   return { subject: rendered.subject, sent: result.sent, to: rendered.to };
 }

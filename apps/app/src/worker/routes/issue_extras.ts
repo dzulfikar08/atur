@@ -15,8 +15,6 @@ import { v4 as uuid } from "uuid";
 import { nowISO } from "../lib/pagination";
 import * as schema from "../db/schema";
 import * as issuesRepo from "../repositories/issues";
-import * as modulesRepo from "../repositories/modules";
-import * as relationsService from "../services/relations";
 import * as timeEntriesService from "../services/timeEntries";
 
 type C = Context<{ Bindings: Env }>;
@@ -146,7 +144,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       const row: typeof schema.issues.$inferInsert = {
         id,
         name: body.name,
-        sequenceId: await issuesRepo.getNextSequence(db, parent.projectId),
+        sequenceId: await issuesRepo.allocateNextSequence(db, parent.projectId),
         parentId: parent.id,
         projectId: parent.projectId,
         workspaceId: parent.workspaceId,
@@ -154,9 +152,10 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         createdAt: now,
         updatedAt: now,
       };
-      // sequenceId is MAX+1 and collides under concurrent creators;
-      // insertIssueWithRetry re-derives it and retries on uq_issue_sequence.
-      await issuesRepo.insertIssueWithRetry(db, row);
+      // sequenceId comes from the atomic per-project counter (UPDATE ...
+      // RETURNING), so concurrent creators get distinct ids — no collisions,
+      // no retry loop.
+      await db.insert(schema.issues).values(row);
       return c.json(
         (
           await db
@@ -210,15 +209,42 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         throw new HTTPException(400, {
           message: "related_issue_id and relation_type are required",
         });
-      // Route through relationsService.create — it validates that BOTH issues
-      // live in the caller's workspace before inserting. A raw insert here
-      // would let a foreign issue UUID be attached as the related side.
-      const relation = await relationsService.create(db, c.get("workspace").id, {
-        issue_id: issue.id,
-        related_issue_id: body.related_issue_id,
-        relation_type: body.relation_type as "blocks" | "blocked_by" | "relates_to" | "duplicates",
+      // related_issue_id must be an issue in the caller's workspace — a raw
+      // insert here bypasses relationsService.create's both-sided check and
+      // would let a member attach a foreign-workspace issue as the related side
+      // (leaking the reference back via that issue's relation list).
+      const [related] = await db
+        .select({ id: schema.issues.id })
+        .from(schema.issues)
+        .where(
+          and(
+            eq(schema.issues.id, body.related_issue_id),
+            eq(schema.issues.workspaceId, c.get("workspace").id),
+            isNull(schema.issues.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!related) throw new HTTPException(404, { message: "Issue not found" });
+      const id = uuid();
+      const now = nowISO();
+      await db.insert(schema.issueRelations).values({
+        id,
+        issueId: issue.id,
+        relatedIssueId: body.related_issue_id,
+        relationType: body.relation_type,
+        createdAt: now,
+        updatedAt: now,
       });
-      return c.json(relation, 201);
+      return c.json(
+        (
+          await db
+            .select()
+            .from(schema.issueRelations)
+            .where(eq(schema.issueRelations.id, id))
+            .limit(1)
+        )[0],
+        201,
+      );
     },
   )
   .delete(
@@ -277,12 +303,21 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       const { db, issue } = await resolveIssue(c);
       const body = (await c.req.json().catch(() => ({}))) as { module_id?: string };
       if (!body.module_id) throw new HTTPException(400, { message: "module_id is required" });
-      // The module must live in the issue's (caller's) workspace — otherwise a
-      // foreign module UUID could be attached to a local issue.
-      const mod = await modulesRepo.findById(db, body.module_id);
-      if (!mod || mod.workspaceId !== issue.workspaceId) {
-        throw new HTTPException(404, { message: "Module not found" });
-      }
+      // module_id must belong to the caller's workspace — otherwise a foreign
+      // module could be attached to a local issue via this raw insert (it
+      // bypasses modulesService.addIssue's workspace compare).
+      const [mod] = await db
+        .select({ id: schema.modules.id })
+        .from(schema.modules)
+        .where(
+          and(
+            eq(schema.modules.id, body.module_id),
+            eq(schema.modules.workspaceId, c.get("workspace").id),
+            isNull(schema.modules.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!mod) throw new HTTPException(404, { message: "Module not found" });
       const [existing] = await db
         .select()
         .from(schema.moduleIssues)

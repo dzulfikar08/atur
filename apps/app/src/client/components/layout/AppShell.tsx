@@ -35,6 +35,7 @@ const ALL_ALLOWED_SUBPATHS = new Set([
   "/pages",
   "/crm",
   "/crm/contacts",
+  "/crm/companies",
   "/crm/pipelines",
 ]);
 

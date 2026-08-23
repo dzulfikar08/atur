@@ -16,8 +16,6 @@ export const searchRoutes = new Hono<{ Bindings: Env }>({ strict: false }).get("
   if (workspace) await resolveWorkspaceForCaller(c, workspace);
   const project = c.req.query("project");
   const limit = Math.min(parseInt(c.req.query("limit") || "50", 10), 100);
-  // Unscoped search is bounded to the caller: userId filters results to
-  // workspaces they own or are an active member of (see services/search.ts).
   const results = await searchService.search(db, q, workspace, project, limit, c.get("user").sub);
   return c.json(results);
 });
