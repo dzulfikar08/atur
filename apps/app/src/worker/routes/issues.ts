@@ -10,7 +10,7 @@ import * as issuesRepo from "../repositories/issues";
 
 export const issueRoutes = new Hono<{ Bindings: Env }>({ strict: false })
 
-  .get("/", async (c) => {
+  .get("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const { offset, limit } = paginationParams(c);
     const projectId = c.req.param("projectId")!;
@@ -48,7 +48,7 @@ export const issueRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     return c.json(result, 201);
   })
 
-  .get("/:issueId", async (c) => {
+  .get("/:issueId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
     const issue = await issuesRepo.resolveIssue(db, projectId, c.req.param("issueId")!);
@@ -57,7 +57,7 @@ export const issueRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     return c.json(result);
   })
 
-  .get("/:issueId/sub-issues", async (c) => {
+  .get("/:issueId/sub-issues", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
     const issue = await issuesRepo.resolveIssue(db, projectId, c.req.param("issueId")!);

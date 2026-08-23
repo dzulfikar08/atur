@@ -30,7 +30,7 @@ async function resolveIssue(c: C) {
 export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
 
   // ---- Attachments ----
-  .get("/attachments", authMiddleware, async (c: C) => {
+  .get("/attachments", authMiddleware, requireWorkspaceMember, async (c: C) => {
     const { db, issue } = await resolveIssue(c);
     const rows = await db
       .select()
@@ -96,7 +96,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   })
 
   // ---- Sub-issues (children via issues.parent_id) ----
-  .get("/sub-issues", authMiddleware, async (c: C) => {
+  .get("/sub-issues", authMiddleware, requireWorkspaceMember, async (c: C) => {
     const { db, issue } = await resolveIssue(c);
     const rows = await db
       .select()
@@ -146,7 +146,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   })
 
   // ---- Relations ----
-  .get("/relations", authMiddleware, async (c: C) => {
+  .get("/relations", authMiddleware, requireWorkspaceMember, async (c: C) => {
     const { db, issue } = await resolveIssue(c);
     const rows = await db
       .select()
@@ -201,7 +201,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   })
 
   // ---- Modules (module_issues join) ----
-  .get("/modules", authMiddleware, async (c: C) => {
+  .get("/modules", authMiddleware, requireWorkspaceMember, async (c: C) => {
     const { db, issue } = await resolveIssue(c);
     const rows = await db
       .select({
@@ -259,7 +259,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   })
 
   // ---- Activities ----
-  .get("/activities", authMiddleware, async (c: C) => {
+  .get("/activities", authMiddleware, requireWorkspaceMember, async (c: C) => {
     const { db, issue } = await resolveIssue(c);
     // Join users so each event can be attributed to an actor (name + customer/staff).
     const rows = await db
@@ -287,11 +287,11 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   })
 
   // ---- Custom values (no table — stub) ----
-  .get("/custom-values", authMiddleware, (c: C) => c.json([]))
+  .get("/custom-values", authMiddleware, requireWorkspaceMember, (c: C) => c.json([]))
   .post("/custom-values", authMiddleware, requireWorkspaceMember, (c: C) => c.json({ ok: true }))
 
   // ---- Time entries ----
-  .get("/time-entries", authMiddleware, async (c: C) => {
+  .get("/time-entries", authMiddleware, requireWorkspaceMember, async (c: C) => {
     const { db, issue } = await resolveIssue(c);
     const result = await timeEntriesService.list(db, issue, c);
     return c.json(result);

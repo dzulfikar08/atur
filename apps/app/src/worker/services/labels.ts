@@ -46,19 +46,30 @@ export const updateLabelSchema = z
   .partial()
   .refine((d) => Object.keys(d).length > 0, { message: "At least one field required" });
 
-export async function update(db: DbClient, id: string, data: z.infer<typeof updateLabelSchema>) {
+// workspaceId is the caller's workspace (route guard). A label in another
+// workspace is indistinguishable from a missing one → 404, never a leaky 200.
+export async function update(
+  db: DbClient,
+  id: string,
+  workspaceId: string,
+  data: z.infer<typeof updateLabelSchema>,
+) {
   const existing = await labelsRepo.findById(db, id);
-  if (!existing) throw new HTTPException(404, { message: "Label not found" });
+  if (!existing || existing.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Label not found" });
+  }
   const updateData: Record<string, unknown> = { ...data };
   if (data.parent_id !== undefined) {
     updateData.parentId = data.parent_id;
     delete updateData.parent_id;
   }
-  return labelsRepo.update(db, id, updateData);
+  return labelsRepo.update(db, id, workspaceId, updateData);
 }
 
-export async function remove(db: DbClient, id: string) {
+export async function remove(db: DbClient, id: string, workspaceId: string) {
   const existing = await labelsRepo.findById(db, id);
-  if (!existing) throw new HTTPException(404, { message: "Label not found" });
-  await labelsRepo.remove(db, id);
+  if (!existing || existing.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Label not found" });
+  }
+  await labelsRepo.remove(db, id, workspaceId);
 }

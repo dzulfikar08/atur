@@ -17,7 +17,7 @@ async function resolveIssueId(c: Context<{ Bindings: Env }>) {
 }
 
 export const commentRoutes = new Hono<{ Bindings: Env }>({ strict: false })
-  .get("/", async (c) => {
+  .get("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const issueId = await resolveIssueId(c);
     const { offset, limit } = paginationParams(c);

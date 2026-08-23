@@ -9,7 +9,7 @@ import { HTTPException } from "hono/http-exception";
 
 export const subscriberRoutes = new Hono<{ Bindings: Env }>({ strict: false });
 
-subscriberRoutes.get("/", async (c) => {
+subscriberRoutes.get("/", authMiddleware, requireWorkspaceMember, async (c) => {
   const db = getDb(c.env.DB);
   const projectId = c.req.param("projectId")!;
   const issue = await issuesRepo.resolveIssue(db, projectId, c.req.param("issueId")!);

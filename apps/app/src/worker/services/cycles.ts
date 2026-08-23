@@ -51,11 +51,20 @@ export async function list(db: DbClient, projectId: string, c: Context<{ Binding
   return paginatedResponse(cycles, total, offset, limit);
 }
 
-export async function update(db: DbClient, id: string, data: z.infer<typeof updateCycleSchema>) {
+// workspaceId is the caller's workspace (route guard). A cycle in another
+// workspace is indistinguishable from a missing one → 404, never a leaky 200.
+export async function update(
+  db: DbClient,
+  id: string,
+  workspaceId: string,
+  data: z.infer<typeof updateCycleSchema>,
+) {
   const existing = await cyclesRepo.findById(db, id);
-  if (!existing) throw new HTTPException(404, { message: "Cycle not found" });
+  if (!existing || existing.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Cycle not found" });
+  }
   const parsed = updateCycleSchema.parse(data);
-  return cyclesRepo.update(db, id, {
+  return cyclesRepo.update(db, id, workspaceId, {
     name: parsed.name,
     description: parsed.description,
     startDate: parsed.start_date,
@@ -63,25 +72,37 @@ export async function update(db: DbClient, id: string, data: z.infer<typeof upda
   });
 }
 
-export async function remove(db: DbClient, id: string) {
+export async function remove(db: DbClient, id: string, workspaceId: string) {
   const existing = await cyclesRepo.findById(db, id);
-  if (!existing) throw new HTTPException(404, { message: "Cycle not found" });
-  await cyclesRepo.softDelete(db, id);
+  if (!existing || existing.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Cycle not found" });
+  }
+  await cyclesRepo.softDelete(db, id, workspaceId);
 }
 
 export async function addIssue(
   db: DbClient,
   cycleId: string,
+  workspaceId: string,
   data: z.infer<typeof addIssueSchema>,
 ) {
   const parsed = addIssueSchema.parse(data);
   const cycle = await cyclesRepo.findById(db, cycleId);
-  if (!cycle) throw new HTTPException(404, { message: "Cycle not found" });
+  if (!cycle || cycle.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Cycle not found" });
+  }
   await cyclesRepo.addIssue(db, cycleId, parsed.issue_id);
 }
 
-export async function removeIssue(db: DbClient, cycleId: string, issueId: string) {
+export async function removeIssue(
+  db: DbClient,
+  cycleId: string,
+  workspaceId: string,
+  issueId: string,
+) {
   const cycle = await cyclesRepo.findById(db, cycleId);
-  if (!cycle) throw new HTTPException(404, { message: "Cycle not found" });
+  if (!cycle || cycle.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Cycle not found" });
+  }
   await cyclesRepo.removeIssue(db, cycleId, issueId);
 }

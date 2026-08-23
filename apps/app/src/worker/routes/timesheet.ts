@@ -2,11 +2,13 @@ import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import * as timesheetService from "../services/timesheet";
 
 export const timesheetRoutes = new Hono<{ Bindings: Env }>({ strict: false }).get(
   "/",
   authMiddleware,
+  requireWorkspaceMember,
   async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;

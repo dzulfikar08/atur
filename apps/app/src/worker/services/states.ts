@@ -136,17 +136,28 @@ export const updateStateSchema = z
   .partial()
   .refine((d) => Object.keys(d).length > 0, { message: "At least one field required" });
 
-export async function update(db: DbClient, id: string, data: z.infer<typeof updateStateSchema>) {
+// workspaceId is the caller's workspace (route guard). A state in another
+// workspace is indistinguishable from a missing one → 404, never a leaky 200.
+export async function update(
+  db: DbClient,
+  id: string,
+  workspaceId: string,
+  data: z.infer<typeof updateStateSchema>,
+) {
   const existing = await statesRepo.findById(db, id);
-  if (!existing) throw new HTTPException(404, { message: "State not found" });
+  if (!existing || existing.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "State not found" });
+  }
   const updateData: Record<string, unknown> = { ...data };
   if (data.group_name !== undefined) updateData.groupName = data.group_name;
   delete updateData.group_name;
-  return statesRepo.update(db, id, updateData);
+  return statesRepo.update(db, id, workspaceId, updateData);
 }
 
-export async function remove(db: DbClient, id: string) {
+export async function remove(db: DbClient, id: string, workspaceId: string) {
   const existing = await statesRepo.findById(db, id);
-  if (!existing) throw new HTTPException(404, { message: "State not found" });
-  await statesRepo.remove(db, id);
+  if (!existing || existing.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "State not found" });
+  }
+  await statesRepo.remove(db, id, workspaceId);
 }

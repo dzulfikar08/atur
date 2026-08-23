@@ -60,17 +60,25 @@ export async function create(
   return findById(db, id);
 }
 
-export async function update(db: DbClient, id: string, data: Record<string, unknown>) {
+// Mutations are workspace-scoped (id AND workspace_id) so a bare foreign UUID
+// from another workspace can never match — the caller's workspace always comes
+// from the route guard (c.get("workspace").id), never from the request body.
+export async function update(
+  db: DbClient,
+  id: string,
+  workspaceId: string,
+  data: Record<string, unknown>,
+) {
   await db
     .update(labels)
     .set({ ...data, updatedAt: nowISO() })
-    .where(eq(labels.id, id));
+    .where(and(eq(labels.id, id), eq(labels.workspaceId, workspaceId)));
   return findById(db, id);
 }
 
-export async function remove(db: DbClient, id: string) {
+export async function remove(db: DbClient, id: string, workspaceId: string) {
   await db
     .update(labels)
     .set({ deletedAt: nowISO(), updatedAt: nowISO() })
-    .where(eq(labels.id, id));
+    .where(and(eq(labels.id, id), eq(labels.workspaceId, workspaceId)));
 }
