@@ -263,7 +263,8 @@ async function setDealStageForStatus(
 // Resolve the pipeline project (configured or auto-picked) and move the deal's
 // issue to the first state in `group`. Silently no-ops when there is nothing
 // to move to — sync must not fail over stage mapping.
-async function moveDealToGroup(
+// Exported for tests (DEV-21 project-scoping coverage).
+export async function moveDealToGroup(
   db: DbClient,
   settings: NonNullable<Awaited<ReturnType<typeof polarRepo.getSettings>>>,
   issueId: string,

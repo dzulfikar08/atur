@@ -219,7 +219,9 @@ async function resolveOwnTicket(db: DbClient, customer: PortalCustomer, seqId: n
 export async function getTicket(db: DbClient, customer: PortalCustomer, seqId: number) {
   const ticket = await resolveOwnTicket(db, customer, seqId);
   const issue = await issuesRepo.findById(db, ticket.issueId);
-  const assignees = await issuesRepo.listAssignees(db, ticket.issueId);
+  // Workspace-scoped (DEV-21 parity with enrich paths): portal customers must
+  // not see assignee rows linked from legacy cross-workspace data.
+  const assignees = await issuesRepo.listAssignees(db, ticket.issueId, issue?.workspaceId);
   const comments = await listPublicComments(db, ticket.issueId);
   const activities = await activitiesRepo.listByIssue(db, ticket.issueId);
   return { ticket, issue, assignees, comments, activities };
