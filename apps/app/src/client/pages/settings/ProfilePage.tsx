@@ -385,8 +385,7 @@ export default function ProfilePage() {
               <div>
                 <p className="text-sm font-medium">Workspace rail</p>
                 <p className="text-xs text-muted-foreground">
-                  Show workspaces as a persistent left rail instead of the
-                  dropdown switcher
+                  Show workspaces as a persistent left rail instead of the dropdown switcher
                 </p>
               </div>
               <button
