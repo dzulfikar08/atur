@@ -1,5 +1,6 @@
 import { eq, and, isNull, desc, inArray, sql } from "drizzle-orm";
 import type { DbClient } from "../db/index";
+import { allocateNextSequence } from "./issues";
 import {
   feedbackBoards,
   feedbackVotes,
@@ -124,7 +125,7 @@ export async function createFeedbackIssue(
   data: {
     id: string;
     name: string;
-    sequenceId: number;
+    sequenceId?: number;
     projectId: string;
     workspaceId: string;
     descriptionHtml: string | null;
@@ -134,10 +135,14 @@ export async function createFeedbackIssue(
   },
 ) {
   const now = nowISO();
+  // Atomic allocation via the per-project counter — the public feedback
+  // portal is a concurrent-writer path (form spam, bursts) and must not
+  // 500 on sequence collisions.
+  const sequenceId = data.sequenceId ?? (await allocateNextSequence(db, data.projectId));
   await db.insert(issues).values({
     id: data.id,
     name: data.name,
-    sequenceId: data.sequenceId,
+    sequenceId,
     projectId: data.projectId,
     workspaceId: data.workspaceId,
     priority: "none",
@@ -152,7 +157,7 @@ export async function createFeedbackIssue(
 
   await db.insert(issueSequences).values({
     id: uuid(),
-    sequence: data.sequenceId,
+    sequence: sequenceId,
     issueId: data.id,
     projectId: data.projectId,
     isDeleted: 0,
@@ -169,6 +174,8 @@ export async function createFeedbackIssue(
       updatedAt: now,
     });
   }
+
+  return sequenceId;
 }
 
 // ── Votes ──
