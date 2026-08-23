@@ -55,9 +55,9 @@ beforeEach(() => {
 describe("companies service", () => {
   it("createCompany rejects a duplicate name in the workspace", async () => {
     findByName.mockResolvedValue(company({ id: "other" }) as any);
-    await expect(
-      createCompany(db, WS, { name: "Acme", domain: "acme.com" }),
-    ).rejects.toThrow("already exists");
+    await expect(createCompany(db, WS, { name: "Acme", domain: "acme.com" })).rejects.toThrow(
+      "already exists",
+    );
     expect(createCompanyMock).not.toHaveBeenCalled();
   });
 

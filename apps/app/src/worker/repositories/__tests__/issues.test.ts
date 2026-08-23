@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  isUniqueConstraintError,
-  insertIssueWithRetry,
-  allocateNextSequence,
-} from "../issues";
+import { isUniqueConstraintError, insertIssueWithRetry, allocateNextSequence } from "../issues";
 
 type Db = Parameters<typeof insertIssueWithRetry>[0];
 type Row = Parameters<typeof insertIssueWithRetry>[1];
@@ -168,7 +164,9 @@ function counterDb(init: { maxIssueSeq?: number; existingCounter?: number } = {}
             const chunks = (vals.nextSequence as { queryChunks?: unknown[] } | undefined)
               ?.queryChunks;
             const joined = (chunks ?? [])
-              .map((c) => (typeof c === "string" ? c : String((c as { value?: unknown }).value ?? c)))
+              .map((c) =>
+                typeof c === "string" ? c : String((c as { value?: unknown }).value ?? c),
+              )
               .join(" ");
             const m = /MAX\([^)]*?,\s*(\d+)\s*\)/.exec(joined);
             if (m) {
@@ -190,10 +188,7 @@ function counterDb(init: { maxIssueSeq?: number; existingCounter?: number } = {}
               return Promise.resolve([{ nextSequence: apply() }]);
             },
             // oxlint-disable-next-line unicorn/no-thenable -- mirrors the real builder
-            then: (
-              resolve: (v?: unknown) => void,
-              reject: (e?: unknown) => void,
-            ) => {
+            then: (resolve: (v?: unknown) => void, reject: (e?: unknown) => void) => {
               try {
                 if (!applied) apply();
                 resolve(undefined);

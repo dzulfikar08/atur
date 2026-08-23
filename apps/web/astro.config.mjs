@@ -16,9 +16,7 @@ const SITE = process.env.ATUR_WEB_SITE ?? "https://diatur.com";
 // misses or untracked files.
 const PAGES_DIR = fileURLToPath(new URL("./src/pages/", import.meta.url));
 
-const BLOG_CONTENT_DIR = fileURLToPath(
-  new URL("./src/content/blog/", import.meta.url),
-);
+const BLOG_CONTENT_DIR = fileURLToPath(new URL("./src/content/blog/", import.meta.url));
 
 function srcForUrl(urlPath) {
   if (urlPath === "/") return path.join(PAGES_DIR, "index.astro");

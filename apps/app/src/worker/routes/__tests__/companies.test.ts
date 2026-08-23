@@ -170,4 +170,3 @@ describe("companies routes", () => {
     expect(getCompany).not.toHaveBeenCalled();
   });
 });
-

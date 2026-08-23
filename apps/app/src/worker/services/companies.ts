@@ -37,12 +37,7 @@ export async function createCompany(
   return companiesRepo.createCompany(db, workspaceId, data);
 }
 
-async function findDuplicate(
-  db: DbClient,
-  workspaceId: string,
-  name: string,
-  domain?: string,
-) {
+async function findDuplicate(db: DbClient, workspaceId: string, name: string, domain?: string) {
   const byName = await companiesRepo.findByName(db, workspaceId, name);
   if (byName && byName.name.toLowerCase() === name.toLowerCase()) return byName;
   if (domain) {
@@ -80,10 +75,12 @@ export async function updateCompany(
       db,
       workspaceId,
       data.name ?? existing.name,
-      data.domain !== undefined ? data.domain ?? undefined : existing.domain ?? undefined,
+      data.domain !== undefined ? (data.domain ?? undefined) : (existing.domain ?? undefined),
     );
     if (dup && dup.id !== companyId) {
-      throw new HTTPException(409, { message: "A company with this name or domain already exists" });
+      throw new HTTPException(409, {
+        message: "A company with this name or domain already exists",
+      });
     }
   }
   const company = await companiesRepo.updateCompany(db, workspaceId, companyId, data);
