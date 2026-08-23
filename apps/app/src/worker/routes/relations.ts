@@ -15,7 +15,7 @@ export const relationRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const body = relationsService.createRelationSchema.parse(await c.req.json());
-    const relation = await relationsService.create(db, body);
+    const relation = await relationsService.create(db, c.get("workspace").id, body);
     return c.json(relation, 201);
   })
   // remove takes the guard's workspace id: a relation whose issue lives in

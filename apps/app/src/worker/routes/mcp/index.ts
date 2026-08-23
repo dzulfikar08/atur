@@ -722,6 +722,32 @@ async function assertProjectAccess(
   if (!ok) throw new HTTPException(403, { message: "Not a member of this workspace" });
 }
 
+// Bind a client-supplied project to the workspace a tool already resolved +
+// membership-checked. assertProjectAccess alone is not enough for creates:
+// it only proves the caller is a member of the project's OWN workspace, so a
+// member of ws A naming workspace A with ws B's project_id would pass and
+// mint rows attached to the foreign project. This requires the project to
+// actually live in the named workspace (404 otherwise — same as the HTTP
+// routes' requireWorkspaceProject).
+async function assertProjectInWorkspace(
+  db: ReturnType<typeof getDb>,
+  projectId: string,
+  workspaceId: string,
+) {
+  const [proj] = await db
+    .select({ id: schema.projects.id })
+    .from(schema.projects)
+    .where(
+      and(
+        eq(schema.projects.id, projectId),
+        eq(schema.projects.workspaceId, workspaceId),
+        isNull(schema.projects.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!proj) throw new HTTPException(404, { message: "Project not found" });
+}
+
 // Entity-resolve helpers: map an entity id to its project/workspace, then
 // run the same owner-or-member check. Close IDOR on tools keyed only by id.
 async function assertIssueAccess(db: ReturnType<typeof getDb>, issueId: string, userId: string) {
@@ -769,20 +795,6 @@ async function assertPageAccess(db: ReturnType<typeof getDb>, pageId: string, us
   if (!ws) throw new HTTPException(404, { message: "Workspace not found" });
   if (ws.ownerId !== userId && !(await isWorkspaceMember(db, pg.workspaceId, userId)))
     throw new HTTPException(403, { message: "Not a member of this workspace" });
-}
-
-async function assertRelationAccess(
-  db: ReturnType<typeof getDb>,
-  relationId: string,
-  userId: string,
-) {
-  const [rel] = await db
-    .select({ issueId: schema.issueRelations.issueId })
-    .from(schema.issueRelations)
-    .where(eq(schema.issueRelations.id, relationId))
-    .limit(1);
-  if (!rel) throw new HTTPException(404, { message: "Relation not found" });
-  await assertIssueAccess(db, rel.issueId, userId);
 }
 
 async function handleTool(
@@ -888,6 +900,9 @@ async function handleTool(
     case "create_issue": {
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
       const projectId = params.project_id as string;
+      // The project must belong to the named workspace — otherwise a member of
+      // ws A could mint issues inside ws B by passing its project UUID.
+      await assertProjectInWorkspace(db, projectId, workspaceId);
       const id = uuid();
       const now = nowISO();
       const row: typeof schema.issues.$inferInsert = {
@@ -1114,6 +1129,8 @@ async function handleTool(
     }
     case "create_sprint": {
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      // Same project-binding rule as create_issue above.
+      await assertProjectInWorkspace(db, params.project_id as string, workspaceId);
       const id = uuid();
       const now = nowISO();
       await db.insert(schema.cycles).values({
@@ -1383,7 +1400,22 @@ async function handleTool(
       return rows;
     }
     case "remove_issue_relation": {
-      await assertRelationAccess(db, params.relation_id as string, userId);
+      // Mirror add_issue_relation: BOTH sides of the relation must be issues
+      // the caller can access. The old single-sided check (primary issue only)
+      // let a relation pointing at a foreign workspace's issue be removed by
+      // anyone who could read the primary one. A missing relation 404s before
+      // any write.
+      const [rel] = await db
+        .select({
+          issueId: schema.issueRelations.issueId,
+          relatedIssueId: schema.issueRelations.relatedIssueId,
+        })
+        .from(schema.issueRelations)
+        .where(eq(schema.issueRelations.id, params.relation_id as string))
+        .limit(1);
+      if (!rel) throw new HTTPException(404, { message: "Relation not found" });
+      await assertIssueAccess(db, rel.issueId, userId);
+      await assertIssueAccess(db, rel.relatedIssueId, userId);
       await db
         .update(schema.issueRelations)
         .set({ deletedAt: nowISO(), updatedAt: nowISO() })

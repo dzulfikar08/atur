@@ -564,4 +564,77 @@ describe("member invite/remove require an active admin", () => {
     expect(res.status).toBe(403);
     expect(membersService.removeWorkspaceMember).not.toHaveBeenCalled();
   });
+
+  it("creates the membership when an admin invites a brand-new member (201)", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    vi.mocked(membersRepo.findMembership).mockResolvedValue({
+      id: "mem-1",
+      role: 20,
+      isActive: 1,
+    } as never);
+    // users-by-email select finds an account; the existing-membership select
+    // finds none → the invite falls through to the actual creation path.
+    selectQueue.push([{ id: "u-9", email: "newbie@example.com" }], []);
+    vi.mocked(membersService.addWorkspaceMember).mockResolvedValue({ id: "mem-new" } as never);
+    const app = testApp();
+
+    const res = await req(
+      app,
+      "/api/workspaces/acme/members/invite",
+      jsonInit("POST", { email: "newbie@example.com" }),
+    );
+    expect(res.status).toBe(201);
+    expect(membersService.addWorkspaceMember).toHaveBeenCalledWith(
+      expect.anything(),
+      "ws-1",
+      "u-9",
+      undefined,
+    );
+  });
+});
+
+describe("issue routes bind :projectId to the caller's workspace", () => {
+  const victimUuid = "11111111-2222-3333-4444-555555555555";
+  // One queued row set per request: requireWorkspaceProject's project select,
+  // then resolveIssue's issue select. The db mock ignores the SQL filters, so
+  // the queued rows stand in for the FILTERED result.
+  const boundProject = [{ id: "p-1", workspaceId: "ws-1" }];
+
+  it("404s a foreign projectId in the path on list and create", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    const app = testApp();
+
+    // Foreign project UUID resolves to nothing under ws-1.
+    selectQueue.push([]);
+    const list = await req(app, "/api/workspaces/acme/projects/p-foreign/issues");
+    expect(list.status).toBe(404);
+
+    selectQueue.push([]);
+    const create = await req(
+      app,
+      "/api/workspaces/acme/projects/p-foreign/issues",
+      jsonInit("POST", { name: "Intruder Issue" }),
+    );
+    expect(create.status).toBe(404);
+  });
+
+  it("404s a foreign issue UUID under the caller's own slug (GET/PATCH/DELETE)", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    const app = testApp();
+    const path = `/api/workspaces/acme/projects/p-1/issues/${victimUuid}`;
+
+    // Project p-1 IS ours, but the issue UUID belongs to another project:
+    // resolveIssue's project-scoped lookup returns nothing → 404.
+    selectQueue.push(boundProject, []);
+    const get = await req(app, path);
+    expect(get.status).toBe(404);
+
+    selectQueue.push(boundProject, []);
+    const patch = await req(app, path, jsonInit("PATCH", { name: "Hostile Rename" }));
+    expect(patch.status).toBe(404);
+
+    selectQueue.push(boundProject, []);
+    const del = await req(app, path, { method: "DELETE" });
+    expect(del.status).toBe(404);
+  });
 });

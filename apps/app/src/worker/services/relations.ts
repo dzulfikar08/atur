@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { DbClient } from "../db/index";
 import * as schema from "../db/schema";
 import * as relationsRepo from "../repositories/relations";
@@ -11,7 +11,26 @@ export const createRelationSchema = z.object({
   relation_type: z.enum(["blocks", "blocked_by", "relates_to", "duplicates"]),
 });
 
-export async function create(db: DbClient, data: z.infer<typeof createRelationSchema>) {
+// Both endpoints must be issues in the caller's workspace (route guard) —
+// ported from the MCP add_issue_relation tool's both-sided asserts. Without
+// this, a member of ws A could link a foreign issue by UUID (and the foreign
+// issue's relation list would leak the reference back).
+export async function create(
+  db: DbClient,
+  workspaceId: string,
+  data: z.infer<typeof createRelationSchema>,
+) {
+  const rows = await db
+    .select({ id: schema.issues.id })
+    .from(schema.issues)
+    .where(
+      and(
+        inArray(schema.issues.id, [data.issue_id, data.related_issue_id]),
+        eq(schema.issues.workspaceId, workspaceId),
+        isNull(schema.issues.deletedAt),
+      ),
+    );
+  if (rows.length !== 2) throw new HTTPException(404, { message: "Issue not found" });
   return relationsRepo.createRelation(db, {
     issueId: data.issue_id,
     relatedIssueId: data.related_issue_id,
