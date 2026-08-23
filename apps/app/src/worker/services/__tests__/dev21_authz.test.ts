@@ -51,6 +51,9 @@ function mockDb(selectFixtures: any[][]) {
         return { where: () => Promise.resolve() };
       },
     }),
+    insert: () => ({
+      values: () => ({ onConflictDoNothing: () => ({ returning: () => Promise.resolve([]) }) }),
+    }),
   };
   return { db, updates, selects };
 }
@@ -91,6 +94,26 @@ function eqParam(cond: unknown, columnName: string): unknown {
 
 const MINE = "ws-mine";
 const FOREIGN = "ws-foreign";
+
+// Flatten a drizzle condition into its SQL text (StringChunk template pieces
+// joined). The cond tree is circular (Column -> table -> columns), so
+// JSON.stringify is out; this walks only the chunk arrays we care about.
+function sqlText(cond: unknown): string {
+  const parts: string[] = [];
+  const walk = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    const n = node as any;
+    if (Array.isArray(n.queryChunks)) {
+      for (const chunk of n.queryChunks) walk(chunk);
+      return;
+    }
+    const v = n.value;
+    if (typeof v === "string") parts.push(v);
+    else if (Array.isArray(v)) parts.push(v.join(""));
+  };
+  walk(cond);
+  return parts.join(" ");
+}
 
 // projectsService.update select order: workspaces (findBySlug), projects
 // (findById), then assertProjectIdsInWorkspace's selects.
@@ -156,5 +179,27 @@ describe("DEV-21 label/assignee enrichment belt-and-braces", () => {
       { id: "i1", stateId: null, workspaceId: MINE } as any,
     ]);
     expect(out.labels).toEqual([]);
+  });
+
+  it("enrichIssues assignee query carries the workspace-members EXISTS + issues join", async () => {
+    // The harness can't evaluate SQL, so pin the query SHAPE: the captured
+    // condition must embed the correlated workspace_members EXISTS.
+    const db = mockDb([[], []]);
+    await issuesService.enrichIssues(db.db, [
+      { id: "i1", stateId: null, workspaceId: MINE } as any,
+    ]);
+    const text = sqlText(db.selects[0].cond);
+    expect(text).toContain("workspace_members");
+    expect(text).toContain("workspace_id");
+  });
+
+  it("moveDealToGroup keys the stage state on the ISSUE's project", async () => {
+    // Select order: issue resolve (projectId from the ISSUE row, not any
+    // configured pipeline project), then findStateByGroup.
+    const db = mockDb([[{ projectId: "p-issue" }], [{ id: "g2" }]]);
+    const settings = { workspaceId: MINE, pipelineProjectId: "p-configured" } as any;
+    await polarService.moveDealToGroup(db.db, settings, "i1", "cancelled");
+    expect(eqParam(db.selects[0].cond, "id")).toBe("i1");
+    expect(eqParam(db.selects[1].cond, "project_id")).toBe("p-issue");
   });
 });
