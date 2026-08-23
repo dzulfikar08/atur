@@ -253,7 +253,10 @@ export async function removeAssignee(db: DbClient, issueId: string, assigneeId: 
     );
 }
 
-export async function listLabels(db: DbClient, issueId: string) {
+// workspaceId is optional belt-and-braces (DEV-21): when given, legacy
+// cross-workspace link rows render empty instead of leaking a foreign
+// label's name/color. All write paths already bind ids (DEV-19/20).
+export async function listLabels(db: DbClient, issueId: string, workspaceId?: string) {
   return db
     .select({
       id: labels.id,
@@ -262,10 +265,19 @@ export async function listLabels(db: DbClient, issueId: string) {
     })
     .from(issueLabels)
     .innerJoin(labels, eq(issueLabels.labelId, labels.id))
-    .where(and(eq(issueLabels.issueId, issueId), isNull(issueLabels.deletedAt)));
+    .where(
+      and(
+        eq(issueLabels.issueId, issueId),
+        isNull(issueLabels.deletedAt),
+        ...(workspaceId ? [eq(labels.workspaceId, workspaceId)] : []),
+      ),
+    );
 }
 
-export async function listAssignees(db: DbClient, issueId: string) {
+// Same optional workspaceId belt-and-braces: an assignee only renders when
+// they are an active member of that workspace (the owner is seeded as a
+// member row at workspace creation).
+export async function listAssignees(db: DbClient, issueId: string, workspaceId?: string) {
   return db
     .select({
       id: users.id,
@@ -276,7 +288,17 @@ export async function listAssignees(db: DbClient, issueId: string) {
     })
     .from(issueAssignees)
     .innerJoin(users, eq(issueAssignees.assigneeId, users.id))
-    .where(and(eq(issueAssignees.issueId, issueId), isNull(issueAssignees.deletedAt)));
+    .where(
+      and(
+        eq(issueAssignees.issueId, issueId),
+        isNull(issueAssignees.deletedAt),
+        ...(workspaceId
+          ? [
+              sql`EXISTS (SELECT 1 FROM workspace_members wm WHERE wm.member_id = ${users.id} AND wm.workspace_id = ${workspaceId} AND wm.is_active = 1 AND wm.deleted_at IS NULL)`,
+            ]
+          : []),
+      ),
+    );
 }
 
 export async function getNextSequence(db: DbClient, projectId: string): Promise<number> {
