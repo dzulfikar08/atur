@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("../../repositories/members", () => ({
+  isWorkspaceMember: vi.fn(),
+}));
+vi.mock("../../repositories/customers", () => ({
+  getContact: vi.fn(),
+}));
 vi.mock("../../repositories/companies", () => ({
   findByName: vi.fn(),
   getByDomain: vi.fn(),
@@ -18,6 +24,8 @@ import {
   listCompanies,
 } from "../companies";
 import * as companiesRepo from "../../repositories/companies";
+import * as membersRepo from "../../repositories/members";
+import * as customersRepo from "../../repositories/customers";
 
 const db = {} as any;
 const WS = "ws-1";
@@ -29,6 +37,8 @@ const createCompanyMock = vi.mocked(companiesRepo.createCompany);
 const updateCompanyMock = vi.mocked(companiesRepo.updateCompany);
 const deleteCompanyMock = vi.mocked(companiesRepo.deleteCompany);
 const listCompaniesMock = vi.mocked(companiesRepo.listCompanies);
+const isMemberMock = vi.mocked(membersRepo.isWorkspaceMember);
+const getContactMock = vi.mocked(customersRepo.getContact);
 
 const company = (overrides: Record<string, unknown> = {}) => ({
   id: "comp1",
@@ -53,6 +63,32 @@ beforeEach(() => {
 });
 
 describe("companies service", () => {
+  it("createCompany rejects an owner who is not a member of the workspace", async () => {
+    isMemberMock.mockResolvedValue(false);
+    await expect(createCompany(db, WS, { name: "Acme", ownerId: "foreign-user" })).rejects.toThrow(
+      "not a member",
+    );
+    expect(createCompanyMock).not.toHaveBeenCalled();
+  });
+
+  it("createCompany rejects a primary contact outside the workspace", async () => {
+    isMemberMock.mockResolvedValue(true);
+    getContactMock.mockResolvedValue(null);
+    await expect(
+      createCompany(db, WS, { name: "Acme", primaryContactId: "foreign-contact" }),
+    ).rejects.toThrow("Primary contact not found");
+    expect(createCompanyMock).not.toHaveBeenCalled();
+  });
+
+  it("updateCompany validates owner/primary refs too", async () => {
+    getCompanyMock.mockResolvedValue(company() as never);
+    isMemberMock.mockResolvedValue(false);
+    await expect(updateCompany(db, WS, "comp1", { ownerId: "foreign-user" })).rejects.toThrow(
+      "not a member",
+    );
+    expect(updateCompanyMock).not.toHaveBeenCalled();
+  });
+
   it("createCompany rejects a duplicate name in the workspace", async () => {
     findByName.mockResolvedValue(company({ id: "other" }) as any);
     await expect(createCompany(db, WS, { name: "Acme", domain: "acme.com" })).rejects.toThrow(

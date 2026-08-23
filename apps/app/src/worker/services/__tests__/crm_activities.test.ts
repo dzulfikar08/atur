@@ -59,7 +59,8 @@ describe("listActivities", () => {
     listByCustomerMock.mockResolvedValue({ rows: [{ id: "a1" }], total: 1 } as any);
     const result = await listActivities(db, WS, { customerId: "c1", offset: 0, limit: 50 });
     expect(result.results).toHaveLength(1);
-    expect(listByCustomerMock).toHaveBeenCalledWith(db, "c1", {
+    // Repo reads are workspace-scoped — the service must pass WS through.
+    expect(listByCustomerMock).toHaveBeenCalledWith(db, WS, "c1", {
       customerId: "c1",
       offset: 0,
       limit: 50,
@@ -69,7 +70,11 @@ describe("listActivities", () => {
   it("lists by deal", async () => {
     listByDealMock.mockResolvedValue({ rows: [], total: 0 });
     await listActivities(db, WS, { dealId: "d1", offset: 0, limit: 50 });
-    expect(listByDealMock).toHaveBeenCalledWith(db, "d1", { dealId: "d1", offset: 0, limit: 50 });
+    expect(listByDealMock).toHaveBeenCalledWith(db, WS, "d1", {
+      dealId: "d1",
+      offset: 0,
+      limit: 50,
+    });
   });
 
   it("rejects without a customer or deal filter", async () => {

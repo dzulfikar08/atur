@@ -2,7 +2,9 @@
 // Code registry (not DB config) mirroring how Atur keeps TEMPLATE_PURPOSES in
 // code — and the conceptual port of trycompai/crm's evidence WEIGHTS. Stronger
 // evidence sources weigh more; the score is the sum across INDEPENDENT
-// sources, so two web searches alone never outrank a signature block.
+// sources, so two agreeing sources reach the threshold even when weak
+// (web_search + web_search = 1.0 auto-applies), while a single signature
+// block (0.8) alone stays PROPOSED until a second source or a rep confirms.
 export const EVIDENCE_WEIGHTS = {
   // A signature block in the user's own mailbox — the person wrote it.
   signature: 0.8,

@@ -4,6 +4,8 @@ import { HTTPException } from "hono/http-exception";
 import type { DbClient } from "../db/index";
 import * as schema from "../db/schema";
 import * as companiesRepo from "../repositories/companies";
+import * as customersRepo from "../repositories/customers";
+import * as membersRepo from "../repositories/members";
 import { paginatedResponse } from "../lib/pagination";
 import { nowISO } from "../lib/pagination";
 
@@ -22,11 +24,34 @@ export const createCompanySchema = z.object({
 });
 export const updateCompanySchema = createCompanySchema.partial();
 
+// DEV-21 class: entity ids stored on a company (owner, primary contact) must
+// resolve in THIS workspace before they're persisted — a foreign user/contact
+// UUID that merely exists platform-wide must not be storable as a reference.
+async function assertCompanyRefsInWorkspace(
+  db: DbClient,
+  workspaceId: string,
+  data: { ownerId?: string; primaryContactId?: string },
+) {
+  if (data.ownerId) {
+    const isMember = await membersRepo.isWorkspaceMember(db, workspaceId, data.ownerId);
+    if (!isMember) {
+      throw new HTTPException(404, { message: "Owner is not a member of this workspace" });
+    }
+  }
+  if (data.primaryContactId) {
+    const contact = await customersRepo.getContact(db, workspaceId, data.primaryContactId);
+    if (!contact) {
+      throw new HTTPException(404, { message: "Primary contact not found in this workspace" });
+    }
+  }
+}
+
 export async function createCompany(
   db: DbClient,
   workspaceId: string,
   data: z.infer<typeof createCompanySchema>,
 ) {
+  await assertCompanyRefsInWorkspace(db, workspaceId, data);
   // Duplicate name/domain within the workspace → 409 (mirrors variant name
   // collisions). Domain uniqueness is enforced by a unique index when set;
   // the explicit check gives a clean error for names too.
@@ -70,6 +95,7 @@ export async function updateCompany(
 ) {
   const existing = await companiesRepo.getCompany(db, workspaceId, companyId);
   if (!existing) throw new HTTPException(404, { message: "Company not found" });
+  await assertCompanyRefsInWorkspace(db, workspaceId, data);
   if (data.name || data.domain) {
     const dup = await findDuplicate(
       db,
