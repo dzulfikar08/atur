@@ -51,11 +51,20 @@ export async function list(db: DbClient, projectId: string, c: Context<{ Binding
   return paginatedResponse(sprints, total, offset, limit);
 }
 
-export async function update(db: DbClient, id: string, data: z.infer<typeof updateSprintSchema>) {
+// workspaceId is the caller's workspace (route guard). A sprint in another
+// workspace is indistinguishable from a missing one → 404, never a leaky 200.
+export async function update(
+  db: DbClient,
+  id: string,
+  workspaceId: string,
+  data: z.infer<typeof updateSprintSchema>,
+) {
   const existing = await sprintsRepo.findById(db, id);
-  if (!existing) throw new HTTPException(404, { message: "Sprint not found" });
+  if (!existing || existing.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Sprint not found" });
+  }
   const parsed = updateSprintSchema.parse(data);
-  return sprintsRepo.update(db, id, {
+  return sprintsRepo.update(db, id, workspaceId, {
     name: parsed.name,
     description: parsed.description,
     startDate: parsed.start_date,
@@ -63,25 +72,37 @@ export async function update(db: DbClient, id: string, data: z.infer<typeof upda
   });
 }
 
-export async function remove(db: DbClient, id: string) {
+export async function remove(db: DbClient, id: string, workspaceId: string) {
   const existing = await sprintsRepo.findById(db, id);
-  if (!existing) throw new HTTPException(404, { message: "Sprint not found" });
-  await sprintsRepo.softDelete(db, id);
+  if (!existing || existing.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Sprint not found" });
+  }
+  await sprintsRepo.softDelete(db, id, workspaceId);
 }
 
 export async function addIssue(
   db: DbClient,
   sprintId: string,
+  workspaceId: string,
   data: z.infer<typeof addIssueSchema>,
 ) {
   const parsed = addIssueSchema.parse(data);
   const sprint = await sprintsRepo.findById(db, sprintId);
-  if (!sprint) throw new HTTPException(404, { message: "Sprint not found" });
+  if (!sprint || sprint.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Sprint not found" });
+  }
   await sprintsRepo.addIssue(db, sprintId, parsed.issue_id);
 }
 
-export async function removeIssue(db: DbClient, sprintId: string, issueId: string) {
+export async function removeIssue(
+  db: DbClient,
+  sprintId: string,
+  workspaceId: string,
+  issueId: string,
+) {
   const sprint = await sprintsRepo.findById(db, sprintId);
-  if (!sprint) throw new HTTPException(404, { message: "Sprint not found" });
+  if (!sprint || sprint.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Sprint not found" });
+  }
   await sprintsRepo.removeIssue(db, sprintId, issueId);
 }

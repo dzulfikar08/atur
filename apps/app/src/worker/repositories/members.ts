@@ -49,12 +49,20 @@ export async function addWorkspaceMember(
 
 // Soft-delete a membership scoped to the caller's workspace. A bare-UUID
 // delete let any workspace member remove memberships in OTHER workspaces
-// (cross-workspace IDOR). Returns true when a row in THIS workspace matched.
+// (cross-workspace IDOR). isNull(deletedAt) keeps an already-removed row from
+// matching again (a re-delete would otherwise still "succeed" → 204 on a
+// dead row). Returns true when a live row in THIS workspace matched.
 export async function removeWorkspaceMember(db: DbClient, workspaceId: string, id: string) {
   const rows = await db
     .update(workspaceMembers)
     .set({ deletedAt: nowISO(), updatedAt: nowISO() })
-    .where(and(eq(workspaceMembers.id, id), eq(workspaceMembers.workspaceId, workspaceId)))
+    .where(
+      and(
+        eq(workspaceMembers.id, id),
+        eq(workspaceMembers.workspaceId, workspaceId),
+        isNull(workspaceMembers.deletedAt),
+      ),
+    )
     .returning({ id: workspaceMembers.id });
   return rows.length > 0;
 }
@@ -146,4 +154,27 @@ export async function isWorkspaceMember(
     )
     .limit(1);
   return !!m;
+}
+
+// Membership row (role + is_active) for admin gating — deleted rows excluded.
+// Unlike isWorkspaceMember this also matches suspended (is_active = 0) members
+// so the caller can tell a "suspended admin" from "not a member" and 403 on
+// both with the right semantics.
+export async function findMembership(db: DbClient, workspaceId: string, memberId: string) {
+  const [m] = await db
+    .select({
+      id: workspaceMembers.id,
+      role: workspaceMembers.role,
+      isActive: workspaceMembers.isActive,
+    })
+    .from(workspaceMembers)
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.memberId, memberId),
+        isNull(workspaceMembers.deletedAt),
+      ),
+    )
+    .limit(1);
+  return m;
 }

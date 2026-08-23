@@ -27,18 +27,25 @@ export async function list(db: DbClient, workspaceId: string) {
   return webhooksRepo.listByWorkspace(db, workspaceId);
 }
 
+// workspaceId is the caller's workspace (route guard). A webhook in another
+// workspace is indistinguishable from a missing one → 404, never a leaky 200.
 export async function update(
   db: DbClient,
   id: string,
+  workspaceId: string,
   data: Partial<z.infer<typeof createWebhookSchema>>,
 ) {
   const webhook = await webhooksRepo.findById(db, id);
-  if (!webhook) throw new HTTPException(404, { message: "Webhook not found" });
-  return webhooksRepo.update(db, id, data);
+  if (!webhook || webhook.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Webhook not found" });
+  }
+  return webhooksRepo.update(db, id, workspaceId, data);
 }
 
-export async function remove(db: DbClient, id: string) {
+export async function remove(db: DbClient, id: string, workspaceId: string) {
   const webhook = await webhooksRepo.findById(db, id);
-  if (!webhook) throw new HTTPException(404, { message: "Webhook not found" });
-  await webhooksRepo.remove(db, id);
+  if (!webhook || webhook.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Webhook not found" });
+  }
+  await webhooksRepo.remove(db, id, workspaceId);
 }

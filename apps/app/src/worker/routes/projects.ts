@@ -7,7 +7,7 @@ import { paginationParams, paginatedResponse } from "../lib/pagination";
 import * as projectService from "../services/projects";
 
 export const projectRoutes = new Hono<{ Bindings: Env }>({ strict: false })
-  .get("/", async (c) => {
+  .get("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const { offset, limit } = paginationParams(c);
@@ -27,7 +27,7 @@ export const projectRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const project = await projectService.create(db, slug, body);
     return c.json(project, 201);
   })
-  .get("/:projectId", async (c) => {
+  .get("/:projectId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const projectId = c.req.param("projectId")!;
@@ -49,7 +49,7 @@ export const projectRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     await projectService.remove(db, slug, projectId);
     return c.body(null, 204);
   })
-  .get("/:projectId/members", async (c) => {
+  .get("/:projectId/members", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const slug = c.req.param("slug")!;
     const projectId = c.req.param("projectId")!;

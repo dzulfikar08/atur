@@ -4,11 +4,12 @@
 import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 import { v4 as uuid } from "uuid";
 
 export const viewRoutes = new Hono<{ Bindings: Env }>({ strict: false })
-  .get("/", authMiddleware, (c) => c.json({ results: [] }))
-  .post("/", authMiddleware, async (c) => {
+  .get("/", authMiddleware, requireWorkspaceMember, (c) => c.json({ results: [] }))
+  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as {
       name?: string;
       query?: unknown;
@@ -27,4 +28,4 @@ export const viewRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       201,
     );
   })
-  .delete("/:viewId", authMiddleware, (c) => c.body(null, 204));
+  .delete("/:viewId", authMiddleware, requireWorkspaceMember, (c) => c.body(null, 204));

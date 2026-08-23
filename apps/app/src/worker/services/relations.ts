@@ -1,7 +1,9 @@
-import { z } from "zod";
+import { and, eq, isNull } from "drizzle-orm";
 import type { DbClient } from "../db/index";
+import * as schema from "../db/schema";
 import * as relationsRepo from "../repositories/relations";
 import { HTTPException } from "hono/http-exception";
+import { z } from "zod";
 
 export const createRelationSchema = z.object({
   issue_id: z.string().uuid(),
@@ -21,8 +23,23 @@ export async function list(db: DbClient, issueId: string) {
   return relationsRepo.listByIssue(db, issueId);
 }
 
-export async function remove(db: DbClient, id: string) {
+// issue_relations has no workspace column, so scope via the primary issue:
+// the relation is only removable when its issue belongs to the caller's
+// workspace (route guard). Otherwise 404 — same as a missing relation.
+export async function remove(db: DbClient, id: string, workspaceId: string) {
   const relation = await relationsRepo.findById(db, id);
   if (!relation) throw new HTTPException(404, { message: "Relation not found" });
+  const [issue] = await db
+    .select({ id: schema.issues.id })
+    .from(schema.issues)
+    .where(
+      and(
+        eq(schema.issues.id, relation.issueId),
+        eq(schema.issues.workspaceId, workspaceId),
+        isNull(schema.issues.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!issue) throw new HTTPException(404, { message: "Relation not found" });
   await relationsRepo.removeRelation(db, id);
 }

@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
-import { requireWorkspaceMember } from "../middleware/workspace";
+import { requireWorkspaceAdmin, requireWorkspaceMember } from "../middleware/workspace";
 import * as membersService from "../services/members";
 import { HTTPException } from "hono/http-exception";
 import { eq, and, isNull } from "drizzle-orm";
@@ -28,7 +28,9 @@ export const memberRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await membersService.listWorkspaceMembers(db, workspaceId);
     return c.json(result);
   })
-  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
+  // Adding/removing members changes who can access the workspace at all, so it
+  // is admin-only (owner or role >= 20) — not any member.
+  .post("/", authMiddleware, requireWorkspaceMember, requireWorkspaceAdmin, async (c) => {
     const db = getDb(c.env.DB);
     const workspaceId = c.get("workspace").id;
     const body = addMemberSchema.parse(await c.req.json());
@@ -40,7 +42,7 @@ export const memberRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     );
     return c.json(result, 201);
   })
-  .post("/invite", authMiddleware, requireWorkspaceMember, async (c) => {
+  .post("/invite", authMiddleware, requireWorkspaceMember, requireWorkspaceAdmin, async (c) => {
     const db = getDb(c.env.DB);
     const workspaceId = c.get("workspace").id;
     const body = inviteSchema.parse(await c.req.json());
@@ -91,13 +93,23 @@ export const memberRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const member = await membersService.addWorkspaceMember(db, workspaceId, user.id, body.role);
     return c.json(member, 201);
   })
-  .delete("/:memberId", authMiddleware, requireWorkspaceMember, async (c) => {
-    const db = getDb(c.env.DB);
-    const memberId = c.req.param("memberId")!;
-    // Scoped to the caller's workspace: a foreign member UUID (from another
-    // workspace) matches no row here → 404 instead of silently kicking that
-    // workspace's member out (cross-workspace IDOR).
-    const removed = await membersService.removeWorkspaceMember(db, c.get("workspace").id, memberId);
-    if (!removed) throw new HTTPException(404, { message: "Member not found" });
-    return c.body(null, 204);
-  });
+  .delete(
+    "/:memberId",
+    authMiddleware,
+    requireWorkspaceMember,
+    requireWorkspaceAdmin,
+    async (c) => {
+      const db = getDb(c.env.DB);
+      const memberId = c.req.param("memberId")!;
+      // Scoped to the caller's workspace: a foreign member UUID (from another
+      // workspace) matches no row here → 404 instead of silently kicking that
+      // workspace's member out (cross-workspace IDOR).
+      const removed = await membersService.removeWorkspaceMember(
+        db,
+        c.get("workspace").id,
+        memberId,
+      );
+      if (!removed) throw new HTTPException(404, { message: "Member not found" });
+      return c.body(null, 204);
+    },
+  );

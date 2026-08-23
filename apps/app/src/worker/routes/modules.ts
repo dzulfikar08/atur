@@ -8,7 +8,7 @@ import * as modulesService from "../services/modules";
 import * as schema from "../db/schema";
 
 export const moduleRoutes = new Hono<{ Bindings: Env }>({ strict: false })
-  .get("/", async (c) => {
+  .get("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
     const result = await modulesService.list(db, projectId, c);
@@ -17,38 +17,40 @@ export const moduleRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
-    const workspaceSlug = c.req.param("slug")!;
     const body = modulesService.createModuleSchema.parse(await c.req.json());
-    const result = await modulesService.create(db, body, projectId, workspaceSlug);
+    const result = await modulesService.create(db, body, projectId, c.get("workspace").id);
     return c.json(result, 201);
   })
-  .get("/:moduleId", async (c) => {
+  .get("/:moduleId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const moduleId = c.req.param("moduleId")!;
     const result = await modulesService.getById(db, moduleId);
     return c.json(result);
   })
+  // update/remove (and their issue-link mutations) take the guard's workspace
+  // id: a module UUID from another workspace matches nothing → 404
+  // (cross-workspace IDOR).
   .patch("/:moduleId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const moduleId = c.req.param("moduleId")!;
     const body = modulesService.updateModuleSchema.parse(await c.req.json());
-    const result = await modulesService.update(db, moduleId, body);
+    const result = await modulesService.update(db, moduleId, c.get("workspace").id, body);
     return c.json(result);
   })
   .delete("/:moduleId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const moduleId = c.req.param("moduleId")!;
-    await modulesService.remove(db, moduleId);
+    await modulesService.remove(db, moduleId, c.get("workspace").id);
     return c.json({ success: true });
   })
   .post("/:moduleId/issues", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const moduleId = c.req.param("moduleId")!;
     const body = modulesService.addIssueSchema.parse(await c.req.json());
-    await modulesService.addIssue(db, moduleId, body);
+    await modulesService.addIssue(db, moduleId, c.get("workspace").id, body);
     return c.json({ success: true }, 201);
   })
-  .get("/:moduleId/issues", async (c) => {
+  .get("/:moduleId/issues", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const moduleId = c.req.param("moduleId")!;
     const rows = await db
@@ -62,6 +64,6 @@ export const moduleRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const db = getDb(c.env.DB);
     const moduleId = c.req.param("moduleId")!;
     const issueId = c.req.param("issueId")!;
-    await modulesService.removeIssue(db, moduleId, issueId);
+    await modulesService.removeIssue(db, moduleId, c.get("workspace").id, issueId);
     return c.json({ success: true });
   });

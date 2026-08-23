@@ -40,7 +40,10 @@ vi.mock("../../db/index", () => ({
 }));
 
 vi.mock("../../repositories/workspaces", () => ({ findBySlug: vi.fn() }));
-vi.mock("../../repositories/members", () => ({ isWorkspaceMember: vi.fn() }));
+vi.mock("../../repositories/members", () => ({
+  isWorkspaceMember: vi.fn(),
+  findMembership: vi.fn(),
+}));
 
 vi.mock("../../services/projects", async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -56,8 +59,20 @@ vi.mock("../../services/sprints", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   create: vi.fn(),
 }));
+// Repos stay mocked while labels/sprints update+remove run through the REAL
+// service, so the cross-workspace scoping logic itself is exercised.
+vi.mock("../../repositories/labels", () => ({
+  findById: vi.fn(),
+  update: vi.fn(),
+  remove: vi.fn(),
+}));
+vi.mock("../../repositories/sprints", () => ({
+  findById: vi.fn(),
+  softDelete: vi.fn(),
+}));
 vi.mock("../../services/members", async (importOriginal) => ({
   ...(await importOriginal<object>()),
+  addWorkspaceMember: vi.fn(),
   listWorkspaceMembers: vi.fn(),
   removeWorkspaceMember: vi.fn(),
 }));
@@ -75,9 +90,12 @@ import { labelRoutes } from "../../routes/labels";
 import { sprintRoutes } from "../../routes/sprints";
 import { memberRoutes } from "../../routes/members";
 import { workspaceRoutes } from "../../routes/workspaces";
+import { issueRoutes } from "../../routes/issues";
 import * as workspaceRepo from "../../repositories/workspaces";
 import * as membersRepo from "../../repositories/members";
 import * as projectRepo from "../../repositories/projects";
+import * as labelsRepo from "../../repositories/labels";
+import * as sprintsRepo from "../../repositories/sprints";
 import * as projectService from "../../services/projects";
 import * as labelsService from "../../services/labels";
 import * as sprintsService from "../../services/sprints";
@@ -100,6 +118,7 @@ function testApp() {
   app.route("/api/workspaces/:slug/projects", projectRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/labels", labelRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/sprints", sprintRoutes);
+  app.route("/api/workspaces/:slug/projects/:projectId/issues", issueRoutes);
   return app;
 }
 
@@ -247,6 +266,12 @@ describe("workspace member routes", () => {
 
   it("scopes member removal to the caller's workspace (cross-workspace IDOR)", async () => {
     vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    // Removal is admin-gated: give the caller an active admin membership row.
+    vi.mocked(membersRepo.findMembership).mockResolvedValue({
+      id: "mem-1",
+      role: 20,
+      isActive: 1,
+    } as never);
     const app = testApp();
     // "victim-uuid" belongs to another workspace: the workspace-scoped delete
     // matches no row in ws-1 and reports false → route answers 404, so the
@@ -277,9 +302,14 @@ describe("workspace member routes", () => {
 });
 
 describe("workspace management requires an active admin", () => {
-  // assertCanManage runs two raw selects: the workspace row, then the member row.
+  // requireWorkspaceAdmin resolves via workspaceRepo.findBySlug + the
+  // findMembership row (owner short-circuits before the row is even read).
   it("rejects a suspended admin (is_active = 0) with 403", async () => {
-    selectQueue.push([WORKSPACE], [{ role: 20, isActive: 0, deletedAt: null }]);
+    vi.mocked(membersRepo.findMembership).mockResolvedValue({
+      id: "mem-1",
+      role: 20,
+      isActive: 0,
+    } as never);
     const app = testApp();
 
     const res = await req(
@@ -291,14 +321,53 @@ describe("workspace management requires an active admin", () => {
     expect(workspaceService.update).not.toHaveBeenCalled();
   });
 
+  it("rejects a plain member (role 15) with 403", async () => {
+    vi.mocked(membersRepo.findMembership).mockResolvedValue({
+      id: "mem-1",
+      role: 15,
+      isActive: 1,
+    } as never);
+    const app = testApp();
+
+    const res = await req(app, "/api/workspaces/acme", { method: "DELETE" });
+    expect(res.status).toBe(403);
+    expect(workspaceService.update).not.toHaveBeenCalled();
+  });
+
   it("allows an active admin to rename", async () => {
-    selectQueue.push([WORKSPACE], [{ role: 20, isActive: 1, deletedAt: null }]);
+    // An active admin is also an active member — the membership gate passes
+    // first, then the role gate reads the membership row.
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    vi.mocked(membersRepo.findMembership).mockResolvedValue({
+      id: "mem-1",
+      role: 20,
+      isActive: 1,
+    } as never);
     vi.mocked(workspaceService.update).mockResolvedValue({ id: "ws-1" } as never);
     const app = testApp();
 
     const res = await req(app, "/api/workspaces/acme", jsonInit("PATCH", { name: "New Name" }));
     expect(res.status).toBe(200);
-    expect(workspaceService.update).toHaveBeenCalledTimes(1);
+    expect(workspaceService.update).toHaveBeenCalledWith(
+      expect.anything(),
+      "acme",
+      expect.objectContaining({ name: "New Name" }),
+    );
+  });
+
+  it("404s a deleted/unknown workspace on PATCH", async () => {
+    // workspaceRepo.findBySlug is deletedAt-filtered, so a soft-deleted
+    // workspace resolves the same as an unknown slug.
+    vi.mocked(workspaceRepo.findBySlug).mockResolvedValue(undefined as never);
+    const app = testApp();
+
+    const res = await req(
+      app,
+      "/api/workspaces/acme",
+      jsonInit("PATCH", { name: "Hostile Rename" }),
+    );
+    expect(res.status).toBe(404);
+    expect(workspaceService.update).not.toHaveBeenCalled();
   });
 });
 
@@ -342,5 +411,157 @@ describe("project member removal is scoped to the resolved project", () => {
     const res = await req(app, memberPath("pm-1"), { method: "DELETE" });
     expect(res.status).toBe(404);
     expect(projectRepo.removeMember).not.toHaveBeenCalled();
+  });
+});
+
+describe("cross-workspace object writes are scoped to the caller's workspace", () => {
+  // The REAL service update/remove run here (only the repo layer is mocked),
+  // so these exercise the resolve-then-compare + scoped where logic itself.
+  const victimUuid = "11111111-2222-3333-4444-555555555555";
+
+  it("404s a foreign label PATCH and never reaches the repo (labels)", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    // The label exists — but in another workspace.
+    vi.mocked(labelsRepo.findById).mockResolvedValue({
+      id: victimUuid,
+      workspaceId: "ws-other",
+      deletedAt: null,
+    } as never);
+    const app = testApp();
+
+    const res = await req(
+      app,
+      `/api/workspaces/acme/projects/p-1/labels/${victimUuid}`,
+      jsonInit("PATCH", { name: "Hostile Rename" }),
+    );
+    expect(res.status).toBe(404);
+    expect(labelsRepo.update).not.toHaveBeenCalled();
+
+    // A label in the caller's own workspace updates via the scoped repo call.
+    vi.mocked(labelsRepo.findById).mockResolvedValue({
+      id: "l-1",
+      workspaceId: "ws-1",
+      deletedAt: null,
+    } as never);
+    vi.mocked(labelsRepo.update).mockResolvedValue({ id: "l-1" } as never);
+    const allowed = await req(
+      app,
+      "/api/workspaces/acme/projects/p-1/labels/l-1",
+      jsonInit("PATCH", { name: "Renamed" }),
+    );
+    expect(allowed.status).toBe(200);
+    expect(labelsRepo.update).toHaveBeenCalledWith(
+      expect.anything(),
+      "l-1",
+      "ws-1", // the guard's workspace — never one derived from the raw UUID
+      expect.objectContaining({ name: "Renamed" }),
+    );
+  });
+
+  it("404s a foreign sprint DELETE and never soft-deletes (sprints)", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    vi.mocked(sprintsRepo.findById).mockResolvedValue({
+      id: victimUuid,
+      workspaceId: "ws-other",
+      deletedAt: null,
+    } as never);
+    const app = testApp();
+
+    const res = await req(app, `/api/workspaces/acme/projects/p-1/sprints/${victimUuid}`, {
+      method: "DELETE",
+    });
+    expect(res.status).toBe(404);
+    expect(sprintsRepo.softDelete).not.toHaveBeenCalled();
+
+    // The same UUID in the caller's workspace soft-deletes normally.
+    vi.mocked(sprintsRepo.findById).mockResolvedValue({
+      id: "s-1",
+      workspaceId: "ws-1",
+      deletedAt: null,
+    } as never);
+    const allowed = await req(app, "/api/workspaces/acme/projects/p-1/sprints/s-1", {
+      method: "DELETE",
+    });
+    expect(allowed.status).toBe(200);
+    expect(sprintsRepo.softDelete).toHaveBeenCalledWith(expect.anything(), "s-1", "ws-1");
+  });
+});
+
+describe("read routes enforce workspace membership", () => {
+  it("rejects issue listing and detail by a non-member with 403", async () => {
+    const app = testApp();
+
+    const list = await req(app, "/api/workspaces/acme/projects/p-1/issues");
+    expect(list.status).toBe(403);
+
+    const detail = await req(app, "/api/workspaces/acme/projects/p-1/issues/1");
+    expect(detail.status).toBe(403);
+  });
+
+  it("rejects member listing by a non-member with 403", async () => {
+    const app = testApp();
+
+    const res = await req(app, "/api/workspaces/acme/members");
+    expect(res.status).toBe(403);
+    expect(membersService.listWorkspaceMembers).not.toHaveBeenCalled();
+  });
+});
+
+describe("member invite/remove require an active admin", () => {
+  const invite = jsonInit("POST", { email: "newbie@example.com" });
+
+  it("rejects a plain member's invite with 403", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    vi.mocked(membersRepo.findMembership).mockResolvedValue({
+      id: "mem-1",
+      role: 15,
+      isActive: 1,
+    } as never);
+    const app = testApp();
+
+    const res = await req(app, "/api/workspaces/acme/members/invite", invite);
+    expect(res.status).toBe(403);
+    expect(membersService.addWorkspaceMember).not.toHaveBeenCalled();
+  });
+
+  it("rejects a suspended admin's invite with 403", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    vi.mocked(membersRepo.findMembership).mockResolvedValue({
+      id: "mem-1",
+      role: 20,
+      isActive: 0,
+    } as never);
+    const app = testApp();
+
+    const res = await req(app, "/api/workspaces/acme/members/invite", invite);
+    expect(res.status).toBe(403);
+    expect(membersService.addWorkspaceMember).not.toHaveBeenCalled();
+  });
+
+  it("lets an active admin invite (idempotent 200 via the existing-member path)", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    vi.mocked(membersRepo.findMembership).mockResolvedValue({
+      id: "mem-1",
+      role: 20,
+      isActive: 1,
+    } as never);
+    const app = testApp();
+
+    const res = await req(app, "/api/workspaces/acme/members/invite", invite);
+    expect(res.status).toBe(200);
+  });
+
+  it("rejects a plain member's member removal with 403", async () => {
+    vi.mocked(membersRepo.isWorkspaceMember).mockResolvedValue(true);
+    vi.mocked(membersRepo.findMembership).mockResolvedValue({
+      id: "mem-1",
+      role: 15,
+      isActive: 1,
+    } as never);
+    const app = testApp();
+
+    const res = await req(app, "/api/workspaces/acme/members/m-2", { method: "DELETE" });
+    expect(res.status).toBe(403);
+    expect(membersService.removeWorkspaceMember).not.toHaveBeenCalled();
   });
 });

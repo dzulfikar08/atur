@@ -6,7 +6,7 @@ import { requireWorkspaceMember } from "../middleware/workspace";
 import * as relationsService from "../services/relations";
 
 export const relationRoutes = new Hono<{ Bindings: Env }>({ strict: false })
-  .get("/:issueId", async (c) => {
+  .get("/:issueId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const issueId = c.req.param("issueId")!;
     const relations = await relationsService.list(db, issueId);
@@ -18,9 +18,11 @@ export const relationRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const relation = await relationsService.create(db, body);
     return c.json(relation, 201);
   })
+  // remove takes the guard's workspace id: a relation whose issue lives in
+  // another workspace matches nothing → 404 (cross-workspace IDOR).
   .delete("/:relationId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
     const relationId = c.req.param("relationId")!;
-    await relationsService.remove(db, relationId);
+    await relationsService.remove(db, relationId, c.get("workspace").id);
     return c.json({ success: true });
   });

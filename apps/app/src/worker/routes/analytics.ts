@@ -5,21 +5,16 @@ import { and, eq, isNull, isNotNull, count } from "drizzle-orm";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import * as schema from "../db/schema";
+import { authMiddleware } from "../middleware/auth";
+import { requireWorkspaceMember } from "../middleware/workspace";
 
 export const analyticsRoutes = new Hono<{ Bindings: Env }>({ strict: false })
-  .get("/overview", async (c) => {
+  .get("/overview", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
-    const slug = c.req.param("slug")!;
-    const [ws] = await db
-      .select({ id: schema.workspaces.id })
-      .from(schema.workspaces)
-      .where(and(eq(schema.workspaces.slug, slug), isNull(schema.workspaces.deletedAt)))
-      .limit(1);
-    const workspaceId = ws?.id;
+    // The guard resolved (and membership-checked) the workspace for :slug.
+    const workspaceId = c.get("workspace").id;
 
-    const base = workspaceId
-      ? and(eq(schema.issues.workspaceId, workspaceId), isNull(schema.issues.deletedAt))
-      : isNull(schema.issues.deletedAt);
+    const base = and(eq(schema.issues.workspaceId, workspaceId), isNull(schema.issues.deletedAt));
 
     const [totalRow] = await db.select({ n: count() }).from(schema.issues).where(base);
     const [openRow] = await db
@@ -42,5 +37,5 @@ export const analyticsRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       overdue_trend: 0,
     });
   })
-  .get("/completion-trend", (c) => c.json({ trend: [] }))
-  .get("/sprints", (c) => c.json({ active_sprints: [] }));
+  .get("/completion-trend", authMiddleware, requireWorkspaceMember, (c) => c.json({ trend: [] }))
+  .get("/sprints", authMiddleware, requireWorkspaceMember, (c) => c.json({ active_sprints: [] }));

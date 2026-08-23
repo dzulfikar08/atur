@@ -53,11 +53,20 @@ export async function list(db: DbClient, projectId: string, c: Context<{ Binding
   return paginatedResponse(modules, total, offset, limit);
 }
 
-export async function update(db: DbClient, id: string, data: z.infer<typeof updateModuleSchema>) {
+// workspaceId is the caller's workspace (route guard). A module in another
+// workspace is indistinguishable from a missing one → 404, never a leaky 200.
+export async function update(
+  db: DbClient,
+  id: string,
+  workspaceId: string,
+  data: z.infer<typeof updateModuleSchema>,
+) {
   const existing = await modulesRepo.findById(db, id);
-  if (!existing) throw new HTTPException(404, { message: "Module not found" });
+  if (!existing || existing.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Module not found" });
+  }
   const parsed = updateModuleSchema.parse(data);
-  return modulesRepo.update(db, id, {
+  return modulesRepo.update(db, id, workspaceId, {
     name: parsed.name,
     description: parsed.description,
     status: parsed.status,
@@ -67,25 +76,37 @@ export async function update(db: DbClient, id: string, data: z.infer<typeof upda
   });
 }
 
-export async function remove(db: DbClient, id: string) {
+export async function remove(db: DbClient, id: string, workspaceId: string) {
   const existing = await modulesRepo.findById(db, id);
-  if (!existing) throw new HTTPException(404, { message: "Module not found" });
-  await modulesRepo.softDelete(db, id);
+  if (!existing || existing.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Module not found" });
+  }
+  await modulesRepo.softDelete(db, id, workspaceId);
 }
 
 export async function addIssue(
   db: DbClient,
   moduleId: string,
+  workspaceId: string,
   data: z.infer<typeof addIssueSchema>,
 ) {
   const parsed = addIssueSchema.parse(data);
   const mod = await modulesRepo.findById(db, moduleId);
-  if (!mod) throw new HTTPException(404, { message: "Module not found" });
+  if (!mod || mod.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Module not found" });
+  }
   await modulesRepo.addIssue(db, moduleId, parsed.issue_id);
 }
 
-export async function removeIssue(db: DbClient, moduleId: string, issueId: string) {
+export async function removeIssue(
+  db: DbClient,
+  moduleId: string,
+  workspaceId: string,
+  issueId: string,
+) {
   const mod = await modulesRepo.findById(db, moduleId);
-  if (!mod) throw new HTTPException(404, { message: "Module not found" });
+  if (!mod || mod.workspaceId !== workspaceId) {
+    throw new HTTPException(404, { message: "Module not found" });
+  }
   await modulesRepo.removeIssue(db, moduleId, issueId);
 }

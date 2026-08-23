@@ -60,9 +60,13 @@ export async function create(
   return findById(db, id);
 }
 
+// Mutations are workspace-scoped (id AND workspace_id) — a bare foreign UUID
+// from another workspace never matches. The workspace id always comes from the
+// route guard (c.get("workspace").id), never the request body.
 export async function update(
   db: DbClient,
   id: string,
+  workspaceId: string,
   data: {
     name?: string;
     description?: string | null;
@@ -75,16 +79,16 @@ export async function update(
   await db
     .update(schema.modules)
     .set({ ...data, updatedAt: nowISO() })
-    .where(eq(schema.modules.id, id));
+    .where(and(eq(schema.modules.id, id), eq(schema.modules.workspaceId, workspaceId)));
   return findById(db, id);
 }
 
-export async function softDelete(db: DbClient, id: string) {
+export async function softDelete(db: DbClient, id: string, workspaceId: string) {
   const now = nowISO();
   await db
     .update(schema.modules)
     .set({ deletedAt: now, updatedAt: now })
-    .where(eq(schema.modules.id, id));
+    .where(and(eq(schema.modules.id, id), eq(schema.modules.workspaceId, workspaceId)));
 }
 
 export async function addIssue(db: DbClient, moduleId: string, issueId: string) {
