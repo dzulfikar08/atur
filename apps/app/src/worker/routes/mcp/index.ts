@@ -909,34 +909,45 @@ async function assertStateInWorkspace(
 
 // Labels carry workspaceId directly (they are workspace-scoped, not
 // project-scoped), so the same id + workspace + not-deleted shape applies.
-async function assertLabelInWorkspace(
+// One inArray select covers the whole list; row count must match unique ids.
+async function assertLabelsInWorkspace(
   db: ReturnType<typeof getDb>,
-  labelId: string,
+  labelIds: string[],
   workspaceId: string,
 ) {
-  const [label] = await db
+  const unique = [...new Set(labelIds)];
+  if (unique.length === 0) return;
+  const rows = await db
     .select({ id: schema.labels.id })
     .from(schema.labels)
     .where(
       and(
-        eq(schema.labels.id, labelId),
+        inArray(schema.labels.id, unique),
         eq(schema.labels.workspaceId, workspaceId),
         isNull(schema.labels.deletedAt),
       ),
-    )
-    .limit(1);
-  if (!label) throw new HTTPException(404, { message: "Label not found" });
+    );
+  if (rows.length !== unique.length) {
+    throw new HTTPException(404, { message: "Label not found" });
+  }
 }
 
-// Assignees must be ACTIVE members of the workspace. The workspace owner is
-// seeded into workspace_members at creation time, so a membership-row check
-// covers owners too. Any unknown id → 404 before a row is written.
+// Assignees must be owner or ACTIVE member of the workspace — the same
+// owner-or-member rule every other auth path uses, so a workspace whose
+// owner row is missing/deleted in workspace_members can still assign the
+// owner. Any remaining unknown id → 404 before a row is written.
 async function assertAssigneesInWorkspace(
   db: ReturnType<typeof getDb>,
   assigneeIds: string[],
   workspaceId: string,
 ) {
   const unique = [...new Set(assigneeIds)];
+  const [ws] = await db
+    .select({ ownerId: schema.workspaces.ownerId })
+    .from(schema.workspaces)
+    .where(eq(schema.workspaces.id, workspaceId))
+    .limit(1);
+  if (!ws) throw new HTTPException(404, { message: "Workspace not found" });
   const rows = await db
     .select({ memberId: schema.workspaceMembers.memberId })
     .from(schema.workspaceMembers)
@@ -949,7 +960,7 @@ async function assertAssigneesInWorkspace(
       ),
     );
   const found = new Set(rows.map((r) => r.memberId));
-  const missing = unique.filter((id) => !found.has(id));
+  const missing = unique.filter((id) => !found.has(id) && id !== ws.ownerId);
   if (missing.length > 0) {
     throw new HTTPException(404, { message: "Assignee not found in this workspace" });
   }
@@ -1114,18 +1125,18 @@ export async function handleTool(
       // Same binding for the optional state/label/assignee ids: they must
       // belong to the named workspace, else the issue row (or its join rows)
       // would reference a foreign workspace's entities.
-      if (params.state_id) {
+      // Guards are `!== undefined` (not truthiness): an empty-string id must
+      // run through validation and 404 there, not skip it and get inserted.
+      if (params.state_id !== undefined) {
         await assertStateInWorkspace(db, params.state_id as string, workspaceId);
       }
       if (Array.isArray(params.label_ids)) {
-        for (const labelId of params.label_ids as string[]) {
-          await assertLabelInWorkspace(db, labelId, workspaceId);
-        }
+        await assertLabelsInWorkspace(db, params.label_ids as string[], workspaceId);
       }
       if (Array.isArray(params.assignee_ids) && (params.assignee_ids as string[]).length > 0) {
         await assertAssigneesInWorkspace(db, params.assignee_ids as string[], workspaceId);
       }
-      if (params.parent_id) {
+      if (params.parent_id !== undefined) {
         // The parent issue must live in the named workspace too — else a
         // member of ws A could nest their issue under ws B's issue tree.
         const [parent] = await db
