@@ -32,24 +32,17 @@ export type Post = CollectionEntry<"blog">;
 
 /** Rough reading time from the raw markdown body (~220 wpm). */
 export function readMins(body: string | undefined): number {
-  const words = (body ?? "")
-    .split(/\s+/)
-    .filter(Boolean).length;
+  const words = (body ?? "").split(/\s+/).filter(Boolean).length;
   return Math.max(1, Math.round(words / 220));
 }
 
 /** Slugify a tag label for /blog/tag/ URLs. */
 export function tagSlug(tag: string): string {
-  return tag
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "-");
+  return tag.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
 export function newestFirst(posts: Post[]): Post[] {
-  return [...posts].sort(
-    (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf(),
-  );
+  return [...posts].sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
 }
 
 export function byCategory(posts: Post[], category: string): Post[] {
@@ -58,9 +51,7 @@ export function byCategory(posts: Post[], category: string): Post[] {
 
 export function byTag(posts: Post[], tag: string): Post[] {
   const slug = tagSlug(tag);
-  return posts.filter((p) =>
-    (p.data.tags ?? []).some((t) => tagSlug(t) === slug),
-  );
+  return posts.filter((p) => (p.data.tags ?? []).some((t) => tagSlug(t) === slug));
 }
 
 export interface CategoryInfo {
@@ -107,9 +98,7 @@ export function allTags(posts: Post[]): TagInfo[] {
 /** Same category first, then posts sharing a tag, deduped, capped. */
 export function relatedPosts(all: Post[], post: Post, cap = 3): Post[] {
   const tagSet = new Set((post.data.tags ?? []).map(tagSlug));
-  const sameCategory = byCategory(all, post.data.category).filter(
-    (p) => p.id !== post.id,
-  );
+  const sameCategory = byCategory(all, post.data.category).filter((p) => p.id !== post.id);
   const bySharedTag = tagSet.size
     ? all.filter(
         (p) =>
