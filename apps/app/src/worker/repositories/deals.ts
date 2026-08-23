@@ -171,7 +171,8 @@ export async function update(
 // Per-stage, per-currency rollup: SUM(amount_cents) and COUNT grouped by the
 // issue's state AND the deal's currency — mixed-currency pipelines must never
 // cross-sum. Powers pipeline column totals on the board. stateGroup rides
-// along (functionally dependent on state_id in SQLite's loose GROUP BY).
+// along as MAX() — functionally dependent on state_id, so the aggregate keeps
+// strict GROUP BY engines happy without changing the grouped result.
 export async function aggregateByStageCurrency(
   db: DbClient,
   projectId: string,
@@ -187,7 +188,7 @@ export async function aggregateByStageCurrency(
   const rows = await db
     .select({
       stateId: schema.issues.stateId,
-      stateGroup: schema.states.groupName,
+      stateGroup: sql<string | null>`MAX(${schema.states.groupName})`,
       currency: schema.deals.currency,
       totalCents: sql<number>`COALESCE(SUM(${schema.deals.amountCents}), 0)`,
       count: sql<number>`COUNT(*)`,
