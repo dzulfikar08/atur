@@ -160,7 +160,8 @@ async function boundPipelineProject(
   return pickPipelineProject(db, settings.workspaceId);
 }
 
-async function resolvePipeline(
+// Exported for tests (DEV-20 config-poisoning coverage).
+export async function resolvePipeline(
   db: DbClient,
   settings: NonNullable<Awaited<ReturnType<typeof polarRepo.getSettings>>>,
 ): Promise<{ projectId: string; defaultStateId: string | null }> {
