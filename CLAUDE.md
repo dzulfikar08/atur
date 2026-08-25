@@ -257,11 +257,11 @@ add_comment(
 )
 ```
 
-### 46 Available Tools
+### 49 Available Tools
 
 | Category              | Tools                                                                                                                                    |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Workspace             | `list_workspaces`, `list_workspace_members`                                                                                              |
+| Workspace             | `list_workspaces`, `create_workspace`, `update_workspace`, `delete_workspace`, `list_workspace_members`                                 |
 | Projects              | `list_projects`, `get_project`, `create_project`                                                                                         |
 | Issues                | `list_issues`, `create_issue`, `get_issue`, `update_issue`, `delete_issue`, `search_issues`, `add_comment`, `list_comments`              |
 | Issue Relations       | `list_issue_relations`, `add_issue_relation`, `remove_issue_relation`                                                                    |
