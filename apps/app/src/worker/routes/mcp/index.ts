@@ -16,6 +16,8 @@ import * as companiesService from "../../services/companies";
 import * as factsRepo from "../../repositories/contact_facts";
 import * as factsService from "../../services/contact_facts";
 import * as activitiesService from "../../services/crm_activities";
+import * as workspaceService from "../../services/workspaces";
+import * as workspaceRepo from "../../repositories/workspaces";
 
 interface JsonRpcRequest {
   jsonrpc: string;
@@ -48,6 +50,50 @@ const TOOLS = [
     name: "list_workspaces",
     description: "List all workspaces",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "create_workspace",
+    description: "Create a new workspace (calling user becomes owner and admin member)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Workspace display name (1-80 chars)" },
+        slug: {
+          type: "string",
+          description: 'URL slug: 1-48 chars, lowercase letters/digits/hyphens (e.g. "my-team")',
+        },
+        logo: { type: "string" },
+        organizationSize: { type: "string" },
+        timezone: { type: "string", description: "IANA timezone, defaults to UTC" },
+        backgroundColor: { type: "string" },
+      },
+      required: ["name", "slug"],
+    },
+  },
+  {
+    name: "update_workspace",
+    description: "Update a workspace's profile (owner or admin only)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string", description: "Workspace slug" },
+        name: { type: "string" },
+        logo: { type: "string" },
+        organizationSize: { type: "string" },
+        timezone: { type: "string" },
+        backgroundColor: { type: "string" },
+      },
+      required: ["workspace"],
+    },
+  },
+  {
+    name: "delete_workspace",
+    description: "Soft-delete a workspace and hide it from lists (owner or admin only)",
+    inputSchema: {
+      type: "object",
+      properties: { workspace: { type: "string", description: "Workspace slug" } },
+      required: ["workspace"],
+    },
   },
   {
     name: "list_projects",
@@ -851,6 +897,42 @@ async function isWorkspaceMember(
   return !!m;
 }
 
+// MCP mirror of requireWorkspaceAdmin (middleware/workspace.ts): workspace
+// mutations (rename, settings, delete) are owner-or-admin only. Run after
+// getWorkspaceId, which has already proven active membership — this adds the
+// role gate on top: owner, or an ACTIVE member with role >= 20. Suspended
+// members (isActive = 0) are denied even with an admin role.
+async function assertWorkspaceAdmin(
+  db: ReturnType<typeof getDb>,
+  workspaceId: string,
+  userId: string,
+) {
+  const [ws] = await db
+    .select({ ownerId: schema.workspaces.ownerId })
+    .from(schema.workspaces)
+    .where(eq(schema.workspaces.id, workspaceId))
+    .limit(1);
+  if (!ws) throw new HTTPException(404, { message: "Workspace not found" });
+  if (ws.ownerId === userId) return;
+  const [m] = await db
+    .select({ role: schema.workspaceMembers.role })
+    .from(schema.workspaceMembers)
+    .where(
+      and(
+        eq(schema.workspaceMembers.workspaceId, workspaceId),
+        eq(schema.workspaceMembers.memberId, userId),
+        eq(schema.workspaceMembers.isActive, 1),
+        isNull(schema.workspaceMembers.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!m || m.role < 20) {
+    throw new HTTPException(403, {
+      message: "Only the workspace owner or an admin can perform this action",
+    });
+  }
+}
+
 // Gate project-scoped tools: resolve project -> workspace, then require the
 // user be that workspace's owner or an active member.
 async function assertProjectAccess(
@@ -1071,6 +1153,37 @@ export async function handleTool(
             .from(schema.workspaces)
             .where(and(isNull(schema.workspaces.deletedAt), eq(schema.workspaces.ownerId, userId)));
       return rows;
+    }
+    case "create_workspace": {
+      const parsed = workspaceService.createWorkspaceSchema.safeParse(params);
+      if (!parsed.success) {
+        throw new HTTPException(400, {
+          message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
+        });
+      }
+      // Service checks slug uniqueness (409) and inserts the owner as an
+      // admin member, mirroring POST /api/workspaces.
+      return workspaceService.create(db, userId, parsed.data);
+    }
+    case "update_workspace": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      await assertWorkspaceAdmin(db, workspaceId, userId);
+      const parsed = workspaceService.updateWorkspaceSchema.safeParse(params);
+      if (!parsed.success) {
+        throw new HTTPException(400, {
+          message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
+        });
+      }
+      if (Object.keys(parsed.data).length === 0) {
+        throw new HTTPException(400, { message: "No updatable fields provided" });
+      }
+      return workspaceRepo.update(db, workspaceId, parsed.data);
+    }
+    case "delete_workspace": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      await assertWorkspaceAdmin(db, workspaceId, userId);
+      await workspaceRepo.softDelete(db, workspaceId);
+      return { success: true, deleted: params.workspace as string };
     }
     case "list_projects": {
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
