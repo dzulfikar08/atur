@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, api } from "@/lib/api";
+import { buildHierarchicalRows } from "@/lib/issueTree";
 import MobileIssueCard from "./MobileIssueCard";
 import BottomSheet from "./BottomSheet";
 import PullToRefreshIndicator from "./PullToRefreshIndicator";
@@ -243,37 +244,18 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
 
   // Nest sub-issues under their parent card (indent + ↳ marker). Orphans
   // (parent filtered out) stay top-level but keep the marker.
-  const hierarchical = useMemo(() => {
-    const byId = new Map(filteredSorted.map((i) => [i.id, i]));
-    const childrenOf = new Map<string, Issue[]>();
-    const roots: Issue[] = [];
-    for (const issue of filteredSorted) {
-      const parent = issue.parent_id ? byId.get(issue.parent_id) : undefined;
-      if (parent && parent.id !== issue.id && parent.project_id === issue.project_id) {
-        const list = childrenOf.get(parent.id);
-        if (list) list.push(issue);
-        else childrenOf.set(parent.id, [issue]);
-      } else {
-        roots.push(issue);
-      }
-    }
-    const rows: (Issue & { depth: number; childCount: number; isSubIssue: boolean })[] = [];
-    const walk = (issue: Issue, depth: number, stack: Set<string>) => {
-      if (stack.has(issue.id)) return; // cycle guard
-      const children = childrenOf.get(issue.id) ?? [];
-      rows.push({
-        ...issue,
-        depth,
-        childCount: children.length,
-        isSubIssue: depth > 0 || (!!issue.parent_id && !byId.get(issue.parent_id)),
-      });
-      const next = new Set(stack);
-      next.add(issue.id);
-      for (const child of children) walk(child, depth + 1, next);
-    };
-    for (const root of roots) walk(root, 0, new Set());
-    return rows;
-  }, [filteredSorted]);
+  const hierarchical = useMemo(
+    () =>
+      buildHierarchicalRows(filteredSorted, new Set(), {
+        sameTree: (p, c) => p.project_id === c.project_id,
+      }).map((r) => ({
+        ...r.issue,
+        depth: r.depth,
+        childCount: r.childCount,
+        isSubIssue: r.isSubIssue,
+      })),
+    [filteredSorted],
+  );
 
   // Distinct assignees / labels across the fetched issues (for the filter sheet).
   const stateOptions = useMemo(() => {

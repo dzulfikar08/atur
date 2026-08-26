@@ -4,6 +4,7 @@ import { useWindowSize } from "@/hooks/useWindowSize";
 import MobileIssueList from "@/components/mobile/MobileIssueList";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type Issue, type AllProject } from "@/lib/api";
+import { buildHierarchicalRows } from "@/lib/issueTree";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -467,39 +468,18 @@ function DesktopMyIssues({ slug }: { slug: string }) {
   // Nest sub-issues under their parent row. Orphans (parent filtered out or
   // missing) stay at the top level but keep the ↳ marker so the relationship
   // is still visible.
-  const hierarchicalRows = useMemo(() => {
-    type Row = MyIssueRow & { depth: number; childCount: number; isSubIssue: boolean };
-    const byId = new Map(filteredIssues.map((i) => [i.id, i]));
-    const childrenOf = new Map<string, MyIssueRow[]>();
-    const roots: MyIssueRow[] = [];
-    for (const issue of filteredIssues) {
-      const parent = issue.parent_id ? byId.get(issue.parent_id) : undefined;
-      if (parent && parent.id !== issue.id && parent.project_id === issue.project_id) {
-        const list = childrenOf.get(parent.id);
-        if (list) list.push(issue);
-        else childrenOf.set(parent.id, [issue]);
-      } else {
-        roots.push(issue);
-      }
-    }
-    const rows: Row[] = [];
-    const walk = (issue: MyIssueRow, depth: number, stack: Set<string>) => {
-      if (stack.has(issue.id)) return; // cycle guard
-      const children = childrenOf.get(issue.id) ?? [];
-      rows.push({
-        ...issue,
-        depth,
-        childCount: children.length,
-        isSubIssue: depth > 0 || (!!issue.parent_id && !byId.get(issue.parent_id)),
-      });
-      if (collapsedParents.has(issue.id)) return;
-      const next = new Set(stack);
-      next.add(issue.id);
-      for (const child of children) walk(child, depth + 1, next);
-    };
-    for (const root of roots) walk(root, 0, new Set());
-    return rows;
-  }, [filteredIssues, collapsedParents]);
+  const hierarchicalRows = useMemo(
+    () =>
+      buildHierarchicalRows(filteredIssues, collapsedParents, {
+        sameTree: (p, c) => p.project_id === c.project_id,
+      }).map((r) => ({
+        ...r.issue,
+        depth: r.depth,
+        childCount: r.childCount,
+        isSubIssue: r.isSubIssue,
+      })),
+    [filteredIssues, collapsedParents],
+  );
 
   const toggleCollapse = (id: string) =>
     setCollapsedParents((prev) => {

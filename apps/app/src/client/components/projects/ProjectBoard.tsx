@@ -1,7 +1,8 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { Fragment, useState, useMemo, useCallback, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, api, type Issue, type State, type Module } from "@/lib/api";
+import { buildHierarchicalRows, type TreeRow } from "@/lib/issueTree";
 import FilterBar, { type FilterState } from "@/components/issues/FilterBar";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -36,6 +37,8 @@ import CommentEditor from "@/components/editor/CommentEditor";
 import {
   ArrowLeft,
   ArrowRight,
+  ChevronDown,
+  ChevronRight,
   Plus,
   List,
   Columns3,
@@ -332,6 +335,21 @@ export default function ProjectBoard() {
   const [viewName, setViewName] = useState("");
   const [viewsOpen, setViewsOpen] = useState(false);
   const [calMonth, setCalMonth] = useState(new Date());
+  // List-view tree + grouping (?group= mirrors the ?view= pattern).
+  const groupParam = searchParams.get("group");
+  const listGroup = (
+    ["none", "state", "module"].includes(groupParam ?? "") ? groupParam : "none"
+  ) as "none" | "state" | "module";
+  const setListGroup = (g: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (g === "none") params.delete("group");
+    else params.set("group", g);
+    setSearchParams(params, { replace: true });
+  };
+  const [collapsedParents, setCollapsedParents] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [subIssueTarget, setSubIssueTarget] = useState<string | null>(null);
+  const [subIssueName, setSubIssueName] = useState("");
 
   // Saved views
   const { data: savedViews = [] } = useQuery({
@@ -526,6 +544,262 @@ export default function ProjectBoard() {
     }
     return Object.values(groups).sort((a, b) => a.state.sequence - b.state.sequence);
   }, [filteredIssues, states]);
+
+  // List-view tree rows + section groupings. The tree is built from
+  // filteredIssues (a filtered-out parent promotes its children to top level
+  // with the ↳ orphan marker — expected). Group-by-module puts a multi-module
+  // issue under its FIRST module only.
+  const listRows = useMemo(
+    () => buildHierarchicalRows(filteredIssues, collapsedParents),
+    [filteredIssues, collapsedParents],
+  );
+  const listToggleCollapse = (id: string) =>
+    setCollapsedParents((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  // Keys carry a mode prefix (state:/module:) so collapsedGroups entries
+  // can't leak across group modes.
+  const listStateGroups = useMemo(() => {
+    if (listGroup !== "state")
+      return [] as { key: string; label: string; color?: string; rows: TreeRow<Issue>[] }[];
+    const groups = new Map<
+      string,
+      { key: string; label: string; color?: string; rows: TreeRow<Issue>[] }
+    >();
+    // Sort by sequence — the API returns no ORDER BY and board columns
+    // already sort this way; list sections must not diverge.
+    for (const st of [...states].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0)))
+      groups.set(st.id, { key: `state:${st.id}`, label: st.name, color: st.color, rows: [] });
+    const untyped = { key: "state:none", label: "No State", rows: [] as TreeRow<Issue>[] };
+    for (const row of listRows) {
+      const st = row.issue.state_id ? states.find((s) => s.id === row.issue.state_id) : undefined;
+      if (st) groups.get(st.id)!.rows.push(row);
+      else untyped.rows.push(row);
+    }
+    return [...groups.values(), ...(untyped.rows.length ? [untyped] : [])].filter(
+      (g) => g.rows.length > 0,
+    );
+  }, [listGroup, listRows, states]);
+  const listModuleGroups = useMemo(() => {
+    if (listGroup !== "module")
+      return [] as { key: string; label: string; rows: TreeRow<Issue>[] }[];
+    const groups = new Map<string, { key: string; label: string; rows: TreeRow<Issue>[] }>();
+    const none = { key: "module:none", label: "No Module", rows: [] as TreeRow<Issue>[] };
+    for (const row of listRows) {
+      const mid = row.issue.module_ids?.[0];
+      const mod = mid ? moduleMap.get(mid) : undefined;
+      if (!mod) {
+        none.rows.push(row);
+        continue;
+      }
+      if (!groups.has(mod.id))
+        groups.set(mod.id, { key: `module:${mod.id}`, label: mod.name, rows: [] });
+      groups.get(mod.id)!.rows.push(row);
+    }
+    return [...groups.values(), ...(none.rows.length ? [none] : [])];
+  }, [listGroup, listRows, moduleMap]);
+
+  // Top-level quick-add footer row, shared by the grouped and flat list
+  // branches so grouping never removes the ability to add an issue.
+  const listQuickAddRow = (
+    <tr className="border-t">
+      <td colSpan={8} className="p-1">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const fd = new FormData(e.currentTarget);
+            const name = fd.get("quick-add") as string;
+            if (name.trim()) {
+              createMutation.mutate({
+                name: name.trim(),
+                description_html: "",
+                priority: "none",
+                state_id: backlogStateId || undefined,
+              });
+              e.currentTarget.reset();
+            }
+          }}
+          className="flex items-center"
+        >
+          <Plus className="h-4 w-4 text-muted-foreground mx-2 shrink-0" />
+          <input
+            name="quick-add"
+            placeholder="Add issue..."
+            className="flex-1 bg-transparent text-sm py-1.5 px-1 outline-none placeholder:text-muted-foreground"
+          />
+        </form>
+      </td>
+    </tr>
+  );
+
+  // One list-view row (tree cell + inline sub-issue add). Returns a keyed
+  // Fragment so the optional add-row reconciles with its parent row.
+  const renderListRow = (row: TreeRow<Issue>) => {
+    const issue = row.issue;
+    const st = states.find((s) => s.id === issue.state_id);
+    const isAddingSub = subIssueTarget === issue.id;
+    return (
+      <Fragment key={issue.id}>
+        <tr
+          className="border-t hover:bg-muted/30 cursor-pointer transition-colors group"
+          onClick={() => navigate(`/${slug}/projects/${projectId}/issues/${issue.sequence_id}`)}
+        >
+          <td className="p-2 text-muted-foreground text-xs font-mono">
+            {String(issue.sequence_id).padStart(4, "0")}
+          </td>
+          <td className="p-2 max-w-xs">
+            <div className="flex items-center" style={{ paddingLeft: row.depth * 18 }}>
+              <span className="w-[22px] shrink-0 flex items-center justify-center">
+                {row.childCount > 0 ? (
+                  <button
+                    type="button"
+                    aria-label="Toggle sub-issues"
+                    className="p-0.5 text-muted-foreground hover:text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      listToggleCollapse(issue.id);
+                    }}
+                  >
+                    {collapsedParents.has(issue.id) ? (
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                ) : row.isSubIssue ? (
+                  <span className="text-muted-foreground text-xs">↳</span>
+                ) : null}
+              </span>
+              <span className="font-medium truncate">{issue.name}</span>
+              {row.childCount > 0 && (
+                <Badge variant="outline" className="ml-2 text-[10px] gap-0.5 shrink-0">
+                  <GitBranch className="h-2.5 w-2.5" />
+                  {row.childCount}
+                </Badge>
+              )}
+              <button
+                className="ml-1.5 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground shrink-0"
+                title="Add sub-issue"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCollapsedParents((prev) => {
+                    const next = new Set(prev);
+                    next.delete(issue.id);
+                    return next;
+                  });
+                  setSubIssueTarget((prev) => (prev === issue.id ? null : issue.id));
+                  setSubIssueName("");
+                }}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </td>
+          <td className="p-2">
+            <span
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full"
+              style={{
+                backgroundColor: (st?.color || "#6b7280") + "20",
+                color: st?.color || "#6b7280",
+              }}
+            >
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: st?.color || "#6b7280" }}
+              />
+              {st?.name ?? "—"}
+            </span>
+          </td>
+          <td className="p-2">
+            <span
+              className={`text-xs font-medium px-2 py-0.5 rounded ${PRIORITY_COLORS[issue.priority || "none"] || PRIORITY_COLORS.none}`}
+            >
+              {issue.priority || "none"}
+            </span>
+          </td>
+          <td className="p-2 hidden lg:table-cell">
+            <div className="flex -space-x-1.5">
+              {(issue.assignees ?? []).slice(0, 3).map((a) => (
+                <span
+                  key={a.id}
+                  title={a.display_name || a.username || a.email || a.id}
+                  className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] font-medium"
+                >
+                  {(a.display_name || a.username || a.email || "?").charAt(0).toUpperCase()}
+                </span>
+              ))}
+              {(issue.assignees ?? []).length > 3 && (
+                <span className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px]">
+                  +{issue.assignees!.length - 3}
+                </span>
+              )}
+            </div>
+          </td>
+          <td className="p-2 hidden md:table-cell">
+            {(issue.module_ids ?? []).length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {(issue.module_ids ?? []).map((mid) => {
+                  const mod = moduleMap.get(mid);
+                  return mod ? (
+                    <Badge key={mid} variant="secondary" className="text-[10px] gap-0.5">
+                      <Package className="h-2.5 w-2.5" />
+                      {mod.name}
+                    </Badge>
+                  ) : null;
+                })}
+              </div>
+            ) : (
+              <span className="text-xs text-muted-foreground">—</span>
+            )}
+          </td>
+          <td className="p-2 text-muted-foreground text-xs">
+            {issue.estimate_points != null ? issue.estimate_points : "—"}
+          </td>
+          <td className="p-2 text-muted-foreground text-xs hidden md:table-cell">
+            {formatDistanceToNow(new Date(issue.updated_at), { addSuffix: true })}
+          </td>
+        </tr>
+        {isAddingSub && (
+          <tr>
+            <td />
+            <td colSpan={7}>
+              <form
+                className="flex items-center gap-2 py-1"
+                style={{ paddingLeft: (row.depth + 1) * 18 + 22 }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (subIssueName.trim()) {
+                    createMutation.mutate({
+                      name: subIssueName.trim(),
+                      description_html: "",
+                      priority: "none",
+                      state_id: backlogStateId || undefined,
+                      parent_id: issue.id,
+                    });
+                    setSubIssueTarget(null);
+                    setSubIssueName("");
+                  }
+                }}
+              >
+                <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+                <input
+                  autoFocus
+                  value={subIssueName}
+                  onChange={(e) => setSubIssueName(e.target.value)}
+                  placeholder="Sub-issue name..."
+                  className="flex-1 bg-transparent text-sm py-1 px-1 outline-none placeholder:text-muted-foreground"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </form>
+            </td>
+          </tr>
+        )}
+      </Fragment>
+    );
+  };
 
   const activeIssue = useMemo(
     () => issues.find((i) => i.id === activeIssueId) ?? null,
@@ -1037,119 +1311,122 @@ export default function ProjectBoard() {
       )}
 
       {view === "list" && (
-        <div className="flex flex-1 min-h-0 flex-col p-4">
+        <div className="flex flex-1 min-h-0 flex-col p-4 gap-2">
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-muted-foreground">
+              {filteredIssues.length} issue{filteredIssues.length === 1 ? "" : "s"}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() =>
+                  setListGroup(
+                    listGroup === "none" ? "state" : listGroup === "state" ? "module" : "none",
+                  )
+                }
+              >
+                Group:{" "}
+                {listGroup === "state" ? "State" : listGroup === "module" ? "Module" : "None"}
+              </Button>
+              {listRows.some((r) => r.childCount > 0) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() =>
+                    setCollapsedParents((prev) =>
+                      prev.size > 0
+                        ? new Set()
+                        : new Set(listRows.filter((r) => r.childCount > 0).map((r) => r.issue.id)),
+                    )
+                  }
+                >
+                  {collapsedParents.size > 0 ? "Expand all" : "Collapse all"}
+                </Button>
+              )}
+            </div>
+          </div>
           <div className="flex-1 min-h-0 overflow-auto rounded-lg border">
-            <table className="w-full text-sm min-w-[600px]">
+            <table className="w-full text-sm min-w-[680px]">
               <thead className="sticky top-0 bg-muted/50">
                 <tr>
                   <th className="text-left p-2 font-medium text-muted-foreground w-16">ID</th>
                   <th className="text-left p-2 font-medium text-muted-foreground">Title</th>
                   <th className="text-left p-2 font-medium text-muted-foreground w-28">State</th>
                   <th className="text-left p-2 font-medium text-muted-foreground w-24">Priority</th>
-                  <th className="text-left p-2 font-medium text-muted-foreground w-28">Module</th>
+                  <th className="text-left p-2 font-medium text-muted-foreground w-24 hidden lg:table-cell">
+                    Assignees
+                  </th>
+                  <th className="text-left p-2 font-medium text-muted-foreground w-28 hidden md:table-cell">
+                    Module
+                  </th>
                   <th className="text-left p-2 font-medium text-muted-foreground w-16">Pts</th>
                   <th className="text-left p-2 font-medium text-muted-foreground hidden md:table-cell w-24">
                     Updated
                   </th>
                 </tr>
               </thead>
-              <tbody>
-                {filteredIssues.map((issue) => {
-                  const st = states.find((s) => s.id === issue.state_id);
-                  return (
-                    <tr
-                      key={issue.id}
-                      className="border-t hover:bg-muted/30 cursor-pointer transition-colors"
-                      onClick={() =>
-                        navigate(`/${slug}/projects/${projectId}/issues/${issue.sequence_id}`)
-                      }
-                    >
-                      <td className="p-2 text-muted-foreground text-xs font-mono">
-                        {String(issue.sequence_id).padStart(4, "0")}
-                      </td>
-                      <td className="p-2 font-medium max-w-xs truncate">{issue.name}</td>
-                      <td className="p-2">
-                        <span
-                          className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full"
-                          style={{
-                            backgroundColor: (st?.color || "#6b7280") + "20",
-                            color: st?.color || "#6b7280",
-                          }}
+              {listGroup === "state" || listGroup === "module" ? (
+                <tbody>
+                  {(listGroup === "state" ? listStateGroups : listModuleGroups).map((g) => {
+                    const dot = "color" in g ? (g.color as string | undefined) : undefined;
+                    return (
+                      <Fragment key={g.key}>
+                        <tr
+                          className="bg-muted/40 border-t cursor-pointer"
+                          onClick={() =>
+                            setCollapsedGroups((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(g.key)) next.delete(g.key);
+                              else next.add(g.key);
+                              return next;
+                            })
+                          }
                         >
-                          <span
-                            className="h-1.5 w-1.5 rounded-full"
-                            style={{ backgroundColor: st?.color || "#6b7280" }}
-                          />
-                          {st?.name ?? "—"}
-                        </span>
-                      </td>
-                      <td className="p-2">
-                        <span
-                          className={`text-xs font-medium px-2 py-0.5 rounded ${PRIORITY_COLORS[issue.priority || "none"] || PRIORITY_COLORS.none}`}
-                        >
-                          {issue.priority || "none"}
-                        </span>
-                      </td>
-                      <td className="p-2">
-                        {(issue.module_ids ?? []).length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {(issue.module_ids ?? []).map((mid) => {
-                              const mod = moduleMap.get(mid);
-                              return mod ? (
-                                <Badge
-                                  key={mid}
-                                  variant="secondary"
-                                  className="text-[10px] gap-0.5"
-                                >
-                                  <Package className="h-2.5 w-2.5" />
-                                  {mod.name}
-                                </Badge>
-                              ) : null;
-                            })}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="p-2 text-muted-foreground text-xs">
-                        {issue.estimate_points != null ? issue.estimate_points : "—"}
-                      </td>
-                      <td className="p-2 text-muted-foreground text-xs hidden md:table-cell">
-                        {formatDistanceToNow(new Date(issue.updated_at), { addSuffix: true })}
+                          <td colSpan={8} className="p-2">
+                            <div className="flex items-center gap-2 font-medium">
+                              {collapsedGroups.has(g.key) ? (
+                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              )}
+                              {dot && (
+                                <span
+                                  className="h-2.5 w-2.5 rounded-full"
+                                  style={{ backgroundColor: dot }}
+                                />
+                              )}
+                              {listGroup === "module" && g.key !== "module:none" && (
+                                <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                              )}
+                              <span>{g.label}</span>
+                              <span className="text-muted-foreground text-xs font-normal">
+                                {g.rows.length}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                        {!collapsedGroups.has(g.key) && g.rows.map((row) => renderListRow(row))}
+                      </Fragment>
+                    );
+                  })}
+                  {(listGroup === "state" ? listStateGroups : listModuleGroups).length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="p-4 text-center text-sm text-muted-foreground">
+                        No issues match the current filters
                       </td>
                     </tr>
-                  );
-                })}
-                {/* Inline quick-add row */}
-                <tr className="border-t">
-                  <td colSpan={7} className="p-1">
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const fd = new FormData(e.currentTarget);
-                        const name = fd.get("quick-add") as string;
-                        if (name.trim()) {
-                          createMutation.mutate({
-                            name: name.trim(),
-                            description_html: "",
-                            priority: "none",
-                            state_id: backlogStateId || undefined,
-                          });
-                          e.currentTarget.reset();
-                        }
-                      }}
-                      className="flex items-center"
-                    >
-                      <Plus className="h-4 w-4 text-muted-foreground mx-2 shrink-0" />
-                      <input
-                        name="quick-add"
-                        placeholder="Add issue..."
-                        className="flex-1 bg-transparent text-sm py-1.5 px-1 outline-none placeholder:text-muted-foreground"
-                      />
-                    </form>
-                  </td>
-                </tr>
-              </tbody>
+                  )}
+                  {listQuickAddRow}
+                </tbody>
+              ) : (
+                <tbody>
+                  {listRows.map((row) => renderListRow(row))}
+                  {listQuickAddRow}
+                </tbody>
+              )}
             </table>
           </div>
         </div>

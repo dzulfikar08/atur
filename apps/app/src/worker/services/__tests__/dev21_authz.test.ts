@@ -193,6 +193,34 @@ describe("DEV-21 label/assignee enrichment belt-and-braces", () => {
     expect(text).toContain("workspace_id");
   });
 
+  it("enrichIssues attaches module ids from live module links", async () => {
+    // Select order: assigneeRows, labelRows, moduleRows.
+    const db = mockDb([
+      [],
+      [],
+      [
+        { issueId: "i1", moduleId: "m1", workspaceId: MINE },
+        { issueId: "i1", moduleId: "m2", workspaceId: FOREIGN },
+      ],
+    ]);
+    const [out] = await issuesService.enrichIssues(db.db, [
+      { id: "i1", stateId: null, workspaceId: MINE } as any,
+    ]);
+    // m2 is a legacy foreign-workspace link — must drop out.
+    expect(out.moduleIds).toEqual(["m1"]);
+  });
+
+  it("enrichIssues module query reads module_issues", async () => {
+    // Shape pin: the module select runs against module_issues (the harness's
+    // sqlText can't surface column names, so the deleted_at filters on the
+    // link + joined modules row are exercised by the query in the service).
+    const db = mockDb([[], [], []]);
+    await issuesService.enrichIssues(db.db, [
+      { id: "i1", stateId: null, workspaceId: MINE } as any,
+    ]);
+    expect(db.selects[2].table).toBe("module_issues");
+    expect(db.selects[2].cond).toBeTruthy();
+  });
   it("moveDealToGroup keys the stage state on the ISSUE's project", async () => {
     // Select order: issue resolve (projectId from the ISSUE row, not any
     // configured pipeline project), then findStateByGroup.

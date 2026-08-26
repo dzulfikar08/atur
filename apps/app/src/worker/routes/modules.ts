@@ -5,6 +5,7 @@ import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
 import { requireWorkspaceMember } from "../middleware/workspace";
 import * as modulesService from "../services/modules";
+import { enrichIssues } from "../services/issues";
 import * as schema from "../db/schema";
 
 export const moduleRoutes = new Hono<{ Bindings: Env }>({ strict: false })
@@ -56,11 +57,23 @@ export const moduleRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     // Scope the join key: a foreign module UUID must 404, not list its issues.
     await modulesService.getById(db, moduleId, c.get("workspace").id);
     const rows = await db
-      .select()
+      .select({ issue: schema.issues })
       .from(schema.issues)
       .innerJoin(schema.moduleIssues, eq(schema.moduleIssues.issueId, schema.issues.id))
-      .where(and(eq(schema.moduleIssues.moduleId, moduleId), isNull(schema.issues.deletedAt)));
-    return c.json({ results: rows.map((r) => r.issues) });
+      .where(
+        and(
+          eq(schema.moduleIssues.moduleId, moduleId),
+          isNull(schema.issues.deletedAt),
+          isNull(schema.moduleIssues.deletedAt),
+        ),
+      );
+    // Enriched rows (state/labels/assignees/module_ids) so the module table
+    // view renders without a second round-trip per issue.
+    const results = await enrichIssues(
+      db,
+      rows.map((r) => r.issue),
+    );
+    return c.json({ results });
   })
   .delete("/:moduleId/issues/:issueId", authMiddleware, requireWorkspaceMember, async (c) => {
     const db = getDb(c.env.DB);
