@@ -24,6 +24,8 @@ export const createIssueSchema = z.object({
   label_ids: z.array(z.string().uuid()).optional(),
   assignee_ids: z.array(z.string().uuid()).optional(),
   parent_id: z.string().uuid().nullable().optional(),
+  // DEV-22: flags portfolio-level decision issues for /api/me/decisions.
+  is_decision: z.boolean().optional(),
 });
 
 export const updateIssueSchema = z.object({
@@ -36,6 +38,8 @@ export const updateIssueSchema = z.object({
   estimate_points: z.number().nullable().optional(),
   label_ids: z.array(z.string().uuid()).optional(),
   assignee_ids: z.array(z.string().uuid()).optional(),
+  // DEV-22: flags portfolio-level decision issues for /api/me/decisions.
+  is_decision: z.boolean().optional(),
 });
 
 // Bind caller-supplied state/label/assignee ids to the issue's workspace —
@@ -156,6 +160,7 @@ export async function create(
     estimatePoints: data.estimate_points ?? null,
     parentId: data.parent_id ?? null,
     createdById,
+    isDecision: data.is_decision ? 1 : 0,
   });
 
   if (data.label_ids && data.label_ids.length > 0) {
@@ -340,6 +345,14 @@ export async function update(
       field: "estimate_points",
       oldValue: issue.estimatePoints != null ? String(issue.estimatePoints) : null,
       newValue: data.estimate_points != null ? String(data.estimate_points) : null,
+    });
+  }
+  if (data.is_decision !== undefined && (data.is_decision ? 1 : 0) !== issue.isDecision) {
+    updateData.isDecision = data.is_decision ? 1 : 0;
+    events.push({
+      field: "is_decision",
+      oldValue: issue.isDecision ? "true" : "false",
+      newValue: data.is_decision ? "true" : "false",
     });
   }
 

@@ -675,6 +675,20 @@ export const api = {
     apiFetch<{ active_sprints: SprintData[] }>(`/me/analytics/sprints`).then(
       (r) => r.active_sprints,
     ),
+  // ── Portfolio strategy (DEV-22) — cross-workspace /api/me/* ──
+  listStrategy: async () => {
+    const data = await apiFetch<{ results: WorkspaceStrategy[] }>("/me/strategy/");
+    return data.results;
+  },
+  listDecisions: async () => {
+    const data = await apiFetch<{ results: DecisionItem[] }>("/me/decisions/");
+    return data.results;
+  },
+  updateWorkspaceStrategy: (slug: string, data: WorkspaceStrategyPatch) =>
+    apiFetch(`/workspaces/${slug}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
 };
 
 // --- Types ---
@@ -684,6 +698,60 @@ export interface Workspace {
   name: string;
   slug: string;
   logo?: string | null;
+}
+
+// ── Portfolio strategy (DEV-22) ──
+export type StrategyVerdict = "invest" | "harden" | "harvest" | "kill" | "needs-review";
+
+export interface StrategyScoreHistoryEntry {
+  moat_score: number | null;
+  ai_proof_score: number | null;
+  strategy_verdict: string | null;
+  strategy_note: string | null;
+  created_at: string | null;
+}
+
+// One workspace as scored by the monthly Moat × AI-proof portfolio review.
+// history carries the two newest workspace_score_history rows (trend arrows).
+// Read-side fields are snake_case — D1/drizzle rows come back with raw column
+// names app-wide (see Issue/Contact types). The PATCH body is camelCase to
+// match services/workspaces.ts zod schema.
+export interface WorkspaceStrategy {
+  id: string;
+  slug: string;
+  name: string;
+  logo?: string | null;
+  moat_score: number | null;
+  ai_proof_score: number | null;
+  strategy_verdict: StrategyVerdict | null;
+  strategy_note: string | null;
+  reviewed_at: string | null;
+  history: StrategyScoreHistoryEntry[];
+}
+
+export interface WorkspaceStrategyPatch {
+  moatScore?: number | null;
+  aiProofScore?: number | null;
+  strategyVerdict?: StrategyVerdict | null;
+  strategyNote?: string | null;
+}
+
+// Open is_decision=1 issue across all workspaces (decision inbox).
+// Wire format is snake_case (snakeCaseMiddleware).
+export interface DecisionItem {
+  id: string;
+  name: string;
+  sequence_id: number;
+  priority: string | null;
+  target_date: string | null;
+  updated_at: string | null;
+  project_id: string;
+  project_name: string;
+  project_identifier: string;
+  workspace_slug: string;
+  workspace_name: string;
+  state_name: string | null;
+  state_color: string | null;
 }
 
 export interface AnalyticsOverview {

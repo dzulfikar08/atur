@@ -90,6 +90,15 @@ export const workspaces = sqliteTable(
     // Signature appended to CRM customer emails ({{footer}} placeholder).
     // Null → fallback "Regards,\n<workspace name> team".
     emailFooter: text("email_footer"),
+    // ── Portfolio strategy (DEV-22) ──
+    // Moat × AI-proof scores (0–5) from the monthly portfolio review; verdict
+    // maps to the 2×2 matrix quadrant action. History lands in
+    // workspace_score_history on every changed rescore (services/workspaces.ts).
+    moatScore: integer("moat_score"),
+    aiProofScore: integer("ai_proof_score"),
+    strategyVerdict: text("strategy_verdict"),
+    strategyNote: text("strategy_note"),
+    reviewedAt: text("reviewed_at"),
     ownerId: text("owner_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -137,6 +146,26 @@ export const workspaceInvites = sqliteTable("workspace_invites", {
   updatedAt: text("updated_at"),
   deletedAt: text("deleted_at"),
 });
+
+// ── Portfolio strategy score history (DEV-22) ──
+// One row per CHANGED rescore of a workspace's Moat × AI-proof scores —
+// written only from services/workspaces.ts update(). The latest-but-one row
+// vs the current workspaces row gives the /strategy view its trend arrows.
+export const workspaceScoreHistory = sqliteTable(
+  "workspace_score_history",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    moatScore: integer("moat_score"),
+    aiProofScore: integer("ai_proof_score"),
+    strategyVerdict: text("strategy_verdict"),
+    strategyNote: text("strategy_note"),
+    createdAt: text("created_at"),
+  },
+  (table) => [index("idx_workspace_score_history_workspace").on(table.workspaceId)],
+);
 
 export const projects = sqliteTable(
   "projects",
@@ -276,6 +305,9 @@ export const issues = sqliteTable(
     completedAt: text("completed_at"),
     archivedAt: text("archived_at"),
     isDraft: integer("is_draft").notNull().default(0),
+    // DEV-22: marks portfolio-level decision issues (strategy gates, kill
+    // switches). Feeds the cross-workspace decision inbox (/api/me/decisions).
+    isDecision: integer("is_decision").notNull().default(0),
     descriptionJson: text("description_json"),
     descriptionHtml: text("description_html"),
     descriptionStripped: text("description_stripped"),

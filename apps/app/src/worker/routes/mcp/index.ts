@@ -82,9 +82,31 @@ const TOOLS = [
         organizationSize: { type: "string" },
         timezone: { type: "string" },
         backgroundColor: { type: "string" },
+        // ── Portfolio strategy (DEV-22) — Moat × AI-proof rescore. ──
+        moatScore: { type: "integer", minimum: 0, maximum: 5, description: "Moat score 0-5" },
+        aiProofScore: {
+          type: "integer",
+          minimum: 0,
+          maximum: 5,
+          description: "AI-proofness score 0-5",
+        },
+        strategyVerdict: {
+          type: "string",
+          enum: ["invest", "harden", "harvest", "kill", "needs-review"],
+        },
+        strategyNote: {
+          type: "string",
+          description: "One-line evidence backing the scores (required discipline)",
+        },
       },
       required: ["workspace"],
     },
+  },
+  {
+    name: "list_decisions",
+    description:
+      "List open decision issues (is_decision=1) across ALL the user's workspaces — the portfolio decision inbox",
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "delete_workspace",
@@ -160,6 +182,10 @@ const TOOLS = [
           type: "string",
           description: "Parent issue UUID to create this as a sub-issue",
         },
+        is_decision: {
+          type: "boolean",
+          description: "Flag as a portfolio-level decision issue (shows in the decision inbox)",
+        },
       },
       required: ["project_id", "workspace", "name"],
     },
@@ -177,6 +203,10 @@ const TOOLS = [
         priority: { type: "string" },
         name: { type: "string" },
         description_html: { type: "string" },
+        is_decision: {
+          type: "boolean",
+          description: "Flag/unflag as a portfolio-level decision issue",
+        },
       },
       required: ["project_id", "workspace", "issue_id"],
     },
@@ -1177,13 +1207,61 @@ export async function handleTool(
       if (Object.keys(parsed.data).length === 0) {
         throw new HTTPException(400, { message: "No updatable fields provided" });
       }
-      return workspaceRepo.update(db, workspaceId, parsed.data);
+      // Service.update (not repo.update) so strategy rescors flow through the
+      // reviewed_at stamp + workspace_score_history append (DEV-22) — same as
+      // REST PATCH /api/workspaces/:slug. Re-resolve the slug from the id
+      // getWorkspaceId returned: params.workspace may be a display NAME (the
+      // documented convenience fallback), which service.update's findBySlug
+      // would 404 on.
+      const row = await workspaceRepo.findById(db, workspaceId);
+      if (!row) throw new HTTPException(404, { message: "Workspace not found" });
+      return workspaceService.update(db, row.slug, parsed.data);
     }
     case "delete_workspace": {
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
       await assertWorkspaceAdmin(db, workspaceId, userId);
       await workspaceRepo.softDelete(db, workspaceId);
       return { success: true, deleted: params.workspace as string };
+    }
+    case "list_decisions": {
+      // Cross-workspace decision inbox (DEV-22) — mirrors GET /api/me/decisions.
+      // Open (not completed, not deleted) issues with is_decision=1 across all
+      // workspaces the user owns or belongs to; dated first ascending.
+      const ids = await workspaceRepo.listIdsByUser(db, userId);
+      if (!ids.length) return [];
+      return db
+        .select({
+          id: schema.issues.id,
+          name: schema.issues.name,
+          sequenceId: schema.issues.sequenceId,
+          priority: schema.issues.priority,
+          targetDate: schema.issues.targetDate,
+          projectId: schema.projects.id,
+          projectName: schema.projects.name,
+          projectIdentifier: schema.projects.identifier,
+          workspaceSlug: schema.workspaces.slug,
+          workspaceName: schema.workspaces.name,
+          stateName: schema.states.name,
+          stateColor: schema.states.color,
+        })
+        .from(schema.issues)
+        .innerJoin(schema.projects, eq(schema.projects.id, schema.issues.projectId))
+        .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.issues.workspaceId))
+        .leftJoin(schema.states, eq(schema.states.id, schema.issues.stateId))
+        .where(
+          and(
+            inArray(schema.issues.workspaceId, ids),
+            eq(schema.issues.isDecision, 1),
+            isNull(schema.issues.deletedAt),
+            isNull(schema.issues.completedAt),
+          ),
+        )
+        .orderBy(
+          sql`CASE WHEN ${schema.issues.targetDate} IS NULL THEN 1 ELSE 0 END`,
+          sql`${schema.issues.targetDate} ASC`,
+          desc(schema.issues.updatedAt),
+        )
+        .limit(200);
     }
     case "list_projects": {
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
@@ -1293,6 +1371,7 @@ export async function handleTool(
         sequenceId: await issuesRepo.allocateNextSequence(db, projectId),
         projectId,
         workspaceId,
+        isDecision: params.is_decision ? 1 : 0,
         createdAt: now,
         updatedAt: now,
       };
@@ -1338,6 +1417,7 @@ export async function handleTool(
       if (params.priority !== undefined) updates.priority = params.priority;
       if (params.name !== undefined) updates.name = params.name;
       if (params.description_html !== undefined) updates.descriptionHtml = params.description_html;
+      if (params.is_decision !== undefined) updates.isDecision = params.is_decision ? 1 : 0;
       await db
         .update(schema.issues)
         .set(updates)

@@ -190,6 +190,123 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     return c.json(paginatedResponse(rows, countRow.total, offset, limit));
   })
 
+  // ── Portfolio strategy (DEV-22) ──
+  // All the user's workspaces with their Moat × AI-proof scores plus the two
+  // most recent workspace_score_history rows per workspace. The client derives
+  // trend arrows by comparing current values against the newest history row
+  // that differs from them.
+  .get("/strategy", async (c) => {
+    const db = getDb(c.env.DB);
+    const user = c.get("user");
+    const ids = await workspaceRepo.listIdsByUser(db, user.sub);
+    if (!ids.length) return c.json({ results: [] });
+
+    const rows = await db
+      .select({
+        id: schema.workspaces.id,
+        slug: schema.workspaces.slug,
+        name: schema.workspaces.name,
+        logo: schema.workspaces.logo,
+        moatScore: schema.workspaces.moatScore,
+        aiProofScore: schema.workspaces.aiProofScore,
+        strategyVerdict: schema.workspaces.strategyVerdict,
+        strategyNote: schema.workspaces.strategyNote,
+        reviewedAt: schema.workspaces.reviewedAt,
+      })
+      .from(schema.workspaces)
+      .where(and(inArray(schema.workspaces.id, ids), isNull(schema.workspaces.deletedAt)));
+
+    const history = await db
+      .select({
+        workspaceId: schema.workspaceScoreHistory.workspaceId,
+        moatScore: schema.workspaceScoreHistory.moatScore,
+        aiProofScore: schema.workspaceScoreHistory.aiProofScore,
+        strategyVerdict: schema.workspaceScoreHistory.strategyVerdict,
+        strategyNote: schema.workspaceScoreHistory.strategyNote,
+        createdAt: schema.workspaceScoreHistory.createdAt,
+      })
+      .from(schema.workspaceScoreHistory)
+      .where(inArray(schema.workspaceScoreHistory.workspaceId, ids))
+      .orderBy(desc(schema.workspaceScoreHistory.createdAt));
+
+    // Keep only the two newest rows per workspace (desc scan, first two wins).
+    const byWorkspace = new Map<string, typeof history>();
+    for (const h of history) {
+      const list = byWorkspace.get(h.workspaceId) ?? [];
+      if (list.length < 2) {
+        list.push(h);
+        byWorkspace.set(h.workspaceId, list);
+      }
+    }
+
+    const results = rows.map((w) => ({
+      id: w.id,
+      slug: w.slug,
+      name: w.name,
+      logo: w.logo,
+      moatScore: w.moatScore,
+      aiProofScore: w.aiProofScore,
+      strategyVerdict: w.strategyVerdict,
+      strategyNote: w.strategyNote,
+      reviewedAt: w.reviewedAt,
+      history: (byWorkspace.get(w.id) ?? []).map((h) => ({
+        moatScore: h.moatScore,
+        aiProofScore: h.aiProofScore,
+        strategyVerdict: h.strategyVerdict,
+        strategyNote: h.strategyNote,
+        createdAt: h.createdAt,
+      })),
+    }));
+    return c.json({ results });
+  })
+
+  // Open decision issues (is_decision=1) across the user's workspaces — the
+  // portfolio "what needs deciding" inbox (DEV-22). Dated decisions first
+  // ascending by due date; undated last by recency.
+  .get("/decisions", async (c) => {
+    const db = getDb(c.env.DB);
+    const user = c.get("user");
+    const ids = await workspaceRepo.listIdsByUser(db, user.sub);
+    if (!ids.length) return c.json({ results: [] });
+
+    const rows = await db
+      .select({
+        id: schema.issues.id,
+        name: schema.issues.name,
+        sequenceId: schema.issues.sequenceId,
+        priority: schema.issues.priority,
+        targetDate: schema.issues.targetDate,
+        updatedAt: schema.issues.updatedAt,
+        projectId: schema.projects.id,
+        projectName: schema.projects.name,
+        projectIdentifier: schema.projects.identifier,
+        workspaceSlug: schema.workspaces.slug,
+        workspaceName: schema.workspaces.name,
+        stateName: schema.states.name,
+        stateColor: schema.states.color,
+      })
+      .from(schema.issues)
+      .innerJoin(schema.projects, eq(schema.projects.id, schema.issues.projectId))
+      .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.issues.workspaceId))
+      .leftJoin(schema.states, eq(schema.states.id, schema.issues.stateId))
+      .where(
+        and(
+          inArray(schema.issues.workspaceId, ids),
+          eq(schema.issues.isDecision, 1),
+          isNull(schema.issues.deletedAt),
+          isNull(schema.issues.completedAt),
+        ),
+      )
+      .orderBy(
+        sql`CASE WHEN ${schema.issues.targetDate} IS NULL THEN 1 ELSE 0 END`,
+        sql`${schema.issues.targetDate} ASC`,
+        desc(schema.issues.updatedAt),
+      )
+      .limit(200);
+
+    return c.json({ results: rows });
+  })
+
   // Aggregate issue counts across the user's workspaces. Template: routes/analytics.ts.
   .get("/analytics/overview", async (c) => {
     const db = getDb(c.env.DB);
