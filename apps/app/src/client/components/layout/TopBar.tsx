@@ -4,7 +4,7 @@ import { Search, Bell, Sun, Moon, Monitor, FileText, Clock, PenTool } from "@/li
 import { useThemeStore } from "@/stores/theme";
 import { usePagesStore } from "@/stores/pages";
 import { useQuery } from "@tanstack/react-query";
-import { apiFetch, type Page } from "@/lib/api";
+import { api, apiFetch, type Page } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -40,21 +40,29 @@ export default function TopBar() {
   const [searchQuery, setSearchQuery] = useState("");
   const { recent } = usePagesStore();
 
-  // Fetch pages for the current workspace so we can show recent page names
+  // Fetch pages for the current workspace so we can show recent page names.
+  // "all" is a virtual slug — workspace-scoped endpoints 404 on it, so use the
+  // cross-workspace /me endpoints instead.
   const { data: pages = [] } = useQuery({
     queryKey: ["pages", slug],
-    queryFn: () => listPages(slug!),
+    queryFn: () => (slug === "all" ? api.listAllPages() : listPages(slug!)),
     enabled: !!slug && searchOpen,
   });
 
   // Projects for this workspace — used to resolve project UUIDs in the breadcrumb
   // (e.g. /:slug/projects/<uuid>/issues) to a readable identifier/name.
-  const { data: projects = [] } = useQuery({
+  const { data: projects = [] } = useQuery<{
+    id: string;
+    name: string | null;
+    identifier?: string | null;
+  }[]>({
     queryKey: ["projects", slug],
     queryFn: () =>
-      apiFetch<{ results: { id: string; name: string; identifier: string }[] }>(
-        `/workspaces/${slug}/projects/`,
-      ).then((r) => r.results),
+      slug === "all"
+        ? api.listAllProjects()
+        : apiFetch<{
+            results: { id: string; name: string | null; identifier?: string | null }[];
+          }>(`/workspaces/${slug}/projects/`).then((r) => r.results),
     enabled: !!slug,
   });
   const projectById = new Map(projects.map((p) => [p.id, p]));
@@ -138,7 +146,7 @@ export default function TopBar() {
       let path = `/${slug}/${pathSegments.slice(0, i + 1).join("/")}`;
       if (pathSegments[i - 1] === "projects") {
         const p = projectById.get(segment);
-        if (p) label = p.identifier || p.name;
+        if (p) label = p.identifier || p.name || "Project";
       }
       // "issues" is a workspace-level page (My Issues), but inside a project
       // detail route its naive path (/:slug/projects/:id/issues) matches no
