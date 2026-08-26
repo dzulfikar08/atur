@@ -17,6 +17,8 @@ import * as factsRepo from "../../repositories/contact_facts";
 import * as factsService from "../../services/contact_facts";
 import * as activitiesService from "../../services/crm_activities";
 import * as workspaceService from "../../services/workspaces";
+import { fieldSettingsSchema, withSettings } from "../../services/customFields";
+import * as valuesRepo from "../../repositories/customFieldValues";
 import * as workspaceRepo from "../../repositories/workspaces";
 
 interface JsonRpcRequest {
@@ -422,6 +424,190 @@ const TOOLS = [
         sprint_id: { type: "string" },
       },
       required: ["project_id", "workspace", "sprint_id"],
+    },
+  },
+  {
+    name: "create_module",
+    description:
+      "Create a module in a project. ALWAYS pass workspace (slug) and project_id (UUID).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project_id: { type: "string" },
+        workspace: { type: "string" },
+        name: { type: "string" },
+        description: { type: "string" },
+        status: { type: "string" },
+        start_date: { type: "string" },
+        target_date: { type: "string" },
+      },
+      required: ["project_id", "workspace", "name"],
+    },
+  },
+  {
+    name: "update_module",
+    description:
+      "Update a module (name/description/status/dates). ALWAYS pass workspace (slug) and module_id (UUID).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        module_id: { type: "string" },
+        name: { type: "string" },
+        description: { type: "string" },
+        status: { type: "string" },
+        start_date: { type: "string" },
+        target_date: { type: "string" },
+      },
+      required: ["workspace", "module_id"],
+    },
+  },
+  {
+    name: "delete_module",
+    description:
+      "Soft-delete a module (module no longer listed; its issues keep their data). ALWAYS pass workspace (slug) and module_id (UUID).",
+    inputSchema: {
+      type: "object",
+      properties: { workspace: { type: "string" }, module_id: { type: "string" } },
+      required: ["workspace", "module_id"],
+    },
+  },
+  {
+    name: "create_state",
+    description:
+      "Create a workflow state in a project (e.g. Need Review). group_name: backlog|started|completed|cancelled. ALWAYS pass workspace (slug) and project_id (UUID).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project_id: { type: "string" },
+        workspace: { type: "string" },
+        name: { type: "string" },
+        group_name: { type: "string", enum: ["backlog", "started", "completed", "cancelled"] },
+        color: { type: "string" },
+        description: { type: "string" },
+      },
+      required: ["project_id", "workspace", "name", "group_name"],
+    },
+  },
+  {
+    name: "list_folders",
+    description:
+      "List project folders in a workspace (ClickUp-style grouping above projects). ALWAYS pass workspace (slug).",
+    inputSchema: {
+      type: "object",
+      properties: { workspace: { type: "string" } },
+      required: ["workspace"],
+    },
+  },
+  {
+    name: "create_folder",
+    description: "Create a project folder. ALWAYS pass workspace (slug) and name.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        name: { type: "string" },
+        color: { type: "string" },
+        sort_order: { type: "number" },
+      },
+      required: ["workspace", "name"],
+    },
+  },
+  {
+    name: "update_folder",
+    description:
+      "Update a folder (name/color/sort_order). ALWAYS pass workspace (slug) and folder_id (UUID).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        folder_id: { type: "string" },
+        name: { type: "string" },
+        color: { type: "string" },
+        sort_order: { type: "number" },
+      },
+      required: ["workspace", "folder_id"],
+    },
+  },
+  {
+    name: "delete_folder",
+    description:
+      "Soft-delete a folder (projects keep their data and render under No folder). ALWAYS pass workspace (slug) and folder_id (UUID).",
+    inputSchema: {
+      type: "object",
+      properties: { workspace: { type: "string" }, folder_id: { type: "string" } },
+      required: ["workspace", "folder_id"],
+    },
+  },
+  {
+    name: "set_project_folder",
+    description:
+      "Move a project into a folder (or out: pass folder_id null). ALWAYS pass workspace (slug) and project_id (UUID).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        project_id: { type: "string" },
+        folder_id: { type: ["string", "null"] },
+      },
+      required: ["workspace", "project_id"],
+    },
+  },
+  {
+    name: "list_custom_fields",
+    description:
+      "List custom field definitions for a project (settings includes options/currency). ALWAYS pass workspace (slug) and project_id (UUID).",
+    inputSchema: {
+      type: "object",
+      properties: { project_id: { type: "string" }, workspace: { type: "string" } },
+      required: ["project_id", "workspace"],
+    },
+  },
+  {
+    name: "create_custom_field",
+    description:
+      "Create a custom field on a project. field_type: text|url|number|date|checkbox|select|multi_select|user|currency. Currency fields default to IDR unless settings.currency is set. ALWAYS pass workspace (slug) and project_id (UUID).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project_id: { type: "string" },
+        workspace: { type: "string" },
+        name: { type: "string" },
+        field_type: {
+          type: "string",
+          enum: [
+            "text",
+            "url",
+            "number",
+            "date",
+            "checkbox",
+            "select",
+            "multi_select",
+            "user",
+            "currency",
+          ],
+        },
+        description: { type: "string" },
+        is_required: { type: "boolean" },
+        settings: { type: "object" },
+      },
+      required: ["project_id", "workspace", "name", "field_type"],
+    },
+  },
+  {
+    name: "set_custom_field_value",
+    description:
+      'Set one custom field value on an issue. value_json for currency fields: {amount_cents: number, currency: "IDR"}. Pass null to clear. ALWAYS pass workspace (slug), project_id, issue_id and custom_field_id (UUIDs).',
+    inputSchema: {
+      type: "object",
+      properties: {
+        project_id: { type: "string" },
+        workspace: { type: "string" },
+        issue_id: { type: "string" },
+        custom_field_id: { type: "string" },
+        value_json: {},
+      },
+      required: ["project_id", "workspace", "issue_id", "custom_field_id"],
     },
   },
   {
@@ -1035,6 +1221,27 @@ async function assertStateInWorkspace(
   if (!state) throw new HTTPException(404, { message: "State not found" });
 }
 
+// A folder must live in the workspace the tool call already resolved —
+// same shape as assertStateInWorkspace below.
+async function assertFolderInWorkspace(
+  db: ReturnType<typeof getDb>,
+  folderId: string,
+  workspaceId: string,
+) {
+  const [folder] = await db
+    .select({ id: schema.projectFolders.id })
+    .from(schema.projectFolders)
+    .where(
+      and(
+        eq(schema.projectFolders.id, folderId),
+        eq(schema.projectFolders.workspaceId, workspaceId),
+        isNull(schema.projectFolders.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!folder) throw new HTTPException(404, { message: "Folder not found" });
+}
+
 // Labels carry workspaceId directly (they are workspace-scoped, not
 // project-scoped), so the same id + workspace + not-deleted shape applies.
 // One inArray select covers the whole list; row count must match unique ids.
@@ -1485,6 +1692,186 @@ export async function handleTool(
         );
       return { success: true };
     }
+    case "list_folders": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      const rows = await db
+        .select()
+        .from(schema.projectFolders)
+        .where(
+          and(
+            eq(schema.projectFolders.workspaceId, workspaceId),
+            isNull(schema.projectFolders.deletedAt),
+          ),
+        )
+        .orderBy(asc(schema.projectFolders.sortOrder));
+      return rows;
+    }
+    case "create_folder": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      const id = uuid();
+      const now = nowISO();
+      await db.insert(schema.projectFolders).values({
+        id,
+        name: params.name as string,
+        color: (params.color as string) ?? null,
+        sortOrder: (params.sort_order as number) ?? 65535.0,
+        workspaceId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const [created] = await db
+        .select()
+        .from(schema.projectFolders)
+        .where(eq(schema.projectFolders.id, id))
+        .limit(1);
+      return created;
+    }
+    case "update_folder": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      await assertFolderInWorkspace(db, params.folder_id as string, workspaceId);
+      const updates: Record<string, unknown> = { updatedAt: nowISO() };
+      if (params.name !== undefined) updates.name = params.name;
+      if (params.color !== undefined) updates.color = params.color;
+      if (params.sort_order !== undefined) updates.sortOrder = params.sort_order;
+      await db
+        .update(schema.projectFolders)
+        .set(updates)
+        .where(
+          and(
+            eq(schema.projectFolders.id, params.folder_id as string),
+            eq(schema.projectFolders.workspaceId, workspaceId),
+          ),
+        );
+      const [updated] = await db
+        .select()
+        .from(schema.projectFolders)
+        .where(eq(schema.projectFolders.id, params.folder_id as string))
+        .limit(1);
+      return updated;
+    }
+    case "delete_folder": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      await assertFolderInWorkspace(db, params.folder_id as string, workspaceId);
+      const now = nowISO();
+      await db
+        .update(schema.projectFolders)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(schema.projectFolders.id, params.folder_id as string),
+            eq(schema.projectFolders.workspaceId, workspaceId),
+          ),
+        );
+      return { success: true };
+    }
+    case "set_project_folder": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      await assertProjectInWorkspace(db, params.project_id as string, workspaceId);
+      // Folder (when set) must belong to the same workspace — the binding
+      // rule the REST update enforces.
+      if (params.folder_id)
+        await assertFolderInWorkspace(db, params.folder_id as string, workspaceId);
+      await db
+        .update(schema.projects)
+        .set({ folderId: (params.folder_id as string | null) ?? null, updatedAt: nowISO() })
+        .where(
+          and(
+            eq(schema.projects.id, params.project_id as string),
+            eq(schema.projects.workspaceId, workspaceId),
+          ),
+        );
+      return { success: true };
+    }
+    case "list_custom_fields": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      await assertProjectInWorkspace(db, params.project_id as string, workspaceId);
+      const rows = await db
+        .select()
+        .from(schema.customFields)
+        .where(
+          and(
+            eq(schema.customFields.projectId, params.project_id as string),
+            isNull(schema.customFields.deletedAt),
+          ),
+        );
+      // Parsed settings (options/currency) instead of the raw options string.
+      return rows.map((row) => withSettings(row));
+    }
+    case "create_custom_field": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      await assertProjectInWorkspace(db, params.project_id as string, workspaceId);
+      const id = uuid();
+      const now = nowISO();
+      // Validate settings like the REST service — a malformed currency code
+      // would crash Intl.NumberFormat in the client's currency renderer.
+      const settings = fieldSettingsSchema.parse(params.settings ?? {}) as {
+        options?: unknown;
+        currency?: string;
+      };
+      if (params.field_type === "currency" && !settings.currency) settings.currency = "IDR";
+      await db.insert(schema.customFields).values({
+        id,
+        name: params.name as string,
+        fieldType: params.field_type as string,
+        description: (params.description as string) ?? null,
+        isRequired: params.is_required ? 1 : 0,
+        options: JSON.stringify(settings),
+        projectId: params.project_id as string,
+        workspaceId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const [created] = await db
+        .select()
+        .from(schema.customFields)
+        .where(eq(schema.customFields.id, id))
+        .limit(1);
+      return created;
+    }
+    case "set_custom_field_value": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      await assertProjectInWorkspace(db, params.project_id as string, workspaceId);
+      // Issue must live in the named project; the field must belong to the
+      // SAME project — the cross-project linkage guard from the REST service.
+      const [issue] = await db
+        .select({ id: schema.issues.id, workspaceId: schema.issues.workspaceId })
+        .from(schema.issues)
+        .where(
+          and(
+            eq(schema.issues.id, params.issue_id as string),
+            eq(schema.issues.projectId, params.project_id as string),
+            eq(schema.issues.workspaceId, workspaceId),
+            isNull(schema.issues.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!issue) throw new HTTPException(404, { message: "Issue not found" });
+      const [field] = await db
+        .select({ id: schema.customFields.id })
+        .from(schema.customFields)
+        .where(
+          and(
+            eq(schema.customFields.id, params.custom_field_id as string),
+            eq(schema.customFields.projectId, params.project_id as string),
+            isNull(schema.customFields.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!field) throw new HTTPException(404, { message: "Custom field not found" });
+      const valueJson =
+        params.value_json === undefined || params.value_json === null
+          ? null
+          : JSON.stringify(params.value_json);
+      await valuesRepo.upsert(db, {
+        id: uuid(),
+        issueId: issue.id,
+        customFieldId: params.custom_field_id as string,
+        valueJson,
+        workspaceId,
+        now: nowISO(),
+      });
+      return { success: true };
+    }
     case "add_comment": {
       await assertIssueAccess(db, params.issue_id as string, userId);
       const id = uuid();
@@ -1722,6 +2109,82 @@ export async function handleTool(
         completed: completedCount,
         percentage: Math.round((completedCount / totalCount) * 100),
       };
+    }
+    case "create_module": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      // Same project-binding rule as create_issue / create_sprint.
+      await assertProjectInWorkspace(db, params.project_id as string, workspaceId);
+      const id = uuid();
+      const now = nowISO();
+      await db.insert(schema.modules).values({
+        id,
+        name: params.name as string,
+        description: (params.description as string) ?? null,
+        status: (params.status as string) ?? "planned",
+        startDate: (params.start_date as string) ?? null,
+        targetDate: (params.target_date as string) ?? null,
+        projectId: params.project_id as string,
+        workspaceId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const [created] = await db
+        .select()
+        .from(schema.modules)
+        .where(eq(schema.modules.id, id))
+        .limit(1);
+      return created;
+    }
+    case "update_module": {
+      await assertModuleAccess(db, params.module_id as string, userId);
+      const updates: Record<string, unknown> = { updatedAt: nowISO() };
+      if (params.name !== undefined) updates.name = params.name;
+      if (params.description !== undefined) updates.description = params.description;
+      if (params.status !== undefined) updates.status = params.status;
+      if (params.start_date !== undefined) updates.startDate = params.start_date;
+      if (params.target_date !== undefined) updates.targetDate = params.target_date;
+      await db
+        .update(schema.modules)
+        .set(updates)
+        .where(eq(schema.modules.id, params.module_id as string));
+      const [updated] = await db
+        .select()
+        .from(schema.modules)
+        .where(eq(schema.modules.id, params.module_id as string))
+        .limit(1);
+      return updated;
+    }
+    case "delete_module": {
+      await assertModuleAccess(db, params.module_id as string, userId);
+      const now = nowISO();
+      await db
+        .update(schema.modules)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(eq(schema.modules.id, params.module_id as string));
+      return { success: true };
+    }
+    case "create_state": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      await assertProjectInWorkspace(db, params.project_id as string, workspaceId);
+      const id = uuid();
+      const now = nowISO();
+      await db.insert(schema.states).values({
+        id,
+        name: params.name as string,
+        color: (params.color as string) || "#808080",
+        groupName: params.group_name as string,
+        description: (params.description as string) ?? null,
+        projectId: params.project_id as string,
+        workspaceId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const [created] = await db
+        .select()
+        .from(schema.states)
+        .where(eq(schema.states.id, id))
+        .limit(1);
+      return created;
     }
     case "list_modules": {
       await assertProjectAccess(db, params.project_id as string, userId);

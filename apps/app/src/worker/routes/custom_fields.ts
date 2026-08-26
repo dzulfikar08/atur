@@ -2,17 +2,20 @@ import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
-import { requireWorkspaceMember } from "../middleware/workspace";
+import { requireWorkspaceMember, requireWorkspaceProject } from "../middleware/workspace";
 import * as customFieldsService from "../services/customFields";
 
+// requireWorkspaceProject binds the :projectId param to the caller's
+// workspace — without it a member could list/create fields on a foreign
+// project by UUID (cross-tenant write injection).
 export const customFieldRoutes = new Hono<{ Bindings: Env }>({ strict: false })
-  .get("/", authMiddleware, requireWorkspaceMember, async (c) => {
+  .get("/", authMiddleware, requireWorkspaceMember, requireWorkspaceProject, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
     const result = await customFieldsService.list(db, projectId);
     return c.json(result);
   })
-  .post("/", authMiddleware, requireWorkspaceMember, async (c) => {
+  .post("/", authMiddleware, requireWorkspaceMember, requireWorkspaceProject, async (c) => {
     const db = getDb(c.env.DB);
     const projectId = c.req.param("projectId")!;
     const body = customFieldsService.createCustomFieldSchema.parse(await c.req.json());
@@ -21,16 +24,28 @@ export const customFieldRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   })
   // update/remove take the guard's workspace id: a field UUID from another
   // workspace matches nothing → 404 (cross-workspace IDOR).
-  .patch("/:fieldId", authMiddleware, requireWorkspaceMember, async (c) => {
-    const db = getDb(c.env.DB);
-    const fieldId = c.req.param("fieldId")!;
-    const body = customFieldsService.updateCustomFieldSchema.parse(await c.req.json());
-    const result = await customFieldsService.update(db, fieldId, c.get("workspace").id, body);
-    return c.json(result);
-  })
-  .delete("/:fieldId", authMiddleware, requireWorkspaceMember, async (c) => {
-    const db = getDb(c.env.DB);
-    const fieldId = c.req.param("fieldId")!;
-    await customFieldsService.remove(db, fieldId, c.get("workspace").id);
-    return c.body(null, 204);
-  });
+  .patch(
+    "/:fieldId",
+    authMiddleware,
+    requireWorkspaceMember,
+    requireWorkspaceProject,
+    async (c) => {
+      const db = getDb(c.env.DB);
+      const fieldId = c.req.param("fieldId")!;
+      const body = customFieldsService.updateCustomFieldSchema.parse(await c.req.json());
+      const result = await customFieldsService.update(db, fieldId, c.get("workspace").id, body);
+      return c.json(result);
+    },
+  )
+  .delete(
+    "/:fieldId",
+    authMiddleware,
+    requireWorkspaceMember,
+    requireWorkspaceProject,
+    async (c) => {
+      const db = getDb(c.env.DB);
+      const fieldId = c.req.param("fieldId")!;
+      await customFieldsService.remove(db, fieldId, c.get("workspace").id);
+      return c.body(null, 204);
+    },
+  );

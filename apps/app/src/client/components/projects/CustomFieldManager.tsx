@@ -23,6 +23,7 @@ const FIELD_TYPES: { value: FieldType; label: string }[] = [
   { value: "checkbox", label: "Checkbox" },
   { value: "url", label: "URL" },
   { value: "user", label: "User" },
+  { value: "currency", label: "Currency" },
 ];
 
 const TYPE_COLORS: Record<string, string> = {
@@ -161,6 +162,7 @@ function FieldForm({
   const [fieldType, setFieldType] = useState<FieldType>(initial?.field_type || "text");
   const [isRequired, setIsRequired] = useState(initial?.is_required || false);
   const [options, setOptions] = useState<SelectOption[]>(initial?.settings?.options || []);
+  const [currency, setCurrency] = useState(initial?.settings?.currency || "IDR");
 
   const isSelect = fieldType === "select" || fieldType === "multi_select";
 
@@ -173,6 +175,9 @@ function FieldForm({
       };
       if (isSelect) {
         data.settings = { options };
+      }
+      if (fieldType === "currency") {
+        data.settings = { currency };
       }
       if (initial) {
         return api.updateCustomField(slug, projectId, initial.id, data);
@@ -227,6 +232,24 @@ function FieldForm({
           </SelectContent>
         </Select>
       </div>
+
+      {fieldType === "currency" && (
+        <div>
+          <label className="text-sm font-medium mb-1 block">Currency</label>
+          <Select value={currency} onValueChange={setCurrency}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {["IDR", "USD", "EUR", "SGD"].map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <div className="flex items-center gap-2">
         <input

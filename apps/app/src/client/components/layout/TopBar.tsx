@@ -51,11 +51,13 @@ export default function TopBar() {
 
   // Projects for this workspace — used to resolve project UUIDs in the breadcrumb
   // (e.g. /:slug/projects/<uuid>/issues) to a readable identifier/name.
-  const { data: projects = [] } = useQuery<{
-    id: string;
-    name: string | null;
-    identifier?: string | null;
-  }[]>({
+  const { data: projects = [] } = useQuery<
+    {
+      id: string;
+      name: string | null;
+      identifier?: string | null;
+    }[]
+  >({
     queryKey: ["projects", slug],
     queryFn: () =>
       slug === "all"

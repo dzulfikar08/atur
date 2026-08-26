@@ -125,6 +125,26 @@ export const api = {
   // Project
   getProject: (slug: string, projectId: string) =>
     apiFetch<ProjectDetail>(`/workspaces/${slug}/projects/${projectId}/`),
+  listFolders: (slug: string) =>
+    apiFetch<{ results: ProjectFolder[] }>(`/workspaces/${slug}/folders/`).then(
+      (d) => d.results ?? [],
+    ),
+  createFolder: (slug: string, data: { name: string; color?: string; sort_order?: number }) =>
+    apiFetch<ProjectFolder>(`/workspaces/${slug}/folders/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateFolder: (
+    slug: string,
+    folderId: string,
+    data: Partial<{ name: string; color: string; sort_order: number }>,
+  ) =>
+    apiFetch<ProjectFolder>(`/workspaces/${slug}/folders/${folderId}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteFolder: (slug: string, folderId: string) =>
+    apiFetch(`/workspaces/${slug}/folders/${folderId}/`, { method: "DELETE" }),
   updateProject: (slug: string, projectId: string, data: Partial<ProjectDetail>) =>
     apiFetch<ProjectDetail>(`/workspaces/${slug}/projects/${projectId}/`, {
       method: "PATCH",
@@ -815,6 +835,17 @@ export interface ProjectDetail {
   emoji?: string;
   slug?: string;
   is_pipeline?: number;
+  folder_id?: string | null;
+}
+
+export interface ProjectFolder {
+  id: string;
+  name: string;
+  color: string | null;
+  sort_order: number;
+  workspace_id: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 export interface Issue {
@@ -904,7 +935,8 @@ export type FieldType =
   | "date"
   | "checkbox"
   | "url"
-  | "user";
+  | "user"
+  | "currency";
 
 export interface SelectOption {
   id: string;
@@ -916,7 +948,7 @@ export interface CustomField {
   id: string;
   name: string;
   field_type: FieldType;
-  settings: { options?: SelectOption[] } | null;
+  settings: { options?: SelectOption[]; currency?: string } | null;
   is_required: boolean;
   sort_order: number;
   project_id: string;
@@ -932,7 +964,7 @@ export interface CustomFieldValue {
   value_json: unknown;
   field_name: string;
   field_type: string;
-  field_settings: { options?: SelectOption[] } | null;
+  field_settings: { options?: SelectOption[]; currency?: string } | null;
 }
 
 export interface Label {

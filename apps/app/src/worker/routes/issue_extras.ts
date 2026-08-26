@@ -16,6 +16,7 @@ import { nowISO } from "../lib/pagination";
 import * as schema from "../db/schema";
 import * as issuesRepo from "../repositories/issues";
 import * as timeEntriesService from "../services/timeEntries";
+import * as customFieldValuesService from "../services/customFieldValues";
 
 type C = Context<{ Bindings: Env }>;
 
@@ -397,12 +398,34 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     },
   )
 
-  // ---- Custom values (no table — stub) ----
-  .get("/custom-values", authMiddleware, requireWorkspaceMember, requireWorkspaceProject, (c: C) =>
-    c.json([]),
+  // ---- Custom values ----
+  .get(
+    "/custom-values",
+    authMiddleware,
+    requireWorkspaceMember,
+    requireWorkspaceProject,
+    async (c: C) => {
+      const { db, issue } = await resolveIssue(c);
+      // Bare array on the wire — the client types GET as CustomFieldValue[]
+      // (the old stub also returned a bare array).
+      const results = await customFieldValuesService.list(db, issue);
+      return c.json(results);
+    },
   )
-  .post("/custom-values", authMiddleware, requireWorkspaceMember, requireWorkspaceProject, (c: C) =>
-    c.json({ ok: true }),
+  .post(
+    "/custom-values",
+    authMiddleware,
+    requireWorkspaceMember,
+    requireWorkspaceProject,
+    async (c: C) => {
+      const { db, issue } = await resolveIssue(c);
+      const result = await customFieldValuesService.set(
+        db,
+        issue,
+        await c.req.json().catch(() => ({})),
+      );
+      return c.json(result, 201);
+    },
   )
 
   // ---- Time entries ----

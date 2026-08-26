@@ -80,7 +80,8 @@ function FieldInput({
     field.field_type === "url" ||
     field.field_type === "number" ||
     field.field_type === "date" ||
-    field.field_type === "user";
+    field.field_type === "user" ||
+    field.field_type === "currency";
   const [local, setLocal] = useState<unknown>(currentVal);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -152,6 +153,48 @@ function FieldInput({
           <DatePicker value={(display as string) || null} onChange={(v) => schedule(v)} />
         </div>
       );
+
+    case "currency": {
+      // Stored as {amount_cents, currency}; edited in major units and shown
+      // formatted next to the input.
+      const currency =
+        (field.settings?.currency as string | undefined) ||
+        ((value?.field_settings as { currency?: string } | null)?.currency ?? "IDR");
+      const shown = display as { amount_cents?: number } | null;
+      const major = shown && typeof shown.amount_cents === "number" ? shown.amount_cents / 100 : "";
+      const formatMajor = (cents: number) =>
+        new Intl.NumberFormat("id-ID", {
+          style: "currency",
+          currency,
+          maximumFractionDigits: 0,
+        }).format(cents / 100);
+      return (
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">
+            {field.name}
+            {field.is_required && <span className="text-destructive ml-0.5">*</span>}
+          </label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              value={major}
+              min={0}
+              onChange={(e) => {
+                const v = e.target.value;
+                schedule(v === "" ? null : { amount_cents: Math.round(Number(v) * 100), currency });
+              }}
+              placeholder={field.name}
+              className="h-8 text-sm"
+            />
+            {typeof major === "number" && major !== 0 && (
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {formatMajor(major * 100)}
+              </span>
+            )}
+          </div>
+        </div>
+      );
+    }
 
     case "checkbox":
       return (
