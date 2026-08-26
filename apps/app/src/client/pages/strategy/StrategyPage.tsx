@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Gauge, TrendingUp, TrendingDown, Minus, Inbox } from "@/lib/icons";
+import { Gauge, TrendingUp, TrendingDown, Minus, Inbox, Info } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import StrategyScatter from "./StrategyScatter";
@@ -145,14 +145,62 @@ export default function StrategyPage() {
         </Card>
       ) : (
         <>
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="p-4 lg:col-span-2">
-              <StrategyScatter
-                workspaces={workspaces}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-              />
-            </Card>
+         {/* Strategy matrix legend */}
+         <Card className="p-4">
+           <div className="flex items-start gap-3">
+             <Info className="mt-0.5 size-5 text-muted-foreground shrink-0" />
+             <div className="space-y-2.5 text-sm">
+               <p className="font-medium">Moat × AI-proof matrix</p>
+               <p className="text-xs text-muted-foreground">
+                 Each workspace is plotted on a 2×2 grid. <strong>Moat</strong> (Y-axis, 0–5)
+                 measures competitive defensibility; <strong>AI-proof</strong> (X-axis, 0–5)
+                 measures how hard AI is to recreate or replace it. The midpoint (2.5) splits
+                 each axis into low/high.
+               </p>
+               <table className="text-xs">
+                 <tbody>
+                   <tr>
+                     <MatrixCell
+                       label="HARDEN"
+                       color="amber"
+                       desc="Strong moat but AI-vulnerable. Defend the advantage before AI erodes it."
+                     />
+                     <MatrixCell
+                       label="INVEST"
+                       color="emerald"
+                       desc="Strong moat AND AI-proof. The best corner — scale, grow, put more in here."
+                     />
+                   </tr>
+                   <tr>
+                     <MatrixCell
+                       label="KILL"
+                       color="red"
+                       desc="Weak moat and AI-vulnerable. The worst corner — deprioritize, sunset, or divest."
+                     />
+                     <MatrixCell
+                       label="HARVEST"
+                       color="blue"
+                       desc="Weak moat but AI-proof. Not defensibly strong, but not AI-threatened either — milk it while it lasts."
+                     />
+                   </tr>
+                 </tbody>
+               </table>
+               <p className="text-xs text-muted-foreground">
+                 Verdicts are set manually after scoring — pick a dot or row, enter both scores,
+                 choose your verdict, and back it with an evidence note.
+               </p>
+             </div>
+           </div>
+         </Card>
+
+         <div className="grid gap-4 lg:grid-cols-3">
+           <Card className="p-4 lg:col-span-2">
+             <StrategyScatter
+               workspaces={workspaces}
+               selectedId={selectedId}
+               onSelect={setSelectedId}
+             />
+           </Card>
             <ScoreEditor
               workspaces={workspaces}
               selected={selected}
@@ -287,6 +335,40 @@ export default function StrategyPage() {
         </>
       )}
     </div>
+  );
+}
+
+// ── Matrix legend cell ──
+const MATRIX_COLOR: Record<string, string> = {
+  emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  red: "bg-red-500/10 text-red-600 dark:text-red-400",
+  blue: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+};
+
+function MatrixCell({
+  label,
+  color,
+  desc,
+}: {
+  label: string;
+  color: "emerald" | "amber" | "red" | "blue";
+  desc: string;
+}) {
+  return (
+    <td className="px-3 py-2 pr-6">
+      <div className="flex items-center gap-1.5">
+        <span
+          className={cn(
+            "inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium",
+            MATRIX_COLOR[color],
+          )}
+        >
+          {label}
+        </span>
+        <span className="text-xs text-muted-foreground max-w-[200px]">{desc}</span>
+      </div>
+    </td>
   );
 }
 
