@@ -629,11 +629,26 @@ export const api = {
     if (params?.workspace) qs.set("workspace", params.workspace);
     if (params?.project) qs.set("project", params.project);
     if (params?.limit) qs.set("limit", String(params.limit));
-    const query = qs.toString();
-    const data = await apiFetch<{ results: AllIssue[]; total: number }>(
-      `/me/issues/${query ? `?${query}` : ""}`,
-    );
-    return data.results;
+    // The endpoint paginates (offset/limit, capped server-side). Callers that
+    // pass an explicit limit get a single page; without one we walk every page
+    // so list views keep their full dataset.
+    const singlePage = params?.limit != null;
+    const all: AllIssue[] = [];
+    let offset = 0;
+    const limit = params?.limit ?? 100;
+    while (true) {
+      qs.set("offset", String(offset));
+      qs.set("limit", String(limit));
+      const page = await apiFetch<{
+        results: AllIssue[];
+        total: number;
+        next_offset: number | null;
+      }>(`/me/issues/?${qs.toString()}`);
+      all.push(...page.results);
+      if (singlePage || page.next_offset == null || page.results.length === 0) break;
+      offset = page.next_offset;
+    }
+    return all;
   },
   listAllProjects: async (params?: { is_pipeline?: 1 }) => {
     const qs = new URLSearchParams();

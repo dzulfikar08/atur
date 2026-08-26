@@ -21,14 +21,14 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const db = getDb(c.env.DB);
     const user = c.get("user");
     const ids = await workspaceRepo.listIdsByUser(db, user.sub);
-    if (!ids.length) return c.json({ results: [], total: 0 });
+    if (!ids.length) return c.json(paginatedResponse([], 0, 0, 50));
 
     const state = c.req.query("state");
     const priority = c.req.query("priority");
     const search = c.req.query("search");
     const workspace = c.req.query("workspace"); // workspace id
     const project = c.req.query("project"); // project id
-    const limit = Math.min(parseInt(c.req.query("limit") || "500", 10), 500);
+    const { offset, limit } = paginationParams(c);
 
     const conditions = [inArray(schema.issues.workspaceId, ids), isNull(schema.issues.deletedAt)];
     if (state) conditions.push(eq(schema.issues.stateId, state));
@@ -36,6 +36,14 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     if (search) conditions.push(like(schema.issues.name, `%${search}%`));
     if (workspace) conditions.push(eq(schema.issues.workspaceId, workspace));
     if (project) conditions.push(eq(schema.issues.projectId, project));
+    const where = and(...conditions);
+
+    // Count without the display joins — every condition is issues-scoped, and
+    // total must describe the full filtered set, not just this page.
+    const [countRow] = await db
+      .select({ total: sql<number>`count(*)` })
+      .from(schema.issues)
+      .where(where);
 
     const rows = await db
       .select({
@@ -48,8 +56,9 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       .from(schema.issues)
       .innerJoin(schema.projects, eq(schema.projects.id, schema.issues.projectId))
       .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.issues.workspaceId))
-      .where(and(...conditions))
+      .where(where)
       .orderBy(desc(schema.issues.updatedAt))
+      .offset(offset)
       .limit(limit);
 
     const enriched = await issuesService.enrichIssues(
@@ -64,7 +73,7 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       workspaceName: rows[i].workspaceName,
     }));
 
-    return c.json({ results, total: results.length });
+    return c.json(paginatedResponse(results, countRow.total, offset, limit));
   })
 
   // All projects across the user's workspaces.

@@ -521,6 +521,17 @@ async function enrichIssue(
   };
 }
 
+// D1 caps bound parameters per statement (~100). Enrichment IN-lists must be
+// chunked below that or large pages (e.g. /api/me/issues with hundreds of
+// rows) fail the whole query with a 500.
+const ENRICH_CHUNK = 90;
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 export async function enrichIssues(
   db: DbClient,
   issueList: NonNullable<Awaited<ReturnType<typeof issuesRepo.findById>>>[],
@@ -530,43 +541,50 @@ export async function enrichIssues(
   const issueIds = issueList.map((i) => i.id);
   const stateIds = [...new Set(issueList.map((i) => i.stateId).filter(Boolean) as string[])];
 
-  const stateRows =
-    stateIds.length > 0
-      ? await db
-          .select({
-            id: schema.states.id,
-            name: schema.states.name,
-            color: schema.states.color,
-            group: schema.states.groupName,
-            workspaceId: schema.states.workspaceId,
-          })
-          .from(schema.states)
-          .where(inArray(schema.states.id, stateIds))
-      : [];
-  const stateMap = new Map(stateRows.map((s) => [s.id, s]));
+  const stateQueries = chunk(stateIds, ENRICH_CHUNK).map((ids) =>
+    db
+      .select({
+        id: schema.states.id,
+        name: schema.states.name,
+        color: schema.states.color,
+        group: schema.states.groupName,
+        workspaceId: schema.states.workspaceId,
+      })
+      .from(schema.states)
+      .where(inArray(schema.states.id, ids)),
+  );
+  const stateChunks: Awaited<(typeof stateQueries)[number]>[] = [];
+  for (const q of stateQueries) stateChunks.push(await q);
+  const stateRows = stateChunks.flat();
+  const stateMap = new Map(stateRows.map((s) => [s.id, s] as const));
 
-  const assigneeRows = await db
-    .select({
-      issueId: schema.issueAssignees.issueId,
-      id: schema.users.id,
-      email: schema.users.email,
-      username: schema.users.username,
-      displayName: schema.users.displayName,
-      avatar: schema.users.avatar,
-    })
-    .from(schema.issueAssignees)
-    .innerJoin(schema.users, eq(schema.issueAssignees.assigneeId, schema.users.id))
-    .innerJoin(schema.issues, eq(schema.issueAssignees.issueId, schema.issues.id))
-    .where(
-      and(
-        inArray(schema.issueAssignees.issueId, issueIds),
-        isNull(schema.issueAssignees.deletedAt),
-        // Belt-and-braces (DEV-21): an assignee only renders when they are an
-        // active member of the OWNING issue's workspace (correlated to the
-        // joined issues row). Legacy foreign link rows drop out here.
-        sql`EXISTS (SELECT 1 FROM workspace_members wm WHERE wm.member_id = ${schema.users.id} AND wm.workspace_id = ${schema.issues.workspaceId} AND wm.is_active = 1 AND wm.deleted_at IS NULL)`,
+  const assigneeQueries = chunk(issueIds, ENRICH_CHUNK).map((ids) =>
+    db
+      .select({
+        issueId: schema.issueAssignees.issueId,
+        id: schema.users.id,
+        email: schema.users.email,
+        username: schema.users.username,
+        displayName: schema.users.displayName,
+        avatar: schema.users.avatar,
+      })
+      .from(schema.issueAssignees)
+      .innerJoin(schema.users, eq(schema.issueAssignees.assigneeId, schema.users.id))
+      .innerJoin(schema.issues, eq(schema.issueAssignees.issueId, schema.issues.id))
+      .where(
+        and(
+          inArray(schema.issueAssignees.issueId, ids),
+          isNull(schema.issueAssignees.deletedAt),
+          // Belt-and-braces (DEV-21): an assignee only renders when they are an
+          // active member of the OWNING issue's workspace (correlated to the
+          // joined issues row). Legacy foreign link rows drop out here.
+          sql`EXISTS (SELECT 1 FROM workspace_members wm WHERE wm.member_id = ${schema.users.id} AND wm.workspace_id = ${schema.issues.workspaceId} AND wm.is_active = 1 AND wm.deleted_at IS NULL)`,
+        ),
       ),
-    );
+  );
+  const assigneeChunks: Awaited<(typeof assigneeQueries)[number]>[] = [];
+  for (const q of assigneeQueries) assigneeChunks.push(await q);
+  const assigneeRows = assigneeChunks.flat();
 
   const assigneeMap = new Map<string, typeof assigneeRows>();
   for (const row of assigneeRows) {
@@ -574,19 +592,22 @@ export async function enrichIssues(
     assigneeMap.get(row.issueId)!.push(row);
   }
 
-  const labelRows = await db
-    .select({
-      issueId: schema.issueLabels.issueId,
-      id: schema.labels.id,
-      name: schema.labels.name,
-      color: schema.labels.color,
-      workspaceId: schema.labels.workspaceId,
-    })
-    .from(schema.issueLabels)
-    .innerJoin(schema.labels, eq(schema.issueLabels.labelId, schema.labels.id))
-    .where(
-      and(inArray(schema.issueLabels.issueId, issueIds), isNull(schema.issueLabels.deletedAt)),
-    );
+  const labelQueries = chunk(issueIds, ENRICH_CHUNK).map((ids) =>
+    db
+      .select({
+        issueId: schema.issueLabels.issueId,
+        id: schema.labels.id,
+        name: schema.labels.name,
+        color: schema.labels.color,
+        workspaceId: schema.labels.workspaceId,
+      })
+      .from(schema.issueLabels)
+      .innerJoin(schema.labels, eq(schema.issueLabels.labelId, schema.labels.id))
+      .where(and(inArray(schema.issueLabels.issueId, ids), isNull(schema.issueLabels.deletedAt))),
+  );
+  const labelChunks: Awaited<(typeof labelQueries)[number]>[] = [];
+  for (const q of labelQueries) labelChunks.push(await q);
+  const labelRows = labelChunks.flat();
 
   const labelMap = new Map<string, typeof labelRows>();
   for (const row of labelRows) {
