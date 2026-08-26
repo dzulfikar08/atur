@@ -37,6 +37,8 @@ export const updateProjectSchema = z.object({
   projectLeadId: z.string().nullable().optional(),
   defaultAssigneeId: z.string().nullable().optional(),
   defaultStateId: z.string().nullable().optional(),
+  // ClickUp-style folder grouping (DEV-27). null clears the folder.
+  folderId: z.string().uuid().nullable().optional(),
   isPipeline: z.boolean().optional(),
 });
 
@@ -180,6 +182,22 @@ export async function update(
     stateId: data.defaultStateId,
     userIds: [data.projectLeadId, data.defaultAssigneeId],
   });
+  // Folder must live in the project's workspace — same binding rule as
+  // states/assignees above (a foreign folder id would leak grouping names).
+  if (data.folderId) {
+    const [folder] = await db
+      .select({ id: schema.projectFolders.id })
+      .from(schema.projectFolders)
+      .where(
+        and(
+          eq(schema.projectFolders.id, data.folderId),
+          eq(schema.projectFolders.workspaceId, workspace.id),
+          isNull(schema.projectFolders.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!folder) throw new HTTPException(404, { message: "Folder not found" });
+  }
   // Boolean → 0/1 int for the sqlite column; never reseeds states — flagging an
   // existing project must not touch its workflow.
   const { isPipeline, ...rest } = data;

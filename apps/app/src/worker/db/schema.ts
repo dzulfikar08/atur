@@ -167,6 +167,25 @@ export const workspaceScoreHistory = sqliteTable(
   (table) => [index("idx_workspace_score_history_workspace").on(table.workspaceId)],
 );
 
+// ClickUp-style folder level: workspace → folder → project. Nullable FK —
+// projects without a folder simply render under "No folder".
+export const projectFolders = sqliteTable(
+  "project_folders",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    color: text("color"),
+    sortOrder: real("sort_order").notNull().default(65535.0),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    createdAt: text("created_at"),
+    updatedAt: text("updated_at"),
+    deletedAt: text("deleted_at"),
+  },
+  (table) => [index("idx_project_folders_workspace").on(table.workspaceId)],
+);
+
 export const projects = sqliteTable(
   "projects",
   {
@@ -186,6 +205,7 @@ export const projects = sqliteTable(
     defaultAssigneeId: text("default_assignee_id"),
     projectLeadId: text("project_lead_id"),
     defaultStateId: text("default_state_id"),
+    folderId: text("folder_id").references(() => projectFolders.id, { onDelete: "set null" }),
     moduleView: integer("module_view").notNull().default(1),
     cycleView: integer("cycle_view").notNull().default(1),
     pageView: integer("page_view").notNull().default(1),
@@ -783,6 +803,31 @@ export const customFields = sqliteTable("custom_fields", {
   updatedAt: text("updated_at"),
   deletedAt: text("deleted_at"),
 });
+
+// Values attach a typed JSON payload to an issue per field. Currency values
+// are { amount_cents: number, currency: string } — cents keep the deals
+// precedent; currency travels with the value.
+export const customFieldValues = sqliteTable(
+  "custom_field_values",
+  {
+    id: text("id").primaryKey(),
+    issueId: text("issue_id")
+      .notNull()
+      .references(() => issues.id, { onDelete: "cascade" }),
+    customFieldId: text("custom_field_id")
+      .notNull()
+      .references(() => customFields.id, { onDelete: "cascade" }),
+    valueJson: text("value_json"),
+    workspaceId: text("workspace_id").notNull(),
+    createdAt: text("created_at"),
+    updatedAt: text("updated_at"),
+    deletedAt: text("deleted_at"),
+  },
+  (t) => [
+    uniqueIndex("uq_custom_field_value").on(t.issueId, t.customFieldId),
+    index("idx_cfv_field").on(t.customFieldId),
+  ],
+);
 
 export const sprints = sqliteTable(
   "sprints",
