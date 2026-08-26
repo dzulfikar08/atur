@@ -64,6 +64,13 @@
       "when": 1787453183816,
       "tag": "0008_absurd_namora",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1787678407786,
+      "tag": "0009_sudden_psynapse",
+      "breakpoints": true
     }
   ]
 }

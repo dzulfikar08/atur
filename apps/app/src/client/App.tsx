@@ -36,6 +36,7 @@ const TimesheetPage = lazy(() => import("@/pages/timesheet/TimesheetPage"));
 const CrmPage = lazy(() => import("@/pages/crm/CrmPage"));
 const ContactsListPage = lazy(() => import("@/pages/crm/ContactsListPage"));
 const ContactDetailPage = lazy(() => import("@/pages/crm/ContactDetailPage"));
+const StrategyPage = lazy(() => import("@/pages/strategy/StrategyPage"));
 const CompaniesPage = lazy(() => import("@/pages/crm/CompaniesPage"));
 const CompanyDetailPage = lazy(() => import("@/pages/crm/CompanyDetailPage"));
 const CrmPipelineListPage = lazy(() => import("@/pages/crm/PipelineListPage"));
@@ -181,6 +182,7 @@ export default function App() {
           <Route path="/:slug/crm/pipelines/:projectId" element={<CrmPipelineBoardPage />} />
           <Route path="/:slug/crm/email-templates" element={<EmailTemplatesPage />} />
           <Route path="/:slug/settings" element={<SettingsPage />} />
+          <Route path="/:slug/strategy" element={<StrategyPage />} />
           <Route path="/:slug/me" element={<ProfilePage />} />
         </Route>
       </Routes>

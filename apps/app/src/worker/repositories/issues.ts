@@ -133,6 +133,7 @@ export async function create(
     targetDate?: string;
     estimatePoints?: number | null;
     parentId?: string | null;
+    isDecision?: number;
   },
 ) {
   const now = nowISO();
@@ -155,6 +156,7 @@ export async function create(
     targetDate: data.targetDate ?? null,
     estimatePoints: data.estimatePoints ?? null,
     parentId: data.parentId ?? null,
+    isDecision: data.isDecision ?? 0,
     createdAt: now,
     updatedAt: now,
   };
@@ -186,6 +188,7 @@ export async function update(
     targetDate?: string;
     estimatePoints?: number | null;
     archivedAt?: string;
+    isDecision?: number;
     isDraft?: number;
     descriptionJson?: string;
     descriptionStripped?: string;

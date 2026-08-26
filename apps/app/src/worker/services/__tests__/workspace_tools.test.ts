@@ -36,6 +36,7 @@ function mockDb(selectFixtures: any[][]) {
       const builder: any = {
         table: "",
         innerJoin: () => builder,
+        leftJoin: () => builder,
         where: (cond: unknown) => {
           selects[idx] = { table: builder.table, cond };
           return chainy(rows);
@@ -216,5 +217,74 @@ describe("workspace management MCP tools", () => {
       403,
     );
     expect(db.updates).toHaveLength(0);
+  });
+
+  it("update_workspace with strategy fields stamps reviewed_at + appends history (DEV-22)", async () => {
+    // Select order: getWorkspaceId (owner short-circuits membership),
+    // assertWorkspaceAdmin (owner short-circuits role), slug re-resolve by id,
+    // service findBySlug (old values), repo.update read-back (new values).
+    const db = mockDb([
+      [{ id: "ws-1", ownerId: ME }],
+      [{ ownerId: ME }],
+      [{ id: "ws-1", slug: "acme", ownerId: ME }],
+      [{ id: "ws-1", slug: "acme", ownerId: ME, moatScore: null, aiProofScore: null }],
+      [{ id: "ws-1", slug: "acme", moatScore: 4, aiProofScore: 3, strategyVerdict: "harden" }],
+    ]);
+    const result = await handleTool(
+      db.db,
+      {} as any,
+      "update_workspace",
+      { workspace: "acme", moatScore: 4, aiProofScore: 3, strategyVerdict: "harden" },
+      ME,
+    );
+    expect(result).toMatchObject({ moatScore: 4, aiProofScore: 3 });
+    expect(db.updates[0]).toMatchObject({ moatScore: 4, aiProofScore: 3 });
+    expect(db.updates[0].reviewedAt).toBeTruthy();
+    expect(db.inserts).toHaveLength(1);
+    expect(db.inserts[0]).toMatchObject({ workspaceId: "ws-1", moatScore: 4 });
+  });
+
+  it("update_workspace accepts a display NAME (slug fallback) — regression guard", async () => {
+    // getWorkspaceId: slug select misses, name select hits. Then admin check,
+    // slug re-resolve by id, service findBySlug, repo read-back.
+    const updated = { id: "ws-1", slug: "acme", name: "Renamed" };
+    const db = mockDb([
+      [],
+      [{ id: "ws-1", ownerId: ME }],
+      [{ ownerId: ME }],
+      [{ id: "ws-1", slug: "acme", ownerId: ME }],
+      [{ id: "ws-1", slug: "acme", ownerId: ME }],
+      [updated],
+    ]);
+    const result = await handleTool(
+      db.db,
+      {} as any,
+      "update_workspace",
+      { workspace: "Acme Corp", name: "Renamed" },
+      ME,
+    );
+    expect(result).toMatchObject({ name: "Renamed" });
+    expect(db.updates).toHaveLength(1);
+  });
+
+  it("update_workspace rejects an out-of-range strategy score with 400", async () => {
+    const db = mockDb([[{ id: "ws-1", ownerId: ME }], [{ ownerId: ME }]]);
+    await expectStatus(
+      () =>
+        handleTool(db.db, {} as any, "update_workspace", { workspace: "acme", moatScore: 9 }, ME),
+      400,
+    );
+    expect(db.updates).toHaveLength(0);
+    expect(db.inserts).toHaveLength(0);
+  });
+
+  it("list_decisions returns open is_decision rows across the user's workspaces (DEV-22)", async () => {
+    const rows = [{ id: "i1", name: "Kill or continue", sequenceId: 7, workspaceSlug: "acme" }];
+    // Select order: listIdsByUser (workspace ids), the joined inbox query.
+    const db = mockDb([[{ id: "ws-1" }], rows]);
+    const result = await handleTool(db.db, {} as any, "list_decisions", {}, ME);
+    expect(result).toEqual(rows);
+    // The inbox query runs against issues joined to projects/workspaces.
+    expect(db.selects[2].table).toBe("issues");
   });
 });

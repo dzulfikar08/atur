@@ -122,3 +122,13 @@ export async function softDelete(db: DbClient, id: string) {
     .set({ deletedAt: nowISO(), updatedAt: nowISO() })
     .where(eq(schema.workspaces.id, id));
 }
+
+// DEV-22: append-only strategy rescore history — one row per real change,
+// written only from services/workspaces.ts update(). The latest two rows per
+// workspace give /api/me/strategy its trend comparison.
+export async function insertScoreHistory(
+  db: DbClient,
+  row: typeof schema.workspaceScoreHistory.$inferInsert,
+) {
+  await db.insert(schema.workspaceScoreHistory).values(row);
+}

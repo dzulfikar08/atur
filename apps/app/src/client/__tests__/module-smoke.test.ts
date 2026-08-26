@@ -20,6 +20,7 @@ const MODULES = [
   "@/components/layout/Sidebar",
   "@/components/mobile/BottomNav",
   "@/components/issues/IssueDetail",
+  "@/pages/strategy/StrategyPage",
 ];
 
 describe("module load smoke (blank-white guard)", () => {

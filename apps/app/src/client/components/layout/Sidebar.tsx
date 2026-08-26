@@ -15,6 +15,7 @@ import {
   Plus,
   LayoutDashboard,
   Layers,
+  Gauge,
 } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
@@ -63,6 +64,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { to: "crm", icon: Users, label: "CRM" },
       { to: "crm/companies", icon: Building2, label: "Companies" },
       { to: "integrations", icon: Puzzle, label: "Integrations" },
+      { to: "strategy", icon: Gauge, label: "Strategy" },
       { to: "admin", icon: Shield, label: "Admin" },
       { to: "settings", icon: Settings, label: "Settings" },
     ],
