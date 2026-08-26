@@ -513,11 +513,29 @@ async function enrichIssue(
     state = s ?? null;
   }
 
+  const moduleIds = issue
+    ? (
+        await db
+          .select({ moduleId: schema.moduleIssues.moduleId })
+          .from(schema.moduleIssues)
+          .innerJoin(schema.modules, eq(schema.moduleIssues.moduleId, schema.modules.id))
+          .where(
+            and(
+              eq(schema.moduleIssues.issueId, issue.id),
+              isNull(schema.moduleIssues.deletedAt),
+              isNull(schema.modules.deletedAt),
+              eq(schema.modules.workspaceId, issue.workspaceId),
+            ),
+          )
+      ).map((r) => r.moduleId)
+    : [];
+
   return {
     ...issue,
     labels,
     assignees,
     state,
+    moduleIds,
   };
 }
 
@@ -614,6 +632,34 @@ export async function enrichIssues(
     if (!labelMap.has(row.issueId)) labelMap.set(row.issueId, []);
     labelMap.get(row.issueId)!.push(row);
   }
+  const moduleQueries = chunk(issueIds, ENRICH_CHUNK).map((ids) =>
+    db
+      .select({
+        issueId: schema.moduleIssues.issueId,
+        moduleId: schema.moduleIssues.moduleId,
+        workspaceId: schema.modules.workspaceId,
+      })
+      .from(schema.moduleIssues)
+      .innerJoin(schema.modules, eq(schema.moduleIssues.moduleId, schema.modules.id))
+      .where(
+        and(
+          inArray(schema.moduleIssues.issueId, ids),
+          isNull(schema.moduleIssues.deletedAt),
+          isNull(schema.modules.deletedAt),
+        ),
+      ),
+  );
+  const moduleChunks: Awaited<(typeof moduleQueries)[number]>[] = [];
+  for (const q of moduleQueries) moduleChunks.push(await q);
+  const moduleRows = moduleChunks.flat();
+
+  // Keep the module's workspace on the row: the final map drops legacy
+  // foreign links (same belt-and-braces rule as labels/states below).
+  const moduleMap = new Map<string, typeof moduleRows>();
+  for (const row of moduleRows) {
+    if (!moduleMap.has(row.issueId)) moduleMap.set(row.issueId, []);
+    moduleMap.get(row.issueId)!.push(row);
+  }
 
   return issueList.map((issue) => {
     const assignees =
@@ -642,6 +688,13 @@ export async function enrichIssues(
       stateRow && stateRow.workspaceId === issue.workspaceId
         ? { id: stateRow.id, name: stateRow.name, color: stateRow.color, group: stateRow.group }
         : null;
-    return { ...issue, labels, assignees, state };
+    // Workspace filter mirrors the label rule: legacy foreign module links
+    // drop out instead of leaking ids into the payload.
+    const moduleIds =
+      moduleMap
+        .get(issue.id)
+        ?.filter((m) => m.workspaceId === issue.workspaceId)
+        .map((m) => m.moduleId) ?? [];
+    return { ...issue, labels, assignees, state, moduleIds };
   });
 }
