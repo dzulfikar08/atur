@@ -187,9 +187,10 @@ describe("exchangeCode", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toContain("oauth2.googleapis.com/token");
     expect(init.method).toBe("POST");
-    expect((init.headers as Record<string, string>)["Content-Type"]).toBe(
-      "application/x-www-form-urlencoded",
-    );
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Content-Type"]).toBe("application/x-www-form-urlencoded");
+    // Without Accept: application/json Google may reply urlencoded.
+    expect(headers["Accept"]).toBe("application/json");
     const body = new URLSearchParams(init.body as string);
     expect(body.get("grant_type")).toBe("authorization_code");
     expect(body.get("code")).toBe("c-1");
@@ -214,6 +215,19 @@ describe("exchangeCode", () => {
   it("200 without access_token → GoogleAuthError(token_exchange_failed)", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({})));
     await expect(exchangeCode(args)).rejects.toMatchObject({ code: "token_exchange_failed" });
+  });
+
+  it("urlencoded token response (no JSON content type) is parsed too", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("access_token=at&expires_in=3599", {
+          status: 200,
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        }),
+      ),
+    );
+    await expect(exchangeCode(args)).resolves.toEqual({ accessToken: "at", idToken: null });
   });
 });
 

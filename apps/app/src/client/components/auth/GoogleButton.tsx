@@ -1,12 +1,15 @@
 import { Button } from "@/components/ui/button";
+import { resolveApiUrl } from "@/lib/native";
 
 // "Continue with Google" — a full-page navigation to the worker's
 // GET /auth/google (302 → accounts.google.com). A fetch() would not work here:
 // the authorize URL has to be loaded by the browser itself so Google can
-// redirect back to /auth/google/callback.
+// redirect back to /auth/google/callback. resolveApiUrl is inert in the
+// browser and points at the deployed worker origin inside the Capacitor
+// webview (the full native OAuth flow remains a known limitation).
 export function GoogleButton({ label = "Continue with Google" }: { label?: string }) {
   return (
-    <a href="/auth/google" className="block">
+    <a href={resolveApiUrl("/auth/google")} className="block">
       <Button type="button" variant="outline" className="w-full">
         <GoogleGlyph className="mr-2 h-4 w-4" />
         {label}

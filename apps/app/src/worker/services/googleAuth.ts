@@ -8,7 +8,7 @@ import {
 import { generateToken } from "../lib/token";
 import * as usersRepo from "../repositories/users";
 import * as accountsRepo from "../repositories/accounts";
-import { usernameFromEmail } from "./auth";
+import { usernameFromEmail, rotateSession } from "./auth";
 import { sessionExpiryISO } from "../lib/session";
 
 const PROVIDER = "google";
@@ -76,7 +76,11 @@ export async function exchangeCode(args: {
 }): Promise<{ accessToken: string; idToken: string | null }> {
   const res = await fetch(GOOGLE_TOKEN_ENDPOINT, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      // Without this Google may reply urlencoded instead of JSON.
+      Accept: "application/json",
+    },
     body: new URLSearchParams({
       code: args.code,
       client_id: args.clientId,
@@ -93,7 +97,15 @@ export async function exchangeCode(args: {
       `Google token endpoint ${res.status}: ${text.slice(0, 300)}`,
     );
   }
-  const data = (await res.json()) as { access_token?: string; id_token?: string };
+  // Parse either shape — JSON when the server honors Accept, urlencoded when
+  // it doesn't.
+  const text = await res.text();
+  let data: { access_token?: string; id_token?: string };
+  try {
+    data = JSON.parse(text) as { access_token?: string; id_token?: string };
+  } catch {
+    data = Object.fromEntries(new URLSearchParams(text));
+  }
   if (!data.access_token) {
     throw new GoogleAuthError("token_exchange_failed", "Google token response missing access_token");
   }
@@ -217,20 +229,15 @@ export async function signInWithGoogle(
 }
 
 // Every successful path funnels here for existing users: fresh opaque token +
-// 24h sliding window, exactly like login/OTP. isEmailVerified is stamped 1 —
-// Google already verified the address.
+// 24h sliding window — the shared rotateSession invariant, same as login/OTP.
+// isEmailVerified is stamped 1 — Google already verified the address.
 async function mintSession(
   db: DbClient,
   userId: string,
   email: string,
   username: string,
 ): Promise<GoogleAuthResult> {
-  const token = generateToken();
-  await usersRepo.updateUser(db, userId, {
-    token,
-    isEmailVerified: 1,
-    sessionExpiresAt: sessionExpiryISO(),
-  });
+  const token = await rotateSession(db, userId, { isEmailVerified: 1 });
   return { user: { id: userId, email, username }, token };
 }
 

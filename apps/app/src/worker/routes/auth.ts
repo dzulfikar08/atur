@@ -25,8 +25,19 @@ type C = Context<{ Bindings: Env }>;
 
 // Browsers reject Secure cookies over plain HTTP, which would silently drop the
 // session on local dev (http://localhost). Only mark Secure when really on HTTPS.
+// Single source of truth for the request scheme — cookies and the OAuth
+// redirect_uri must never disagree about it.
+function requestProto(c: C): string {
+  // Some proxies hand the worker an http:// url; trust the forwarded proto —
+  // but only when it's a clean single value, never a chained/malformed one
+  // (Google rejects a redirect_uri that doesn't match the registration).
+  const fwd = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim();
+  if (fwd === "http" || fwd === "https") return fwd;
+  return new URL(c.req.url).protocol.replace(":", "");
+}
+
 function isHttps(c: C): boolean {
-  return c.req.url.startsWith("https://");
+  return requestProto(c) === "https";
 }
 
 function setSessionCookie(c: C, token: string) {
@@ -60,15 +71,13 @@ const OAUTH_STATE_COOKIE = "plane-oauth-state";
 
 // redirect_uri must be byte-identical between the authorize request and the
 // token exchange, and pre-registered in the Google OAuth client (prod host +
-// http://localhost:5173 for dev).
+// http://localhost:5173 for dev). Built in one place for exactly that reason.
 function originOf(c: C): string {
-  const url = new URL(c.req.url);
-  // Some proxies hand the worker an http:// url; trust the forwarded proto —
-  // but only when it's a clean single value, never a chained/malformed one
-  // (Google rejects a redirect_uri that doesn't match the registration).
-  const fwd = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim();
-  const proto = fwd === "http" || fwd === "https" ? fwd : url.protocol.replace(":", "");
-  return `${proto}://${url.host}`;
+  return `${requestProto(c)}://${new URL(c.req.url).host}`;
+}
+
+function googleRedirectUri(c: C): string {
+  return `${originOf(c)}/auth/google/callback`;
 }
 
 // OAuth failures are navigations, not JSON: bounce to the SPA callback page,
@@ -167,7 +176,7 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       return c.redirect(
         googleAuthorizeUrl({
           clientId: GOOGLE_CLIENT_ID,
-          redirectUri: `${originOf(c)}/auth/google/callback`,
+          redirectUri: googleRedirectUri(c),
           state,
           challenge,
         }),
@@ -218,7 +227,7 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         clientId: GOOGLE_CLIENT_ID,
         clientSecret: GOOGLE_CLIENT_SECRET,
         code,
-        redirectUri: `${originOf(c)}/auth/google/callback`,
+        redirectUri: googleRedirectUri(c),
         verifier,
       });
       const profile = await googleAuth.fetchProfile(tokens.accessToken);

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Loader2 } from "@/lib/icons";
 
 import { useAuthStore } from "@/stores/auth";
+import { clearSessionToken } from "@/lib/native";
 
 export default function OAuthCallbackPage() {
   const { provider } = useParams<{ provider: string }>();
@@ -17,7 +18,6 @@ export default function OAuthCallbackPage() {
     hasRun.current = true;
 
     async function handleCallback() {
-      const code = searchParams.get("code");
       const errorParam = searchParams.get("error");
 
       if (errorParam) {
@@ -28,16 +28,15 @@ export default function OAuthCallbackPage() {
         return;
       }
 
-      if (!code) {
-        toast.error("Missing authorization code from provider");
-        navigate("/auth/login", { replace: true });
-        return;
-      }
-
       try {
         // The OAuth callback is handled server-side via GET /auth/{provider}/callback
-        // which sets the session cookie and redirects back here.
-        // We just need to fetch the user now.
+        // which exchanges the code, sets the session cookie and redirects back
+        // here — no code param arrives on this page, success is proven by the
+        // session cookie alone.
+        // Drop any bearer token from a previous password/OTP login first: it
+        // is sent as an Authorization header (which the worker prefers over
+        // the cookie) and is stale after the server rotated users.token.
+        clearSessionToken();
         await fetchUser();
 
         const redirect = sessionStorage.getItem("redirect_after_login") ?? "/";
