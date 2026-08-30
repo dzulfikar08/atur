@@ -17,6 +17,8 @@ import * as factsRepo from "../../repositories/contact_facts";
 import * as factsService from "../../services/contact_facts";
 import * as activitiesService from "../../services/crm_activities";
 import * as workspaceService from "../../services/workspaces";
+import * as assetsService from "../../services/assets";
+import * as commentsService from "../../services/comments";
 import { fieldSettingsSchema, withSettings } from "../../services/customFields";
 import * as valuesRepo from "../../repositories/customFieldValues";
 import * as workspaceRepo from "../../repositories/workspaces";
@@ -279,6 +281,28 @@ const TOOLS = [
         issue_id: { type: "string" },
       },
       required: ["project_id", "workspace", "issue_id"],
+    },
+  },
+  {
+    name: "update_comment",
+    description: "Update your own comment (comment_html and/or access)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        comment_id: { type: "string" },
+        comment_html: { type: "string" },
+        access: { type: "string" },
+      },
+      required: ["comment_id"],
+    },
+  },
+  {
+    name: "delete_comment",
+    description: "Delete your own comment (soft)",
+    inputSchema: {
+      type: "object",
+      properties: { comment_id: { type: "string" } },
+      required: ["comment_id"],
     },
   },
   {
@@ -714,11 +738,31 @@ const TOOLS = [
   },
   {
     name: "upload_image",
-    description: "Upload an image asset",
+    description:
+      "Upload an image (or any file) as an asset and get a URL to embed in comments/descriptions. " +
+      "This MCP server runs remotely, so it cannot read your local disk: read the file yourself, " +
+      "base64-encode the bytes, and pass them as content_base64. Returns { id, url, size, filename }.",
     inputSchema: {
       type: "object",
-      properties: { project_id: { type: "string" }, workspace: { type: "string" } },
-      required: ["project_id", "workspace"],
+      properties: {
+        content_base64: {
+          type: "string",
+          description: "File bytes, base64-encoded. A data: URL prefix is tolerated.",
+        },
+        filename: {
+          type: "string",
+          description: 'File name, e.g. "evidence.png" — the extension seeds the MIME type.',
+        },
+        mime_type: {
+          type: "string",
+          description: "Optional MIME override, e.g. image/png",
+        },
+        issue_id: {
+          type: "string",
+          description: "Optional issue UUID to link the asset to (access-checked)",
+        },
+      },
+      required: ["content_base64", "filename"],
     },
   },
   {
@@ -1313,6 +1357,19 @@ async function assertIssueAccess(db: ReturnType<typeof getDb>, issueId: string, 
   await assertProjectAccess(db, iss.projectId, userId);
 }
 
+// Comment-scoped tools are keyed only by comment id, so resolve comment →
+// issue → project access first. (commentsRepo also filters soft-deleted rows,
+// so the isNull here is defense-in-depth, not the only guard.)
+async function assertCommentAccess(db: ReturnType<typeof getDb>, commentId: string, userId: string) {
+  const [comment] = await db
+    .select({ issueId: schema.issueComments.issueId })
+    .from(schema.issueComments)
+    .where(and(eq(schema.issueComments.id, commentId), isNull(schema.issueComments.deletedAt)))
+    .limit(1);
+  if (!comment) throw new HTTPException(404, { message: "Comment not found" });
+  await assertIssueAccess(db, comment.issueId, userId);
+}
+
 async function assertCycleAccess(db: ReturnType<typeof getDb>, cycleId: string, userId: string) {
   const [cyc] = await db
     .select({ projectId: schema.cycles.projectId })
@@ -1351,12 +1408,62 @@ async function assertPageAccess(db: ReturnType<typeof getDb>, pageId: string, us
 }
 // Exported for tests: DEV-19 authz suites drive the tool handler directly
 // with a mocked db instead of standing up the whole MCP HTTP transport.
+// ── upload_image ────────────────────────────────────────────────────────────
+// The MCP server is remote, so callers ship file bytes as base64 rather than
+// local paths. Size is capped in assetsService.uploadBytes for all entry
+// points; this gate just rejects oversized payloads before the decode.
+
+const EXT_MIME: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  avif: "image/avif",
+  svg: "image/svg+xml",
+  bmp: "image/bmp",
+  ico: "image/x-icon",
+  pdf: "application/pdf",
+};
+
+function decodeBase64Upload(raw: string): Uint8Array {
+  // Tolerate data: URLs (any MIME/params shape) and stray whitespace — agents
+  // copy bytes from many places.
+  const b64 = raw.replace(/^data:[^,]*;base64,/, "").replace(/\s+/g, "");
+  if (!b64) {
+    throw new HTTPException(400, {
+      message:
+        "content_base64 is required — this MCP server runs remotely and cannot read local file paths, so read the file yourself and pass its bytes base64-encoded",
+    });
+  }
+  // Reject oversized payloads BEFORE paying for the decode (4 chars ↔ 3 bytes).
+  const max = assetsService.MAX_UPLOAD_BYTES;
+  if (b64.length > Math.ceil(max / 3) * 4) {
+    throw new HTTPException(413, {
+      message: `File too large; MCP uploads are capped at ${max} bytes`,
+    });
+  }
+  let binary: string;
+  try {
+    binary = atob(b64);
+  } catch {
+    throw new HTTPException(400, { message: "content_base64 is not valid base64" });
+  }
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  if (bytes.byteLength === 0) {
+    throw new HTTPException(400, { message: "content_base64 decoded to zero bytes" });
+  }
+  return bytes;
+}
+
 export async function handleTool(
   db: ReturnType<typeof getDb>,
   env: Env,
   toolName: string,
   params: Record<string, unknown>,
   userId: string,
+  origin?: string,
 ): Promise<unknown> {
   switch (toolName) {
     case "list_workspaces": {
@@ -1901,6 +2008,26 @@ export async function handleTool(
         .orderBy(desc(schema.issueComments.createdAt));
       return rows;
     }
+    case "update_comment": {
+      await assertCommentAccess(db, params.comment_id as string, userId);
+      // REST parity: updateCommentSchema's min(1) is not applied on this path,
+      // so reject an empty body here instead of writing one.
+      if (typeof params.comment_html === "string" && params.comment_html.trim() === "") {
+        throw new HTTPException(400, { message: "comment_html cannot be empty" });
+      }
+      // Ownership + the write itself live in the service — same rules as the
+      // REST PATCH route (404 unknown/deleted, 403 not the author).
+      return commentsService.update(db, userId, params.comment_id as string, {
+        comment_html: params.comment_html as string | undefined,
+        access: params.access as string | undefined,
+      });
+    }
+    case "delete_comment": {
+      await assertCommentAccess(db, params.comment_id as string, userId);
+      // Same author-only rule as the REST DELETE route.
+      await commentsService.remove(db, userId, params.comment_id as string);
+      return { success: true };
+    }
     case "list_states": {
       await assertProjectAccess(db, params.project_id as string, userId);
       const rows = await db
@@ -2302,7 +2429,45 @@ export async function handleTool(
         .limit(1);
     }
     case "upload_image": {
-      return { message: "Use POST /api/assets/upload endpoint. This is a placeholder." };
+      const bytes = decodeBase64Upload(
+        typeof params.content_base64 === "string" ? params.content_base64 : "",
+      );
+      // Only the basename is kept — a caller-supplied path separator must not
+      // smuggle directory structure into the stored filename.
+      const filename =
+        String(params.filename ?? "image.png")
+          .split(/[\\/]/)
+          .pop()!
+          .trim() || "image.png";
+      const ext = filename.includes(".") ? filename.split(".").pop()!.toLowerCase() : "";
+      // Caller-supplied MIME is accepted only within the safe set — a stored
+      // text/html type would be served inline by GET /api/assets/:id (XSS).
+      const requested =
+        typeof params.mime_type === "string" ? params.mime_type.trim().toLowerCase() : "";
+      const safeMime = /^(image\/[\w.+-]+|application\/pdf)$/.test(requested) ? requested : "";
+      // hasOwn keeps filenames like "x.toString" from reading the prototype.
+      const extMime = Object.hasOwn(EXT_MIME, ext) ? EXT_MIME[ext] : undefined;
+      const mime = safeMime || extMime || "application/octet-stream";
+
+      const issueId =
+        typeof params.issue_id === "string" && params.issue_id ? params.issue_id : undefined;
+      if (issueId) await assertIssueAccess(db, issueId, userId);
+
+      const result = await assetsService.uploadBytes(
+        db,
+        env,
+        userId,
+        { bytes, type: mime, size: bytes.byteLength },
+        issueId,
+        issueId ? "issue" : undefined,
+      );
+      return {
+        id: result.id,
+        // Absolute so agents working outside this repo can embed it verbatim.
+        url: origin ? `${origin}${result.url}` : result.url,
+        size: result.size,
+        filename,
+      };
     }
     case "add_issue_relation": {
       await assertIssueAccess(db, params.issue_id as string, userId);
@@ -2655,6 +2820,7 @@ export const mcpRoutes = new Hono<{ Bindings: Env }>({ strict: false })
             params.name,
             params.arguments || {},
             c.get("user").sub,
+            new URL(c.req.url).origin,
           );
           return c.json(ok(body.id, result));
         }

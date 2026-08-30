@@ -218,26 +218,32 @@ update_issue(state_id=need_review)
 
 Use `upload_image` + `add_comment` to attach screenshot evidence when verifying work with Playwright or other browser automation.
 
-**`upload_image` accepts a file path (not base64):**
+**`upload_image` takes base64 bytes (the MCP server is remote — it cannot read your local disk):**
 
 ```
-upload_image(file_path="/absolute/path/to/screenshot.png")
-  → returns { id, url, size }
+upload_image(
+  content_base64="<file bytes, base64>",   // required; a data: URL prefix is tolerated
+  filename="evidence.png",                 // required; extension seeds the MIME type
+  mime_type="image/png",                   // optional override
+  issue_id="<uuid>"                        // optional: link the asset to an issue
+)
+  → returns { id, url, size, filename }    // url is ABSOLUTE — embed it verbatim
 ```
 
-MIME type is auto-detected from file extension. Override with optional `mime_type` param.
+Cap: 25 MB per upload. You can also read assets back: `GET /api/assets/<id>` accepts `X-API-Key` (no session cookie needed).
 
 **Workflow:**
 
 ```
 1. Take screenshot with Playwright → saves to local file
-2. upload_image(file_path="/path/to/screenshot.png")
-   → returns { id, url, size }
-3. add_comment(
+2. base64-encode the file (e.g. `base64 -w0 /path/evidence.png`)
+3. upload_image(content_base64="<base64>", filename="evidence.png")
+   → { id, url, size, filename }
+4. add_comment(
      project_id, issue_id, workspace,
-     comment_html='<p>Verified: feature works as expected</p><p><img src="URL_FROM_STEP_2" alt="evidence"></p>'
+     comment_html='<p>Verified: feature works as expected</p><p><img src="URL_FROM_STEP_3" alt="evidence"></p>'
    )
-4. update_issue(state_id=done)  // mark complete with evidence attached
+5. update_issue(state_id=done)  // mark complete with evidence attached
 ```
 
 **Example (in Claude Code):**
@@ -246,9 +252,10 @@ MIME type is auto-detected from file extension. Override with optional `mime_typ
 # Take screenshot
 browser_take_screenshot(filename="evidence.png")
 
-# Upload directly from file path
-upload_image(file_path="/absolute/path/to/evidence.png")
-# → { "url": "https://app.diatur.com/api/assets/<uuid>" }
+# Encode it, then upload
+B64=$(base64 -w0 /absolute/path/to/evidence.png)
+upload_image(content_base64="$B64", filename="evidence.png")
+# → { "url": "https://app.diatur.com/api/assets/<uuid>", "size": 123456, "filename": "evidence.png" }
 
 # Comment with embedded image
 add_comment(
@@ -257,13 +264,13 @@ add_comment(
 )
 ```
 
-### 49 Available Tools
+### 72 Available Tools
 
 | Category              | Tools                                                                                                                                    |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | Workspace             | `list_workspaces`, `create_workspace`, `update_workspace`, `delete_workspace`, `list_workspace_members`                                  |
 | Projects              | `list_projects`, `get_project`, `create_project`                                                                                         |
-| Issues                | `list_issues`, `create_issue`, `get_issue`, `update_issue`, `delete_issue`, `search_issues`, `add_comment`, `list_comments`              |
+| Issues                | `list_issues`, `create_issue`, `get_issue`, `update_issue`, `delete_issue`, `search_issues`, `add_comment`, `update_comment`, `delete_comment`, `list_comments` |
 | Issue Relations       | `list_issue_relations`, `add_issue_relation`, `remove_issue_relation`                                                                    |
 | Sprints               | `list_sprints`, `create_sprint`, `get_sprint`, `update_sprint`, `add_issue_to_sprint`, `remove_issue_from_sprint`, `get_sprint_progress` |
 | Modules               | `list_modules`, `get_module`, `add_issue_to_module`, `remove_issue_from_module`                                                          |
