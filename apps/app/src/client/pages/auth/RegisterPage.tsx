@@ -8,6 +8,7 @@ import { Eye, EyeOff, Loader2 } from "@/lib/icons";
 
 import { useAuthStore } from "@/stores/auth";
 import { ApiError } from "@/lib/api";
+import { AuthDivider, GoogleButton } from "@/components/auth/GoogleButton";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -225,6 +226,9 @@ export default function RegisterPage() {
               </Button>
             </form>
           </Form>
+
+          <AuthDivider />
+          <GoogleButton label="Sign up with Google" />
         </CardContent>
 
         <CardFooter className="justify-center">

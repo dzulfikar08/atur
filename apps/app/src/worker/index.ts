@@ -1,5 +1,6 @@
 import { createApp } from "./app";
 import { runDueDateReminders } from "./services/reminders";
+import { OAUTH_NAV_PATHS } from "./lib/oauth";
 import type { Env } from "./lib/env";
 
 const app = createApp();
@@ -18,6 +19,17 @@ export default {
     // /auth/callback/*) and API mutations (POST /auth/sign-in, /auth/register,
     // /auth/sign-out). Route /auth/* to the API only for non-GET requests so the
     // browser-navigated auth pages fall through to the SPA.
+    //
+    // Exception: Google OAuth is browser-navigated GET but must reach the
+    // worker — GET /auth/google 302s to accounts.google.com and
+    // GET /auth/google/callback consumes the code, sets the session cookie,
+    // then bounces to the SPA at /auth/callback/google. The path list lives in
+    // lib/oauth.ts (OAUTH_NAV_PATHS) next to the provider config so a new
+    // provider only has to be added once. GitHub/GitLab GETs still fall
+    // through to the SPA until their handlers exist.
+    const trimmedPath = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+    const isOAuthNav =
+      method === "GET" && OAUTH_NAV_PATHS.some((p) => p === trimmedPath);
     const isApiPath =
       pathname.startsWith("/api/") ||
       pathname === "/health" ||
@@ -26,7 +38,7 @@ export default {
       pathname === "/widget.js" || // embeddable feedback widget (application/javascript)
       pathname.startsWith("/public/") || // public feedback board API (token-keyed, no session)
       pathname.startsWith("/webhooks/polar"); // Polar webhook receiver (per-workspace, signed)
-    const isAuthApi = pathname.startsWith("/auth/") && method !== "GET";
+    const isAuthApi = (pathname.startsWith("/auth/") && method !== "GET") || isOAuthNav;
 
     // Portal: the same /portal/:slug/... paths serve BOTH the customer-facing
     // SPA pages (browser GET navigations) and the JSON API (fetch GET/POST —

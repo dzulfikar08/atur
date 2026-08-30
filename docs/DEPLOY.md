@@ -28,6 +28,37 @@ cd apps/app
 bunx wrangler secret put EMAIL_FROM   # e.g. noreply@diatur.com (must match send_email verified_address)
 ```
 
+### Google OAuth ("Continue with Google")
+
+Create an OAuth client in Google Cloud Console (**APIs & Services → Credentials
+→ Create credentials → OAuth client ID → Web application**) and register BOTH
+redirect URIs (must match what the worker derives from the request origin,
+byte-for-byte):
+
+- `https://app.diatur.com/auth/google/callback` (prod)
+- `http://localhost:5173/auth/google/callback` (vite dev server)
+
+Then store the client id + secret as worker secrets, and locally in
+`apps/app/.dev.vars` (gitignored):
+
+```bash
+cd apps/app
+bunx wrangler secret put GOOGLE_CLIENT_ID
+bunx wrangler secret put GOOGLE_CLIENT_SECRET
+```
+
+```
+# apps/app/.dev.vars
+GOOGLE_CLIENT_ID=1234...apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-...
+```
+
+If the secrets are absent, the login button's flow starts but immediately
+bounces back with `error=oauth_disabled` (the user sees a "not configured"
+toast). While testing locally, note that `client/lib/dev-auth.ts` auto-stamps a
+dev session cookie — clear cookies first or the OAuth flow appears to be
+skipped.
+
 ### Polar integration
 
 The Polar integration (payments → CRM import) stores its credentials

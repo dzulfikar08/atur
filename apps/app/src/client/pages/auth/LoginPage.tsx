@@ -8,6 +8,7 @@ import { Eye, EyeOff, Loader2 } from "@/lib/icons";
 
 import { useAuthStore } from "@/stores/auth";
 import { ApiError } from "@/lib/api";
+import { AuthDivider, GoogleButton } from "@/components/auth/GoogleButton";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -187,6 +188,9 @@ export default function LoginPage() {
               <OtpLogin />
             </TabsContent>
           </Tabs>
+
+          <AuthDivider />
+          <GoogleButton />
         </CardContent>
 
         <CardFooter className="justify-center">

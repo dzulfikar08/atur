@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { DbClient } from "../db/index";
 import { users } from "../db/schema";
 import { v4 as uuid } from "uuid";
@@ -7,6 +7,23 @@ import { nowISO } from "../lib/pagination";
 export async function findByEmail(db: DbClient, email: string) {
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
   return user;
+}
+
+// Case-insensitive lookup. Emails are stored exactly as typed at registration,
+// so "Dzul@Foo.com" and "dzul@foo.com" are different rows today (the unique
+// index is case-sensitive) — an OAuth identity (Google always reports a
+// verified, lowercase-normalized address) must still resolve to the right
+// account when linking. The email-match is not index-backed (lower() on the
+// column) and case-variant duplicates are possible, so order deterministically
+// and take the oldest row rather than letting storage pick one at random.
+export async function findByEmailCaseInsensitive(db: DbClient, email: string) {
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(sql`lower(${users.email}) = ${email.toLowerCase()}`)
+    .orderBy(users.createdAt)
+    .limit(1);
+  return user ?? null;
 }
 export async function findByUsername(db: DbClient, username: string) {
   const [user] = await db.select().from(users).where(eq(users.username, username)).limit(1);
@@ -44,6 +61,9 @@ export async function createUser(
     passwordHash: string | null;
     token: string;
     sessionExpiresAt?: string | null;
+    displayName?: string | null;
+    avatar?: string | null;
+    isEmailVerified?: 0 | 1;
   },
 ) {
   const id = uuid();
@@ -55,10 +75,12 @@ export async function createUser(
     passwordHash: data.passwordHash,
     token: data.token,
     sessionExpiresAt: data.sessionExpiresAt ?? null,
+    displayName: data.displayName ?? null,
+    avatar: data.avatar ?? null,
     userTimezone: "UTC",
     isActive: 1,
     isSuperuser: 0,
-    isEmailVerified: 0,
+    isEmailVerified: data.isEmailVerified ?? 0,
     isBot: 0,
     createdAt: now,
     updatedAt: now,
