@@ -12,7 +12,6 @@ import {
   Settings,
   ChevronDown,
   ChevronRight,
-  Plus,
   LayoutDashboard,
   Layers,
   Gauge,
@@ -28,12 +27,11 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import UserMenu from "@/components/layout/UserMenu";
 import CreateWorkspaceDialog from "@/components/layout/CreateWorkspaceDialog";
+import { WorkspaceMenuItems } from "@/components/layout/WorkspaceSwitcher";
 
 interface NavItem {
   to: string;
@@ -87,7 +85,7 @@ export default function Sidebar() {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const toggle = useSidebarStore((s) => s.toggle);
   const { data: workspaces = [] } = useWorkspaces();
-  const { currentSlug, switchWorkspace } = useWorkspaceStore();
+  const { currentSlug } = useWorkspaceStore();
   const workspaceRail = useUiPrefsStore((s) => s.workspaceRail);
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -210,35 +208,7 @@ export default function Sidebar() {
                 </span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
-                <DropdownMenuItem onClick={() => navigate(switchWorkspace("all"))}>
-                  <span className="text-muted-foreground">
-                    <Layers size={16} />
-                  </span>
-                  <span className={cn(isAll && "font-medium")}>All Workspaces</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {workspaces.map((ws) => (
-                  <DropdownMenuItem key={ws.id} onClick={() => navigate(switchWorkspace(ws.slug))}>
-                    {ws.logo ? (
-                      <img src={ws.logo} alt="" className="size-4 rounded object-cover" />
-                    ) : (
-                      <span className="flex size-4 items-center justify-center rounded bg-primary text-[10px] font-semibold text-primary-foreground">
-                        {(ws.name[0] ?? "").toUpperCase()}
-                      </span>
-                    )}
-                    <span className={cn(ws.slug === currentSlug && "font-medium")}>{ws.name}</span>
-                  </DropdownMenuItem>
-                ))}
-                {workspaces.length === 0 && (
-                  <DropdownMenuItem disabled>No workspaces</DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setCreateOpen(true)}>
-                  <span className="text-muted-foreground">
-                    <Plus size={16} />
-                  </span>
-                  Create workspace
-                </DropdownMenuItem>
+                <WorkspaceMenuItems onCreateWorkspace={() => setCreateOpen(true)} />
               </DropdownMenuContent>
             </DropdownMenu>
           )}

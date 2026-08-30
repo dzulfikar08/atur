@@ -3,6 +3,8 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Search, Bell, Sun, Moon, Monitor, FileText, Clock, PenTool } from "@/lib/icons";
 import { useThemeStore } from "@/stores/theme";
 import { usePagesStore } from "@/stores/pages";
+import { useUiPrefsStore } from "@/stores/ui";
+import WorkspaceSwitcher from "./WorkspaceSwitcher";
 import { useQuery } from "@tanstack/react-query";
 import { api, apiFetch, type Page } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -36,6 +38,7 @@ export default function TopBar() {
   const { slug } = useParams<{ slug: string }>();
   const location = useLocation();
   const { theme, setTheme } = useThemeStore();
+  const workspaceRail = useUiPrefsStore((s) => s.workspaceRail);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const { recent } = usePagesStore();
@@ -164,6 +167,13 @@ export default function TopBar() {
 
   return (
     <header className="flex h-14 items-center gap-3 border-b border-border bg-background px-4">
+      {/* Workspace switcher — mirrors whichever sidebar switcher is off-screen:
+          below md (no sidebar), or md–lg when the experimental rail pref is on
+          (rail is lg+ and the sidebar row is static then). */}
+      <div className={cn("shrink-0", workspaceRail ? "lg:hidden" : "md:hidden")}>
+        <WorkspaceSwitcher />
+      </div>
+
       {/* Breadcrumb - left */}
       <nav className="hidden items-center gap-1 text-sm md:flex min-w-0">
         {breadcrumbs.map((crumb, i) => (
