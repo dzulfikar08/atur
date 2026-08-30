@@ -11,14 +11,20 @@ const databaseId = "08a18888-5e9a-4384-8ec2-03e73adab633";
 function resolveToken() {
   if (process.env.CLOUDFLARE_API_TOKEN) return process.env.CLOUDFLARE_API_TOKEN;
   // Fall back to the wrangler OAuth token so `drizzle-kit migrate` works with
-  // `wrangler login` credentials without needing a separate API token.
+  // `wrangler login` credentials without needing a separate API token. The
+  // file lives under Library/Preferences on macOS and ~/.config (XDG) on Linux.
   const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
-  const configPath = `${home}/Library/Preferences/.wrangler/config/default.toml`;
-  try {
-    const toml = readFileSync(configPath, "utf8");
-    const match = toml.match(/^oauth_token\s*=\s*"([^"]+)"/m);
-    if (match) return match[1];
-  } catch {}
+  const configPaths = [
+    `${home}/.config/.wrangler/config/default.toml`, // Linux
+    `${home}/Library/Preferences/.wrangler/config/default.toml`, // macOS
+  ];
+  for (const configPath of configPaths) {
+    try {
+      const toml = readFileSync(configPath, "utf8");
+      const match = toml.match(/^oauth_token\s*=\s*"([^"]+)"/m);
+      if (match) return match[1];
+    } catch {}
+  }
   return undefined;
 }
 
