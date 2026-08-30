@@ -6,6 +6,9 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
+    // jsdom 29 leaves the window at an opaque origin when no URL is set, where
+    // `localStorage`/`document.cookie` throw SecurityError. Pin an origin.
+    environmentOptions: { jsdom: { url: "http://localhost/" } },
     globals: true,
     setupFiles: ["./src/client/test/setup.ts"],
     // React 19.2.x only exports `act` from its development build. Tests need

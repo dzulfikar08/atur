@@ -25,8 +25,14 @@ const MODULES = [
 
 describe("module load smoke (blank-white guard)", () => {
   for (const mod of MODULES) {
-    it(`imports ${mod} without throwing`, async () => {
-      await expect(import(mod)).resolves.toBeDefined();
-    });
+    // IssueDetail's import graph is heavy enough that under full-suite parallel
+    // load it brushes the default 5s timeout even though it imports cleanly.
+    it(
+      `imports ${mod} without throwing`,
+      async () => {
+        await expect(import(mod)).resolves.toBeDefined();
+      },
+      15_000,
+    );
   }
 });
