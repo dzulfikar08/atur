@@ -9,19 +9,28 @@ export const uploadSchema = z.object({
   entityType: z.string().optional(),
 });
 
-export async function upload(
+// Hard cap for every upload entry point (REST, portal, MCP). Without it a
+// caller can stream an unbounded multipart body straight into R2.
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+export async function uploadBytes(
   db: DbClient,
   env: Env,
   createdById: string,
-  file: File,
+  file: { bytes: ArrayBuffer | Uint8Array; type: string; size: number },
   entityId?: string,
   entityType?: string,
 ) {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new HTTPException(413, {
+      message: `File too large (${file.size} bytes); uploads are capped at ${MAX_UPLOAD_BYTES} bytes`,
+    });
+  }
+
   const key = `${createdById}/${crypto.randomUUID()}`;
-  const buffer = await file.arrayBuffer();
   const contentType = file.type || "application/octet-stream";
 
-  await env.R2.put(key, buffer, {
+  await env.R2.put(key, file.bytes, {
     httpMetadata: { contentType },
   });
 
@@ -37,7 +46,39 @@ export async function upload(
   return {
     id: asset.id,
     url: `/api/assets/${asset.id}`,
+    size: file.size,
   };
+}
+
+export async function upload(
+  db: DbClient,
+  env: Env,
+  createdById: string,
+  file: File,
+  entityId?: string,
+  entityType?: string,
+) {
+  const buffer = await file.arrayBuffer();
+  return uploadBytes(
+    db,
+    env,
+    createdById,
+    { bytes: buffer, type: file.type || "application/octet-stream", size: file.size },
+    entityId,
+    entityType,
+  );
+}
+
+// Whether GET /api/assets/:id may serve this stored type inline. Uploads come
+// from users and API callers, so the stored type is untrusted: only render
+// what browsers execute nothing for, force the rest to download (see the GET
+// handler). SVG downloads too — inline SVG runs scripts when navigated to
+// directly (<img> embedding still renders it).
+export function serveInline(contentType: string): boolean {
+  return (
+    (/^image\//.test(contentType) && !contentType.includes("svg")) ||
+    contentType === "application/pdf"
+  );
 }
 
 export async function getAsset(db: DbClient, env: Env, id: string) {

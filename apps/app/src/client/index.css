@@ -1003,12 +1003,13 @@
   user-select: none;
 }
 
-/* Images */
+/* Images — clicking one opens it full-screen (CommentContent lightbox) */
 .md-viewer img {
   max-width: 100%;
   height: auto;
   border-radius: 6px;
   margin: 0.5em 0;
+  cursor: zoom-in;
 }
 
 /* Tables */
