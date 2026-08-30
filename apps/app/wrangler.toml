@@ -31,6 +31,11 @@ id = "767d9b9dfa0e4f79a70f7f3c3e205f69"
 name = "SEND_EMAIL"
 verified_address = "noreply@diatur.com"
 
+# Google OAuth ("Continue with Google"): GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET
+# are secrets (not vars) — see docs/DEPLOY.md. Registered redirect URIs must be
+# https://app.diatur.com/auth/google/callback and
+# http://localhost:5173/auth/google/callback (vite dev).
+
 [observability]
 enabled = true
 
