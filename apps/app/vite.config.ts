@@ -36,6 +36,15 @@ export default defineConfig({
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,ico,txt,woff2}"],
         runtimeCaching: [],
+        // The default navigateFallback serves cached index.html for EVERY
+        // navigation. The OAuth endpoints are worker routes (302 → accounts.
+        // google.com, then back with the session cookie) — once the SW
+        // swallowed them, the button hung at /auth/google and WebKit logged
+        // "Unsafe attempt to load URL" for the cross-origin redirect.
+        navigateFallbackDenylist: [
+          /^\/auth\/google\/?$/,
+          /^\/auth\/google\/callback\/?$/,
+        ],
       },
     }),
     cloudflare(),

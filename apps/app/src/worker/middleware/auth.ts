@@ -131,6 +131,20 @@ async function resolveUserByToken(db: DbClient, token: string): Promise<Resolved
   return usersRepo.findByToken(db, token);
 }
 
+// Resolve a request's raw token — pk_live_* API key or opaque session — to a
+// user, enforcing the session sliding-expiry. Shared by authMiddleware and by
+// routes that authenticate outside it (e.g. GET /api/assets/:id, which must
+// also accept portal-cookie customers).
+export async function resolveRequestUser(
+  db: DbClient,
+  token: string,
+): Promise<ResolvedUser | null> {
+  const user = await resolveUserByToken(db, token);
+  if (!user) return null;
+  if (!token.startsWith("pk_live_") && isSessionExpired(user.sessionExpiresAt)) return null;
+  return user;
+}
+
 function toAuthUser(user: ResolvedUser): AuthUser {
   return {
     sub: user.id,
@@ -146,14 +160,8 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     throw new HTTPException(401, { message: "Missing or invalid token" });
   }
   const db = getDb(c.env.DB);
-  const user = await resolveUserByToken(db, token);
+  const user = await resolveRequestUser(db, token);
   if (!user) {
-    throw new HTTPException(401, { message: "Invalid or expired token" });
-  }
-
-  // Opaque session tokens carry a sliding expiry; reject when past it. API
-  // keys (pk_live_*) have their own expires_at handled in resolveUserByToken.
-  if (!token.startsWith("pk_live_") && isSessionExpired(user.sessionExpiresAt)) {
     throw new HTTPException(401, { message: "Invalid or expired token" });
   }
 
@@ -186,7 +194,8 @@ export async function optionalAuth(c: Context<{ Bindings: Env }>, next: Next) {
   const token = extractToken(c);
   if (token) {
     const db = getDb(c.env.DB);
-    const user = await resolveUserByToken(db, token);
+    // Same contract as authMiddleware: expired sessions must not authenticate.
+    const user = await resolveRequestUser(db, token);
     if (user) {
       c.set("user", toAuthUser(user));
     }

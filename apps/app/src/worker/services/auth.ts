@@ -54,9 +54,26 @@ export async function login(db: DbClient, data: z.infer<typeof loginSchema>) {
   if (!valid) {
     throw new HTTPException(401, { message: "Invalid email or password" });
   }
-  const token = generateToken();
-  await usersRepo.updateUser(db, user.id, { token, sessionExpiresAt: sessionExpiryISO() });
+  const token = await rotateSession(db, user.id);
   return { user: { id: user.id, email: user.email, username: user.username }, token };
+}
+
+// The session-mint invariant in one place: fresh opaque token + 24h sliding
+// expiry (see lib/session.ts). Every login path (password, OTP, Google) funnels
+// through here so session semantics can't drift between them; extra columns
+// (e.g. isEmailVerified) ride along on the same write.
+export async function rotateSession(
+  db: DbClient,
+  userId: string,
+  extra: Parameters<typeof usersRepo.updateUser>[2] = {},
+): Promise<string> {
+  const token = generateToken();
+  await usersRepo.updateUser(db, userId, {
+    token,
+    sessionExpiresAt: sessionExpiryISO(),
+    ...extra,
+  });
+  return token;
 }
 
 export async function getProfile(db: DbClient, userId: string) {
@@ -187,11 +204,6 @@ export async function verifyLoginOtp(
     userId = created.id;
   }
 
-  const token = generateToken();
-  await usersRepo.updateUser(db, userId, {
-    token,
-    isEmailVerified: 1,
-    sessionExpiresAt: sessionExpiryISO(),
-  });
+  const token = await rotateSession(db, userId, { isEmailVerified: 1 });
   return { user: { id: userId, email: data.email, username }, token };
 }
