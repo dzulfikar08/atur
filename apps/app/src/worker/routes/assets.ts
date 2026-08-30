@@ -1,13 +1,11 @@
 import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, extractToken, resolveRequestUser } from "../middleware/auth";
 import * as assetsService from "../services/assets";
 import { HTTPException } from "hono/http-exception";
 import { getCookie } from "hono/cookie";
-import { extractToken } from "../middleware/auth";
 import { PORTAL_COOKIE } from "../middleware/portalAuth";
-import * as usersRepo from "../repositories/users";
 import * as customersRepo from "../repositories/customers";
 import * as membersRepo from "../repositories/members";
 
@@ -39,13 +37,13 @@ export const assetRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const db = getDb(c.env.DB);
     const id = c.req.param("id")!;
 
-    // Resolve the requester: a main-app user (any token) or, failing that, a
-    // portal customer (portal-session cookie). Asset IDs are NOT public —
-    // anonymous requests are rejected.
+    // Resolve the requester: a main-app user (API key or session token) or,
+    // failing that, a portal customer (portal-session cookie). Asset IDs are
+    // NOT public — anonymous requests are rejected.
     const token = extractToken(c);
     let userId: string | null = null;
     if (token) {
-      const u = await usersRepo.findByToken(db, token);
+      const u = await resolveRequestUser(db, token);
       if (u) userId = u.id;
     }
     let customer: customersRepo.CustomerRow | null = null;
@@ -100,7 +98,16 @@ export const assetRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       c.header("Cloudflare-Image-Resizing", options);
     }
 
-    c.header("Content-Type", result.contentType);
+    // The stored type is untrusted (uploads come from users, portal customers
+    // and API callers): serve inline only what browsers render without
+    // executing scripts, force the rest to download so it can never run on
+    // our origin. Policy lives in assetsService.serveInline.
+    const storedType = result.contentType || "application/octet-stream";
+    const inline = assetsService.serveInline(storedType);
+
+    c.header("X-Content-Type-Options", "nosniff");
+    c.header("Content-Type", inline ? storedType : "application/octet-stream");
+    c.header("Content-Disposition", inline ? "inline" : "attachment");
     c.header("Content-Length", result.size?.toString() || "0");
     return c.body(result.body as ReadableStream);
   });

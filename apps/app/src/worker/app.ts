@@ -54,6 +54,13 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.use("*", snakeCaseMiddleware);
   app.use("*", errorMiddleware);
 
+  // Asset routes authenticate themselves: POST /upload carries its own
+  // authMiddleware, and GET /:id resolves a main-app user (API key or session)
+  // OR a portal customer from the portal-session cookie. Mounted before the
+  // global /api/* gate below — otherwise authMiddleware 401s portal customers
+  // before the handler can see their cookie and their ticket images break.
+  app.route("/api/assets", assetRoutes);
+
   // Every /api/* route requires an authenticated session (cookie or bearer).
   // /auth/* (login/register) and /health are mounted outside /api and stay public.
   app.use("/api/*", authMiddleware);
@@ -107,7 +114,6 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/api/workspaces/:slug/analytics", analyticsRoutes);
   app.route("/api/me", meRoutes);
   app.route("/api/workspaces/:slug/timesheet", timesheetRoutes);
-  app.route("/api/assets", assetRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/issues/:issueId/comments", commentRoutes);
   // Mounted before issueExtrasRoutes so /subscribers isn't swallowed by its
   // generic /:issueId handler.
