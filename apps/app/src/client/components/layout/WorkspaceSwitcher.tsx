@@ -21,13 +21,8 @@ import CreateWorkspaceDialog from "@/components/layout/CreateWorkspaceDialog";
  */
 export function WorkspaceMenuItems({ onCreateWorkspace }: { onCreateWorkspace: () => void }) {
   const navigate = useNavigate();
-  const { slug } = useParams<{ slug: string }>();
   const { data: workspaces = [] } = useWorkspaces();
   const { currentSlug, switchWorkspace } = useWorkspaceStore();
-
-  // Same resolution as the switcher triggers: store wins, route slug is the
-  // fallback (direct /:slug navigation before the store is hydrated).
-  const activeSlug = currentSlug ?? slug;
 
   return (
     <>
@@ -35,7 +30,7 @@ export function WorkspaceMenuItems({ onCreateWorkspace }: { onCreateWorkspace: (
         <span className="text-muted-foreground">
           <Layers size={16} />
         </span>
-        <span className={cn(activeSlug === "all" && "font-medium")}>All Workspaces</span>
+        <span className={cn(currentSlug === "all" && "font-medium")}>All Workspaces</span>
       </DropdownMenuItem>
       <DropdownMenuSeparator />
       {workspaces.map((ws) => (
@@ -47,7 +42,7 @@ export function WorkspaceMenuItems({ onCreateWorkspace }: { onCreateWorkspace: (
               {(ws.name[0] ?? "").toUpperCase()}
             </span>
           )}
-          <span className={cn(ws.slug === activeSlug && "font-medium")}>{ws.name}</span>
+          <span className={cn(ws.slug === currentSlug && "font-medium")}>{ws.name}</span>
         </DropdownMenuItem>
       ))}
       {workspaces.length === 0 && <DropdownMenuItem disabled>No workspaces</DropdownMenuItem>}
