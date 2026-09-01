@@ -73,12 +73,27 @@ export async function upload(
 // from users and API callers, so the stored type is untrusted: only render
 // what browsers execute nothing for, force the rest to download (see the GET
 // handler). SVG downloads too — inline SVG runs scripts when navigated to
-// directly (<img> embedding still renders it).
+// directly. The GET handler pairs the disposition with the TRUE stored MIME,
+// so <img> embeds keep rendering (they ignore Content-Disposition) while
+// direct navigation downloads instead of executing on our origin.
 export function serveInline(contentType: string): boolean {
+  // MIME matching is case-insensitive in browsers — an uploader sending a
+  // part header `Content-Type: image/SVG+XML` must not slip past the svg
+  // guard and get served (and executed) inline.
+  const type = contentType.trim().toLowerCase();
   return (
-    (/^image\//.test(contentType) && !contentType.includes("svg")) ||
-    contentType === "application/pdf"
+    (/^image\//.test(type) && !type.includes("svg")) ||
+    type === "application/pdf"
   );
+}
+
+// Stored Content-Types are untrusted: both upload paths persist the multipart
+// part header verbatim. Reduce to a bare, well-formed type/token pair —
+// parameters stripped, MIME matching lowercased — so the value is always safe
+// to emit as a response header; anything malformed falls back to octet-stream.
+export function storedContentType(raw: string | null | undefined): string {
+  const base = (raw ?? "").split(";")[0].trim().toLowerCase();
+  return /^[-\w.+]+\/[-\w.+]+$/.test(base) ? base : "application/octet-stream";
 }
 
 export async function getAsset(db: DbClient, env: Env, id: string) {

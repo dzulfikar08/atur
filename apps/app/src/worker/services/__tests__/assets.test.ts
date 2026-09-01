@@ -18,6 +18,17 @@ describe("serveInline (asset content-type policy)", () => {
     expect(serveInline("application/javascript")).toBe(false);
   });
 
+  it("matches MIME case-insensitively (image/SVG+XML is still SVG)", () => {
+    expect(serveInline("image/SVG+XML")).toBe(false);
+    expect(serveInline("IMAGE/PNG")).toBe(true);
+    expect(serveInline("Image/Svg")).toBe(false);
+  });
+
+  it("ignores parameters appended to the stored type", () => {
+    expect(serveInline("image/svg+xml; charset=utf-8")).toBe(false);
+    expect(serveInline("image/png; charset=binary")).toBe(true);
+  });
+
   it("downloads when the stored type is missing or opaque", () => {
     expect(serveInline("")).toBe(false);
     expect(serveInline("application/octet-stream")).toBe(false);
