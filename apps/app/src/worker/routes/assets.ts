@@ -97,16 +97,19 @@ export const assetRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       const options = [...imgParams, `format=${format}`].join(",");
       c.header("Cloudflare-Image-Resizing", options);
     }
-
     // The stored type is untrusted (uploads come from users, portal customers
-    // and API callers): serve inline only what browsers render without
-    // executing scripts, force the rest to download so it can never run on
-    // our origin. Policy lives in assetsService.serveInline.
-    const storedType = result.contentType || "application/octet-stream";
+    // and API callers). Serve the TRUE stored MIME — <img> refuses to render
+    // images labelled application/octet-stream (nosniff blocks them outright),
+    // which broke every SVG workspace logo — and gate execution with
+    // Content-Disposition instead: attachment forces a download on direct
+    // navigation, so inline-SVG scripts never run on our origin. <img> embeds
+    // ignore Content-Disposition, so svg and raster images still render.
+    // Render-without-execution allowlist (inline) lives in serveInline.
+    const storedType = assetsService.storedContentType(result.contentType);
     const inline = assetsService.serveInline(storedType);
 
     c.header("X-Content-Type-Options", "nosniff");
-    c.header("Content-Type", inline ? storedType : "application/octet-stream");
+    c.header("Content-Type", storedType);
     c.header("Content-Disposition", inline ? "inline" : "attachment");
     c.header("Content-Length", result.size?.toString() || "0");
     return c.body(result.body as ReadableStream);
