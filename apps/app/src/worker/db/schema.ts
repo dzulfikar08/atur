@@ -203,6 +203,11 @@ export const workspaceLinks = sqliteTable("workspace_links", {
   notes: text("notes"),
   createdAt: text("created_at"),
   updatedAt: text("updated_at"),
+  // Autonomy (firstmate port): NULL mode = local-only; 'direct-PR' lets the
+  // agent push + open a PR; auto_merge 'yolo' additionally lets it merge after
+  // green gates. Explicit per-workspace, off by default.
+  mode: text("mode"),
+  autoMerge: text("auto_merge"),
 });
 
 export const projects = sqliteTable(

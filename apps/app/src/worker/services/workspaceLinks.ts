@@ -16,6 +16,11 @@ export const upsertLinkSchema = z
     default_branch: optionalText,
     herdr_workspace: optionalText,
     notes: optionalText,
+    // Autonomy (firstmate port): NULL mode = local-only; 'direct-PR' = agent
+    // pushes + opens a PR; auto_merge 'yolo' additionally lets it merge after
+    // green gates. Any non-null auto_merge value must be the yolo sentinel.
+    mode: z.enum(["local-only", "direct-PR"]).nullable().optional(),
+    auto_merge: z.literal("yolo").nullable().optional(),
   })
   .refine((d) => Object.keys(d).length > 0, { message: "At least one field required" });
 
@@ -28,6 +33,8 @@ function serialize(input: UpsertLinkInput) {
     defaultBranch?: string | null;
     herdrWorkspace?: string | null;
     notes?: string | null;
+    mode?: string | null;
+    autoMerge?: string | null;
   } = {};
   if (input.repo_urls !== undefined)
     patch.repoUrls = input.repo_urls === null ? null : JSON.stringify(input.repo_urls);
@@ -35,6 +42,8 @@ function serialize(input: UpsertLinkInput) {
   if (input.default_branch !== undefined) patch.defaultBranch = input.default_branch;
   if (input.herdr_workspace !== undefined) patch.herdrWorkspace = input.herdr_workspace;
   if (input.notes !== undefined) patch.notes = input.notes;
+  if (input.mode !== undefined) patch.mode = input.mode;
+  if (input.auto_merge !== undefined) patch.autoMerge = input.auto_merge;
   return patch;
 }
 
@@ -55,6 +64,8 @@ export function deserialize(row: NonNullable<Awaited<ReturnType<typeof linksRepo
     default_branch: row.defaultBranch,
     herdr_workspace: row.herdrWorkspace,
     notes: row.notes,
+    mode: row.mode,
+    auto_merge: row.autoMerge,
     updated_at: row.updatedAt,
   };
 }

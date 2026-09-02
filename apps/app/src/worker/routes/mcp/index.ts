@@ -1115,7 +1115,7 @@ const TOOLS = [
   {
     name: "set_workspace_link",
     description:
-      "Create or update a workspace binding (repo_urls, local_path, default_branch, herdr_workspace, notes). Pass null to clear a field. Owner-or-admin only",
+      "Create or update a workspace binding (repo_urls, local_path, default_branch, herdr_workspace, notes, mode, auto_merge). Pass null to clear a field. mode: 'local-only' (default) or 'direct-PR'; auto_merge: 'yolo' lets the agent merge its own PR after green gates. Owner-or-admin only",
     inputSchema: {
       type: "object",
       properties: {
@@ -1125,6 +1125,8 @@ const TOOLS = [
         default_branch: { type: "string" },
         herdr_workspace: { type: "string" },
         notes: { type: "string" },
+        mode: { type: "string", enum: ["local-only", "direct-PR"] },
+        auto_merge: { type: "string", enum: ["yolo"] },
       },
       required: ["workspace"],
     },
