@@ -22,6 +22,7 @@ import * as commentsService from "../../services/comments";
 import { fieldSettingsSchema, withSettings } from "../../services/customFields";
 import * as valuesRepo from "../../repositories/customFieldValues";
 import * as workspaceRepo from "../../repositories/workspaces";
+import * as linksService from "../../services/workspaceLinks";
 
 interface JsonRpcRequest {
   jsonrpc: string;
@@ -1100,6 +1101,34 @@ const TOOLS = [
       required: ["workspace"],
     },
   },
+  {
+    name: "get_workspace_links",
+    description:
+      "Control-plane binding for a workspace: GitHub repo(s), local checkout path, default branch, herdr workspace. Pass workspace for one binding (membership required) or omit it to list all bindings",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "set_workspace_link",
+    description:
+      "Create or update a workspace binding (repo_urls, local_path, default_branch, herdr_workspace, notes). Pass null to clear a field. Owner-or-admin only",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        repo_urls: { type: "array", items: { type: "string" } },
+        local_path: { type: "string" },
+        default_branch: { type: "string" },
+        herdr_workspace: { type: "string" },
+        notes: { type: "string" },
+      },
+      required: ["workspace"],
+    },
+  },
 ];
 
 async function getWorkspaceId(db: ReturnType<typeof getDb>, slug: string, userId?: string) {
@@ -1812,6 +1841,22 @@ export async function handleTool(
         )
         .orderBy(asc(schema.projectFolders.sortOrder));
       return rows;
+    }
+    case "get_workspace_links": {
+      // Single binding needs membership; the unscoped list is the operator's
+      // agent seeding/lookup path (API keys are owner-minted) and returns only
+      // ops config — repo paths, never credentials.
+      if (params.workspace) {
+        await getWorkspaceId(db, params.workspace as string, userId);
+        return linksService.get(db, params.workspace as string);
+      }
+      return linksService.list(db);
+    }
+    case "set_workspace_link": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      await assertWorkspaceAdmin(db, workspaceId, userId);
+      const input = linksService.upsertLinkSchema.parse(params);
+      return linksService.upsert(db, params.workspace as string, input);
     }
     case "create_folder": {
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
