@@ -15,6 +15,7 @@ import { pageRoutes } from "./routes/pages";
 import { viewRoutes } from "./routes/views";
 import { stateRoutes } from "./routes/states";
 import { projectFolderRoutes } from "./routes/projectFolders";
+import { workspaceLinkRoutes } from "./routes/workspaceLinks";
 import { labelRoutes } from "./routes/labels";
 import { memberRoutes } from "./routes/members";
 import { sprintRoutes } from "./routes/sprints";
@@ -99,6 +100,7 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/api/workspaces/:slug/pages", pageRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/states", stateRoutes);
   app.route("/api/workspaces/:slug/folders", projectFolderRoutes);
+  app.route("/api/workspaces/:slug/links", workspaceLinkRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/labels", labelRoutes);
   app.route("/api/workspaces/:slug/members", memberRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/sprints", sprintRoutes);

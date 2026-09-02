@@ -289,3 +289,39 @@ Global Codex config (`~/.Codex.json` → `mcpServers.atur`) is **already wired t
 # 2. insert into prod api_keys (bind to your user id)
 wrangler d1 execute atur-db --remote --command "INSERT INTO api_keys (id,key_hash,label,user_id,is_active,created_at,updated_at) VALUES ('<uuid>','<hash>','Codex','<user-uuid>',1,'<iso>','<iso>');"
 ```
+
+### Control Plane — Agent Claim/Evidence Convention (DEV-29)
+
+Atur is the control plane; the harness (herdr/omp) is the execution plane.
+Harness = source of truth for live state. Atur = source of truth for intent
+(issues) + history (evidence). Never gate on Atur reflecting live state.
+
+**Before spawning an agent for a workspace**, read its binding:
+`get_workspace_links(workspace: "<slug>")` (or `GET /api/workspaces/:slug/links`).
+The binding carries repo(s), local checkout path, default branch, and herdr
+workspace. Spawn work in a git worktree of the bound repo.
+
+**Claim** (agent starts work):
+
+```
+add_comment: "Picked up by <agent-name> (pane <pane-id>).
+Observe: ssh <host> -t omp attach <pane-id>"
+update_issue: state_id = In Progress
+```
+
+One claim comment per task. No progress spam — edit or reply only when there
+is a decision or a blocker.
+
+**Evidence** (agent finishes):
+
+```
+add_comment: what changed + proof (screenshot via upload_image, or test/command
+output). UI work MUST attach a screenshot; CLI/test work attaches the run output.
+update_issue: state_id = Need Review
+```
+
+Agents NEVER move an issue to Done and NEVER push to the default branch —
+human merges. On harness restart, any issue sitting in In Progress with a dead
+pane must be re-claimed or commented as crashed before new work starts, so
+Atur never lies about who is working.
+

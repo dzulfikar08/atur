@@ -186,6 +186,25 @@ export const projectFolders = sqliteTable(
   (table) => [index("idx_project_folders_workspace").on(table.workspaceId)],
 );
 
+// Control-plane registry (DEV-29): binds a workspace slug to its execution
+// context — GitHub repo(s), local checkout path, default branch, herdr
+// workspace. Keyed by slug (the canonical MCP identifier) with a UNIQUE
+// constraint instead of a workspaces FK so rows survive workspace recreation
+// and agents can address them by slug; every read/write path still resolves +
+// membership-checks the slug first.
+export const workspaceLinks = sqliteTable("workspace_links", {
+  id: text("id").primaryKey(),
+  workspaceSlug: text("workspace_slug").notNull().unique(),
+  // JSON array of repo URLs / "owner/repo" identifiers; NULL = no repo.
+  repoUrls: text("repo_urls"),
+  localPath: text("local_path"),
+  defaultBranch: text("default_branch"),
+  herdrWorkspace: text("herdr_workspace"),
+  notes: text("notes"),
+  createdAt: text("created_at"),
+  updatedAt: text("updated_at"),
+});
+
 export const projects = sqliteTable(
   "projects",
   {
