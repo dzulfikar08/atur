@@ -59,6 +59,8 @@ const LINK = {
   default_branch: null,
   herdr_workspace: null,
   notes: null,
+  mode: null,
+  auto_merge: null,
   updated_at: "2026-09-02T00:00:00Z",
 };
 
@@ -125,6 +127,34 @@ describe("workspace link routes (DEV-29 control plane)", () => {
       repo_urls: ["owner/repo"],
       local_path: "/srv/acme",
     });
+  });
+
+  it("PUT / accepts autonomy mode + auto_merge and passes them through", async () => {
+    findMembership.mockResolvedValue({ isActive: 1, role: 20 } as never);
+    upsertLink.mockResolvedValue({ ...LINK, mode: "direct-PR", auto_merge: "yolo" });
+    const res = await testApp().request(
+      "/api/workspaces/acme/links",
+      jsonInit("PUT", { mode: "direct-PR", auto_merge: "yolo" }),
+      { DB: {} } as never,
+    );
+    expect(res.status).toBe(200);
+    expect(upsertLink).toHaveBeenCalledWith(expect.anything(), "acme", {
+      mode: "direct-PR",
+      auto_merge: "yolo",
+    });
+  });
+
+  it("PUT / rejects unknown autonomy values (service never runs)", async () => {
+    findMembership.mockResolvedValue({ isActive: 1, role: 20 } as never);
+    const res = await testApp().request(
+      "/api/workspaces/acme/links",
+      jsonInit("PUT", { mode: "yolo" }),
+      { DB: {} } as never,
+    );
+    // Repo-wide convention: inline zod parse failures bubble via
+    // errorMiddleware (500) — the invariant is that the service never executes.
+    expect([400, 500]).toContain(res.status);
+    expect(upsertLink).not.toHaveBeenCalled();
   });
 
   it("PUT / is owner-or-admin only (plain member → 403)", async () => {

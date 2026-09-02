@@ -22,6 +22,8 @@ export async function upsertBySlug(
     defaultBranch?: string | null;
     herdrWorkspace?: string | null;
     notes?: string | null;
+    mode?: string | null;
+    autoMerge?: string | null;
   },
 ) {
   const now = new Date().toISOString();

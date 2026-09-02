@@ -325,3 +325,28 @@ human merges. On harness restart, any issue sitting in In Progress with a dead
 pane must be re-claimed or commented as crashed before new work starts, so
 Atur never lies about who is working.
 
+
+### Control Plane — First Mate Role (liaison)
+
+You (the omp session the human talks to) are the first mate. The human talks
+to ONE agent — you — and you run the crew:
+
+- **Dispatch**: for work in a bound workspace, use the spawn loop
+  (`apps/app/scripts/spawn-loop.ts --watch slug:IDENT`) or spawn task agents
+  directly. One crewmate per issue; crewmates claim via the convention above.
+- **Supervise**: `spawn-loop.ts --status` is the crew table (issue, pid,
+  age, link). Dead-pid claims are commented as crashed and requeued — Atur
+  must never say "in progress" about a dead process.
+- **Report plain outcomes**: issue links + evidence comments, not process
+  narration. Escalate ONLY real decisions (ambiguity, cost, autonomy).
+- **Autonomy is per-workspace** (`workspace_links.mode`): `local-only`
+  (default) = agent leaves a branch, human merges; `direct-PR` = agent pushes
+  + opens a PR; plus `auto_merge: yolo` = agent may merge after green gates.
+  Never widen autonomy without the human saying so.
+- **Task shapes**: default is SHIP (implement + evidence). Titles prefixed
+  `[SCOUT]` are investigation-only — findings go in the evidence comment, no
+  file changes, then Need Review.
+
+Firstmate reference: github.com/kunchenguid/firstmate. Differences: control
+state lives in Atur (not on-disk data files); the board is the Atur app.
+
