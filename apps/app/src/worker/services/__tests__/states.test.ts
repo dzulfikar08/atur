@@ -125,6 +125,24 @@ describe("list lazy seeding", () => {
   });
 });
 
+describe("create derives the canonical key", () => {
+  it("stores the key from the state name (MCP create_state path)", async () => {
+    const { db, inserts } = mockDb([[]]);
+    await statesService.create(db, "p1", "ws1", {
+      name: "Needs You",
+      color: "#EC4899",
+      group: "started",
+    });
+    expect(inserts[0].key).toBe("needs_you");
+  });
+
+  it("falls back to the group key for custom names", async () => {
+    const { db, inserts } = mockDb([[]]);
+    await statesService.create(db, "p1", "ws1", { name: "Design", color: "#fff", group: "started" });
+    expect(inserts[0].key).toBe("in_progress");
+  });
+});
+
 describe("canonicalStateKey", () => {
   it("maps known workflow names regardless of group", () => {
     expect(statesService.canonicalStateKey("Todo", "started")).toBe("todo");

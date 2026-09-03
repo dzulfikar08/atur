@@ -502,6 +502,7 @@ async function enrichIssue(
         name: schema.states.name,
         color: schema.states.color,
         group: schema.states.groupName,
+        key: schema.states.key,
       })
       .from(schema.states)
       // Workspace-scoped: a legacy row pointing at a foreign state must
