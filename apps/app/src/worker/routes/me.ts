@@ -28,10 +28,34 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const search = c.req.query("search");
     const workspace = c.req.query("workspace"); // workspace id
     const project = c.req.query("project"); // project id
+    const stateKey = c.req.query("state_key"); // canonical key, e.g. needs_you
+    const group = c.req.query("group"); // backlog|started|completed|cancelled
     const { offset, limit } = paginationParams(c);
 
     const conditions = [inArray(schema.issues.workspaceId, ids), isNull(schema.issues.deletedAt)];
     if (state) conditions.push(eq(schema.issues.stateId, state));
+    // Canonical filters (ATUR-3): state UUIDs are per-project rows, so
+    // cross-workspace filtering must resolve through the states table.
+    if (stateKey)
+      conditions.push(
+        inArray(
+          schema.issues.stateId,
+          db
+            .select({ id: schema.states.id })
+            .from(schema.states)
+            .where(and(eq(schema.states.key, stateKey), isNull(schema.states.deletedAt))),
+        ),
+      );
+    if (group)
+      conditions.push(
+        inArray(
+          schema.issues.stateId,
+          db
+            .select({ id: schema.states.id })
+            .from(schema.states)
+            .where(and(eq(schema.states.groupName, group), isNull(schema.states.deletedAt))),
+        ),
+      );
     if (priority) conditions.push(eq(schema.issues.priority, priority));
     if (search) conditions.push(like(schema.issues.name, `%${search}%`));
     if (workspace) conditions.push(eq(schema.issues.workspaceId, workspace));
@@ -74,6 +98,49 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     }));
 
     return c.json(paginatedResponse(results, countRow.total, offset, limit));
+  })
+
+  // Per-workspace, per-canonical-state issue counts plus the oldest
+  // updated_at in each bucket — the "is anything stagnating?" portfolio
+  // rollup (ATUR-3). Feeds Status filter counts and the daily handling view.
+  // CRM pipeline projects are excluded: sales stages are not the workflow.
+  .get("/state-summary", async (c) => {
+    const db = getDb(c.env.DB);
+    const user = c.get("user");
+    const ids = await workspaceRepo.listIdsByUser(db, user.sub);
+    if (!ids.length) return c.json({ results: [] });
+
+    const rows = await db
+      .select({
+        workspaceId: schema.workspaces.id,
+        workspaceSlug: schema.workspaces.slug,
+        workspaceName: schema.workspaces.name,
+        stateKey: schema.states.key,
+        group: schema.states.groupName,
+        count: sql<number>`count(*)`,
+        oldestUpdatedAt: sql<string | null>`min(${schema.issues.updatedAt})`,
+      })
+      .from(schema.issues)
+      .innerJoin(schema.states, eq(schema.states.id, schema.issues.stateId))
+      .innerJoin(schema.projects, eq(schema.projects.id, schema.issues.projectId))
+      .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.issues.workspaceId))
+      .where(
+        and(
+          inArray(schema.issues.workspaceId, ids),
+          isNull(schema.issues.deletedAt),
+          isNull(schema.states.deletedAt),
+          eq(schema.projects.isPipeline, 0),
+        ),
+      )
+      .groupBy(
+        schema.workspaces.id,
+        schema.workspaces.slug,
+        schema.workspaces.name,
+        schema.states.key,
+        schema.states.groupName,
+      );
+
+    return c.json({ results: rows });
   })
 
   // All projects across the user's workspaces.

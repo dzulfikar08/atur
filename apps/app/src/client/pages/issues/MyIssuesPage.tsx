@@ -63,10 +63,23 @@ const SORT_OPTIONS = [
   { value: "name", label: "Title" },
 ];
 
+// Canonical workflow statuses (ATUR-3): stable across every project, unlike
+// per-project state UUIDs. Counted from the fetched set below.
+const CANONICAL_STATES = [
+  { key: "backlog", label: "Backlog" },
+  { key: "todo", label: "Todo" },
+  { key: "in_progress", label: "In Progress" },
+  { key: "needs_you", label: "Needs You" },
+  { key: "need_review", label: "Need Review" },
+  { key: "done", label: "Done" },
+  { key: "cancelled", label: "Cancelled" },
+];
+
 interface Filters {
   workspace: string; // workspace id, 'all'
   project: string; // project id, 'all'
   state: string; // state id, 'all'
+  stateKey: string; // canonical key, 'all' | CANONICAL_STATES key
   priority: string; // 'all' | priority
   assignee: string; // user id, 'all' | 'none'
   label: string; // label id, 'all'
@@ -79,6 +92,7 @@ const FILTERS_DEFAULT: Filters = {
   workspace: "all",
   project: "all",
   state: "all",
+  stateKey: "all",
   priority: "all",
   assignee: "all",
   label: "all",
@@ -339,6 +353,14 @@ function DesktopMyIssues({ slug }: { slug: string }) {
     return workspaces.find((w) => w.id === filters.workspace)?.slug ?? "all";
   }, [filters.workspace, workspaces]);
 
+  // Per-status counts across the fetched issues (canonical keys).
+  const statusCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const i of allIssues) {
+      if (i.state?.key) m[i.state.key] = (m[i.state.key] ?? 0) + 1;
+    }
+    return m;
+  }, [allIssues]);
   // Distinct states/assignees/labels across the fetched issues.
   const stateOptions = useMemo(() => {
     const map = new Map<string, { id: string; name: string; group: string; color?: string }>();
@@ -382,6 +404,7 @@ function DesktopMyIssues({ slug }: { slug: string }) {
     filters.workspace !== "all",
     filters.project !== "all",
     filters.state !== "all",
+    filters.stateKey !== "all",
     filters.priority !== "all",
     filters.assignee !== "all",
     filters.label !== "all",
@@ -402,6 +425,7 @@ function DesktopMyIssues({ slug }: { slug: string }) {
       if (filters.workspace !== "all" && issue.workspace_slug !== filterWorkspaceSlug) return false;
       if (filters.project !== "all" && issue.project_id !== filters.project) return false;
       if (filters.state !== "all" && issue.state_id !== filters.state) return false;
+      if (filters.stateKey !== "all" && issue.state?.key !== filters.stateKey) return false;
       if (filters.priority !== "all" && issue.priority !== filters.priority) return false;
       if (filters.assignee !== "all") {
         const ids = (issue.assignees ?? []).map((a: any) => a.id);
@@ -573,39 +597,65 @@ function DesktopMyIssues({ slug }: { slug: string }) {
         <Popover>
           <PopoverTrigger asChild>
             <Button
-              variant={filters.state !== "all" ? "secondary" : "outline"}
+              variant={
+                filters.state !== "all" || filters.stateKey !== "all" ? "secondary" : "outline"
+              }
               size="sm"
               className="h-8 text-xs gap-1"
             >
               <Filter className="h-3 w-3" />
               State
-              {filters.state !== "all" && (
+              {(filters.state !== "all" || filters.stateKey !== "all") && (
                 <Badge variant="secondary" className="h-4 px-1 text-[10px] ml-0.5">
-                  {stateOptions.find((s) => s.id === filters.state)?.name?.slice(0, 8) || "..."}
+                  {filters.stateKey !== "all"
+                    ? CANONICAL_STATES.find((s) => s.key === filters.stateKey)?.label
+                    : stateOptions.find((s) => s.id === filters.state)?.name?.slice(0, 8) || "..."}
                 </Badge>
               )}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-48 p-1" align="start">
+            <p className="px-3 pt-1 pb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+              Status
+            </p>
             <button
-              className={`w-full text-left px-3 py-1.5 text-sm rounded-sm hover:bg-accent ${filters.state === "all" ? "bg-accent font-medium" : ""}`}
-              onClick={() => update({ state: "all" })}
+              className={`w-full text-left px-3 py-1.5 text-sm rounded-sm hover:bg-accent ${filters.stateKey === "all" && filters.state === "all" ? "bg-accent font-medium" : ""}`}
+              onClick={() => update({ stateKey: "all", state: "all" })}
             >
               All States
             </button>
-            {stateOptions.map((s) => (
+            {CANONICAL_STATES.filter((s) => (statusCounts[s.key] ?? 0) > 0).map((s) => (
               <button
-                key={s.id}
-                className={`w-full text-left px-3 py-1.5 text-sm rounded-sm hover:bg-accent flex items-center gap-2 ${filters.state === s.id ? "bg-accent font-medium" : ""}`}
-                onClick={() => update({ state: s.id })}
+                key={s.key}
+                className={`w-full text-left px-3 py-1.5 text-sm rounded-sm hover:bg-accent flex items-center justify-between ${filters.stateKey === s.key ? "bg-accent font-medium" : ""}`}
+                onClick={() => update({ stateKey: s.key, state: "all" })}
               >
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: s.color || "#6b7280" }}
-                />
-                {s.name}
+                {s.label}
+                <span className="text-[10px] text-muted-foreground">
+                  {statusCounts[s.key] ?? 0}
+                </span>
               </button>
             ))}
+            {stateOptions.length > 0 && (
+              <>
+                <p className="px-3 pt-1.5 pb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Exact state
+                </p>
+                {stateOptions.map((s) => (
+                  <button
+                    key={s.id}
+                    className={`w-full text-left px-3 py-1.5 text-sm rounded-sm hover:bg-accent flex items-center gap-2 ${filters.state === s.id ? "bg-accent font-medium" : ""}`}
+                    onClick={() => update({ state: s.id, stateKey: "all" })}
+                  >
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: s.color || "#6b7280" }}
+                    />
+                    {s.name}
+                  </button>
+                ))}
+              </>
+            )}
           </PopoverContent>
         </Popover>
 

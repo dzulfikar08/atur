@@ -163,6 +163,11 @@ const TOOLS = [
         project_id: { type: "string" },
         workspace: { type: "string" },
         state: { type: "string" },
+        state_key: {
+          type: "string",
+          description:
+            "Canonical state key instead of a UUID: backlog|todo|in_progress|needs_you|need_review|done|cancelled",
+        },
         limit: { type: "integer" },
         offset: { type: "integer" },
       },
@@ -1657,6 +1662,22 @@ export async function handleTool(
         isNull(schema.issues.deletedAt),
       ];
       if (params.state) conditions.push(eq(schema.issues.stateId, params.state as string));
+      if (params.state_key)
+        conditions.push(
+          inArray(
+            schema.issues.stateId,
+            db
+              .select({ id: schema.states.id })
+              .from(schema.states)
+              .where(
+                and(
+                  eq(schema.states.projectId, params.project_id as string),
+                  eq(schema.states.key, params.state_key as string),
+                  isNull(schema.states.deletedAt),
+                ),
+              ),
+          ),
+        );
       const limit = Math.min(Number(params.limit) || 50, 100);
       const offset = Number(params.offset) || 0;
       const rows = await db

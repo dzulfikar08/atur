@@ -124,3 +124,33 @@ describe("list lazy seeding", () => {
     expect(inserts).toHaveLength(0);
   });
 });
+
+describe("canonicalStateKey", () => {
+  it("maps known workflow names regardless of group", () => {
+    expect(statesService.canonicalStateKey("Todo", "started")).toBe("todo");
+    expect(statesService.canonicalStateKey("In Progress", "started")).toBe("in_progress");
+    expect(statesService.canonicalStateKey("Needs You", "started")).toBe("needs_you");
+    expect(statesService.canonicalStateKey("Need Review", "started")).toBe("need_review");
+    expect(statesService.canonicalStateKey("Done", "completed")).toBe("done");
+    expect(statesService.canonicalStateKey("Cancelled", "cancelled")).toBe("cancelled");
+  });
+
+  it("matches case-insensitively and the localized aliases already in the portfolio", () => {
+    expect(statesService.canonicalStateKey("  todo ", "started")).toBe("todo");
+    expect(statesService.canonicalStateKey("Jalan", "started")).toBe("in_progress");
+    expect(statesService.canonicalStateKey("Need Confirmation", "started")).toBe("needs_you");
+    expect(statesService.canonicalStateKey("Selesai", "completed")).toBe("done");
+    expect(statesService.canonicalStateKey("Gagal", "cancelled")).toBe("cancelled");
+  });
+
+  it("derives from the group for custom names", () => {
+    expect(statesService.canonicalStateKey("Menunggu Meta", "started")).toBe("in_progress");
+    expect(statesService.canonicalStateKey("Design", "started")).toBe("in_progress");
+    expect(statesService.canonicalStateKey("Shipped", "completed")).toBe("done");
+    expect(statesService.canonicalStateKey("Lead", "backlog")).toBe("backlog");
+  });
+
+  it("returns null only for an unknown group", () => {
+    expect(statesService.canonicalStateKey("Whatever", "weird")).toBeNull();
+  });
+});
