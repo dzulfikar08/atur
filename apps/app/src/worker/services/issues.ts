@@ -567,6 +567,7 @@ export async function enrichIssues(
         color: schema.states.color,
         group: schema.states.groupName,
         workspaceId: schema.states.workspaceId,
+        key: schema.states.key,
       })
       .from(schema.states)
       .where(inArray(schema.states.id, ids)),
@@ -686,7 +687,13 @@ export async function enrichIssues(
     const stateRow = issue.stateId ? stateMap.get(issue.stateId) : undefined;
     const state =
       stateRow && stateRow.workspaceId === issue.workspaceId
-        ? { id: stateRow.id, name: stateRow.name, color: stateRow.color, group: stateRow.group }
+        ? {
+            id: stateRow.id,
+            name: stateRow.name,
+            color: stateRow.color,
+            group: stateRow.group,
+            key: stateRow.key,
+          }
         : null;
     // Workspace filter mirrors the label rule: legacy foreign module links
     // drop out instead of leaking ids into the payload.

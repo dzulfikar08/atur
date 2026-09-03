@@ -636,6 +636,8 @@ export const api = {
   // --- Cross-workspace ("All Workspaces") endpoints — /api/me/* ---
   listAllIssues: async (params?: {
     state?: string;
+    state_key?: string;
+    group?: string;
     priority?: string;
     search?: string;
     workspace?: string;
@@ -644,6 +646,8 @@ export const api = {
   }) => {
     const qs = new URLSearchParams();
     if (params?.state) qs.set("state", params.state);
+    if (params?.state_key) qs.set("state_key", params.state_key);
+    if (params?.group) qs.set("group", params.group);
     if (params?.priority) qs.set("priority", params.priority);
     if (params?.search) qs.set("search", params.search);
     if (params?.workspace) qs.set("workspace", params.workspace);
@@ -887,7 +891,7 @@ export interface Issue {
   external_source?: string | null;
   module_ids?: string[];
   // Enriched fields returned by list endpoints (issues.ts / me.ts):
-  state?: { id: string; name: string; color?: string; group: string } | null;
+  state?: { id: string; name: string; color?: string; group: string; key?: string | null } | null;
   labels?: { id: string; name: string; color?: string }[];
   assignees?: {
     id: string;

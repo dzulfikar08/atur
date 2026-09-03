@@ -12,26 +12,74 @@ import { HTTPException } from "hono/http-exception";
 // states yet (UI-created projects start stateless). "Todo" is the default so
 // new issues land somewhere visible instead of a null state.
 const DEFAULT_STATES: StageSeed[] = [
-  { name: "Backlog", group: "backlog", color: "#9CA3AF" },
-  { name: "Todo", group: "started", color: "#3B82F6", isDefault: true },
-  { name: "In Progress", group: "started", color: "#F59E0B" },
-  { name: "Done", group: "completed", color: "#22C55E" },
-  { name: "Cancelled", group: "cancelled", color: "#EF4444" },
+  { name: "Backlog", group: "backlog", color: "#9CA3AF", key: "backlog" },
+  { name: "Todo", group: "started", color: "#3B82F6", key: "todo", isDefault: true },
+  { name: "In Progress", group: "started", color: "#F59E0B", key: "in_progress" },
+  { name: "Done", group: "completed", color: "#22C55E", key: "done" },
+  { name: "Cancelled", group: "cancelled", color: "#EF4444", key: "cancelled" },
 ];
 
 // Canonical sales funnel for CRM pipelines (is_pipeline=1). "Lead" is the
 // default so new deals enter at the top of the funnel; Won/Lost map to the
 // terminal groups (completed/cancelled) the deal board dims and collapses.
 export const SALES_STAGES: StageSeed[] = [
-  { name: "Lead", group: "backlog", color: "#9CA3AF", isDefault: true },
-  { name: "Qualified", group: "started", color: "#3B82F6" },
-  { name: "Proposal", group: "started", color: "#8B5CF6" },
-  { name: "Negotiation", group: "started", color: "#F59E0B" },
-  { name: "Won", group: "completed", color: "#22C55E" },
-  { name: "Lost", group: "cancelled", color: "#EF4444" },
+  { name: "Lead", group: "backlog", color: "#9CA3AF", key: "backlog", isDefault: true },
+  { name: "Qualified", group: "started", color: "#3B82F6", key: "in_progress" },
+  { name: "Proposal", group: "started", color: "#8B5CF6", key: "in_progress" },
+  { name: "Negotiation", group: "started", color: "#F59E0B", key: "in_progress" },
+  { name: "Won", group: "completed", color: "#22C55E", key: "done" },
+  { name: "Lost", group: "cancelled", color: "#EF4444", key: "cancelled" },
 ];
 
-type StageSeed = { name: string; group: string; color: string; isDefault?: boolean };
+export type StateKey =
+  | "backlog"
+  | "todo"
+  | "in_progress"
+  | "needs_you"
+  | "need_review"
+  | "done"
+  | "cancelled";
+
+type StageSeed = { name: string; group: string; color: string; key?: StateKey; isDefault?: boolean };
+
+// Canonical key for a state: the stable cross-project identity behind
+// `?state_key=` filters (ATUR-3). Known names win (so renamed-but-familiar
+// states stay canonical); everything else derives from the group, which keeps
+// every state reachable from canonical filters. Names match
+// case-insensitively and include the localized aliases already in the
+// portfolio (intip's "Jalan", WLB DEV's "Need Confirmation", family's
+// "Selesai"/"Gagal"). Custom names under a standard group collapse into the
+// group's key; only a truly unknown group yields null.
+const NAME_TO_KEY: Record<string, StateKey> = {
+  backlog: "backlog",
+  todo: "todo",
+  "in progress": "in_progress",
+  jalan: "in_progress",
+  "needs you": "needs_you",
+  "need confirmation": "needs_you",
+  "need review": "need_review",
+  done: "done",
+  selesai: "done",
+  cancelled: "cancelled",
+  gagal: "cancelled",
+};
+
+export function canonicalStateKey(name: string, group: string): StateKey | null {
+  const byName = NAME_TO_KEY[name.trim().toLowerCase()];
+  if (byName) return byName;
+  switch (group) {
+    case "backlog":
+      return "backlog";
+    case "started":
+      return "in_progress";
+    case "completed":
+      return "done";
+    case "cancelled":
+      return "cancelled";
+    default:
+      return null;
+  }
+}
 
 // Not transactional (D1 has no interactive transactions): a crash mid-seed
 // leaves a partial workflow that the lazy list() branch won't retry (rows > 0).
@@ -53,6 +101,7 @@ async function seedStates(
       name: s.name,
       color: s.color,
       groupName: s.group,
+      key: s.key ?? canonicalStateKey(s.name, s.group),
       sequence: i * 10000,
       isDefault: s.isDefault ? 1 : 0,
       isTriage: 0,
@@ -98,6 +147,7 @@ export async function create(
     name: data.name,
     color: data.color || "#808080",
     groupName: data.group,
+    key: canonicalStateKey(data.name, data.group),
     description: data.description,
     slug: data.slug,
     projectId,
@@ -155,6 +205,13 @@ export async function update(
   const updateData: Record<string, unknown> = { ...data };
   if (data.group_name !== undefined) updateData.groupName = data.group_name;
   delete updateData.group_name;
+  // Key is derived, never user-authored: recompute whenever name or group moves.
+  if (updateData.name !== undefined || updateData.groupName !== undefined) {
+    updateData.key = canonicalStateKey(
+      (updateData.name as string) ?? existing.name,
+      (updateData.groupName as string) ?? existing.group,
+    );
+  }
   return statesRepo.update(db, id, workspaceId, updateData);
 }
 

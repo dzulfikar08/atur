@@ -11,6 +11,7 @@ const stateCols = {
   description: states.description,
   color: states.color,
   slug: states.slug,
+  key: states.key,
   sequence: states.sequence,
   group: states.groupName,
   isDefault: states.isDefault,
@@ -47,6 +48,7 @@ export async function create(
     workspaceId: string;
     description?: string;
     slug?: string;
+    key?: string | null;
   },
 ) {
   const id = uuid();
@@ -60,6 +62,7 @@ export async function create(
     workspaceId: data.workspaceId,
     description: data.description || null,
     slug: data.slug || null,
+    key: data.key ?? null,
     createdAt: now,
     updatedAt: now,
   });

@@ -278,6 +278,7 @@ export const states = sqliteTable(
     description: text("description"),
     color: text("color"),
     slug: text("slug"),
+    key: text("key"),
     sequence: real("sequence").notNull().default(65535.0),
     groupName: text("group_name").notNull(),
     isTriage: integer("is_triage").notNull().default(0),
