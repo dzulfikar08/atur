@@ -129,6 +129,7 @@ const SLIM_TOOLS: Record<string, string[]> = {
   update_contact: CONTACT,
   list_deals: DEAL,
   create_deal: DEAL,
+  get_contact: CONTACT,
   move_deal_stage: DEAL,
   update_deal: DEAL,
   list_companies: COMPANY,
