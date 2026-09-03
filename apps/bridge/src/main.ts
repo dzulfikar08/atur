@@ -4,7 +4,8 @@
  * Binds 127.0.0.1 only, holds no secrets. The Atur Worker is the front door:
  * browser → Worker (auth + audit) → Cloudflare Tunnel → this daemon.
  * Optional shared-secret for the tunnel leg: set BRIDGE_TOKEN; clients must
- * then present it via the `x-bridge-token` header or `?token=` query param.
+ * then present it via the `x-bridge-token` header (never a query param —
+ * tokens in URLs leak into logs).
  *
  * Routes:
  *   GET /health           → liveness
@@ -17,12 +18,10 @@ const PORT = Number(process.env.BRIDGE_PORT ?? 7601);
 const TOKEN = process.env.BRIDGE_TOKEN ?? "";
 
 function authorized(req: Request): boolean {
+  // Header-only by design: accepting the secret via ?token= would put it in
+  // URLs that tunnel/ingress components may log.
   if (TOKEN === "") return true;
-  const url = new URL(req.url);
-  return (
-    req.headers.get("x-bridge-token") === TOKEN ||
-    url.searchParams.get("token") === TOKEN
-  );
+  return req.headers.get("x-bridge-token") === TOKEN;
 }
 
 const hub = new PaneHub();

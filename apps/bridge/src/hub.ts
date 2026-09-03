@@ -9,7 +9,7 @@
  *                    {type:"ping"}
  */
 import type { ServerWebSocket } from "bun";
-import { rpc } from "./herdr";
+import { HerdrError, rpc } from "./herdr";
 
 export interface BridgeMeta {
   paneId: string;
@@ -42,21 +42,32 @@ interface PaneReadPayload {
 /** Live mirroring polls `pane.read`. Protocol 20 (herdr 0.8.2) publishes no
  *  output events for plain shell panes — `pane.updated` covers agent state
  *  only, and `pane.output_matched` fires once at subscribe time — so polling
- *  with screen-text change detection is the mechanism. */
-const WATCHDOG_POLL_MS = 400;
+ *  with per-row screen diffing is the mechanism. Cadence is adaptive: after
+ *  a change the watcher polls fast for a burst (spinner animation), then
+ *  settles back to the idle rate. */
+const IDLE_POLL_MS = 400;
+const FAST_POLL_MS = 100;
+const ACTIVITY_BURST_MS = 1_500;
+
+/** Fan-out backpressure cap: a client whose socket buffer exceeds this is
+ *  skipped until it drains (full-state snapshots make skips lossless). */
+const MAX_BUFFERED_BYTES = 1_000_000;
 
 class Watcher {
   readonly clients = new Map<Ws, BridgeMeta>();
   private lastText: string | null = null;
+  private lastLines: string[] | null = null;
   private lastRevision = 0;
   private pumping = false;
-  private watchdog: ReturnType<typeof setInterval>;
+  /** Poll fast briefly after a change so spinners animate, then settle. */
+  private fastUntil = 0;
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     readonly paneId: string,
     private readonly onIdle: (watcher: Watcher) => void,
   ) {
-    this.watchdog = setInterval(() => void this.pump(), WATCHDOG_POLL_MS);
+    this.scheduleNext();
   }
 
   get isEmpty(): boolean {
@@ -65,7 +76,18 @@ class Watcher {
 
   /** Stop background work when the last viewer leaves. */
   dispose(): void {
-    clearInterval(this.watchdog);
+    if (this.pollTimer) clearTimeout(this.pollTimer);
+    this.pollTimer = null;
+  }
+
+  private scheduleNext(): void {
+    if (this.pollTimer) return;
+    const ms = Date.now() < this.fastUntil ? FAST_POLL_MS : IDLE_POLL_MS;
+    this.pollTimer = setTimeout(() => {
+      this.pollTimer = null;
+      void this.pump();
+      this.scheduleNext();
+    }, ms);
   }
 
   join(ws: Ws): BridgeMeta {
@@ -107,6 +129,7 @@ class Watcher {
       // content hasn't changed since the last watcher read.
       const res = await this.readScreen();
       this.lastText = res.read.text;
+      this.lastLines = res.read.text.split("\r\n");
       this.lastRevision = res.read.revision;
       ws.send(
         JSON.stringify({
@@ -135,6 +158,39 @@ class Watcher {
     });
   }
 
+  /** Line-level diff against the previous screen. The visible-screen dump is
+   *  a flat \r\n-joined grid, so equal-height frames diff per row safely;
+   *  anything else (first frame, height change, reconnect) falls back to a
+   *  full snapshot. */
+  private buildFrame(text: string, revision: number): string {
+    const lines = text.split("\r\n");
+    const prev = this.lastLines;
+    if (prev && prev.length === lines.length) {
+      const rows: [number, string][] = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line !== undefined && line !== prev[i]) rows.push([i, line]);
+      }
+      if (rows.length > 0) {
+        return JSON.stringify({ type: "diff", revision, rows });
+      }
+      // Identical lines with differing raw text (normalization noise) —
+      // nothing to repaint.
+      return "";
+    }
+    return JSON.stringify({ type: "snapshot", revision, ansi: text });
+  }
+
+  private broadcast(payload: string): void {
+    for (const [ws, client] of this.clients) {
+      // Snapshots are full-state, so skipping a slow client is lossless —
+      // its next change supersedes anything we would send now.
+      if (!client.joined) continue;
+      if (ws.getBufferedAmount() > MAX_BUFFERED_BYTES) continue;
+      ws.send(payload);
+    }
+  }
+
   private async pump(): Promise<void> {
     if (this.pumping) return;
     if (this.isEmpty) return;
@@ -144,18 +200,27 @@ class Watcher {
       // herdr's pane revision has proven unreliable across pane kinds — the
       // screen text is the source of truth for change detection.
       if (res.read.text === this.lastText) return;
+      const frame = this.buildFrame(res.read.text, res.read.revision);
       this.lastText = res.read.text;
+      this.lastLines = res.read.text.split("\r\n");
       this.lastRevision = res.read.revision;
-      const payload = JSON.stringify({
-        type: "snapshot",
-        revision: res.read.revision,
-        ansi: res.read.text,
-      });
-      for (const [ws, client] of this.clients) {
-        if (client.joined) ws.send(payload);
+      if (frame !== "") {
+        this.broadcast(frame);
+        this.fastUntil = Date.now() + ACTIVITY_BURST_MS;
       }
     } catch (e) {
-      // Pane died (agent exited, tab closed): tell clients and stop.
+      // Only a missing pane is terminal (agent exited, tab closed). Transient
+      // herdr hiccups (restart, socket timeout) must not kill the watcher and
+      // flag live panes as exited — the next tick retries.
+      const gone =
+        e instanceof HerdrError && /not_found|no such/i.test(e.code + " " + e.message);
+      if (!gone) {
+        console.error(
+          `pane.read ${this.paneId} failed (transient, will retry):`,
+          e,
+        );
+        return;
+      }
       const reason = e instanceof Error ? e.message : String(e);
       this.dispose();
       for (const [ws] of this.clients) {
@@ -182,17 +247,7 @@ interface InputSegment {
   keys?: string[];
 }
 
-const CTRL_SEQUENCES: [string, string[]][] = [
-  ["\x1b[A", ["up"]],
-  ["\x1b[B", ["down"]],
-  ["\x1b[C", ["right"]],
-  ["\x1b[D", ["left"]],
-  ["\x1b[H", ["home"]],
-  ["\x1b[F", ["end"]],
-  ["\x1b[3~", ["delete"]],
-  ["\x1b[5~", ["pageup"]],
-  ["\x1b[6~", ["pagedown"]],
-  ["\x1b", ["esc"]],
+const SIMPLE_KEYS: [string, string[]][] = [
   ["\r", ["enter"]],
   ["\n", ["enter"]],
   ["\t", ["tab"]],
@@ -204,6 +259,42 @@ const CTRL_SEQUENCES: [string, string[]][] = [
   ["\x1c", ["ctrl+\\"]],
 ];
 
+/** CSI/SS3 final byte → herdr key combo. Params (modifiers, repeats) are
+ *  intentionally degraded: a remote viewer gets plain keys. */
+const CSI_FINAL_KEYS: Record<string, string[]> = {
+  A: ["up"],
+  B: ["down"],
+  C: ["right"],
+  D: ["left"],
+  H: ["home"],
+  F: ["end"],
+  Z: ["shift+tab"],
+};
+
+const TILDE_PARAM_KEYS: Record<string, string[]> = {
+  "3": ["delete"],
+  "5": ["pageup"],
+  "6": ["pagedown"],
+};
+
+/** Map a parsed CSI/SS3 body (e.g. "[A", "[3~", "OB") to keys, or null when
+ *  the sequence is unrecognized — it is then dropped, never leaked as text. */
+function escapeSequenceKeys(body: string): string[] | null {
+  if (body.startsWith("[")) {
+    const final = body[body.length - 1];
+    if (final === undefined) return null;
+    if (final === "~") {
+      const firstParam = body.slice(1, -1).split(";")[0] ?? "";
+      return TILDE_PARAM_KEYS[firstParam] ?? null;
+    }
+    return CSI_FINAL_KEYS[final] ?? null;
+  }
+  if (body.startsWith("O")) {
+    return CSI_FINAL_KEYS[body[1] ?? ""] ?? null;
+  }
+  return null;
+}
+
 export function translateInput(data: string): InputSegment[] {
   const segments: InputSegment[] = [];
   let textRun = "";
@@ -214,14 +305,35 @@ export function translateInput(data: string): InputSegment[] {
     }
   };
   let i = 0;
-  outer: while (i < data.length) {
-    for (const [seq, keys] of CTRL_SEQUENCES) {
+  while (i < data.length) {
+    let simple: { keys: string[]; len: number } | null = null;
+    for (const [seq, keys] of SIMPLE_KEYS) {
       if (data.startsWith(seq, i)) {
-        flush();
-        segments.push({ keys });
-        i += seq.length;
-        continue outer;
+        simple = { keys, len: seq.length };
+        break;
       }
+    }
+    if (simple) {
+      flush();
+      segments.push({ keys: simple.keys });
+      i += simple.len;
+      continue;
+    }
+    if (data[i] === "\x1b") {
+      flush();
+      // Consume one full CSI/SS3 sequence; only a lone ESC maps to the esc
+      // key. Bracketed-paste markers (\x1b[200~ / \x1b[201~) fall out here —
+      // ESC itself is already verified below; match the sequence body.
+      const m = /^(\[[0-9;:?]*[A-Za-z~]|O[A-Za-z])/.exec(data.slice(i + 1, i + 64));
+      if (m) {
+        const keys = escapeSequenceKeys(m[1] ?? "");
+        if (keys) segments.push({ keys });
+        i += m[0].length + 1; // matched body + the ESC byte itself
+      } else {
+        segments.push({ keys: ["esc"] });
+        i += 1;
+      }
+      continue;
     }
     const code = data.charCodeAt(i);
     if (code < 32 || code === 127) {
@@ -315,7 +427,10 @@ export class PaneHub {
     let watcher = this.watchers.get(paneId);
     if (!watcher) {
       watcher = new Watcher(paneId, (idle) => {
-        if (idle.isEmpty) this.watchers.delete(idle.paneId);
+        if (idle.isEmpty) {
+          idle.dispose();
+          this.watchers.delete(idle.paneId);
+        }
       });
       this.watchers.set(paneId, watcher);
     }

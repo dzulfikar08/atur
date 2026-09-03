@@ -31,7 +31,10 @@ export interface PaneHello {
 
 export interface PaneAttachHandlers {
   onHello?: (pane: PaneHello) => void;
+  /** Full visible-screen frame (ANSI). */
   onSnapshot?: (ansi: string) => void;
+  /** Per-row repaint: [0-based row, full row content] — write atomically. */
+  onDiff?: (rows: [number, string][]) => void;
   onExit?: (reason: string) => void;
   onError?: (message: string) => void;
 }
@@ -106,7 +109,7 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
 
       ws.onmessage = (event: MessageEvent) => {
         if (typeof event.data !== "string") return;
-        let msg: { type?: unknown; pane?: unknown; ansi?: unknown; message?: unknown; reason?: unknown };
+        let msg: { type?: unknown; pane?: unknown; ansi?: unknown; rows?: unknown; message?: unknown; reason?: unknown };
         try {
           msg = JSON.parse(event.data);
         } catch {
@@ -124,6 +127,22 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
           case "snapshot":
             if (typeof msg.ansi === "string") handlersRef.current.onSnapshot?.(msg.ansi);
             break;
+          case "diff": {
+            if (!Array.isArray(msg.rows)) break;
+            const rows: [number, string][] = [];
+            for (const row of msg.rows) {
+              if (
+                Array.isArray(row) &&
+                row.length === 2 &&
+                typeof row[0] === "number" &&
+                typeof row[1] === "string"
+              ) {
+                rows.push([row[0], row[1]]);
+              }
+            }
+            if (rows.length > 0) handlersRef.current.onDiff?.(rows);
+            break;
+          }
           case "error":
             handlersRef.current.onError?.(
               typeof msg.message === "string" ? msg.message : "unknown bridge error",
