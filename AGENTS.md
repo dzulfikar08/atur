@@ -305,7 +305,10 @@ workspace. Spawn work in a git worktree of the bound repo.
 
 ```
 add_comment: "Picked up by <agent-name> (pane <pane-id>).
-Observe: ssh <host> -t omp attach <pane-id>"
+Observe: https://app.diatur.com/panes/<pane-id> — live terminal of the pane
+in the browser (Atur Worker authenticates; requires the atur-bridge daemon
+running on the agent host with its Cloudflare Tunnel up). On the agent host
+itself, `herdr pane read <pane-id> --format ansi` reads the current screen."
 update_issue: state_id = In Progress
 ```
 
