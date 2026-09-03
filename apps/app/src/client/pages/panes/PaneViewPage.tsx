@@ -44,13 +44,23 @@ export default function PaneViewPage() {
   const { status, sendInput, retry } = usePaneAttach(paneId ?? "", {
     // hello carries the real pane geometry — the grid is authoritative.
     onHello: ({ cols, rows }) => termRef.current?.resize(cols, rows),
-    // Each snapshot is a full visible-screen dump: clear, then replay ANSI.
+    // Full frame: home + clear + replay in ONE write (one parse pass → one
+    // repaint, no clear/draw flash). term.reset() is never used per frame —
+    // it blanks the screen and forces a second paint.
     onSnapshot: (ansi) => {
       setBridgeError(null);
-      const term = termRef.current;
-      if (!term) return;
-      term.reset();
-      term.write(ansi);
+      termRef.current?.write("\x1b[H\x1b[2J\x1b[?25l" + ansi + "\x1b[?25l");
+    },
+    // Diff: repaint only changed rows, cursor-addressed, in one write. The
+    // cursor stays hidden — herdr's dump carries no cursor position, so a
+    // visible cursor would just sit at the wrong spot.
+    onDiff: (rows) => {
+      let data = "";
+      for (const [row, line] of rows) {
+        data += `\x1b[${row + 1};1H\x1b[2K` + line;
+      }
+      data += "\x1b[?25l";
+      termRef.current?.write(data);
     },
     onError: (message) => setBridgeError(message),
   });
