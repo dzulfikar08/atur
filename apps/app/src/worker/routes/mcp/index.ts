@@ -23,6 +23,7 @@ import { fieldSettingsSchema, withSettings } from "../../services/customFields";
 import * as valuesRepo from "../../repositories/customFieldValues";
 import * as workspaceRepo from "../../repositories/workspaces";
 import * as linksService from "../../services/workspaceLinks";
+import { annotateSlimToolFields, slimResponse } from "./slim";
 import { canonicalStateKey } from "../../services/states";
 
 interface JsonRpcRequest {
@@ -1139,6 +1140,10 @@ const TOOLS = [
   },
 ];
 
+// Advertise the opt-in slim/include arguments in tools/list — one source of
+// truth with the response projection in ./slim.
+annotateSlimToolFields(TOOLS);
+
 async function getWorkspaceId(db: ReturnType<typeof getDb>, slug: string, userId?: string) {
   // Slugs are the canonical identifier; workspace display names are accepted as
   // a convenience fallback so callers don't have to remember the slug.
@@ -1494,7 +1499,7 @@ function decodeBase64Upload(raw: string): Uint8Array {
   return bytes;
 }
 
-export async function handleTool(
+async function handleToolRaw(
   db: ReturnType<typeof getDb>,
   env: Env,
   toolName: string,
@@ -2826,6 +2831,22 @@ export async function handleTool(
     default:
       throw new HTTPException(400, { message: `Unknown tool: ${toolName}` });
   }
+}
+
+// Public entry: runs the raw tool handler, then applies the central opt-in
+// slim projection from ./slim. Without `slim: true` in the tool arguments the
+// handler result is returned untouched, so legacy clients keep byte-identical
+// responses.
+export async function handleTool(
+  db: ReturnType<typeof getDb>,
+  env: Env,
+  toolName: string,
+  params: Record<string, unknown>,
+  userId: string,
+  origin?: string,
+): Promise<unknown> {
+  const result = await handleToolRaw(db, env, toolName, params, userId, origin);
+  return slimResponse(toolName, params, result);
 }
 
 export const mcpRoutes = new Hono<{ Bindings: Env }>({ strict: false })

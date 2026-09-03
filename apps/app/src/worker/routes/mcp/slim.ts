@@ -140,9 +140,6 @@ const SLIM_TOOLS: Record<string, string[]> = {
   list_activities: ACTIVITY,
 };
 
-function normalizeKey(s: string): string {
-  return s.toLowerCase().replace(/_/g, "");
-}
 
 function isPlainObject(v: unknown): v is Row {
   return typeof v === "object" && v !== null && !Array.isArray(v);
