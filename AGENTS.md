@@ -26,26 +26,34 @@ list_states(project_id="<uuid>", workspace="<slug>") → maps state names to UUI
 list_labels(project_id="<uuid>", workspace="<slug>") → maps label names to UUIDs
 ```
 
-State UUIDs are needed for `update_issue` (changing status). Label UUIDs are needed for `create_issue` (tagging). Example states: `backlog`, `todo`, `in-progress`, `done`, `cancelled`, `triage`.
+State UUIDs are needed for `update_issue` (changing status). Label UUIDs are needed for `create_issue` (tagging). Example states: `backlog`, `todo`, `in-progress`, `needs-you`, `need-review`, `done`, `cancelled`, `triage`.
 
 **Step 3: Use the correct IDs in all subsequent calls.**
 
 ### Known Workspaces
 
-| Name          | Slug            |
-| ------------- | --------------- |
-| OpexMX        | `opexmx`        |
-| Voltrus       | `voltrus`       |
-| Cowculator    | `cowculator`    |
-| E-Pondok      | `e-pondok`      |
-| Revklik       | `revklik`       |
-| Waqtu         | `waqtu`         |
-| CloudAgni     | `cloudagni`     |
-| JoyoDigitama  | `joyodigitama`  |
-| WeLoveOurBaby | `weloveourbaby` |
-| BriefOK       | `briefok`       |
+| Name                  | Slug                 |
+| --------------------- | -------------------- |
+| OpexMX                | `opexmx`             |
+| Voltrus               | `voltrus`            |
+| Cowculator            | `cowculator`         |
+| E-Pondok              | `e-pondok`           |
+| Revklik               | `revklik`            |
+| Waqtu                 | `waqtu`              |
+| CloudAgni             | `cloudagni`          |
+| JoyoDigitama          | `joyodigitama`       |
+| WeLoveOurBaby         | `weloveourbaby`      |
+| BriefOK               | `briefok`            |
+| WatchFit              | `watchfit`           |
+| Atur                  | `diatur`             |
+| MotionCue             | `motioncue`          |
+| Dzul & Allicia Family | `family`             |
+| YouTube Automation    | `youtube-automation` |
+| Nempel                | `nempel`             |
+| Mailflare             | `mailflare`          |
+| intip                 | `intip`              |
 
-> **IMPORTANT**: Slugs verified 2026-08-11 (all owned by `ab39f025…` / dzulfikar). If `list_workspaces` returns different results, trust the live data.
+> **IMPORTANT**: Slugs verified 2026-09-03 (all owned by `ab39f025…` / dzulfikar). If `list_workspaces` returns different results, trust the live data.
 
 ### Common Workflows
 
@@ -150,12 +158,13 @@ Follow this lifecycle for every issue you work on:
 
 ```
 Todo → In Progress → Need Review → Done
-                         ↓
-                    [Code Review]
-                    ↙           ↘
-               Clean          Issues Found
-                ↓                  ↓
-               Done         Fix → Need Review (loop)
+         ↓                ↓
+      Needs You       [Code Review]
+         ↓            ↙           ↘
+   human answers   Clean     Issues Found
+   in a comment       ↓          ↓
+         ↓          Done  Fix → Need Review (loop)
+   resumes In Progress
 ```
 
 **Step 1: Start work**
@@ -165,14 +174,31 @@ update_issue(state_id=in_progress)
 // Do the development work
 ```
 
-**Step 2: Development complete → Mark for review**
+**Step 2: Blocked on a human → Needs You**
+
+Paused mid-work is a state, not silence. Missing credential, ambiguous spec,
+approval gate, third-party wait — move the issue and say exactly what you need.
+
+```
+update_issue(state_id=needs_you)
+add_comment("NEEDS YOU: <the exact decision/input/approval required>")
+// Human answers in a comment, then:
+add_comment("Resuming: <what changed>")
+update_issue(state_id=in_progress)
+```
+
+`Needs You` = agent paused mid-work awaiting human input. NOT the same as
+`Need Review` (agent finished, awaiting human judgment). If a project lacks
+the state, create it (Key Rule 9). WeLoveOurBaby DEV predates the convention:
+its `Need Confirmation` state means the same thing — treat as Needs You.
+**Step 3: Development complete → Mark for review**
 
 ```
 update_issue(state_id=need_review)
 add_comment("Development complete. Changed files: X, Y, Z. Key decisions: ...")
 ```
 
-**Step 3: Spawn code review sub-agent**
+**Step 4: Spawn code review sub-agent**
 
 ```
 Agent(subagent_type="code-reviewer", prompt="
@@ -184,18 +210,18 @@ Agent(subagent_type="code-reviewer", prompt="
 ")
 ```
 
-**Step 4a: Review clean → Mark Done**
+**Step 5a: Review clean → Mark Done**
 
 ```
 update_issue(state_id=done)
 add_comment("Code review passed. No issues found.")
 ```
 
-**Step 4b: Review found issues → Fix → Re-review**
+**Step 5b: Review found issues → Fix → Re-review**
 
 ```
 // Fix the issues found by reviewer
-// Then loop back to Step 2 (mark Need Review again, spawn new review)
+// Then loop back to Step 3 (mark Need Review again, spawn new review)
 add_comment("Review feedback addressed: <describe fixes>")
 update_issue(state_id=need_review)
 ```
@@ -212,7 +238,7 @@ update_issue(state_id=need_review)
 6. **Issue relations are bidirectional** — `blocks` means "this issue blocks the related one". `blocked_by` means "this issue is blocked by the related one".
 7. **No blank descriptions** — every issue must follow the Description Standard template above.
 8. **Always add comments** when changing state — document WHAT changed and WHY (e.g. "Development complete, files changed: X, Y").
-9. **"Need Review" state must exist per project** — if a project doesn't have it, create it: `create_state(name="Need Review", group="started", color="#F97316")`.
+9. **"Need Review" and "Needs You" states must exist per project** — if missing, create them: `create_state(name="Need Review", group="started", color="#F97316")` and `create_state(name="Needs You", group="started", color="#EC4899", description="Agent paused mid-work — needs human input, decision, or approval. Agent comments exactly what it needs; human answers in a comment; agent resumes In Progress.")`.
 
 ### Screenshot Evidence Workflow (AI Agents)
 
