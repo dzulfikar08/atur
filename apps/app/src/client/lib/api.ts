@@ -724,6 +724,8 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
+  // ── Panes (herdr execution plane, proxied by the Worker; see ATUR-2) ──
+  listPanes: () => apiFetch<PanesListResponse>("/panes"),
 };
 
 // --- Types ---
@@ -733,6 +735,23 @@ export interface Workspace {
   name: string;
   slug: string;
   logo?: string | null;
+}
+
+// ── Panes (herdr execution plane; snake_case wire format, proxied verbatim) ──
+export interface PaneListItem {
+  pane_id: string;
+  workspace_id: string;
+  workspace_label: string;
+  tab_id: string;
+  cwd: string | null;
+  agent: string | null;
+  agent_status: string | null;
+  title: string | null;
+  revision: number;
+}
+
+export interface PanesListResponse {
+  panes: PaneListItem[];
 }
 
 // ── Portfolio strategy (DEV-22) ──

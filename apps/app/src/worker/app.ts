@@ -43,6 +43,7 @@ import { dealsRoutes } from "./routes/deals";
 import { feedbackRoutes } from "./routes/feedback";
 import { feedbackAdminRoutes } from "./routes/feedback_admin";
 import { widgetRoutes } from "./routes/widget";
+import { paneRoutes } from "./routes/panes";
 import { polarWebhookRoutes, polarRoutes } from "./routes/polar";
 import { meRoutes } from "./routes/me";
 import type { Env } from "./lib/env";
@@ -127,6 +128,8 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/api/workspaces/:slug/projects/:projectId/issue-relations", relationRoutes);
   // Feedback board admin config (authed). Scoped under a project.
   app.route("/api/workspaces/:slug/projects/:projectId/feedback-board", feedbackAdminRoutes);
+  // Herdr execution-plane proxy: pane list + WS attach relay (ATUR-2).
+  app.route("/api/panes", paneRoutes);
 
   return app;
 }

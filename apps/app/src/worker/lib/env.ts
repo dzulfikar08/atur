@@ -12,4 +12,12 @@ export type Env = {
   // back with error=oauth_disabled instead of starting the flow.
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  // Herdr execution-plane bridge (ATUR-2): the local dev daemon on the dev box
+  // (127.0.0.1:7601) or a https:// tunnel hostname in prod. Set via
+  // `wrangler secret put` in prod and .dev.vars locally. Absent → /api/panes
+  // and /api/panes/attach respond 502 (execution plane unreachable).
+  HERDR_BRIDGE_URL?: string;
+  // Optional shared secret; when set, proxied requests carry the
+  // x-bridge-token header the bridge validates. Never in wrangler vars.
+  HERDR_BRIDGE_TOKEN?: string;
 };
