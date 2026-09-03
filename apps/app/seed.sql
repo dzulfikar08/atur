@@ -31,11 +31,11 @@ INSERT OR IGNORE INTO project_members (id, project_id, workspace_id, member_id, 
 VALUES ('00000000-0000-4000-8000-000000000006', '00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000001', 20, 1, datetime('now'), datetime('now'));
 
 -- ---- States ----
-INSERT OR IGNORE INTO states (id, name, description, color, slug, sequence, group_name, is_triage, is_default, project_id, workspace_id, created_at, updated_at) VALUES
- ('00000000-0000-4000-8000-000000000007', 'Backlog',   'Backlog items',     '#808080', 'backlog',     65535, 'backlog',   0, 0, '00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000003', datetime('now'), datetime('now')),
- ('00000000-0000-4000-8000-000000000008', 'Todo',      'Ready to start',    '#8b5cf6', 'todo',        65535, 'started',   0, 1, '00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000003', datetime('now'), datetime('now')),
- ('00000000-0000-4000-8000-000000000009', 'In Progress','Being worked on',  '#f59e0b', 'in-progress', 65535, 'started',   0, 0, '00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000003', datetime('now'), datetime('now')),
- ('00000000-0000-4000-8000-000000000010', 'Done',      'Completed',         '#22c55e', 'done',        65535, 'completed', 0, 0, '00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000003', datetime('now'), datetime('now'));
+INSERT OR IGNORE INTO states (id, name, description, color, slug, sequence, group_name, `key`, is_triage, is_default, project_id, workspace_id, created_at, updated_at) VALUES
+ ('00000000-0000-4000-8000-000000000007', 'Backlog',   'Backlog items',     '#808080', 'backlog',     65535, 'backlog',   'backlog',     0, 0, '00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000003', datetime('now'), datetime('now')),
+ ('00000000-0000-4000-8000-000000000008', 'Todo',      'Ready to start',    '#8b5cf6', 'todo',        65535, 'started',   'todo',        0, 1, '00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000003', datetime('now'), datetime('now')),
+ ('00000000-0000-4000-8000-000000000009', 'In Progress','Being worked on',  '#f59e0b', 'in-progress', 65535, 'started',   'in_progress', 0, 0, '00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000003', datetime('now'), datetime('now')),
+ ('00000000-0000-4000-8000-000000000010', 'Done',      'Completed',         '#22c55e', 'done',        65535, 'completed', 'done',        0, 0, '00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000003', datetime('now'), datetime('now'));
 
 -- ---- Labels ----
 INSERT OR IGNORE INTO labels (id, name, description, color, sort_order, workspace_id, project_id, created_at, updated_at) VALUES

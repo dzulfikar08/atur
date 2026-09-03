@@ -23,6 +23,7 @@ import { fieldSettingsSchema, withSettings } from "../../services/customFields";
 import * as valuesRepo from "../../repositories/customFieldValues";
 import * as workspaceRepo from "../../repositories/workspaces";
 import * as linksService from "../../services/workspaceLinks";
+import { canonicalStateKey } from "../../services/states";
 
 interface JsonRpcRequest {
   jsonrpc: string;
@@ -2368,6 +2369,7 @@ export async function handleTool(
         name: params.name as string,
         color: (params.color as string) || "#808080",
         groupName: params.group_name as string,
+        key: canonicalStateKey(params.name as string, params.group_name as string),
         description: (params.description as string) ?? null,
         projectId: params.project_id as string,
         workspaceId,
