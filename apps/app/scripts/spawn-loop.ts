@@ -39,6 +39,9 @@ const KEY =
 const CLAIM_TTL_MS = 60 * 60 * 1000; // dead claims older than this are force-released
 const HARD_DROP_MS = 24 * 60 * 60 * 1000; // unresolvable claims vanish after a day
 const STALL_MS = 30 * 60 * 1000; // live agent with no log writes this long = stuck
+const SIGTERM_GRACE_MS = 15_000; // wait for SIGTERM to land before escalating to SIGKILL
+const SIGKILL_GRACE_MS = 45_000; // wait for SIGKILL to land before deferring to the next tick
+const REQUEUE_GRACE_MS = 20_000; // pause before verifying a requeue stuck (zombie writes land within seconds)
 const STATE_DIR = join(homedir(), ".local/state/spawn-loop");
 const CLAIMS_FILE = join(STATE_DIR, "claims.json");
 const WT_DIR = join(STATE_DIR, "worktrees");
@@ -139,6 +142,12 @@ function pidAlive(pid?: number): boolean {
   }
 }
 
+const sleep = (ms: number) => {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  setTimeout(resolve, ms);
+  return promise;
+};
+
 function killTree(pid: number, sig: NodeJS.Signals) {
   try {
     process.kill(-pid, sig); // setsid made the spawn a group leader
@@ -192,6 +201,47 @@ async function hasClaimComment(slug: string, projectId: string, issueId: string)
     `/api/workspaces/${slug}/projects/${projectId}/issues/${issueId}/comments`,
   );
   return rowsOf(body).some((c) => JSON.stringify(c).includes("Picked up by"));
+}
+
+// True if a "Picked up by" claim comment landed after `sinceMs` — someone
+// (human or fresh agent) took the issue during a grace window, and
+// supervision must not fight them over the state field.
+async function reclaimedAfter(slug: string, projectId: string, issueId: string, sinceMs: number) {
+  const body = await api<unknown>(
+    "GET",
+    `/api/workspaces/${slug}/projects/${projectId}/issues/${issueId}/comments`,
+  );
+  return rowsOf(body).some((c) => {
+    const at = Date.parse(str(c.createdAt) ?? "");
+    return JSON.stringify(c).includes("Picked up by") && !Number.isNaN(at) && at > sinceMs;
+  });
+}
+
+// PATCH the issue back to the watch state, then — after a grace pause long
+// enough for any in-flight write from the dying agent to land — verify the
+// requeue stuck. A verified kill shrinks the zombie-write race to a single
+// HTTP request; this closes even that. Re-claims during the window win.
+async function requeueVerified(claim: Claim, issueId: string, actionAt: number) {
+  await api("PATCH", `/api/workspaces/${claim.ws}/projects/${claim.projectId}/issues/${issueId}`, {
+    stateId: claim.watchStateId,
+  });
+  await sleep(REQUEUE_GRACE_MS);
+  try {
+    if (await reclaimedAfter(claim.ws, claim.projectId, issueId, actionAt)) return;
+    const issue = (await api<Json>(
+      "GET",
+      `/api/workspaces/${claim.ws}/projects/${claim.projectId}/issues/${issueId}`,
+    )) as Json;
+    const stateId = str(issue.state_id ?? issue.stateId);
+    if (stateId !== null && stateId !== claim.watchStateId) {
+      await api("PATCH", `/api/workspaces/${claim.ws}/projects/${claim.projectId}/issues/${issueId}`, {
+        stateId: claim.watchStateId,
+      });
+      console.log(`    zombie state-write had overwritten the requeue — re-asserted "${claim.watchStateName}"`);
+    }
+  } catch (err) {
+    console.error(`    requeue verification failed: ${err instanceof Error ? err.message : err}`);
+  }
 }
 
 // Fresh worktree per ship task: fetch, resolve base (binding default branch →
@@ -321,7 +371,10 @@ async function cleanupWorktree(claim: Claim): Promise<string | null> {
 // Supervision runs before dispatch each tick: dead-pid claims either finished
 // (issue reached review/done — release silently) or crashed mid-flight
 // (evidence-gap comment + requeue to the watch state). Live claims whose log
-// went quiet for STALL_MS are killed and treated as crashed. DRY never mutates.
+// went quiet for STALL_MS are killed with verified escalation — if death
+// can't be confirmed, the claim is kept and the kill retried next tick.
+// Requeues re-assert the watch state after a grace pause so an in-flight
+// write from the dying agent can't win the race. DRY never mutates.
 async function supervise(claims: Claims): Promise<number> {
   let active = 0;
   for (const [issueId, claim] of Object.entries(claims)) {
@@ -345,15 +398,25 @@ async function supervise(claims: Claims): Promise<number> {
         continue;
       }
       killTree(claim.pid!, "SIGTERM");
-      await new Promise((r) => setTimeout(r, 5000));
+      const termDeadline = Date.now() + SIGTERM_GRACE_MS;
+      while (pidAlive(claim.pid) && Date.now() < termDeadline) await sleep(500);
       if (pidAlive(claim.pid)) killTree(claim.pid!, "SIGKILL");
+      const killDeadline = Date.now() + SIGKILL_GRACE_MS;
+      while (pidAlive(claim.pid) && Date.now() < killDeadline) await sleep(1000);
+      if (pidAlive(claim.pid)) {
+        // SIGKILL delivery can be deferred (D-state sleep) or the process
+        // escaped the group — post nothing false: keep the claim and retry
+        // the kill on the next tick instead of requeueing a live agent.
+        console.error(`    pid ${claim.pid} survived SIGKILL — claim retained, retrying next tick`);
+        active++;
+        continue;
+      }
+      const actionAt = Date.now();
       try {
         await api("POST", `/api/workspaces/${claim.ws}/projects/${claim.projectId}/issues/${issueId}/comments`, {
-          comment_html: `<p>⚠️ Spawned agent (pid ${claim.pid}) stalled — no log output for ~${Math.round(STALL_MS / 60000)}m. Killed and requeued to <strong>${claim.watchStateName}</strong>; claim released.</p>`,
+          comment_html: `<p>⚠️ Spawned agent (pid ${claim.pid}) stalled — no log output for ~${Math.round(STALL_MS / 60000)}m. Killed (verified dead) and requeued to <strong>${claim.watchStateName}</strong>; claim released.</p>`,
         });
-        await api("PATCH", `/api/workspaces/${claim.ws}/projects/${claim.projectId}/issues/${issueId}`, {
-          stateId: claim.watchStateId,
-        });
+        await requeueVerified(claim, issueId, actionAt);
       } catch (err) {
         console.error(`    stall requeue failed: ${err instanceof Error ? err.message : err}`);
       }
@@ -379,12 +442,11 @@ async function supervise(claims: Claims): Promise<number> {
       } else if (DRY) {
         console.log(`    DRY-RUN would comment crash + requeue to "${claim.watchStateName}"`);
       } else {
+        const actionAt = Date.now();
         await api("POST", `/api/workspaces/${claim.ws}/projects/${claim.projectId}/issues/${issueId}/comments`, {
           comment_html: `<p>⚠️ Spawned agent (pid ${claim.pid ?? "?"}) exited after ~${age}m without reaching Need Review. Requeued to <strong>${claim.watchStateName}</strong>; claim released.</p>`,
         });
-        await api("PATCH", `/api/workspaces/${claim.ws}/projects/${claim.projectId}/issues/${issueId}`, {
-          stateId: claim.watchStateId,
-        });
+        await requeueVerified(claim, issueId, actionAt);
         const wtNote = await cleanupWorktree(claim);
         console.log(`    commented crash + requeued to "${claim.watchStateName}"${wtNote ? ` · ${wtNote}` : ""}`);
         notify("spawn-loop: crewmate crashed", `${claim.ws}-${claim.seq} requeued to ${claim.watchStateName}`);
