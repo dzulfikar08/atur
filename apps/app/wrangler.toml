@@ -36,6 +36,11 @@ verified_address = "noreply@diatur.com"
 # https://app.diatur.com/auth/google/callback and
 # http://localhost:5173/auth/google/callback (vite dev).
 
+# Herdr execution-plane bridge (ATUR-2): HERDR_BRIDGE_URL + HERDR_BRIDGE_TOKEN
+# are secrets (not vars) — see docs/DEPLOY.md and .dev.vars.example locally.
+# URL is http://127.0.0.1:7601 in dev or the https:// tunnel hostname in prod;
+# token is the bridge's optional x-bridge-token shared secret.
+
 [observability]
 enabled = true
 

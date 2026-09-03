@@ -1328,3 +1328,20 @@ export const crmEmailLog = sqliteTable(
   },
   (table) => [index("idx_crm_email_log_customer").on(table.customerId, table.sentAt)],
 );
+
+// Herdr execution-plane audit (ATUR-2). One row per successful WebSocket
+// attach to a bridge pane; detached_at is stamped (epoch ms) when either side
+// closes the socket. user_id is intentionally not an FK — audit rows must
+// survive user deletion. Single-tenant phase: any authenticated user may reach
+// any bridge pane (no per-pane workspace ACL yet).
+export const paneAudit = sqliteTable(
+  "pane_audit",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    paneId: text("pane_id").notNull(),
+    attachedAt: integer("attached_at").notNull(),
+    detachedAt: integer("detached_at"),
+  },
+  (table) => [index("idx_pane_audit_user").on(table.userId, table.attachedAt)],
+);
