@@ -312,13 +312,17 @@ describe("mcp slim responses — irregular shapes", () => {
 
 describe("mcp tools/list advertises slim fields", () => {
   it("every tool takes slim; list tools with heavy fields also take include", () => {
-    const byName = new Map(TOOLS.map((t) => [t.name, t]));
+    // TOOLS' inferred type is a big union of literal schemas — annotateSlimToolFields
+    const propsOf = (name: string): Record<string, unknown> | undefined => {
+      const tool = TOOLS.find((t) => t.name === name);
+      return tool?.inputSchema.properties as Record<string, unknown> | undefined;
+    };
     for (const tool of TOOLS) {
-      expect(tool.inputSchema.properties?.slim, `${tool.name} should accept slim`).toBeDefined();
+      expect(propsOf(tool.name)?.slim, `${tool.name} should accept slim`).toBeDefined();
     }
-    expect(byName.get("list_issues")?.inputSchema.properties?.include).toBeDefined();
-    expect(byName.get("get_issue")?.inputSchema.properties?.include).toBeDefined();
-    expect(byName.get("delete_issue")?.inputSchema.properties?.include).toBeUndefined();
+    expect(propsOf("list_issues")?.include).toBeDefined();
+    expect(propsOf("get_issue")?.include).toBeDefined();
+    expect(propsOf("delete_issue")?.include).toBeUndefined();
   });
 
   it("slim/include are optional — no required array gains entries", () => {

@@ -52,7 +52,7 @@ function err(id: number | string | null, code: number, message: string): JsonRpc
   return { jsonrpc: "2.0", id, error: { code, message } };
 }
 
-const TOOLS = [
+export const TOOLS = [
   {
     name: "list_workspaces",
     description: "List all workspaces",
