@@ -55,12 +55,11 @@ function rowsFor(table: unknown): unknown[] {
 function chain(table: unknown) {
   const rows = rowsFor(table);
   const q = {
+    // oxlint-disable-next-line unicorn/no-thenable -- drizzle mock must be both awaitable and chainable
     where: () => q,
     limit: () => Promise.resolve(rows),
-    then: (
-      resolve: (v: unknown[]) => unknown,
-      reject?: (e: unknown) => unknown,
-    ) => Promise.resolve(rows).then(resolve, reject),
+    then: (resolve: (v: unknown[]) => unknown, reject?: (e: unknown) => unknown) =>
+      Promise.resolve(rows).then(resolve, reject),
   };
   return q;
 }

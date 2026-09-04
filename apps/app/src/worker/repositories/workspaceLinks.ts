@@ -29,7 +29,13 @@ export async function upsertBySlug(
   const now = new Date().toISOString();
   await db
     .insert(schema.workspaceLinks)
-    .values({ id: crypto.randomUUID(), workspaceSlug: slug, ...fields, createdAt: now, updatedAt: now })
+    .values({
+      id: crypto.randomUUID(),
+      workspaceSlug: slug,
+      ...fields,
+      createdAt: now,
+      updatedAt: now,
+    })
     .onConflictDoUpdate({
       target: schema.workspaceLinks.workspaceSlug,
       set: { ...fields, updatedAt: now },
@@ -38,9 +44,7 @@ export async function upsertBySlug(
 }
 
 export async function removeBySlug(db: DbClient, slug: string) {
-  await db
-    .delete(schema.workspaceLinks)
-    .where(eq(schema.workspaceLinks.workspaceSlug, slug));
+  await db.delete(schema.workspaceLinks).where(eq(schema.workspaceLinks.workspaceSlug, slug));
 }
 
 // listAll is MCP/admin-only: the tools/call path gates callers per workspace
@@ -48,4 +52,3 @@ export async function removeBySlug(db: DbClient, slug: string) {
 export async function listAll(db: ReturnType<typeof getDb>) {
   return db.select().from(schema.workspaceLinks).orderBy(schema.workspaceLinks.workspaceSlug);
 }
-

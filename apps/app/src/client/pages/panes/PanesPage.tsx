@@ -32,9 +32,7 @@ function PaneCard({ pane }: { pane: PaneListItem }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{pane.title ?? pane.pane_id}</p>
-          <p className="mt-1 truncate text-xs text-muted-foreground">
-            {pane.cwd ?? "—"}
-          </p>
+          <p className="mt-1 truncate text-xs text-muted-foreground">{pane.cwd ?? "—"}</p>
         </div>
         <Code2 className="h-4 w-4 shrink-0 text-muted-foreground" />
       </div>
@@ -44,9 +42,7 @@ function PaneCard({ pane }: { pane: PaneListItem }) {
         {pane.agent_status && (
           <Badge variant={statusVariant(pane.agent_status)}>{pane.agent_status}</Badge>
         )}
-        <span className="ml-auto font-mono text-xs text-muted-foreground">
-          {pane.pane_id}
-        </span>
+        <span className="ml-auto font-mono text-xs text-muted-foreground">{pane.pane_id}</span>
       </div>
     </Link>
   );
@@ -89,8 +85,8 @@ export default function PanesPage() {
             <Code2 className="h-8 w-8 text-muted-foreground" />
             <p className="font-medium">Execution plane unreachable</p>
             <p className="max-w-sm text-center text-sm text-muted-foreground">
-              Couldn&apos;t reach the local herdr bridge. Make sure the bridge
-              daemon is running, then try again.
+              Couldn&apos;t reach the local herdr bridge. Make sure the bridge daemon is running,
+              then try again.
             </p>
             <Button variant="outline" size="sm" onClick={() => panesQuery.refetch()}>
               Retry

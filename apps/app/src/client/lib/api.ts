@@ -373,10 +373,7 @@ export const api = {
     const query = qs.toString();
     return apiFetch<TimesheetResponse>(`/workspaces/${slug}/timesheet/${query ? `?${query}` : ""}`);
   },
-  listAgentUsage: (
-    slug: string,
-    params: { from?: string; to?: string; project_id?: string },
-  ) => {
+  listAgentUsage: (slug: string, params: { from?: string; to?: string; project_id?: string }) => {
     const qs = new URLSearchParams();
     if (params.from) qs.set("from", params.from);
     if (params.to) qs.set("to", params.to);

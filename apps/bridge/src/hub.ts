@@ -137,10 +137,9 @@ class Watcher {
       let cols = 120;
       let rows = 32;
       try {
-        const { layout } = await rpc<{ layout: { panes: PaneRect[] } }>(
-          "pane.layout",
-          { pane_id: this.paneId },
-        );
+        const { layout } = await rpc<{ layout: { panes: PaneRect[] } }>("pane.layout", {
+          pane_id: this.paneId,
+        });
         const rect = layout.panes.find((p) => p.pane_id === this.paneId)?.rect;
         if (rect) {
           cols = rect.width;
@@ -244,13 +243,9 @@ class Watcher {
       // Only a missing pane is terminal (agent exited, tab closed). Transient
       // herdr hiccups (restart, socket timeout) must not kill the watcher and
       // flag live panes as exited — the next tick retries.
-      const gone =
-        e instanceof HerdrError && /not_found|no such/i.test(e.code + " " + e.message);
+      const gone = e instanceof HerdrError && /not_found|no such/i.test(e.code + " " + e.message);
       if (!gone) {
-        console.error(
-          `pane.read ${this.paneId} failed (transient, will retry):`,
-          e,
-        );
+        console.error(`pane.read ${this.paneId} failed (transient, will retry):`, e);
         return;
       }
       const reason = e instanceof Error ? e.message : String(e);
@@ -525,7 +520,10 @@ export class PaneHub {
         });
       // Swallow rejections here: the catch above already reported them, and
       // the queue must keep draining for subsequent frames.
-      this.inputQueues.set(ws, next.then(() => undefined));
+      this.inputQueues.set(
+        ws,
+        next.then(() => undefined),
+      );
       await next;
     }
   }
@@ -562,7 +560,10 @@ export class PaneHub {
     if (proc.exitCode === 0) {
       // <main-repo>/.git (worktree or checkout alike); bare repos keep their
       // own path — not a topology this deployment produces.
-      repo = proc.stdout.toString().trim().replace(/\/\.git$/, "");
+      repo = proc.stdout
+        .toString()
+        .trim()
+        .replace(/\/\.git$/, "");
     }
     if (this.repoCache.size > 500) this.repoCache.clear();
     this.repoCache.set(cwd, repo);

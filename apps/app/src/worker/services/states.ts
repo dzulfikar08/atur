@@ -40,7 +40,13 @@ export type StateKey =
   | "done"
   | "cancelled";
 
-type StageSeed = { name: string; group: string; color: string; key?: StateKey; isDefault?: boolean };
+type StageSeed = {
+  name: string;
+  group: string;
+  color: string;
+  key?: StateKey;
+  isDefault?: boolean;
+};
 
 // Canonical key for a state: the stable cross-project identity behind
 // `?state_key=` filters (ATUR-3). Known names win (so renamed-but-familiar

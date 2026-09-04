@@ -163,7 +163,10 @@ function killTree(pid: number, sig: NodeJS.Signals) {
 function notify(title: string, body: string) {
   if (DRY) return;
   try {
-    const p = Bun.spawn(["notify-send", "-a", "spawn-loop", title, body], { stdout: "ignore", stderr: "ignore" });
+    const p = Bun.spawn(["notify-send", "-a", "spawn-loop", title, body], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
     p.unref();
   } catch {
     // headless box without notify-send — best-effort only
@@ -234,10 +237,16 @@ async function requeueVerified(claim: Claim, issueId: string, actionAt: number) 
     )) as Json;
     const stateId = str(issue.state_id ?? issue.stateId);
     if (stateId !== null && stateId !== claim.watchStateId) {
-      await api("PATCH", `/api/workspaces/${claim.ws}/projects/${claim.projectId}/issues/${issueId}`, {
-        stateId: claim.watchStateId,
-      });
-      console.log(`    zombie state-write had overwritten the requeue — re-asserted "${claim.watchStateName}"`);
+      await api(
+        "PATCH",
+        `/api/workspaces/${claim.ws}/projects/${claim.projectId}/issues/${issueId}`,
+        {
+          stateId: claim.watchStateId,
+        },
+      );
+      console.log(
+        `    zombie state-write had overwritten the requeue — re-asserted "${claim.watchStateName}"`,
+      );
     }
   } catch (err) {
     console.error(`    requeue verification failed: ${err instanceof Error ? err.message : err}`);
@@ -302,7 +311,9 @@ async function spawnAgent(
       "Set the state to Need Review. Never Done.",
     ];
   } else {
-    const wt = DRY ? { wtPath: "/tmp/spawn-loop/dry-worktree", branch: `crew/${slug}-${issue.seq}` } : await prepareWorktree(cwd, slug, issue.seq, binding.default_branch);
+    const wt = DRY
+      ? { wtPath: "/tmp/spawn-loop/dry-worktree", branch: `crew/${slug}-${issue.seq}` }
+      : await prepareWorktree(cwd, slug, issue.seq, binding.default_branch);
     if (!wt) {
       console.log("    skip: worktree preparation failed");
       return null;
@@ -359,7 +370,9 @@ async function spawnAgent(
     stderr: out,
   });
   proc.unref();
-  console.log(`    spawned pid ${proc.pid} (log ${logPath}${wtInfo.branch ? `, branch ${wtInfo.branch}` : ""})`);
+  console.log(
+    `    spawned pid ${proc.pid} (log ${logPath}${wtInfo.branch ? `, branch ${wtInfo.branch}` : ""})`,
+  );
   return { pid: proc.pid, logPath, wtPath: wtInfo.wtPath, branch: wtInfo.branch };
 }
 
@@ -396,9 +409,13 @@ async function supervise(claims: Claims): Promise<number> {
         active++;
         continue;
       }
-      console.log(`  crew: ${claim.ws}-${claim.seq} pid=${claim.pid} STALLED · no log writes for ${Math.round(STALL_MS / 60000)}m`);
+      console.log(
+        `  crew: ${claim.ws}-${claim.seq} pid=${claim.pid} STALLED · no log writes for ${Math.round(STALL_MS / 60000)}m`,
+      );
       if (DRY) {
-        console.log(`    DRY-RUN would kill + comment crash + requeue to "${claim.watchStateName}"`);
+        console.log(
+          `    DRY-RUN would kill + comment crash + requeue to "${claim.watchStateName}"`,
+        );
         active++;
         continue;
       }
@@ -418,9 +435,13 @@ async function supervise(claims: Claims): Promise<number> {
       }
       const actionAt = Date.now();
       try {
-        await api("POST", `/api/workspaces/${claim.ws}/projects/${claim.projectId}/issues/${issueId}/comments`, {
-          comment_html: `<p>⚠️ Spawned agent (pid ${claim.pid}) stalled — no log output for ~${Math.round(STALL_MS / 60000)}m. Killed (verified dead) and requeued to <strong>${claim.watchStateName}</strong>; claim released.</p>`,
-        });
+        await api(
+          "POST",
+          `/api/workspaces/${claim.ws}/projects/${claim.projectId}/issues/${issueId}/comments`,
+          {
+            comment_html: `<p>⚠️ Spawned agent (pid ${claim.pid}) stalled — no log output for ~${Math.round(STALL_MS / 60000)}m. Killed (verified dead) and requeued to <strong>${claim.watchStateName}</strong>; claim released.</p>`,
+          },
+        );
         await requeueVerified(claim, issueId, actionAt);
       } catch (err) {
         console.error(`    stall requeue failed: ${err instanceof Error ? err.message : err}`);
@@ -439,7 +460,8 @@ async function supervise(claims: Claims): Promise<number> {
       const stateId = str(issue.state_id ?? issue.stateId);
       const finished =
         issue.completed_at != null ||
-        (stateId !== null && (claim.doneStateIds.includes(stateId) || stateId === claim.reviewStateId));
+        (stateId !== null &&
+          (claim.doneStateIds.includes(stateId) || stateId === claim.reviewStateId));
       if (finished) {
         const wtNote = await cleanupWorktree(claim);
         console.log(`    finished — releasing claim${wtNote ? ` · ${wtNote}` : ""}`);
@@ -448,13 +470,22 @@ async function supervise(claims: Claims): Promise<number> {
         console.log(`    DRY-RUN would comment crash + requeue to "${claim.watchStateName}"`);
       } else {
         const actionAt = Date.now();
-        await api("POST", `/api/workspaces/${claim.ws}/projects/${claim.projectId}/issues/${issueId}/comments`, {
-          comment_html: `<p>⚠️ Spawned agent (pid ${claim.pid ?? "?"}) exited after ~${age}m without reaching Need Review. Requeued to <strong>${claim.watchStateName}</strong>; claim released.</p>`,
-        });
+        await api(
+          "POST",
+          `/api/workspaces/${claim.ws}/projects/${claim.projectId}/issues/${issueId}/comments`,
+          {
+            comment_html: `<p>⚠️ Spawned agent (pid ${claim.pid ?? "?"}) exited after ~${age}m without reaching Need Review. Requeued to <strong>${claim.watchStateName}</strong>; claim released.</p>`,
+          },
+        );
         await requeueVerified(claim, issueId, actionAt);
         const wtNote = await cleanupWorktree(claim);
-        console.log(`    commented crash + requeued to "${claim.watchStateName}"${wtNote ? ` · ${wtNote}` : ""}`);
-        notify("spawn-loop: crewmate crashed", `${claim.ws}-${claim.seq} requeued to ${claim.watchStateName}`);
+        console.log(
+          `    commented crash + requeued to "${claim.watchStateName}"${wtNote ? ` · ${wtNote}` : ""}`,
+        );
+        notify(
+          "spawn-loop: crewmate crashed",
+          `${claim.ws}-${claim.seq} requeued to ${claim.watchStateName}`,
+        );
       }
       delete claims[issueId];
       saveClaims(claims);
@@ -462,7 +493,9 @@ async function supervise(claims: Claims): Promise<number> {
       // Unresolvable (Atur unreachable?): keep counting until TTL, then
       // force-release so a dead agent never wedges the dispatch slot.
       if (Date.now() - claim.ts > CLAIM_TTL_MS) {
-        console.error(`    supervise failed past TTL — force-releasing: ${err instanceof Error ? err.message : err}`);
+        console.error(
+          `    supervise failed past TTL — force-releasing: ${err instanceof Error ? err.message : err}`,
+        );
         delete claims[issueId];
         saveClaims(claims);
       } else {
@@ -516,7 +549,10 @@ async function tick(ompPath: string) {
       auto_merge: str(link?.auto_merge),
     };
     const issues = rowsOf(
-      await api("GET", `/api/workspaces/${slug}/projects/${projectId}/issues?state=${watch.id}&limit=50`),
+      await api(
+        "GET",
+        `/api/workspaces/${slug}/projects/${projectId}/issues?state=${watch.id}&limit=50`,
+      ),
     );
     console.log(
       `  ${slug}:${ident} — ${issues.length} in ${watchLabel} · mode=${binding.mode ?? "local-only"}${binding.auto_merge ? "+" + binding.auto_merge : ""} · binding ${link ? "ok" : "missing"}`,

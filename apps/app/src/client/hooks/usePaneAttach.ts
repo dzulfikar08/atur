@@ -121,7 +121,16 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
 
       ws.onmessage = (event: MessageEvent) => {
         if (typeof event.data !== "string") return;
-        let msg: { type?: unknown; pane?: unknown; ansi?: unknown; rows?: unknown; message?: unknown; reason?: unknown; keyboard?: unknown; you?: unknown };
+        let msg: {
+          type?: unknown;
+          pane?: unknown;
+          ansi?: unknown;
+          rows?: unknown;
+          message?: unknown;
+          reason?: unknown;
+          keyboard?: unknown;
+          you?: unknown;
+        };
         try {
           msg = JSON.parse(event.data);
         } catch {

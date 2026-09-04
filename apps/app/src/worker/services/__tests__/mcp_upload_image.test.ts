@@ -177,10 +177,7 @@ describe("mcp upload_image", () => {
     const { db } = mockDb({ id: "asset-5", asset: "k" });
     const { env } = mockEnv();
 
-    await expectStatus(
-      () => handleTool(db, env, "upload_image", { filename: "x.png" }, USER),
-      400,
-    );
+    await expectStatus(() => handleTool(db, env, "upload_image", { filename: "x.png" }, USER), 400);
     await expectStatus(
       () =>
         handleTool(

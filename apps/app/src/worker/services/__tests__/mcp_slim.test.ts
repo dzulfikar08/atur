@@ -94,7 +94,14 @@ describe("mcp slim responses — default slim", () => {
     )) as any;
 
     expect(result).toEqual([
-      { id: "i1", name: "Ship the thing", sequenceId: 7, stateId: "s-done", priority: "high", projectId: "p1" },
+      {
+        id: "i1",
+        name: "Ship the thing",
+        sequenceId: 7,
+        stateId: "s-done",
+        priority: "high",
+        projectId: "p1",
+      },
     ]);
     expect(Object.keys(result[0])).not.toContain("descriptionHtml");
   });
@@ -135,7 +142,14 @@ describe("mcp slim responses — mutations", () => {
     )) as any;
 
     expect(result).toEqual([
-      { id: "i1", name: "Ship the thing", sequenceId: 7, stateId: "s-done", priority: "high", projectId: "p1" },
+      {
+        id: "i1",
+        name: "Ship the thing",
+        sequenceId: 7,
+        stateId: "s-done",
+        priority: "high",
+        projectId: "p1",
+      },
     ]);
     const keys = Object.keys(result[0]);
     expect(keys).not.toContain("descriptionHtml");
@@ -172,11 +186,16 @@ describe("mcp slim responses — mutations", () => {
   });
 
   it("add_comment-style projection keeps the comment id for the caller", () => {
-    const out = slimResponse(
-      "add_comment",
-      { slim: true },
-      [{ id: "c9", issueId: "i1", actorId: ME, commentHtml: "<p>hey</p>", access: "internal", createdAt: "t" }],
-    );
+    const out = slimResponse("add_comment", { slim: true }, [
+      {
+        id: "c9",
+        issueId: "i1",
+        actorId: ME,
+        commentHtml: "<p>hey</p>",
+        access: "internal",
+        createdAt: "t",
+      },
+    ]);
     expect(out).toEqual([
       { id: "c9", issueId: "i1", actorId: ME, access: "internal", createdAt: "t" },
     ]);
@@ -198,9 +217,14 @@ describe("mcp slim responses — lists", () => {
 
     expect(result).toHaveLength(2);
     for (const row of result) {
-      expect(Object.keys(row).sort()).toEqual(
-        ["id", "name", "priority", "projectId", "sequenceId", "stateId"],
-      );
+      expect(Object.keys(row).sort()).toEqual([
+        "id",
+        "name",
+        "priority",
+        "projectId",
+        "sequenceId",
+        "stateId",
+      ]);
       expect(row.descriptionHtml).toBeUndefined();
     }
   });
@@ -242,44 +266,49 @@ describe("mcp slim responses — include opt-back-in and truncation", () => {
   });
 
   it("include matches underscore/case-insensitively: ['comment_html'] restores commentHtml", () => {
-    const out = slimResponse(
-      "list_comments",
-      { slim: true, include: ["comment_html"] },
-      [{ id: "c1", issueId: "i1", actorId: ME, commentHtml: "<p>full</p>", access: "internal", createdAt: "t" }],
-    ) as any[];
+    const out = slimResponse("list_comments", { slim: true, include: ["comment_html"] }, [
+      {
+        id: "c1",
+        issueId: "i1",
+        actorId: ME,
+        commentHtml: "<p>full</p>",
+        access: "internal",
+        createdAt: "t",
+      },
+    ]) as any[];
     expect(out[0].commentHtml).toBe("<p>full</p>");
   });
 
   it("without include, heavy fields stay omitted even when long strings are kept", () => {
-    const out = slimResponse(
-      "list_time_entries",
-      { slim: true },
-      [
-        {
-          id: "t1",
-          issueId: "i1",
-          userId: ME,
-          durationSeconds: 90 * 60,
-          description: "z".repeat(700),
-          startedAt: "t",
-          createdAt: "t",
-          updatedAt: "t",
-        },
-      ],
-    ) as any[];
+    const out = slimResponse("list_time_entries", { slim: true }, [
+      {
+        id: "t1",
+        issueId: "i1",
+        userId: ME,
+        durationSeconds: 90 * 60,
+        description: "z".repeat(700),
+        startedAt: "t",
+        createdAt: "t",
+        updatedAt: "t",
+      },
+    ]) as any[];
     expect(out[0].description).toBe("z".repeat(SLIM_STRING_LIMIT) + "…[truncated]");
   });
 });
 
 describe("mcp slim responses — irregular shapes", () => {
   it("get_contact bundle keeps slimmed contact+company, drops collections", () => {
-    const out = slimResponse("get_contact", { slim: true }, {
-      contact: { id: "cu1", email: "a@b.c", name: "A", status: "lead", sessionToken: "tok" },
-      company: { id: "co1", name: "Co", description: "d".repeat(600) },
-      deals: [{ id: "d1" }],
-      tickets: [{ id: "t1" }],
-      facts: [{ id: "f1" }],
-    }) as any;
+    const out = slimResponse(
+      "get_contact",
+      { slim: true },
+      {
+        contact: { id: "cu1", email: "a@b.c", name: "A", status: "lead", sessionToken: "tok" },
+        company: { id: "co1", name: "Co", description: "d".repeat(600) },
+        deals: [{ id: "d1" }],
+        tickets: [{ id: "t1" }],
+        facts: [{ id: "f1" }],
+      },
+    ) as any;
     expect(out.company).toEqual({ id: "co1", name: "Co" });
     expect(out.company.description).toBeUndefined();
     expect(out.deals).toBeUndefined();

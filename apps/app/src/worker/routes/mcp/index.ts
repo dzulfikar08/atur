@@ -834,7 +834,7 @@ export const TOOLS = [
   {
     name: "create_time_entry",
     description:
-      "Log time on an issue (duration in seconds). AI agents SHOULD pass source=\"agent\" plus agent_name, model and token counts so usage is attributable and KPI-queryable.",
+      'Log time on an issue (duration in seconds). AI agents SHOULD pass source="agent" plus agent_name, model and token counts so usage is attributable and KPI-queryable.',
     inputSchema: {
       type: "object",
       properties: {
@@ -850,7 +850,10 @@ export const TOOLS = [
         output_tokens: { type: "integer", description: "Completion/output tokens" },
         cache_read_tokens: { type: "integer", description: "Cached input tokens" },
         cache_write_tokens: { type: "integer", description: "Cache-creation tokens" },
-        reasoning_tokens: { type: "integer", description: "Reasoning tokens, if reported separately" },
+        reasoning_tokens: {
+          type: "integer",
+          description: "Reasoning tokens, if reported separately",
+        },
       },
       required: ["project_id", "workspace", "issue_id", "duration_seconds"],
     },
@@ -1427,7 +1430,11 @@ async function assertIssueAccess(db: ReturnType<typeof getDb>, issueId: string, 
 // Comment-scoped tools are keyed only by comment id, so resolve comment →
 // issue → project access first. (commentsRepo also filters soft-deleted rows,
 // so the isNull here is defense-in-depth, not the only guard.)
-async function assertCommentAccess(db: ReturnType<typeof getDb>, commentId: string, userId: string) {
+async function assertCommentAccess(
+  db: ReturnType<typeof getDb>,
+  commentId: string,
+  userId: string,
+) {
   const [comment] = await db
     .select({ issueId: schema.issueComments.issueId })
     .from(schema.issueComments)
@@ -2659,7 +2666,7 @@ async function handleToolRaw(
       const source = params.source === "agent" ? "agent" : "human";
       if (source === "agent" && !params.agent_name) {
         throw new HTTPException(400, {
-          message: "agent_name is required when source is \"agent\"",
+          message: 'agent_name is required when source is "agent"',
         });
       }
       const id = uuid();

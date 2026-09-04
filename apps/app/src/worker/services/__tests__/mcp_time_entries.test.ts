@@ -84,7 +84,12 @@ describe("create_time_entry agent telemetry", () => {
   };
   // Select order: assertIssueAccess(issues) → assertProjectAccess(projects,
   // workspaces) → handler workspace lookup → read-back.
-  const accessFixtures = () => [[{ projectId: "p1" }], [{ workspaceId: "ws1" }], [{ ownerId: ME }], [{ workspaceId: "ws1" }]];
+  const accessFixtures = () => [
+    [{ projectId: "p1" }],
+    [{ workspaceId: "ws1" }],
+    [{ ownerId: ME }],
+    [{ workspaceId: "ws1" }],
+  ];
 
   it("agent entry persists source, identity, model and token counts", async () => {
     const db = mockDb(accessFixtures());
@@ -142,7 +147,8 @@ describe("create_time_entry agent telemetry", () => {
   it("source=agent without agent_name is a 400, nothing inserted", async () => {
     const db = mockDb(accessFixtures());
     await expectStatus(
-      () => handleTool(db.db, {} as Env, "create_time_entry", { ...baseParams, source: "agent" }, ME),
+      () =>
+        handleTool(db.db, {} as Env, "create_time_entry", { ...baseParams, source: "agent" }, ME),
       400,
     );
     expect(db.inserts).toHaveLength(0);
@@ -150,7 +156,12 @@ describe("create_time_entry agent telemetry", () => {
 
   it("agent entries under a foreign project are still 403", async () => {
     // workspace owner is someone else and no membership row → assertProjectAccess 403
-    const db = mockDb([[{ projectId: "p1" }], [{ workspaceId: "ws1" }], [{ ownerId: "someone-else" }], []]);
+    const db = mockDb([
+      [{ projectId: "p1" }],
+      [{ workspaceId: "ws1" }],
+      [{ ownerId: "someone-else" }],
+      [],
+    ]);
     await expectStatus(
       () =>
         handleTool(
@@ -220,7 +231,13 @@ describe("get_agent_usage", () => {
       },
     ];
     const db = mockDb([[{ id: "ws1", ownerId: ME }], rows]);
-    const result: any = await handleTool(db.db, {} as Env, "get_agent_usage", { workspace: "acme" }, ME);
+    const result: any = await handleTool(
+      db.db,
+      {} as Env,
+      "get_agent_usage",
+      { workspace: "acme" },
+      ME,
+    );
     expect(result.results).toHaveLength(3);
     expect(result.totals.total_tokens).toBe(19500);
     expect(result.totals.total_seconds).toBe(12600);
@@ -311,9 +328,19 @@ describe("get_agent_usage", () => {
       },
     ];
     const db = mockDb([[{ id: "ws1", ownerId: ME }], rows]);
-    const result: any = await handleTool(db.db, {} as Env, "get_agent_usage", { workspace: "acme" }, ME);
+    const result: any = await handleTool(
+      db.db,
+      {} as Env,
+      "get_agent_usage",
+      { workspace: "acme" },
+      ME,
+    );
     // Per-row passthrough: priced rows keep their cost, unpriced stays null.
-    expect(result.results.map((r: { cost_usd: number | null }) => r.cost_usd)).toEqual([18, 11.25, null]);
+    expect(result.results.map((r: { cost_usd: number | null }) => r.cost_usd)).toEqual([
+      18,
+      11.25,
+      null,
+    ]);
     // Totals skip unpriced rows — they are unknown, not free.
     expect(result.totals.cost_usd).toBe(29.25);
     const [heavy, light] = result.totals.by_agent;
@@ -323,6 +350,9 @@ describe("get_agent_usage", () => {
 
   it("is 404 for an unknown workspace", async () => {
     const db = mockDb([[]]);
-    await expectStatus(() => handleTool(db.db, {} as Env, "get_agent_usage", { workspace: "nope" }, ME), 404);
+    await expectStatus(
+      () => handleTool(db.db, {} as Env, "get_agent_usage", { workspace: "nope" }, ME),
+      404,
+    );
   });
 });

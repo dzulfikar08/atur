@@ -54,7 +54,7 @@ type ProjectPage = { rows: ProjectRow[]; total: number };
 
 // Fixtures are intentionally partial stand-ins for full Drizzle rows; cast
 // through unknown because the tests only rely on the fields they declare.
-const asRows = <T,>(value: object): T => value as unknown as T;
+const asRows = <T>(value: object): T => value as unknown as T;
 
 const WORKSPACE = asRows<WorkspaceRow>({
   id: "ws-1",
@@ -144,9 +144,13 @@ describe("project routes (DEV-5 hardening)", () => {
 
   it("DELETE /:projectId removes scoped to the workspace", async () => {
     removeProject.mockResolvedValue(undefined);
-    const res = await testApp().request("/api/workspaces/acme/projects/p1", {
-      method: "DELETE",
-    }, { DB: {} } as never);
+    const res = await testApp().request(
+      "/api/workspaces/acme/projects/p1",
+      {
+        method: "DELETE",
+      },
+      { DB: {} } as never,
+    );
     expect(res.status).toBe(204);
     expect(removeProject).toHaveBeenCalledWith(expect.anything(), "acme", "p1");
   });
@@ -175,9 +179,13 @@ describe("project routes (DEV-5 hardening)", () => {
 
   it("non-member cannot DELETE /:projectId (403 before the service runs)", async () => {
     isWorkspaceMember.mockResolvedValue(false);
-    const res = await testApp().request("/api/workspaces/acme/projects/p1", {
-      method: "DELETE",
-    }, { DB: {} } as never);
+    const res = await testApp().request(
+      "/api/workspaces/acme/projects/p1",
+      {
+        method: "DELETE",
+      },
+      { DB: {} } as never,
+    );
     expect(res.status).toBe(403);
     expect(removeProject).not.toHaveBeenCalled();
   });

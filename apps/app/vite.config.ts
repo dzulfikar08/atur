@@ -41,10 +41,7 @@ export default defineConfig({
         // google.com, then back with the session cookie) — once the SW
         // swallowed them, the button hung at /auth/google and WebKit logged
         // "Unsafe attempt to load URL" for the cross-origin redirect.
-        navigateFallbackDenylist: [
-          /^\/auth\/google\/?$/,
-          /^\/auth\/google\/callback\/?$/,
-        ],
+        navigateFallbackDenylist: [/^\/auth\/google\/?$/, /^\/auth\/google\/callback\/?$/],
       },
     }),
     cloudflare(),
