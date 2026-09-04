@@ -11,7 +11,7 @@ Most integrations between AI assistants and project management tools top out at 
 
 ## What MCP is, and why it matters here
 
-MCP is a protocol, not a product. It defines how an AI assistant discovers a tool, authenticates to it, and calls it — and crucially, how it reads back the result. A server built on MCP advertises 35 tools the same way your team does: create issue, list tickets, update a deal, append to a page. The agent sees the same shape the human would see, so the handoff between agent and human is a natural pause, not a translation layer.
+MCP is a protocol, not a product. It defines how an AI assistant discovers a tool, authenticates to it, and calls it — and crucially, how it reads back the result. A server built on MCP advertises 70+ tools the same way your team does: create issue, list tickets, update a deal, append to a page. The agent sees the same shape the human would see, so the handoff between agent and human is a natural pause, not a translation layer.
 
 That matters for project management because the work is collaborative and stateful. An agent that can only read your board cannot reduce the noise in your inbox; an agent that can create, assign, and close the same issues you can, can.
 
@@ -25,7 +25,7 @@ The practical uses are smaller than the hype suggests, and that is the point. Th
 
 ## How Atur does it
 
-Atur ships a built-in MCP server with 35+ tools covering issues, tickets, CRM, time entries, and pages. Authentication is a single API key, and scoped keys restrict an agent to a project or a function: a release-notes agent never needs write access to the CRM pipeline.
+Atur ships a built-in MCP server with 70+ tools covering issues, tickets, CRM, time entries, and pages. Authentication is a single API key, and scoped keys restrict an agent to a project or a function: a release-notes agent never needs write access to the CRM pipeline.
 
 Because the server speaks the same state model as the rest of Atur, an agent-driven triage does not create a shadow workflow. A ticket the agent sets to "waiting on customer" is exactly the state the human teammate sees the next morning, with the SLA clock paused in the same place.
 
@@ -36,4 +36,4 @@ Agents make mistakes at the speed of token generation, so the rule is to review,
 For the kanban discipline that gives those AI-suggested states something stable to act on, read [how WIP limits keep a board moving][k], and see the [workflow section][w] of the site for how states, projects, and cycles fit together.
 
 [k]: /blog/kanban-wip-limits
-[w]: /#workflow
+[w]: /#agents

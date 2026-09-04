@@ -7,7 +7,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "deploy": "astro build && CLOUDFLARE_ACCOUNT_ID=b7e6f8457bd39fa37a7eea5249799754 wrangler pages deploy dist --project-name atur-web --branch main"
+    "deploy": "astro build && CLOUDFLARE_ACCOUNT_ID=b7e6f8457bd39fa37a7eea5249799754 bunx wrangler pages deploy dist --project-name atur-web --branch main"
   },
   "dependencies": {
     "@astrojs/mdx": "^7.0.0",

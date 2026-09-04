@@ -89,4 +89,4 @@ Start with one limit on your worst column. One week of "finish over start" is
 usually enough to sell the team on the rest.
 
 [c]: /blog/helpdesk-metrics-that-matter
-[wf]: /#workflow
+[wf]: /#agents
