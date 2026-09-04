@@ -27,10 +27,14 @@ export type PaneAttachStatus =
 export interface PaneHello {
   cols: number;
   rows: number;
+  /** True when this connection already holds the keyboard. */
+  keyboard?: boolean;
 }
 
 export interface PaneAttachHandlers {
   onHello?: (pane: PaneHello) => void;
+  /** Keyboard ownership changed (claim granted/stolen/released). */
+  onKeyboard?: (you: boolean) => void;
   /** Full visible-screen frame (ANSI). */
   onSnapshot?: (ansi: string) => void;
   /** Per-row repaint: [0-based row, full row content] — write atomically. */
@@ -63,6 +67,14 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: "input", data }));
+    }
+  }, []);
+
+  /** Request (or steal) keyboard ownership; the bridge arbitrates. */
+  const claimKeyboard = useCallback(() => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "claim" }));
     }
   }, []);
 
@@ -109,7 +121,7 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
 
       ws.onmessage = (event: MessageEvent) => {
         if (typeof event.data !== "string") return;
-        let msg: { type?: unknown; pane?: unknown; ansi?: unknown; rows?: unknown; message?: unknown; reason?: unknown };
+        let msg: { type?: unknown; pane?: unknown; ansi?: unknown; rows?: unknown; message?: unknown; reason?: unknown; keyboard?: unknown; you?: unknown };
         try {
           msg = JSON.parse(event.data);
         } catch {
@@ -121,9 +133,13 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
             handlersRef.current.onHello?.({
               cols: typeof pane?.cols === "number" ? pane.cols : 80,
               rows: typeof pane?.rows === "number" ? pane.rows : 24,
+              keyboard: msg.keyboard === true,
             });
             break;
           }
+          case "keyboard":
+            handlersRef.current.onKeyboard?.(msg.you === true);
+            break;
           case "snapshot":
             if (typeof msg.ansi === "string") handlersRef.current.onSnapshot?.(msg.ansi);
             break;
@@ -186,6 +202,5 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
       ws?.close(1000, "unmount");
     };
   }, [paneId, retryKey]);
-
-  return { status, sendInput, retry };
+  return { status, sendInput, retry, claimKeyboard };
 }
