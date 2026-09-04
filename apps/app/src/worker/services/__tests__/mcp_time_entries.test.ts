@@ -224,6 +224,8 @@ describe("get_agent_usage", () => {
     expect(result.results).toHaveLength(3);
     expect(result.totals.total_tokens).toBe(19500);
     expect(result.totals.total_seconds).toBe(12600);
+    // Aggregate fixtures carry no cost_usd → unpriced → null everywhere.
+    expect(result.totals.cost_usd).toBe(null);
     // Ordered by total tokens desc — heaviest agent first.
     expect(result.totals.by_agent).toEqual([
       {
@@ -235,6 +237,7 @@ describe("get_agent_usage", () => {
         total_tokens: 15000,
         input_tokens: 10000,
         output_tokens: 5000,
+        cost_usd: null,
       },
       {
         agent_name: "omp/firstmate",
@@ -245,8 +248,77 @@ describe("get_agent_usage", () => {
         total_tokens: 4500,
         input_tokens: 3000,
         output_tokens: 1500,
+        cost_usd: null,
       },
     ]);
+  });
+
+  it("rolls up cost_usd: priced models sum, unpriced stay null", async () => {
+    // Select order: workspace by slug → aggregate (time_entries ⋈ issues ⋈
+    // model_prices). cost_usd is computed in SQL; fixtures feed it through the
+    // repo mapping + service rollup under test.
+    const rows = [
+      {
+        agent_name: "omp/firstmate",
+        model: "gpt-5.2",
+        issue_id: "i1",
+        issue_name: "Fix auth",
+        sequence_id: 35,
+        project_id: "p1",
+        total_seconds: 1800,
+        entry_count: 1,
+        input_tokens: 1000,
+        output_tokens: 500,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        reasoning_tokens: 0,
+        total_tokens: 1500,
+        cost_usd: 18,
+      },
+      {
+        agent_name: "omp/firstmate",
+        model: "gpt-5.2",
+        issue_id: "i2",
+        issue_name: "Add KPI page",
+        sequence_id: 36,
+        project_id: "p1",
+        total_seconds: 1800,
+        entry_count: 1,
+        input_tokens: 1000,
+        output_tokens: 500,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        reasoning_tokens: 0,
+        total_tokens: 1500,
+        cost_usd: 11.25,
+      },
+      {
+        agent_name: "codex/pane-9",
+        model: "mystery-model",
+        issue_id: "i3",
+        issue_name: "Migrate CRM",
+        sequence_id: 12,
+        project_id: "p2",
+        total_seconds: 7200,
+        entry_count: 3,
+        input_tokens: 10000,
+        output_tokens: 5000,
+        cache_read_tokens: 4000,
+        cache_write_tokens: 0,
+        reasoning_tokens: 0,
+        total_tokens: 15000,
+        cost_usd: null,
+      },
+    ];
+    const db = mockDb([[{ id: "ws1", ownerId: ME }], rows]);
+    const result: any = await handleTool(db.db, {} as Env, "get_agent_usage", { workspace: "acme" }, ME);
+    // Per-row passthrough: priced rows keep their cost, unpriced stays null.
+    expect(result.results.map((r: { cost_usd: number | null }) => r.cost_usd)).toEqual([18, 11.25, null]);
+    // Totals skip unpriced rows — they are unknown, not free.
+    expect(result.totals.cost_usd).toBe(29.25);
+    const [heavy, light] = result.totals.by_agent;
+    expect(heavy).toMatchObject({ agent_name: "codex/pane-9", cost_usd: null });
+    expect(light).toMatchObject({ agent_name: "omp/firstmate", cost_usd: 29.25 });
   });
 
   it("is 404 for an unknown workspace", async () => {

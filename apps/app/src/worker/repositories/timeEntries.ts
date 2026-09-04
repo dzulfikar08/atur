@@ -184,9 +184,19 @@ export async function aggregateAgentUsage(
       cache_write_tokens: sql<number>`COALESCE(SUM(${schema.timeEntries.cacheWriteTokens}), 0)`,
       reasoning_tokens: sql<number>`COALESCE(SUM(${schema.timeEntries.reasoningTokens}), 0)`,
       total_tokens: totalTokens,
+      // USD cost from model_prices (LEFT JOIN — unpriced model → NULL).
+      // Reasoning tokens are billed as output; NULL propagates from the
+      // missing price row so unpriced never masquerades as free.
+      cost_usd: sql<
+        number | null
+      >`(COALESCE(SUM(${schema.timeEntries.inputTokens}), 0) / 1000000.0) * ${schema.modelPrices.inputPerMtok}
+        + ((COALESCE(SUM(${schema.timeEntries.outputTokens}), 0) + COALESCE(SUM(${schema.timeEntries.reasoningTokens}), 0)) / 1000000.0) * ${schema.modelPrices.outputPerMtok}
+        + (COALESCE(SUM(${schema.timeEntries.cacheReadTokens}), 0) / 1000000.0) * ${schema.modelPrices.cacheReadPerMtok}
+        + (COALESCE(SUM(${schema.timeEntries.cacheWriteTokens}), 0) / 1000000.0) * ${schema.modelPrices.cacheWritePerMtok}`,
     })
     .from(schema.timeEntries)
     .innerJoin(schema.issues, eq(schema.timeEntries.issueId, schema.issues.id))
+    .leftJoin(schema.modelPrices, eq(schema.modelPrices.model, schema.timeEntries.model))
     .where(and(...conditions))
     .groupBy(
       schema.timeEntries.agentName,
@@ -209,5 +219,6 @@ export async function aggregateAgentUsage(
     cache_write_tokens: Number(r.cache_write_tokens),
     reasoning_tokens: Number(r.reasoning_tokens),
     total_tokens: Number(r.total_tokens),
+    cost_usd: r.cost_usd == null ? null : Number(r.cost_usd),
   }));
 }

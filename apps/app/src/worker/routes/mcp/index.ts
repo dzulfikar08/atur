@@ -858,7 +858,7 @@ export const TOOLS = [
   {
     name: "get_agent_usage",
     description:
-      "Agent KPI report for a workspace: token + duration burn per agent/model/issue. Use to see where tokens go and evaluate agent efficiency.",
+      "Agent KPI report for a workspace: token + duration burn per agent/model/issue, with cost_usd rollups when the model has a price row. Use to see where tokens (and money) go and evaluate agent efficiency.",
     inputSchema: {
       type: "object",
       properties: {
