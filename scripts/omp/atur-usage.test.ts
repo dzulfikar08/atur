@@ -2,6 +2,7 @@
 // root — no omp host needed; the HookAPI is a mock, the HTTP endpoint is a
 // local collector server.
 import http, { type Server } from "node:http";
+import { unlinkSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 
 type Entry = { id: string; type: string; message?: any };
@@ -170,11 +171,15 @@ describe("atur-usage hook", () => {
     expect(posts).toHaveLength(0);
   });
 
-  it("does nothing without ATUR_API_KEY", async () => {
+  it("does nothing without any key (env and file both absent)", async () => {
     const entries = makeEntries();
     const ctx = makeCtx(entries);
     const saved = process.env.ATUR_API_KEY;
+    const savedFile = process.env.ATUR_API_KEY_FILE;
     delete process.env.ATUR_API_KEY;
+    // Point the file fallback at a path that does not exist, so the default
+    // crew key file on this machine cannot satisfy the lookup either.
+    process.env.ATUR_API_KEY_FILE = "/tmp/atur-hook-test-no-such-key";
     try {
       const hook = await importHook({});
       await hook.emit("session_start", {}, ctx);
@@ -183,7 +188,29 @@ describe("atur-usage hook", () => {
       await hook.emit("session_shutdown", {}, ctx);
       expect(posts).toHaveLength(0);
     } finally {
-      process.env.ATUR_API_KEY = saved;
+      if (saved !== undefined) process.env.ATUR_API_KEY = saved;
+      if (savedFile !== undefined) process.env.ATUR_API_KEY_FILE = savedFile;
+    }
+  });
+
+  it("falls back to the crew key file when no env var is set", async () => {
+    const keyFile = `/tmp/atur-hook-test-key-${Date.now()}.txt`;
+    await Bun.write(keyFile, "pk_live_from_file\n"); // trailing newline must be trimmed
+    const entries = makeEntries();
+    const ctx = makeCtx(entries);
+    const saved = process.env.ATUR_API_KEY;
+    delete process.env.ATUR_API_KEY;
+    process.env.ATUR_API_KEY_FILE = keyFile;
+    try {
+      const hook = await importHook({});
+      await hook.emit("session_start", {}, ctx);
+      entries.add(assistantMsg(100, 50));
+      await hook.emit("tool_call", toolCall(ISSUE_A), ctx);
+      await hook.emit("session_shutdown", {}, ctx);
+      expect(posts).toHaveLength(1);
+    } finally {
+      delete process.env.ATUR_API_KEY_FILE;
+      unlinkSync(keyFile);
     }
   });
 });
