@@ -101,13 +101,23 @@ export async function getAgentUsage(
       total_tokens: number;
       input_tokens: number;
       output_tokens: number;
+      cost_usd: number | null;
     }
   >();
   let totalTokens = 0;
   let totalSeconds = 0;
+  // Null = no priced row contributed; unpriced rows are skipped, never
+  // counted as $0.
+  const addCost = (a: number | null, b: number | null): number | null => {
+    if (a == null) return b;
+    if (b == null) return a;
+    return a + b;
+  };
+  let totalCost: number | null = null;
   for (const r of results) {
     totalTokens += r.total_tokens;
     totalSeconds += r.total_seconds;
+    totalCost = addCost(totalCost, r.cost_usd);
     const key = `${r.agent_name}|${r.model}`;
     const prev = rollup.get(key);
     if (prev) {
@@ -117,6 +127,7 @@ export async function getAgentUsage(
       prev.total_tokens += r.total_tokens;
       prev.input_tokens += r.input_tokens;
       prev.output_tokens += r.output_tokens;
+      prev.cost_usd = addCost(prev.cost_usd, r.cost_usd);
     } else {
       rollup.set(key, {
         agent_name: r.agent_name ?? "unknown",
@@ -127,6 +138,7 @@ export async function getAgentUsage(
         total_tokens: r.total_tokens,
         input_tokens: r.input_tokens,
         output_tokens: r.output_tokens,
+        cost_usd: r.cost_usd ?? null,
       });
     }
   }
@@ -136,6 +148,7 @@ export async function getAgentUsage(
     totals: {
       total_tokens: totalTokens,
       total_seconds: totalSeconds,
+      cost_usd: totalCost,
       by_agent: Array.from(rollup.values()).sort((a, b) => b.total_tokens - a.total_tokens),
     },
   };

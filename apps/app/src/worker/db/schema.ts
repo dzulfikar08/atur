@@ -1032,6 +1032,20 @@ export const timeEntries = sqliteTable(
   ],
 );
 
+// ── Model pricing ──
+// USD per 1M tokens, per billing bucket. `model` matches time_entries.model
+// exactly (the harness-reported string, e.g. "zai/glm-5.3-flash"); models
+// without a row are unpriced — aggregate cost surfaces as null, never a guess.
+export const modelPrices = sqliteTable("model_prices", {
+  model: text("model").primaryKey(),
+  inputPerMtok: real("input_per_mtok").notNull(),
+  outputPerMtok: real("output_per_mtok").notNull(),
+  cacheReadPerMtok: real("cache_read_per_mtok").notNull(),
+  cacheWritePerMtok: real("cache_write_per_mtok").notNull(),
+  createdAt: text("created_at"),
+  updatedAt: text("updated_at"),
+});
+
 // ── Feedback portal + embeddable widget ──
 // Public feedback boards keyed by an unguessable token. Submissions land as
 // issues (external_source='feedback') inside the linked project. Anonymous,
