@@ -10,6 +10,7 @@
  * Routes:
  *   GET /health           → liveness
  *   GET /panes            → live pane list (workspace, agent, status, title)
+ *   GET /pane-repo        → main repo path for a pane cwd (worktree-aware)
  *   GET /attach?pane=<id> → WebSocket upgrade: snapshot mirror + input
  */
 import { PaneHub, type BridgeMeta } from "./hub";
@@ -41,6 +42,28 @@ Bun.serve<BridgeMeta>({
     if (url.pathname === "/panes") {
       try {
         return Response.json(await hub.listPanes());
+      } catch (e) {
+        return Response.json(
+          { error: e instanceof Error ? e.message : String(e) },
+          { status: 502 },
+        );
+      }
+    }
+    if (url.pathname === "/pane-repo") {
+      // Main repository containing the pane's cwd (git-worktree-aware). The
+      // Worker uses it to bind a pane to the Atur workspace whose
+      // workspace_links.local_path matches — crew worktrees resolve to their
+      // parent repo, so they inherit its binding.
+      const paneId = url.searchParams.get("pane");
+      if (!paneId) {
+        return Response.json({ error: "missing pane param" }, { status: 400 });
+      }
+      try {
+        const path = await hub.mainRepoPath(paneId);
+        if (!path) {
+          return Response.json({ error: "no repo for pane cwd" }, { status: 404 });
+        }
+        return Response.json({ path });
       } catch (e) {
         return Response.json(
           { error: e instanceof Error ? e.message : String(e) },

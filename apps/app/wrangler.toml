@@ -2,7 +2,7 @@ name = "atur-hono"
 main = "src/worker/index.ts"
 compatibility_date = "2026-04-08"
 compatibility_flags = ["nodejs_compat"]
-account_id = "bab412435164c01fcd1b8932bc74950f"
+account_id = "b7e6f8457bd39fa37a7eea5249799754"
 
 # 2026-08-17: app split. The marketing site (Astro) owns diatur.com; the app
 # worker owns app.diatur.com.

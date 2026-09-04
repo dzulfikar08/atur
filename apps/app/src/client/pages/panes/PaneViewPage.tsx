@@ -35,15 +35,21 @@ export default function PaneViewPage() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const [bridgeError, setBridgeError] = useState<string | null>(null);
+  // Keyboard ownership is bridge-arbitrated: hello + keyboard frames decide,
+  // the button only asks. Starts read-only on every (re)connect.
+  const [ownsKeyboard, setOwnsKeyboard] = useState(false);
 
   // Pane meta (title, cwd, agent) comes from the shared panes list cache; the
   // view still works if the list is unavailable — the id is the fallback title.
   const panesQuery = useQuery({ queryKey: ["panes"], queryFn: api.listPanes });
   const pane = panesQuery.data?.panes.find((p) => p.pane_id === paneId);
 
-  const { status, sendInput, retry } = usePaneAttach(paneId ?? "", {
+  const { status, sendInput, retry, claimKeyboard } = usePaneAttach(paneId ?? "", {
     // hello carries the real pane geometry — the grid is authoritative.
-    onHello: ({ cols, rows }) => termRef.current?.resize(cols, rows),
+    onHello: ({ cols, rows, keyboard }) => {
+      setOwnsKeyboard(keyboard === true);
+      termRef.current?.resize(cols, rows);
+    },
     // Full frame: home + clear + replay in ONE write (one parse pass → one
     // repaint, no clear/draw flash). term.reset() is never used per frame —
     // it blanks the screen and forces a second paint.
@@ -62,6 +68,7 @@ export default function PaneViewPage() {
       data += "\x1b[?25l";
       termRef.current?.write(data);
     },
+    onKeyboard: (you) => setOwnsKeyboard(you),
     onError: (message) => setBridgeError(message),
   });
 
@@ -84,14 +91,25 @@ export default function PaneViewPage() {
     });
     termRef.current = term;
     term.open(container);
-    term.onData((data) => sendInput(data));
     term.focus();
 
     return () => {
       term.dispose();
       termRef.current = null;
     };
-  }, [paneId, sendInput]);
+  }, [paneId]);
+
+  // Keyboard wiring follows ownership: read-only viewers get no onData pipe
+  // at all (the bridge would reject the input anyway). Re-wired when
+  // ownership flips so a Take keyboard click starts typing immediately.
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    if (!ownsKeyboard) return;
+    const disposable = term.onData((data) => sendInput(data));
+    term.focus();
+    return () => disposable.dispose();
+  }, [ownsKeyboard, sendInput, status]);
 
   if (!paneId) return null;
 
@@ -119,6 +137,16 @@ export default function PaneViewPage() {
               .join(" · ") || paneId}
           </p>
         </div>
+        {ownsKeyboard ? (
+          <Badge variant="default">Keyboard: yours</Badge>
+        ) : (
+          <Badge variant="outline">Read-only</Badge>
+        )}
+        {!ownsKeyboard && status === "connected" && (
+          <Button variant="outline" size="sm" onClick={claimKeyboard}>
+            Take keyboard
+          </Button>
+        )}
         <Badge variant={statusBadgeVariant(status)}>{STATUS_LABELS[status]}</Badge>
       </div>
 

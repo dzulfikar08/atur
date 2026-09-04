@@ -62,6 +62,9 @@ class Watcher {
   /** Poll fast briefly after a change so spinners animate, then settle. */
   private fastUntil = 0;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Current keyboard owner — daemon state, never client-declared. Null =
+   *  everyone read-only. Claim may steal from the current owner. */
+  private owner: Ws | null = null;
 
   constructor(
     readonly paneId: string,
@@ -76,8 +79,37 @@ class Watcher {
 
   /** Stop background work when the last viewer leaves. */
   dispose(): void {
-    if (this.pollTimer) clearTimeout(this.pollTimer);
+    clearTimeout(this.pollTimer ?? undefined);
     this.pollTimer = null;
+  }
+
+  /** Grant the keyboard to this viewer (first claim, or steal from the
+   *  current owner). Idempotent for the owner. */
+  claim(ws: Ws): void {
+    if (this.owner === ws) return;
+    this.owner = ws;
+    this.broadcastKeyboard();
+  }
+
+  hasKeyboard(ws: Ws): boolean {
+    return this.owner === ws;
+  }
+
+  /** Per-client keyboard state so every viewer's UI reflects who can type. */
+  private broadcastKeyboard(): void {
+    for (const [ws] of this.clients) {
+      ws.send(JSON.stringify({ type: "keyboard", you: ws === this.owner }));
+    }
+  }
+
+  detach(ws: Ws): void {
+    this.clients.delete(ws);
+    // A departing owner frees the keyboard; remaining viewers are told.
+    if (this.owner === ws) {
+      this.owner = null;
+      this.broadcastKeyboard();
+    }
+    if (this.isEmpty) this.onIdle(this);
   }
 
   private scheduleNext(): void {
@@ -95,12 +127,6 @@ class Watcher {
     this.clients.set(ws, meta);
     return meta;
   }
-
-  detach(ws: Ws): void {
-    this.clients.delete(ws);
-    if (this.isEmpty) this.onIdle(this);
-  }
-
   /** Initial handshake for one freshly-attached client: pane meta + grid size,
    *  then an immediate snapshot. */
   async greet(ws: Ws): Promise<void> {
@@ -123,7 +149,13 @@ class Watcher {
       } catch {
         // geometry unavailable — keep defaults
       }
-      ws.send(JSON.stringify({ type: "hello", pane: { ...pane, cols, rows } }));
+      ws.send(
+        JSON.stringify({
+          type: "hello",
+          pane: { ...pane, cols, rows },
+          keyboard: this.hasKeyboard(ws),
+        }),
+      );
       // Initial snapshot goes straight to the newcomer: a broadcast pump
       // would filter them out (not yet "joined") and skip if the screen
       // content hasn't changed since the last watcher read.
@@ -435,12 +467,13 @@ export class PaneHub {
       this.watchers.set(paneId, watcher);
     }
     // The hub map and the watcher share ONE meta object so `joined` flips
-    // everywhere at once.
+    // everywhere at once. Awaiting greet keeps the upgrade contract honest:
+    // when this resolves, hello + first snapshot are already in flight —
+    // input/ping frames during greet are still safe (register ran first).
     const meta = watcher.join(ws);
     this.clients.set(ws, meta);
-    void watcher.greet(ws).then(() => {
-      meta.joined = true;
-    });
+    await watcher.greet(ws);
+    meta.joined = true;
     return true;
   }
 
@@ -457,7 +490,23 @@ export class PaneHub {
       ws.send(JSON.stringify({ type: "pong" }));
       return;
     }
+    if (msg.type === "claim") {
+      this.watchers.get(client.paneId)?.claim(ws);
+      return;
+    }
     if (msg.type === "input" && typeof msg.data === "string") {
+      const watcher = this.watchers.get(client.paneId);
+      if (!watcher?.hasKeyboard(ws)) {
+        // Enforced here, not in the UI: a second viewer is read-only even if
+        // its client pretends otherwise.
+        ws.send(
+          JSON.stringify({
+            type: "error",
+            message: "read-only: take the keyboard to send input",
+          }),
+        );
+        return;
+      }
       const segments = translateInput(msg.data);
       const prev = this.inputQueues.get(ws) ?? Promise.resolve();
       const next = prev
@@ -486,5 +535,37 @@ export class PaneHub {
     this.clients.delete(ws);
     this.inputQueues.delete(ws);
     if (client) this.watchers.get(client.paneId)?.detach(ws);
+  }
+
+  /** Main repository for a pane's cwd, resolving through git worktrees so a
+   *  crew worktree (outside its bound checkout) still maps to the workspace
+   *  bound to the main repo. Cached per cwd — git never moves a repo. */
+  private repoCache = new Map<string, string | null>();
+
+  async mainRepoPath(paneId: string): Promise<string | null> {
+    const { pane } = await rpc<{ pane: { cwd?: string | null } }>("pane.get", {
+      pane_id: paneId,
+    });
+    const cwd = pane.cwd;
+    if (!cwd) return null;
+    const cached = this.repoCache.get(cwd);
+    if (cached !== undefined) return cached;
+    const proc = Bun.spawnSync([
+      "git",
+      "-C",
+      cwd,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    ]);
+    let repo: string | null = null;
+    if (proc.exitCode === 0) {
+      // <main-repo>/.git (worktree or checkout alike); bare repos keep their
+      // own path — not a topology this deployment produces.
+      repo = proc.stdout.toString().trim().replace(/\/\.git$/, "");
+    }
+    if (this.repoCache.size > 500) this.repoCache.clear();
+    this.repoCache.set(cwd, repo);
+    return repo;
   }
 }
