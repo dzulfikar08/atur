@@ -234,7 +234,7 @@ describe("workspace management MCP tools", () => {
       db.db,
       {} as any,
       "update_workspace",
-      { workspace: "acme", moatScore: 4, aiProofScore: 3, strategyVerdict: "harden" },
+      { workspace: "acme", moatScore: 4, aiProofScore: 3, strategyVerdict: "harden", slim: false },
       ME,
     );
     expect(result).toMatchObject({ moatScore: 4, aiProofScore: 3 });

@@ -80,8 +80,8 @@ function issueTables(issues: any[]) {
   };
 }
 
-describe("mcp slim responses — default passthrough", () => {
-  it("update_issue without slim returns the full row byte-identically", async () => {
+describe("mcp slim responses — default slim", () => {
+  it("update_issue without slim projects to identity fields", async () => {
     const row = issueRow();
     const { db } = mockDb(issueTables([row]));
 
@@ -93,12 +93,13 @@ describe("mcp slim responses — default passthrough", () => {
       ME,
     )) as any;
 
-    expect(result).toEqual([row]);
-    expect(result[0].descriptionHtml).toBe("<p>long body</p>");
-    expect(result[0].descriptionStripped).toBe("long body");
+    expect(result).toEqual([
+      { id: "i1", name: "Ship the thing", sequenceId: 7, stateId: "s-done", priority: "high", projectId: "p1" },
+    ]);
+    expect(Object.keys(result[0])).not.toContain("descriptionHtml");
   });
 
-  it("explicit slim:false behaves exactly like omitting slim", async () => {
+  it("explicit slim:false opts out and returns the full row byte-identically", async () => {
     const row = issueRow();
     const { db } = mockDb(issueTables([row]));
 

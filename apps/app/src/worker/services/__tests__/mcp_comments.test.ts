@@ -102,7 +102,7 @@ describe("mcp comment tools", () => {
       db,
       ENV,
       "update_comment",
-      { comment_id: "c1", comment_html: "<p>fixed text</p>" },
+      { comment_id: "c1", comment_html: "<p>fixed text</p>", slim: false },
       AUTHOR,
     )) as any;
 

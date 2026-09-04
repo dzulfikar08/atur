@@ -1,9 +1,9 @@
-// Opt-in slim responses for the Atur MCP server.
+// Slim-by-default responses for the Atur MCP server.
 //
 // Handlers always produce the full-fidelity result they always have. The
-// projection below applies ONLY when the caller passes `slim: true` in the
-// tool arguments; with `slim` absent the result object is returned untouched,
-// so existing clients (Codex, Cursor) see byte-identical output.
+// projection below applies by DEFAULT; passing `slim: false` in the tool
+// arguments opts out and returns the result object untouched, so callers
+// needing the full payload get byte-identical output on the next call.
 //
 // Slim contract:
 // - Mutations project to identity fields (id/name/sequenceId/stateId/…), never
@@ -75,7 +75,7 @@ const ACTIVITY = ["id", "customerId", "dealId", "type", "subject", "occurredAt"]
 // Tools whose slim response projects rows. Tools absent here (delete_* and
 // other `{ success: true }` mutators, upload_image, get_sprint_progress,
 // list_decisions, workspace links — all already minimal) pass through
-// unchanged even with slim: true.
+// unchanged even with slim on.
 const SLIM_TOOLS: Record<string, string[]> = {
   // Issues
   list_issues: ISSUE,
@@ -120,7 +120,6 @@ const SLIM_TOOLS: Record<string, string[]> = {
   add_issue_relation: RELATION,
   list_time_entries: TIME_ENTRY,
   create_time_entry: TIME_ENTRY,
-  get_agent_usage: TIME_ENTRY,
   // Custom fields
   list_custom_fields: CUSTOM_FIELD,
   create_custom_field: CUSTOM_FIELD,
@@ -191,7 +190,7 @@ function projectContactBundle(result: Row, include: string[]): Row {
 }
 
 export function slimResponse(toolName: string, args: Record<string, unknown>, result: unknown) {
-  if (args?.slim !== true) return result; // byte-identical passthrough
+  if (args?.slim === false) return result; // explicit opt-out → byte-identical passthrough
   const fields = SLIM_TOOLS[toolName];
   if (!fields) return result;
   const include = Array.isArray(args.include)
@@ -214,24 +213,25 @@ export function slimResponse(toolName: string, args: Record<string, unknown>, re
   return result;
 }
 
-// Advertise the opt-in fields in tools/list. `slim` goes on every tool (the
-// contract's per-tool flag; a no-op on already-minimal responses), `include`
-// only on tools whose slim projection can restore heavy fields.
+// Advertise the slim/include fields in tools/list. `slim` goes on every tool
+// (the contract's per-tool flag; a no-op on already-minimal responses),
+// `include` only on tools whose slim projection can restore heavy fields.
 export function annotateSlimToolFields(tools: ToolSchema[]): void {
   for (const tool of tools) {
     const schema = tool.inputSchema;
     if (!schema.properties) schema.properties = {};
     schema.properties.slim = {
       type: "boolean",
+      default: true,
       description:
-        "Opt-in slim response: mutations return identity fields only, lists return slim rows without heavy fields like description_html. Omit for the full response.",
+        "Slim response by default: mutations return identity fields only, lists return slim rows without heavy fields like description_html. Pass slim:false for the full response.",
     };
     if (SLIM_TOOLS[tool.name]) {
       schema.properties.include = {
         type: "array",
         items: { type: "string" },
         description:
-          'With slim:true, restore heavy fields by name prefix, e.g. ["description"] brings back description_html in get_issue/list_issues responses.',
+          'With slim (the default), restore heavy fields by name prefix, e.g. ["description"] brings back description_html in get_issue/list_issues responses.',
       };
     }
   }
