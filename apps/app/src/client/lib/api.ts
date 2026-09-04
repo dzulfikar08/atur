@@ -1072,6 +1072,9 @@ export interface TimeEntry {
   model?: string | null;
   input_tokens?: number | null;
   output_tokens?: number | null;
+  cache_read_tokens?: number | null;
+  cache_write_tokens?: number | null;
+  reasoning_tokens?: number | null;
   created_at: string | null;
 }
 

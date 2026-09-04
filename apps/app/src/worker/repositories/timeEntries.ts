@@ -156,7 +156,7 @@ export async function aggregateForWorkspace(
 // Date range and project filters optional. Ordered by total tokens desc.
 export async function aggregateAgentUsage(
   db: DbClient,
-  opts: { workspaceId: string; from?: string; to?: string; projectId?: string },
+  opts: { workspaceId: string; from?: string; to?: string; projectId?: string; issueId?: string },
 ) {
   const conditions = [
     eq(schema.timeEntries.workspaceId, opts.workspaceId),
@@ -166,6 +166,7 @@ export async function aggregateAgentUsage(
   if (opts.from) conditions.push(gte(schema.timeEntries.startedAt, opts.from));
   if (opts.to) conditions.push(lte(schema.timeEntries.startedAt, opts.to));
   if (opts.projectId) conditions.push(eq(schema.issues.projectId, opts.projectId));
+  if (opts.issueId) conditions.push(eq(schema.timeEntries.issueId, opts.issueId));
 
   const totalTokens = sql<number>`COALESCE(SUM(${schema.timeEntries.inputTokens}), 0) + COALESCE(SUM(${schema.timeEntries.outputTokens}), 0)`;
   const rows = await db

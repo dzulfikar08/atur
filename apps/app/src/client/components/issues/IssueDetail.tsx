@@ -694,6 +694,18 @@ export default function IssueDetail() {
 
   const totalTimeSeconds = timeEntries.reduce((sum, e) => sum + e.duration_seconds, 0);
 
+  // Issue-scoped agent KPI: token totals + USD cost for this issue's agent
+  const { data: agentUsage } = useQuery({
+    queryKey: ["agent-usage", slug, issue?.id],
+    queryFn: () =>
+      apiFetch<{
+        results: { total_tokens: number; input_tokens: number; output_tokens: number; cache_read_tokens: number }[];
+        totals: { total_tokens: number; cost_usd: number | null };
+      }>(`/workspaces/${slug}/timesheet/agent-usage/?issue_id=${issue?.id}`).then((d) => d),
+    enabled: !!slug && !!issue?.id,
+  });
+  const agentTokens = agentUsage?.totals;
+
   const logTimeMutation = useMutation({
     mutationFn: ({
       duration_seconds,
@@ -1838,6 +1850,13 @@ export default function IssueDetail() {
                     Total: {Math.floor(totalTimeSeconds / 3600)}h{" "}
                     {Math.floor((totalTimeSeconds % 3600) / 60)}m
                   </span>
+                  {agentTokens && agentTokens.total_tokens > 0 && (
+                    <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                      agent: {(agentTokens.total_tokens / 1000).toFixed(1)}k tokens
+                    {agentTokens.cost_usd != null &&
+                      ` · $${agentTokens.cost_usd < 0.01 && agentTokens.cost_usd > 0 ? agentTokens.cost_usd.toFixed(4) : agentTokens.cost_usd.toFixed(2)}`}
+                    </span>
+                  )}
                 </div>
 
                 {/* Entries list */}
@@ -1864,6 +1883,8 @@ export default function IssueDetail() {
                                   {entry.model ? ` · ${entry.model}` : ""}
                                   {(entry.input_tokens != null || entry.output_tokens != null) &&
                                     ` · ${((entry.input_tokens ?? 0) / 1000).toFixed(1)}k in / ${((entry.output_tokens ?? 0) / 1000).toFixed(1)}k out`}
+                                  {!!entry.cache_read_tokens &&
+                                    ` · ${(entry.cache_read_tokens / 1e6).toFixed(1)}M cached`}
                                 </span>
                               )}
                             </p>
