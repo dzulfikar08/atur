@@ -76,7 +76,7 @@ export async function getAgentUsage(
   db: DbClient,
   slug: string,
   userId: string,
-  opts: { from?: string; to?: string; projectId?: string },
+  opts: { from?: string; to?: string; projectId?: string; issueId?: string },
 ) {
   const [ws] = await db
     .select({ id: schema.workspaces.id, ownerId: schema.workspaces.ownerId })

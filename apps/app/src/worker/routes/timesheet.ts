@@ -32,6 +32,7 @@ export const timesheetRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       from: c.req.query("from") || undefined,
       to: c.req.query("to") || undefined,
       projectId: c.req.query("project_id") || undefined,
+      issueId: c.req.query("issue_id") || undefined,
     });
     return c.json(result);
   });
