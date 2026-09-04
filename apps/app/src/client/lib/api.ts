@@ -373,6 +373,19 @@ export const api = {
     const query = qs.toString();
     return apiFetch<TimesheetResponse>(`/workspaces/${slug}/timesheet/${query ? `?${query}` : ""}`);
   },
+  listAgentUsage: (
+    slug: string,
+    params: { from?: string; to?: string; project_id?: string },
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.from) qs.set("from", params.from);
+    if (params.to) qs.set("to", params.to);
+    if (params.project_id) qs.set("project_id", params.project_id);
+    const query = qs.toString();
+    return apiFetch<AgentUsageResponse>(
+      `/workspaces/${slug}/timesheet/agent-usage${query ? `?${query}` : ""}`,
+    );
+  },
 
   // Feedback board admin config (per project)
   getFeedbackBoard: (slug: string, projectId: string) =>
@@ -1053,6 +1066,12 @@ export interface TimeEntry {
   description: string | null;
   started_at: string;
   ended_at: string | null;
+  // Agent telemetry — present on source="agent" entries.
+  source?: "human" | "agent";
+  agent_name?: string | null;
+  model?: string | null;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
   created_at: string | null;
 }
 
@@ -1083,6 +1102,43 @@ export interface TimesheetTotals {
 export interface TimesheetResponse {
   results: TimesheetRow[];
   totals: TimesheetTotals;
+}
+
+export interface AgentUsageRow {
+  agent_name: string;
+  model: string;
+  issue_id: string;
+  issue_name: string;
+  sequence_id: number;
+  project_id: string;
+  total_seconds: number;
+  entry_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  reasoning_tokens: number;
+  total_tokens: number;
+}
+
+export interface AgentUsageByAgent {
+  agent_name: string;
+  model: string;
+  entry_count: number;
+  issue_count: number;
+  total_seconds: number;
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+}
+
+export interface AgentUsageResponse {
+  results: AgentUsageRow[];
+  totals: {
+    total_tokens: number;
+    total_seconds: number;
+    by_agent: AgentUsageByAgent[];
+  };
 }
 
 export interface FeedbackBoardConfig {

@@ -198,6 +198,28 @@ update_issue(state_id=need_review)
 add_comment("Development complete. Changed files: X, Y, Z. Key decisions: ...")
 ```
 
+**Step 3.5: Log usage (AI agents only)**
+
+After finishing work on an issue, record your token consumption so the human can
+see where tokens go and evaluate agent efficiency like human KPIs:
+
+```
+create_time_entry(
+  project_id, workspace, issue_id,
+  duration_seconds=<wall-clock seconds spent>,
+  source="agent",
+  agent_name="<harness>/<agent>",       // e.g. "omp/firstmate", "codex/pane-9"
+  model="<model id>",                   // e.g. "zai/glm-5.3-flash"
+  input_tokens=..., output_tokens=...,  // as reported by your harness
+  cache_read_tokens=..., cache_write_tokens=..., reasoning_tokens=...  // when known
+)
+```
+
+Rules: one entry per task tackle; `agent_name` is required when
+`source="agent"`; omit token fields you genuinely don't know rather than
+guessing. Human timesheet totals exclude agent entries — usage is reported
+separately via `get_agent_usage` (MCP) or `GET /api/workspaces/:slug/timesheet/agent-usage`.
+
 **Step 4: Spawn code review sub-agent**
 
 ```
@@ -283,7 +305,7 @@ add_comment(
 )
 ```
 
-### 49 Available Tools
+### 50 Available Tools
 
 | Category              | Tools                                                                                                                                    |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
@@ -295,7 +317,7 @@ add_comment(
 | Modules               | `list_modules`, `get_module`, `add_issue_to_module`, `remove_issue_from_module`                                                          |
 | Pages                 | `list_pages`, `get_page`, `create_page`, `update_page`                                                                                   |
 | States/Labels/Members | `list_states`, `list_labels`, `list_members`, `set_assignee`                                                                             |
-| Time                  | `list_time_entries`, `create_time_entry`, `delete_time_entry`                                                                            |
+| Time                  | `list_time_entries`, `create_time_entry`, `delete_time_entry`, `get_agent_usage`                                                         |
 | CRM Contacts          | `list_contacts`, `create_contact`, `get_contact`, `update_contact`                                                                       |
 | CRM Deals             | `create_deal`, `list_deals`, `move_deal_stage`, `update_deal`                                                                            |
 | Assets                | `upload_image`                                                                                                                           |
