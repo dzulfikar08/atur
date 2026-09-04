@@ -376,6 +376,18 @@ human merges. On harness restart, any issue sitting in In Progress with a dead
 pane must be re-claimed or commented as crashed before new work starts, so
 Atur never lies about who is working.
 
+**Usage telemetry — harness auto-report (preferred) + self-report (fallback)**
+
+Agents running under omp with `ATUR_API_KEY` in the pane environment report
+token usage AUTOMATICALLY: the `atur-usage` hook
+(`~/.omp/agent/extensions/atur-usage.ts`, source: `scripts/omp/atur-usage.ts`
+in this repo) watches Atur MCP tool calls to detect the issue being tackled,
+sums exact usage from session entries, and files a `source="agent"` time entry
+when the agent switches issues or the session ends. No manual logging needed.
+When the hook is active, do NOT also self-report — that would double-count.
+Agents on harnesses without the hook still log manually per Step 3.5 above.
+Both land in the same ledger and roll up identically via `get_agent_usage`.
+
 
 ### Control Plane — First Mate Role (liaison)
 
