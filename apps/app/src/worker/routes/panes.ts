@@ -60,18 +60,17 @@ function matchWorkspaceSlug(
 
 // Resolve a bridge pane to its Atur workspace slug (see header comment) or
 // null when unbound/bridge-down.
-async function paneWorkspaceSlug(
-  db: DbClient,
-  env: Env,
-  paneId: string,
-): Promise<string | null> {
+async function paneWorkspaceSlug(db: DbClient, env: Env, paneId: string): Promise<string | null> {
   const bridge = await fetchBridgePanes(env);
   if (!bridge.ok) return null;
   const pane = bridge.panes.find((p) => p.pane_id === paneId);
   if (!pane) return null;
 
   const links = await db
-    .select({ workspaceSlug: schema.workspaceLinks.workspaceSlug, localPath: schema.workspaceLinks.localPath })
+    .select({
+      workspaceSlug: schema.workspaceLinks.workspaceSlug,
+      localPath: schema.workspaceLinks.localPath,
+    })
     .from(schema.workspaceLinks);
   const byCwd = pane.cwd ? matchWorkspaceSlug(links, pane.cwd) : null;
   if (byCwd) return byCwd;
@@ -81,10 +80,9 @@ async function paneWorkspaceSlug(
   const base = bridgeBase(env);
   if (!base) return null;
   try {
-    const res = await fetch(
-      `${base}/pane-repo?pane=${encodeURIComponent(paneId)}`,
-      { headers: bridgeHeaders(env) },
-    );
+    const res = await fetch(`${base}/pane-repo?pane=${encodeURIComponent(paneId)}`, {
+      headers: bridgeHeaders(env),
+    });
     if (!res.ok) return null;
     const { path } = (await res.json()) as { path?: string | null };
     return path ? matchWorkspaceSlug(links, path) : null;
@@ -116,7 +114,10 @@ paneRoutes.get("/", async (c) => {
   const db = getDb(c.env.DB);
   const user = c.get("user");
   const links = await db
-    .select({ workspaceSlug: schema.workspaceLinks.workspaceSlug, localPath: schema.workspaceLinks.localPath })
+    .select({
+      workspaceSlug: schema.workspaceLinks.workspaceSlug,
+      localPath: schema.workspaceLinks.localPath,
+    })
     .from(schema.workspaceLinks);
   const seen = new Set<string>();
   const visible: BridgePane[] = [];
@@ -138,11 +139,7 @@ paneRoutes.get("/", async (c) => {
 
 // Workspace slug → membership check (slug is the binding key; membership is
 // workspace-id scoped, so resolve through the workspaces table).
-async function isMemberOfSlug(
-  db: DbClient,
-  slug: string,
-  userId: string,
-): Promise<boolean> {
+async function isMemberOfSlug(db: DbClient, slug: string, userId: string): Promise<boolean> {
   const [ws] = await db
     .select({ id: schema.workspaces.id })
     .from(schema.workspaces)

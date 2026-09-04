@@ -80,8 +80,7 @@ export default function PaneViewPage() {
     const term = new Terminal({
       cursorBlink: false,
       scrollback: 2000,
-      fontFamily:
-        "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+      fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
       fontSize: 13,
       theme: {
         background: "#0a0a0a",
@@ -119,22 +118,13 @@ export default function PaneViewPage() {
     <div className="flex flex-col h-full gap-4">
       {/* Header */}
       <div className="flex items-center gap-3 border-b pb-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() => navigate("/panes")}
-        >
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate("/panes")}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-lg font-semibold">
-            {pane?.title ?? paneId}
-          </h1>
+          <h1 className="truncate text-lg font-semibold">{pane?.title ?? paneId}</h1>
           <p className="truncate text-xs text-muted-foreground">
-            {[pane?.workspace_label, pane?.agent, pane?.cwd]
-              .filter(Boolean)
-              .join(" · ") || paneId}
+            {[pane?.workspace_label, pane?.agent, pane?.cwd].filter(Boolean).join(" · ") || paneId}
           </p>
         </div>
         {ownsKeyboard ? (
@@ -150,9 +140,7 @@ export default function PaneViewPage() {
         <Badge variant={statusBadgeVariant(status)}>{STATUS_LABELS[status]}</Badge>
       </div>
 
-      {bridgeError && (
-        <p className="text-sm text-destructive">Bridge error: {bridgeError}</p>
-      )}
+      {bridgeError && <p className="text-sm text-destructive">Bridge error: {bridgeError}</p>}
 
       {/* Terminal */}
       <div className="relative min-h-[320px] h-[65vh] overflow-auto rounded-lg border bg-[#0a0a0a] p-2">

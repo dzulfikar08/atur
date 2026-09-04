@@ -171,18 +171,26 @@ describe("workspace link routes (DEV-29 control plane)", () => {
   it("DELETE / removes for an admin member", async () => {
     findMembership.mockResolvedValue({ isActive: 1, role: 30 } as never);
     removeLink.mockResolvedValue(undefined);
-    const res = await testApp().request("/api/workspaces/acme/links", {
-      method: "DELETE",
-    }, { DB: {} } as never);
+    const res = await testApp().request(
+      "/api/workspaces/acme/links",
+      {
+        method: "DELETE",
+      },
+      { DB: {} } as never,
+    );
     expect(res.status).toBe(204);
     expect(removeLink).toHaveBeenCalledWith(expect.anything(), "acme");
   });
 
   it("non-member cannot DELETE / (403 before the service runs)", async () => {
     isWorkspaceMember.mockResolvedValue(false);
-    const res = await testApp().request("/api/workspaces/acme/links", {
-      method: "DELETE",
-    }, { DB: {} } as never);
+    const res = await testApp().request(
+      "/api/workspaces/acme/links",
+      {
+        method: "DELETE",
+      },
+      { DB: {} } as never,
+    );
     expect(res.status).toBe(403);
     expect(removeLink).not.toHaveBeenCalled();
   });

@@ -74,7 +74,14 @@ function sumUsageSince(ctx: any): {
   model: string | null;
   newCursor: string | null;
 } {
-  const sum = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, model: null as string | null, newCursor: cursor };
+  const sum = {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    model: null as string | null,
+    newCursor: cursor,
+  };
   let seenCursor = cursor === null;
   for (const e of ctx.sessionManager.getEntries()) {
     if (!seenCursor) {
@@ -153,7 +160,7 @@ export default function aturUsageHook(pi: any): void {
       if (state.issue?.issueId === issueId) return;
       await flush(ctx, { issue: { workspace, projectId, issueId }, windowStart: Date.now() });
     } catch (err: any) {
-      pi.logger?.error?.(`atur-usage: ${(err?.message ?? err)}`);
+      pi.logger?.error?.(`atur-usage: ${err?.message ?? err}`);
     }
   });
 
@@ -164,7 +171,7 @@ export default function aturUsageHook(pi: any): void {
       ensureInit(ctx);
       await flush(ctx);
     } catch (err: any) {
-      pi.logger?.error?.(`atur-usage: ${(err?.message ?? err)}`);
+      pi.logger?.error?.(`atur-usage: ${err?.message ?? err}`);
     }
   };
   pi.on("session_shutdown", endHandler);

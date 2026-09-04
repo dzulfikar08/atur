@@ -121,7 +121,14 @@ export default function TimesheetPage() {
     const rows = agentUsageQuery.data?.results ?? [];
     const map = new Map<
       string,
-      { label: string; model: string; rows: AgentUsageRow[]; totalSeconds: number; totalTokens: number; totalCost: number | null }
+      {
+        label: string;
+        model: string;
+        rows: AgentUsageRow[];
+        totalSeconds: number;
+        totalTokens: number;
+        totalCost: number | null;
+      }
     >();
     for (const r of rows) {
       const entry = map.get(r.agent_name) ?? {
@@ -137,7 +144,11 @@ export default function TimesheetPage() {
       entry.totalTokens += r.total_tokens;
       // Skip unpriced rows — null stays null until a priced row appears.
       entry.totalCost =
-        entry.totalCost == null ? r.cost_usd : r.cost_usd == null ? entry.totalCost : entry.totalCost + r.cost_usd;
+        entry.totalCost == null
+          ? r.cost_usd
+          : r.cost_usd == null
+            ? entry.totalCost
+            : entry.totalCost + r.cost_usd;
       map.set(r.agent_name, entry);
     }
     return Array.from(map.entries())
@@ -309,7 +320,9 @@ export default function TimesheetPage() {
               <div className="flex items-center justify-between bg-muted/40 px-4 py-2 border-b">
                 <span className="text-sm font-medium">
                   {group.label}
-                  <span className="ml-2 font-mono text-xs text-muted-foreground">{group.model}</span>
+                  <span className="ml-2 font-mono text-xs text-muted-foreground">
+                    {group.model}
+                  </span>
                 </span>
                 <span className="text-sm text-muted-foreground">
                   {formatTokens(group.totalTokens)} tokens · {formatDuration(group.totalSeconds)} ·{" "}

@@ -2,10 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
-import {
-  requireWorkspaceMember,
-  requireWorkspaceAdmin,
-} from "../middleware/workspace";
+import { requireWorkspaceMember, requireWorkspaceAdmin } from "../middleware/workspace";
 import * as linksService from "../services/workspaceLinks";
 
 // Control-plane bindings (DEV-29). Mounted under /api/workspaces/:slug/links.

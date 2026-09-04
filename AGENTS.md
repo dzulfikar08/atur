@@ -388,7 +388,6 @@ When the hook is active, do NOT also self-report — that would double-count.
 Agents on harnesses without the hook still log manually per Step 3.5 above.
 Both land in the same ledger and roll up identically via `get_agent_usage`.
 
-
 ### Control Plane — First Mate Role (liaison)
 
 You (the omp session the human talks to) are the first mate. The human talks
@@ -404,12 +403,11 @@ to ONE agent — you — and you run the crew:
   narration. Escalate ONLY real decisions (ambiguity, cost, autonomy).
 - **Autonomy is per-workspace** (`workspace_links.mode`): `local-only`
   (default) = agent leaves a branch, human merges; `direct-PR` = agent pushes
-  + opens a PR; plus `auto_merge: yolo` = agent may merge after green gates.
-  Never widen autonomy without the human saying so.
+  - opens a PR; plus `auto_merge: yolo` = agent may merge after green gates.
+    Never widen autonomy without the human saying so.
 - **Task shapes**: default is SHIP (implement + evidence). Titles prefixed
   `[SCOUT]` are investigation-only — findings go in the evidence comment, no
   file changes, then Need Review.
 
 Firstmate reference: github.com/kunchenguid/firstmate. Differences: control
 state lives in Atur (not on-disk data files); the board is the Atur app.
-

@@ -215,7 +215,6 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       }
       deleteCookie(c, OAUTH_STATE_COOKIE);
 
-
       // Consume first (single-use) so a replayed callback can't reuse the
       // state. Note: KV get-then-delete is not atomic across colos, so a
       // near-simultaneous replay within the consistency window can slip

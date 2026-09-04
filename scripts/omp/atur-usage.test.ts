@@ -33,7 +33,7 @@ function makeCtx(entries: Entry[], file = "20260904_abc12345.jsonl") {
   };
 }
 
-async function importHook(env: Record<string, string>) {
+async function importHook(_env: Record<string, string>) {
   const mod = await import("./atur-usage.ts?test=" + Math.random().toString(36).slice(2));
   const handlers = new Map<string, Array<(e: any, ctx: any) => Promise<unknown>>>();
   const pi = {
@@ -166,7 +166,11 @@ describe("atur-usage hook", () => {
     const hook = await importHook({});
     await hook.emit("session_start", {}, ctx);
     await hook.emit("tool_call", { toolName: "bash", input: { command: "ls" } }, ctx);
-    await hook.emit("tool_call", { toolName: "atur_list_issues", input: { workspace: "demo" } }, ctx);
+    await hook.emit(
+      "tool_call",
+      { toolName: "atur_list_issues", input: { workspace: "demo" } },
+      ctx,
+    );
     await hook.emit("session_shutdown", {}, ctx);
     expect(posts).toHaveLength(0);
   });
@@ -198,7 +202,6 @@ describe("atur-usage hook", () => {
     await Bun.write(keyFile, "pk_live_from_file\n"); // trailing newline must be trimmed
     const entries = makeEntries();
     const ctx = makeCtx(entries);
-    const saved = process.env.ATUR_API_KEY;
     delete process.env.ATUR_API_KEY;
     process.env.ATUR_API_KEY_FILE = keyFile;
     try {

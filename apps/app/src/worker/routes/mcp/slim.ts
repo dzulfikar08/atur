@@ -141,7 +141,6 @@ const SLIM_TOOLS: Record<string, string[]> = {
   list_activities: ACTIVITY,
 };
 
-
 function isPlainObject(v: unknown): v is Row {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }

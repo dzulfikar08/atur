@@ -56,9 +56,7 @@ function fakeWs(paneId: string): TestWs {
 }
 
 function frames(sent: string[], type: string): Record<string, unknown>[] {
-  return sent
-    .map((m) => JSON.parse(m) as Record<string, unknown>)
-    .filter((m) => m.type === type);
+  return sent.map((m) => JSON.parse(m) as Record<string, unknown>).filter((m) => m.type === type);
 }
 
 async function attach(paneId: string): Promise<TestWs> {

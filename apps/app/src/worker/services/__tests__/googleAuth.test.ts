@@ -178,7 +178,9 @@ describe("exchangeCode", () => {
   };
 
   it("POSTs the form-encoded exchange and returns the tokens", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ access_token: "at", id_token: "it" }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ access_token: "at", id_token: "it" }));
     vi.stubGlobal("fetch", fetchMock);
 
     const tokens = await exchangeCode(args);
@@ -201,7 +203,10 @@ describe("exchangeCode", () => {
   });
 
   it("non-ok response → GoogleAuthError(token_exchange_failed) with truncated body", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ error: "invalid_grant" }, 400)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ error: "invalid_grant" }, 400)),
+    );
     try {
       await exchangeCode(args);
       throw new Error("expected GoogleAuthError");
@@ -262,10 +267,7 @@ describe("fetchProfile", () => {
   });
 
   it("email_verified is true only when Google says so", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(jsonResponse({ sub: "s", email: "a@b.c" })),
-    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ sub: "s", email: "a@b.c" })));
     const profile = await fetchProfile("at");
     expect(profile.emailVerified).toBe(false);
   });
@@ -325,7 +327,11 @@ describe("signInWithGoogle", () => {
     const { db, updates, inserts } = mockDb([[], [existing]]); // no account, user found
     const result = await signInWithGoogle(db, base);
 
-    expect(result.user).toMatchObject({ id: "u1", email: "User@Example.com", username: "existing" });
+    expect(result.user).toMatchObject({
+      id: "u1",
+      email: "User@Example.com",
+      username: "existing",
+    });
     expect(inserts).toHaveLength(1); // the accounts link row only
     const userPatch = updates.find((u) => u.isEmailVerified === 1);
     expect(userPatch?.token).toBeTruthy();
@@ -413,7 +419,9 @@ describe("GET /auth/google routes", () => {
     );
     expect(res.status).toBe(302);
     const location = new URL(res.headers.get("Location")!);
-    expect(location.origin + location.pathname).toBe("https://accounts.google.com/o/oauth2/v2/auth");
+    expect(location.origin + location.pathname).toBe(
+      "https://accounts.google.com/o/oauth2/v2/auth",
+    );
     expect(location.searchParams.get("state")).toBeTruthy();
 
     const setCookie = res.headers.get("Set-Cookie") ?? "";

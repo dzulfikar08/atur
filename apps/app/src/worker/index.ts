@@ -28,8 +28,7 @@ export default {
     // provider only has to be added once. GitHub/GitLab GETs still fall
     // through to the SPA until their handlers exist.
     const trimmedPath = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
-    const isOAuthNav =
-      method === "GET" && OAUTH_NAV_PATHS.some((p) => p === trimmedPath);
+    const isOAuthNav = method === "GET" && OAUTH_NAV_PATHS.some((p) => p === trimmedPath);
     const isApiPath =
       pathname.startsWith("/api/") ||
       pathname === "/health" ||

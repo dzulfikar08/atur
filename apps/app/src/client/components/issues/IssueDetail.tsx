@@ -699,7 +699,12 @@ export default function IssueDetail() {
     queryKey: ["agent-usage", slug, issue?.id],
     queryFn: () =>
       apiFetch<{
-        results: { total_tokens: number; input_tokens: number; output_tokens: number; cache_read_tokens: number }[];
+        results: {
+          total_tokens: number;
+          input_tokens: number;
+          output_tokens: number;
+          cache_read_tokens: number;
+        }[];
         totals: { total_tokens: number; cost_usd: number | null };
       }>(`/workspaces/${slug}/timesheet/agent-usage/?issue_id=${issue?.id}`).then((d) => d),
     enabled: !!slug && !!issue?.id,
@@ -1853,8 +1858,8 @@ export default function IssueDetail() {
                   {agentTokens && agentTokens.total_tokens > 0 && (
                     <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
                       agent: {(agentTokens.total_tokens / 1000).toFixed(1)}k tokens
-                    {agentTokens.cost_usd != null &&
-                      ` · $${agentTokens.cost_usd < 0.01 && agentTokens.cost_usd > 0 ? agentTokens.cost_usd.toFixed(4) : agentTokens.cost_usd.toFixed(2)}`}
+                      {agentTokens.cost_usd != null &&
+                        ` · $${agentTokens.cost_usd < 0.01 && agentTokens.cost_usd > 0 ? agentTokens.cost_usd.toFixed(4) : agentTokens.cost_usd.toFixed(2)}`}
                     </span>
                   )}
                 </div>

@@ -81,10 +81,7 @@ export function serveInline(contentType: string): boolean {
   // part header `Content-Type: image/SVG+XML` must not slip past the svg
   // guard and get served (and executed) inline.
   const type = contentType.trim().toLowerCase();
-  return (
-    (/^image\//.test(type) && !type.includes("svg")) ||
-    type === "application/pdf"
-  );
+  return (/^image\//.test(type) && !type.includes("svg")) || type === "application/pdf";
 }
 
 // Stored Content-Types are untrusted: both upload paths persist the multipart

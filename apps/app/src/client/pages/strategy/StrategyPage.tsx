@@ -145,62 +145,62 @@ export default function StrategyPage() {
         </Card>
       ) : (
         <>
-         {/* Strategy matrix legend */}
-         <Card className="p-4">
-           <div className="flex items-start gap-3">
-             <Info className="mt-0.5 size-5 text-muted-foreground shrink-0" />
-             <div className="space-y-2.5 text-sm">
-               <p className="font-medium">Moat × AI-proof matrix</p>
-               <p className="text-xs text-muted-foreground">
-                 Each workspace is plotted on a 2×2 grid. <strong>Moat</strong> (Y-axis, 0–5)
-                 measures competitive defensibility; <strong>AI-proof</strong> (X-axis, 0–5)
-                 measures how hard AI is to recreate or replace it. The midpoint (2.5) splits
-                 each axis into low/high.
-               </p>
-               <table className="text-xs">
-                 <tbody>
-                   <tr>
-                     <MatrixCell
-                       label="HARDEN"
-                       color="amber"
-                       desc="Strong moat but AI-vulnerable. Defend the advantage before AI erodes it."
-                     />
-                     <MatrixCell
-                       label="INVEST"
-                       color="emerald"
-                       desc="Strong moat AND AI-proof. The best corner — scale, grow, put more in here."
-                     />
-                   </tr>
-                   <tr>
-                     <MatrixCell
-                       label="KILL"
-                       color="red"
-                       desc="Weak moat and AI-vulnerable. The worst corner — deprioritize, sunset, or divest."
-                     />
-                     <MatrixCell
-                       label="HARVEST"
-                       color="blue"
-                       desc="Weak moat but AI-proof. Not defensibly strong, but not AI-threatened either — milk it while it lasts."
-                     />
-                   </tr>
-                 </tbody>
-               </table>
-               <p className="text-xs text-muted-foreground">
-                 Verdicts are set manually after scoring — pick a dot or row, enter both scores,
-                 choose your verdict, and back it with an evidence note.
-               </p>
-             </div>
-           </div>
-         </Card>
+          {/* Strategy matrix legend */}
+          <Card className="p-4">
+            <div className="flex items-start gap-3">
+              <Info className="mt-0.5 size-5 text-muted-foreground shrink-0" />
+              <div className="space-y-2.5 text-sm">
+                <p className="font-medium">Moat × AI-proof matrix</p>
+                <p className="text-xs text-muted-foreground">
+                  Each workspace is plotted on a 2×2 grid. <strong>Moat</strong> (Y-axis, 0–5)
+                  measures competitive defensibility; <strong>AI-proof</strong> (X-axis, 0–5)
+                  measures how hard AI is to recreate or replace it. The midpoint (2.5) splits each
+                  axis into low/high.
+                </p>
+                <table className="text-xs">
+                  <tbody>
+                    <tr>
+                      <MatrixCell
+                        label="HARDEN"
+                        color="amber"
+                        desc="Strong moat but AI-vulnerable. Defend the advantage before AI erodes it."
+                      />
+                      <MatrixCell
+                        label="INVEST"
+                        color="emerald"
+                        desc="Strong moat AND AI-proof. The best corner — scale, grow, put more in here."
+                      />
+                    </tr>
+                    <tr>
+                      <MatrixCell
+                        label="KILL"
+                        color="red"
+                        desc="Weak moat and AI-vulnerable. The worst corner — deprioritize, sunset, or divest."
+                      />
+                      <MatrixCell
+                        label="HARVEST"
+                        color="blue"
+                        desc="Weak moat but AI-proof. Not defensibly strong, but not AI-threatened either — milk it while it lasts."
+                      />
+                    </tr>
+                  </tbody>
+                </table>
+                <p className="text-xs text-muted-foreground">
+                  Verdicts are set manually after scoring — pick a dot or row, enter both scores,
+                  choose your verdict, and back it with an evidence note.
+                </p>
+              </div>
+            </div>
+          </Card>
 
-         <div className="grid gap-4 lg:grid-cols-3">
-           <Card className="p-4 lg:col-span-2">
-             <StrategyScatter
-               workspaces={workspaces}
-               selectedId={selectedId}
-               onSelect={setSelectedId}
-             />
-           </Card>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Card className="p-4 lg:col-span-2">
+              <StrategyScatter
+                workspaces={workspaces}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+              />
+            </Card>
             <ScoreEditor
               workspaces={workspaces}
               selected={selected}

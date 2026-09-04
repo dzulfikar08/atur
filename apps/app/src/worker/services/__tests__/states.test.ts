@@ -138,7 +138,11 @@ describe("create derives the canonical key", () => {
 
   it("falls back to the group key for custom names", async () => {
     const { db, inserts } = mockDb([[]]);
-    await statesService.create(db, "p1", "ws1", { name: "Design", color: "#fff", group: "started" });
+    await statesService.create(db, "p1", "ws1", {
+      name: "Design",
+      color: "#fff",
+      group: "started",
+    });
     expect(inserts[0].key).toBe("in_progress");
   });
 });

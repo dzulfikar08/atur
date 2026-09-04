@@ -107,7 +107,10 @@ export async function exchangeCode(args: {
     data = Object.fromEntries(new URLSearchParams(text));
   }
   if (!data.access_token) {
-    throw new GoogleAuthError("token_exchange_failed", "Google token response missing access_token");
+    throw new GoogleAuthError(
+      "token_exchange_failed",
+      "Google token response missing access_token",
+    );
   }
   return { accessToken: data.access_token, idToken: data.id_token ?? null };
 }

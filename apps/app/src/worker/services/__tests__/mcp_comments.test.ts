@@ -156,7 +156,8 @@ describe("mcp comment tools", () => {
     const { db, updates } = mockDb(accessTables());
 
     await expectStatus(
-      () => handleTool(db, ENV, "update_comment", { comment_id: "c1", comment_html: "   " }, AUTHOR),
+      () =>
+        handleTool(db, ENV, "update_comment", { comment_id: "c1", comment_html: "   " }, AUTHOR),
       400,
       "comment_html cannot be empty",
     );
@@ -166,7 +167,13 @@ describe("mcp comment tools", () => {
   it("delete_comment: author soft-deletes and gets success", async () => {
     const { db, updates } = mockDb(accessTables());
 
-    const result = (await handleTool(db, ENV, "delete_comment", { comment_id: "c1" }, AUTHOR)) as any;
+    const result = (await handleTool(
+      db,
+      ENV,
+      "delete_comment",
+      { comment_id: "c1" },
+      AUTHOR,
+    )) as any;
 
     expect(result).toEqual({ success: true });
     expect(updates).toHaveLength(1);

@@ -52,7 +52,8 @@ export function deserialize(row: NonNullable<Awaited<ReturnType<typeof linksRepo
   if (row.repoUrls) {
     try {
       const parsed: unknown = JSON.parse(row.repoUrls);
-      if (Array.isArray(parsed)) repoUrls = parsed.filter((u): u is string => typeof u === "string");
+      if (Array.isArray(parsed))
+        repoUrls = parsed.filter((u): u is string => typeof u === "string");
     } catch {
       repoUrls = null;
     }

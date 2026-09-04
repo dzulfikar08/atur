@@ -57,7 +57,12 @@ export async function create(
 export async function updateTokens(
   db: DbClient,
   id: string,
-  data: { accessToken?: string | null; refreshToken?: string | null; idToken?: string | null; metadata?: string | null },
+  data: {
+    accessToken?: string | null;
+    refreshToken?: string | null;
+    idToken?: string | null;
+    metadata?: string | null;
+  },
 ) {
   await db
     .update(accounts)

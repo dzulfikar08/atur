@@ -14,8 +14,7 @@
  */
 import net from "node:net";
 
-const SOCKET_PATH =
-  process.env.HERDR_SOCKET ?? `${process.env.HOME}/.config/herdr/herdr.sock`;
+const SOCKET_PATH = process.env.HERDR_SOCKET ?? `${process.env.HOME}/.config/herdr/herdr.sock`;
 
 let nextId = 0;
 
@@ -50,9 +49,7 @@ export function rpc<T = unknown>(
       timeoutMs,
     );
     sock.on("connect", () => {
-      sock.write(
-        JSON.stringify({ method, params, id: String(++nextId) }) + "\n",
-      );
+      sock.write(JSON.stringify({ method, params, id: String(++nextId) }) + "\n");
     });
     sock.on("data", (d: Buffer) => {
       buf += d.toString();
@@ -64,8 +61,7 @@ export function rpc<T = unknown>(
             result?: T;
             error?: { code: string; message: string };
           };
-          if (msg.error)
-            reject(new HerdrError(method, msg.error.code, msg.error.message));
+          if (msg.error) reject(new HerdrError(method, msg.error.code, msg.error.message));
           else if (msg.result !== undefined) resolve(msg.result);
           else reject(new Error(`herdr ${method}: empty response`));
         } catch (e) {
