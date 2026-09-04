@@ -1165,8 +1165,8 @@ export const TOOLS = [
   },
 ];
 
-// Advertise the opt-in slim/include arguments in tools/list — one source of
-// truth with the response projection in ./slim.
+// Advertise the default-on slim/include arguments in tools/list — one source
+// of truth with the response projection in ./slim.
 annotateSlimToolFields(TOOLS);
 
 async function getWorkspaceId(db: ReturnType<typeof getDb>, slug: string, userId?: string) {
@@ -2885,10 +2885,10 @@ async function handleToolRaw(
   }
 }
 
-// Public entry: runs the raw tool handler, then applies the central opt-in
-// slim projection from ./slim. Without `slim: true` in the tool arguments the
-// handler result is returned untouched, so legacy clients keep byte-identical
-// responses.
+// Public entry: runs the raw tool handler, then applies the central
+// slim-by-default projection from ./slim. With `slim: false` in the tool
+// arguments the handler result is returned untouched, so callers needing
+// full fidelity get byte-identical responses.
 export async function handleTool(
   db: ReturnType<typeof getDb>,
   env: Env,
