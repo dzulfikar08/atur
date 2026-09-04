@@ -1119,6 +1119,7 @@ export interface AgentUsageRow {
   cache_write_tokens: number;
   reasoning_tokens: number;
   total_tokens: number;
+  cost_usd: number | null;
 }
 
 export interface AgentUsageByAgent {
@@ -1127,9 +1128,9 @@ export interface AgentUsageByAgent {
   entry_count: number;
   issue_count: number;
   total_seconds: number;
-  total_tokens: number;
   input_tokens: number;
   output_tokens: number;
+  cost_usd: number | null;
 }
 
 export interface AgentUsageResponse {
@@ -1137,6 +1138,7 @@ export interface AgentUsageResponse {
   totals: {
     total_tokens: number;
     total_seconds: number;
+    cost_usd: number | null;
     by_agent: AgentUsageByAgent[];
   };
 }
