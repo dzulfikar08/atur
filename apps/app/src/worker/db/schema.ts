@@ -1005,6 +1005,21 @@ export const timeEntries = sqliteTable(
     description: text("description"),
     startedAt: text("started_at").notNull(),
     endedAt: text("ended_at"),
+    // Agent telemetry lane. `source` splits human timesheets from AI-agent
+    // entries; humans always leave the agent columns null. Agent identity is
+    // free-text (harness/pane/model string) because API keys are bound to a
+    // human user — without it, two agents on one key are indistinguishable.
+    source: text("source").notNull().default("human"), // "human" | "agent"
+    agentName: text("agent_name"), // e.g. "omp/firstmate", "codex/pane-12"
+    model: text("model"), // e.g. "zai/glm-5.3-flash"
+    // Token usage as reported by the harness. input/output are the billing
+    // buckets; cache/reasoning are reported separately where the provider
+    // distinguishes them (Anthropic cache read/write, OpenAI cached/reasoning).
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    cacheReadTokens: integer("cache_read_tokens"),
+    cacheWriteTokens: integer("cache_write_tokens"),
+    reasoningTokens: integer("reasoning_tokens"),
     clockifyId: text("clockify_id"),
     createdAt: text("created_at"),
     updatedAt: text("updated_at"),

@@ -120,6 +120,7 @@ const SLIM_TOOLS: Record<string, string[]> = {
   add_issue_relation: RELATION,
   list_time_entries: TIME_ENTRY,
   create_time_entry: TIME_ENTRY,
+  get_agent_usage: TIME_ENTRY,
   // Custom fields
   list_custom_fields: CUSTOM_FIELD,
   create_custom_field: CUSTOM_FIELD,

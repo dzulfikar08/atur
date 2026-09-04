@@ -1,4 +1,4 @@
-import { eq, and, desc, isNull, count, sql, gte, lte } from "drizzle-orm";
+import { eq, and, ne, desc, isNull, count, sql, gte, lte } from "drizzle-orm";
 import type { DbClient } from "../db/index";
 import * as schema from "../db/schema";
 import { v4 as uuid } from "uuid";
@@ -38,6 +38,14 @@ export async function create(
     description?: string | null;
     startedAt: string;
     endedAt?: string | null;
+    source?: "human" | "agent";
+    agentName?: string | null;
+    model?: string | null;
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+    cacheReadTokens?: number | null;
+    cacheWriteTokens?: number | null;
+    reasoningTokens?: number | null;
   },
 ) {
   const id = uuid();
@@ -51,6 +59,14 @@ export async function create(
     description: data.description ?? null,
     startedAt: data.startedAt,
     endedAt: data.endedAt ?? null,
+    source: data.source ?? "human",
+    agentName: data.agentName ?? null,
+    model: data.model ?? null,
+    inputTokens: data.inputTokens ?? null,
+    outputTokens: data.outputTokens ?? null,
+    cacheReadTokens: data.cacheReadTokens ?? null,
+    cacheWriteTokens: data.cacheWriteTokens ?? null,
+    reasoningTokens: data.reasoningTokens ?? null,
     createdAt: now,
     updatedAt: now,
   });
@@ -86,6 +102,8 @@ export async function softDeleteForIssue(db: DbClient, id: string, issueId: stri
 // Aggregate time entries for the workspace timesheet view. Groups by user + issue
 // (joined for issue name/sequence/project and user display). Date range and
 // user/project filters are optional. Ordered by total duration desc.
+// Agent-sourced entries are excluded — they report through aggregateAgentUsage
+// so agent tokens never inflate human timesheets.
 export async function aggregateForWorkspace(
   db: DbClient,
   opts: { workspaceId: string; from?: string; to?: string; userId?: string; projectId?: string },
@@ -93,6 +111,7 @@ export async function aggregateForWorkspace(
   const conditions = [
     eq(schema.timeEntries.workspaceId, opts.workspaceId),
     isNull(schema.timeEntries.deletedAt),
+    ne(schema.timeEntries.source, "agent"),
   ];
   if (opts.from) conditions.push(gte(schema.timeEntries.startedAt, opts.from));
   if (opts.to) conditions.push(lte(schema.timeEntries.startedAt, opts.to));
@@ -129,5 +148,66 @@ export async function aggregateForWorkspace(
     ...r,
     total_seconds: Number(r.total_seconds),
     entry_count: Number(r.entry_count),
+  }));
+}
+
+// Agent KPI aggregate: token + duration burn per agent/model/issue. One row per
+// (agent_name, model, issue) so "where did the tokens go" is a straight read.
+// Date range and project filters optional. Ordered by total tokens desc.
+export async function aggregateAgentUsage(
+  db: DbClient,
+  opts: { workspaceId: string; from?: string; to?: string; projectId?: string },
+) {
+  const conditions = [
+    eq(schema.timeEntries.workspaceId, opts.workspaceId),
+    isNull(schema.timeEntries.deletedAt),
+    eq(schema.timeEntries.source, "agent"),
+  ];
+  if (opts.from) conditions.push(gte(schema.timeEntries.startedAt, opts.from));
+  if (opts.to) conditions.push(lte(schema.timeEntries.startedAt, opts.to));
+  if (opts.projectId) conditions.push(eq(schema.issues.projectId, opts.projectId));
+
+  const totalTokens = sql<number>`COALESCE(SUM(${schema.timeEntries.inputTokens}), 0) + COALESCE(SUM(${schema.timeEntries.outputTokens}), 0)`;
+  const rows = await db
+    .select({
+      agent_name: schema.timeEntries.agentName,
+      model: schema.timeEntries.model,
+      issue_id: schema.timeEntries.issueId,
+      issue_name: schema.issues.name,
+      sequence_id: schema.issues.sequenceId,
+      project_id: schema.issues.projectId,
+      total_seconds: sql<number>`COALESCE(SUM(${schema.timeEntries.durationSeconds}), 0)`,
+      entry_count: sql<number>`COUNT(*)`,
+      input_tokens: sql<number>`COALESCE(SUM(${schema.timeEntries.inputTokens}), 0)`,
+      output_tokens: sql<number>`COALESCE(SUM(${schema.timeEntries.outputTokens}), 0)`,
+      cache_read_tokens: sql<number>`COALESCE(SUM(${schema.timeEntries.cacheReadTokens}), 0)`,
+      cache_write_tokens: sql<number>`COALESCE(SUM(${schema.timeEntries.cacheWriteTokens}), 0)`,
+      reasoning_tokens: sql<number>`COALESCE(SUM(${schema.timeEntries.reasoningTokens}), 0)`,
+      total_tokens: totalTokens,
+    })
+    .from(schema.timeEntries)
+    .innerJoin(schema.issues, eq(schema.timeEntries.issueId, schema.issues.id))
+    .where(and(...conditions))
+    .groupBy(
+      schema.timeEntries.agentName,
+      schema.timeEntries.model,
+      schema.timeEntries.issueId,
+      schema.issues.name,
+      schema.issues.sequenceId,
+      schema.issues.projectId,
+    )
+    .orderBy(desc(totalTokens));
+  return rows.map((r) => ({
+    ...r,
+    agent_name: r.agent_name ?? "unknown",
+    model: r.model ?? "unknown",
+    total_seconds: Number(r.total_seconds),
+    entry_count: Number(r.entry_count),
+    input_tokens: Number(r.input_tokens),
+    output_tokens: Number(r.output_tokens),
+    cache_read_tokens: Number(r.cache_read_tokens),
+    cache_write_tokens: Number(r.cache_write_tokens),
+    reasoning_tokens: Number(r.reasoning_tokens),
+    total_tokens: Number(r.total_tokens),
   }));
 }

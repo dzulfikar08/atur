@@ -69,3 +69,74 @@ export async function getTimesheet(
     },
   };
 }
+
+// Agent KPI report: token + duration burn grouped by agent/model/issue.
+// Same workspace gate as the human timesheet.
+export async function getAgentUsage(
+  db: DbClient,
+  slug: string,
+  userId: string,
+  opts: { from?: string; to?: string; projectId?: string },
+) {
+  const [ws] = await db
+    .select({ id: schema.workspaces.id, ownerId: schema.workspaces.ownerId })
+    .from(schema.workspaces)
+    .where(and(eq(schema.workspaces.slug, slug), isNull(schema.workspaces.deletedAt)))
+    .limit(1);
+  if (!ws) throw new HTTPException(404, { message: "Workspace not found" });
+  if (ws.ownerId !== userId && !(await isWorkspaceMember(db, ws.id, userId))) {
+    throw new HTTPException(403, { message: "Not a member of this workspace" });
+  }
+
+  const results = await timeEntriesRepo.aggregateAgentUsage(db, { workspaceId: ws.id, ...opts });
+
+  const rollup = new Map<
+    string,
+    {
+      agent_name: string;
+      model: string;
+      entry_count: number;
+      issue_count: number;
+      total_seconds: number;
+      total_tokens: number;
+      input_tokens: number;
+      output_tokens: number;
+    }
+  >();
+  let totalTokens = 0;
+  let totalSeconds = 0;
+  for (const r of results) {
+    totalTokens += r.total_tokens;
+    totalSeconds += r.total_seconds;
+    const key = `${r.agent_name}|${r.model}`;
+    const prev = rollup.get(key);
+    if (prev) {
+      prev.entry_count += r.entry_count;
+      prev.issue_count += 1;
+      prev.total_seconds += r.total_seconds;
+      prev.total_tokens += r.total_tokens;
+      prev.input_tokens += r.input_tokens;
+      prev.output_tokens += r.output_tokens;
+    } else {
+      rollup.set(key, {
+        agent_name: r.agent_name ?? "unknown",
+        model: r.model ?? "unknown",
+        entry_count: r.entry_count,
+        issue_count: 1,
+        total_seconds: r.total_seconds,
+        total_tokens: r.total_tokens,
+        input_tokens: r.input_tokens,
+        output_tokens: r.output_tokens,
+      });
+    }
+  }
+
+  return {
+    results,
+    totals: {
+      total_tokens: totalTokens,
+      total_seconds: totalSeconds,
+      by_agent: Array.from(rollup.values()).sort((a, b) => b.total_tokens - a.total_tokens),
+    },
+  };
+}

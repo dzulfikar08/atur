@@ -5,7 +5,7 @@ import { defineConfig } from "drizzle-kit";
 // and out paths; `migrate` needs credentials (resolved from env at run time).
 // accountId/databaseId are hardcoded to match wrangler.toml; the API token is
 // read from CLOUDFLARE_API_TOKEN (falls back to the wrangler OAuth token).
-const accountId = "b7e6f8457bd39fa37a7eea5249799754";
+const accountId = "bab412435164c01fcd1b8932bc74950f";
 const databaseId = "08a18888-5e9a-4384-8ec2-03e73adab633";
 
 function resolveToken() {

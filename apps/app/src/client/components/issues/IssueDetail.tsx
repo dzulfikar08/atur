@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useCallback, type ReactNode } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, api, type Module } from "@/lib/api";
+import { apiFetch, api, type Module, type TimeEntry } from "@/lib/api";
 import { resolveApiUrl, authHeaders } from "@/lib/native";
 import CustomFieldValues from "@/components/issues/CustomFieldValues";
 import CommentEditor from "@/components/editor/CommentEditor";
@@ -686,16 +686,9 @@ export default function IssueDetail() {
   const { data: timeEntries = [], isLoading: timeEntriesLoading } = useQuery({
     queryKey: ["time-entries", slug, projectId, issueId],
     queryFn: () =>
-      apiFetch<{
-        results: {
-          id: string;
-          duration_seconds: number;
-          description: string | null;
-          created_at: string | null;
-        }[];
-      }>(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/time-entries/`).then(
-        (d) => d.results,
-      ),
+      apiFetch<{ results: TimeEntry[] }>(
+        `/workspaces/${slug}/projects/${projectId}/issues/${issueId}/time-entries/`,
+      ).then((d) => d.results),
     enabled: !!slug && !!projectId && !!issueId,
   });
 
@@ -1865,6 +1858,14 @@ export default function IssueDetail() {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium">
                               {hrs}h {mins}m
+                              {entry.source === "agent" && (
+                                <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-normal text-muted-foreground">
+                                  {entry.agent_name ?? "agent"}
+                                  {entry.model ? ` · ${entry.model}` : ""}
+                                  {(entry.input_tokens != null || entry.output_tokens != null) &&
+                                    ` · ${((entry.input_tokens ?? 0) / 1000).toFixed(1)}k in / ${((entry.output_tokens ?? 0) / 1000).toFixed(1)}k out`}
+                                </span>
+                              )}
                             </p>
                             {entry.description && (
                               <p className="text-xs text-muted-foreground truncate">

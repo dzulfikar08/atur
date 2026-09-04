@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { api, type TimesheetRow } from "@/lib/api";
+import { api, type AgentUsageRow, type TimesheetRow } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Card } from "@/components/ui/card";
@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Timer, Download } from "@/lib/icons";
+import { Timer, Download, Bot } from "@/lib/icons";
 import { toast } from "sonner";
 
 // "Xh Ym" from seconds. Omits the hours part when 0 for short entries.
@@ -22,6 +22,13 @@ function formatDuration(totalSeconds: number): string {
   if (h === 0 && m === 0) return "0m";
   if (h === 0) return `${m}m`;
   return `${h}h ${m}m`;
+}
+
+// "12.0k" / "1.2M" token counts for the agent usage tables.
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
 }
 
 interface MemberOption {
@@ -75,6 +82,17 @@ export default function TimesheetPage() {
     enabled: !!slug,
   });
 
+  const agentUsageQuery = useQuery({
+    queryKey: ["agent-usage", slug, from, to, projectId],
+    queryFn: () =>
+      api.listAgentUsage(slug!, {
+        from: from || undefined,
+        to: to || undefined,
+        project_id: projectId || undefined,
+      }),
+    enabled: !!slug,
+  });
+
   // Group rows by user for the table sections.
   const grouped = useMemo(() => {
     const rows = timesheetQuery.data?.results ?? [];
@@ -91,6 +109,31 @@ export default function TimesheetPage() {
     }
     return Array.from(map.entries()).map(([user_id, v]) => ({ user_id, ...v }));
   }, [timesheetQuery.data]);
+
+  // Group agent rows by agent for the AI usage section.
+  const agentGroups = useMemo(() => {
+    const rows = agentUsageQuery.data?.results ?? [];
+    const map = new Map<
+      string,
+      { label: string; model: string; rows: AgentUsageRow[]; totalSeconds: number; totalTokens: number }
+    >();
+    for (const r of rows) {
+      const entry = map.get(r.agent_name) ?? {
+        label: r.agent_name,
+        model: r.model,
+        rows: [],
+        totalSeconds: 0,
+        totalTokens: 0,
+      };
+      entry.rows.push(r);
+      entry.totalSeconds += r.total_seconds;
+      entry.totalTokens += r.total_tokens;
+      map.set(r.agent_name, entry);
+    }
+    return Array.from(map.entries())
+      .map(([agent, v]) => ({ agent, ...v }))
+      .sort((a, b) => b.totalTokens - a.totalTokens);
+  }, [agentUsageQuery.data]);
 
   const totals = timesheetQuery.data?.totals;
 
@@ -221,6 +264,81 @@ export default function TimesheetPage() {
                       </td>
                       <td className="px-4 py-2 text-right font-medium">
                         {formatDuration(r.total_seconds)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* AI agent usage — separate KPI lane, excluded from human totals */}
+      <div className="flex items-center gap-2 pt-2">
+        <Bot className="h-5 w-5 text-primary" />
+        <h2 className="text-lg font-semibold">AI Agent Usage</h2>
+        <span className="text-sm text-muted-foreground ml-auto">
+          {agentUsageQuery.data
+            ? `${formatTokens(agentUsageQuery.data.totals.total_tokens)} tokens · ${formatDuration(agentUsageQuery.data.totals.total_seconds)}`
+            : ""}
+        </span>
+      </div>
+      {agentUsageQuery.isLoading ? (
+        <div className="animate-pulse text-sm text-muted-foreground">Loading…</div>
+      ) : agentGroups.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-muted-foreground">
+          No agent usage in this range. Agents log it with{" "}
+          <code className="font-mono text-xs">create_time_entry</code> using{" "}
+          <code className="font-mono text-xs">source="agent"</code>.
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {agentGroups.map((group) => (
+            <Card key={group.agent} className="overflow-hidden">
+              <div className="flex items-center justify-between bg-muted/40 px-4 py-2 border-b">
+                <span className="text-sm font-medium">
+                  {group.label}
+                  <span className="ml-2 font-mono text-xs text-muted-foreground">{group.model}</span>
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  {formatTokens(group.totalTokens)} tokens · {formatDuration(group.totalSeconds)}
+                </span>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-muted-foreground">
+                    <th className="px-4 py-2 font-medium">Issue</th>
+                    <th className="px-4 py-2 font-medium text-right">Entries</th>
+                    <th className="px-4 py-2 font-medium text-right">Tracked</th>
+                    <th className="px-4 py-2 font-medium text-right">In</th>
+                    <th className="px-4 py-2 font-medium text-right">Out</th>
+                    <th className="px-4 py-2 font-medium text-right">Tokens</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.rows.map((r) => (
+                    <tr key={`${r.agent_name}-${r.issue_id}`} className="border-t">
+                      <td className="px-4 py-2">
+                        <span className="font-mono text-xs text-muted-foreground mr-2">
+                          {r.sequence_id}
+                        </span>
+                        {r.issue_name}
+                      </td>
+                      <td className="px-4 py-2 text-right text-muted-foreground">
+                        {r.entry_count}
+                      </td>
+                      <td className="px-4 py-2 text-right text-muted-foreground">
+                        {formatDuration(r.total_seconds)}
+                      </td>
+                      <td className="px-4 py-2 text-right text-muted-foreground">
+                        {formatTokens(r.input_tokens)}
+                      </td>
+                      <td className="px-4 py-2 text-right text-muted-foreground">
+                        {formatTokens(r.output_tokens)}
+                      </td>
+                      <td className="px-4 py-2 text-right font-medium">
+                        {formatTokens(r.total_tokens)}
                       </td>
                     </tr>
                   ))}

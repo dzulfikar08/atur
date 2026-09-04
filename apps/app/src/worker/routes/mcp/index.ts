@@ -25,6 +25,7 @@ import * as workspaceRepo from "../../repositories/workspaces";
 import * as linksService from "../../services/workspaceLinks";
 import { annotateSlimToolFields, slimResponse } from "./slim";
 import { canonicalStateKey } from "../../services/states";
+import * as timesheetService from "../../services/timesheet";
 
 interface JsonRpcRequest {
   jsonrpc: string;
@@ -832,7 +833,8 @@ export const TOOLS = [
   },
   {
     name: "create_time_entry",
-    description: "Log time on an issue (duration in seconds)",
+    description:
+      "Log time on an issue (duration in seconds). AI agents SHOULD pass source=\"agent\" plus agent_name, model and token counts so usage is attributable and KPI-queryable.",
     inputSchema: {
       type: "object",
       properties: {
@@ -841,8 +843,31 @@ export const TOOLS = [
         issue_id: { type: "string" },
         duration_seconds: { type: "integer", description: "Seconds spent" },
         description: { type: "string" },
+        source: { type: "string", enum: ["human", "agent"], description: "Default human" },
+        agent_name: { type: "string", description: "Agent identifier, e.g. omp/firstmate" },
+        model: { type: "string", description: "Model id, e.g. zai/glm-5.3-flash" },
+        input_tokens: { type: "integer", description: "Prompt/input tokens" },
+        output_tokens: { type: "integer", description: "Completion/output tokens" },
+        cache_read_tokens: { type: "integer", description: "Cached input tokens" },
+        cache_write_tokens: { type: "integer", description: "Cache-creation tokens" },
+        reasoning_tokens: { type: "integer", description: "Reasoning tokens, if reported separately" },
       },
       required: ["project_id", "workspace", "issue_id", "duration_seconds"],
+    },
+  },
+  {
+    name: "get_agent_usage",
+    description:
+      "Agent KPI report for a workspace: token + duration burn per agent/model/issue. Use to see where tokens go and evaluate agent efficiency.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        from: { type: "string", description: "ISO date lower bound (started_at)" },
+        to: { type: "string", description: "ISO date upper bound (started_at)" },
+        project_id: { type: "string" },
+      },
+      required: ["workspace"],
     },
   },
   {
@@ -2625,6 +2650,18 @@ async function handleToolRaw(
         .from(schema.issues)
         .where(eq(schema.issues.id, params.issue_id as string))
         .limit(1);
+      // Token counts: non-negative integers; anything else (missing, junk,
+      // negative) is stored as null rather than failing the whole log.
+      const tokens = (key: string): number | null => {
+        const n = Number(params[key]);
+        return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
+      };
+      const source = params.source === "agent" ? "agent" : "human";
+      if (source === "agent" && !params.agent_name) {
+        throw new HTTPException(400, {
+          message: "agent_name is required when source is \"agent\"",
+        });
+      }
       const id = uuid();
       const now = nowISO();
       await db.insert(schema.timeEntries).values({
@@ -2637,8 +2674,23 @@ async function handleToolRaw(
         startedAt: now,
         createdAt: now,
         updatedAt: now,
+        source,
+        agentName: source === "agent" ? ((params.agent_name as string) ?? null) : null,
+        model: (params.model as string) ?? null,
+        inputTokens: tokens("input_tokens"),
+        outputTokens: tokens("output_tokens"),
+        cacheReadTokens: tokens("cache_read_tokens"),
+        cacheWriteTokens: tokens("cache_write_tokens"),
+        reasoningTokens: tokens("reasoning_tokens"),
       });
       return db.select().from(schema.timeEntries).where(eq(schema.timeEntries.id, id)).limit(1);
+    }
+    case "get_agent_usage": {
+      return timesheetService.getAgentUsage(db, params.workspace as string, userId, {
+        from: (params.from as string) || undefined,
+        to: (params.to as string) || undefined,
+        projectId: (params.project_id as string) || undefined,
+      });
     }
     case "delete_time_entry": {
       // Scoped to the path issue (IDOR): a caller can only delete entries that
