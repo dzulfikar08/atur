@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <style>
+      .brand { font-family: "Manrope"; font-weight: 700; font-size: 34px; fill: #fafafa; }
+      .badge { font-family: "Manrope"; font-weight: 600; font-size: 21px; fill: #a1a1aa; letter-spacing: 0.14em; }
+      .h1 { font-family: "Manrope"; font-weight: 700; font-size: 86px; fill: #fafafa; letter-spacing: -0.03em; }
+      .h2 { font-family: "Instrument Serif"; font-style: italic; font-size: 88px; fill: #d4d4d8; }
+      .sub { font-family: "Manrope"; font-weight: 400; font-size: 27px; fill: #a1a1aa; }
+      .metric { font-family: "Manrope"; font-weight: 700; font-size: 40px; fill: #fafafa; }
+      .metric-label { font-family: "Manrope"; font-weight: 500; font-size: 17px; fill: #a1a1aa; letter-spacing: 0.16em; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="630" fill="#0a0a0b"/>
+  <rect x="0.5" y="0.5" width="1199" height="629" fill="none" stroke="#ffffff" stroke-opacity="0.12"/>
+  <line x1="60" y1="470" x2="1140" y2="470" stroke="#ffffff" stroke-opacity="0.12"/>
+
+  <image href="file:///tmp/logo-white-t.png" x="60" y="52" width="40" height="40"/>
+  <text x="112" y="81" class="brand">Atur</text>
+
+  <circle cx="866" cy="72" r="4" fill="#8b5cf6"/>
+  <text x="1140" y="80" text-anchor="end" class="badge">70+ MCP TOOLS</text>
+
+  <text x="60" y="230" class="h1">You review the work.</text>
+  <text x="60" y="330" class="h2">the agents do the rest.</text>
+
+  <text x="60" y="408" class="sub">Projects, customers, docs, time — and the agents that work them. One workspace.</text>
+
+  <g>
+    <text x="60" y="540" class="metric">70+</text>
+    <text x="60" y="574" class="metric-label">MCP TOOLS</text>
+  </g>
+  <line x1="300" y1="505" x2="300" y2="580" stroke="#ffffff" stroke-opacity="0.12"/>
+  <g>
+    <text x="340" y="540" class="metric">0</text>
+    <text x="340" y="574" class="metric-label">UNREVIEWED MERGES</text>
+  </g>
+  <line x1="730" y1="505" x2="730" y2="580" stroke="#ffffff" stroke-opacity="0.12"/>
+  <g>
+    <text x="770" y="540" class="metric">24/7</text>
+    <text x="770" y="574" class="metric-label">AGENTS ON SHIFT</text>
+  </g>
+</svg>

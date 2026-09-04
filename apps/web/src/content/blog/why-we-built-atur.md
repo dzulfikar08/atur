@@ -33,7 +33,7 @@ encrypted in transit and at rest.
 ## AI-native from day one
 
 Atur ships a built-in MCP server. Any AI agent — Claude Code, Cursor, Copilot —
-can create issues, answer tickets, and update deals through the same 35+ tools
+can create issues, answer tickets, and update deals through the same 70+ tools
 your team uses every day.
 
 Curious how the product itself is put together — the Astro marketing site, the

@@ -13,7 +13,7 @@ Most MCP servers are scoped to a single domain. An issue tracker's agent can cre
 
 ## One surface, one data model
 
-Atur's MCP server exposes 35+ tools across issues, tickets, deals, time entries, and pages — not as five separate servers, but as one surface over one connected workspace. That turns "an agent that manages tickets" into "an agent that runs the operation."
+Atur's MCP server exposes 70+ tools across issues, tickets, deals, time entries, and pages — not as five separate servers, but as one surface over one connected workspace. That turns "an agent that manages tickets" into "an agent that runs the operation."
 
 A concrete example. A customer writes in with a renewal question. One agent can:
 
