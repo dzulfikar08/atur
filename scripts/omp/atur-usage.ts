@@ -8,15 +8,18 @@
 // source="agent" when the agent switches issues or the session ends.
 // The agent never has to self-report; this is the harness-verified path.
 //
-// Config (env):
-//   ATUR_API_KEY     required to enable (X-API-Key value, pk_live_... or dev token)
-//   ATUR_BASE_URL    default https://app.diatur.com
+//   ATUR_API_KEY      X-API-Key value; falls back to ATUR_API_KEY_FILE, then
+//   ATUR_API_KEY_FILE key file path; falls back to ~/.config/atur/crew-api-key
+//   ATUR_BASE_URL     default https://app.diatur.com
 //   ATUR_AGENT_NAME  default omp/pane-<HERDR_PANE_ID> | omp/<session-id8>
 //
 // Failure model: every handler swallows its own errors — a broken report
 // must never block a tool call or crash a session. Failed POSTs keep the
 // cursor and retry on the next trigger.
 // @ts-nocheck -- HookAPI types resolve only inside the omp host process
+
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 
 type IssueRef = { workspace: string; projectId: string; issueId: string };
 
@@ -30,6 +33,18 @@ let initialized = false;
 // Read per call so tests and long-lived sessions pick up env changes.
 function baseUrl(): string {
   return (process.env.ATUR_BASE_URL || "https://app.diatur.com").replace(/\/+$/, "");
+}
+
+// Resolution: env var, then env-named file, then the default crew key file —
+// panes and crewmates report without any env setup at all.
+function apiKey(): string {
+  if (process.env.ATUR_API_KEY) return process.env.ATUR_API_KEY;
+  const file = process.env.ATUR_API_KEY_FILE || `${homedir()}/.config/atur/crew-api-key`;
+  try {
+    return readFileSync(file, "utf8").trim();
+  } catch {
+    return "";
+  }
 }
 
 function agentName(sessionFile: string | undefined): string {
@@ -110,7 +125,7 @@ async function flush(ctx: any, next?: { issue: IssueRef; windowStart: number }):
   const url = `${baseUrl()}/api/workspaces/${issue.workspace}/projects/${issue.projectId}/issues/${issue.issueId}/time-entries`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": process.env.ATUR_API_KEY || "" },
+    headers: { "content-type": "application/json", "x-api-key": apiKey() },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(10_000),
   });
@@ -124,7 +139,7 @@ export default function aturUsageHook(pi: any): void {
   // Open/switch the usage window when the agent works an Atur issue via MCP.
   pi.on("tool_call", async (event: any, ctx: any) => {
     try {
-      if (!process.env.ATUR_API_KEY) return;
+      if (!apiKey()) return;
       ensureInit(ctx);
       const tool = String(event?.toolName ?? "");
       const input = event?.input;
@@ -145,7 +160,7 @@ export default function aturUsageHook(pi: any): void {
   // File the window when the session ends or the user switches away.
   const endHandler = async (_event: any, ctx: any) => {
     try {
-      if (!process.env.ATUR_API_KEY) return;
+      if (!apiKey()) return;
       ensureInit(ctx);
       await flush(ctx);
     } catch (err: any) {
