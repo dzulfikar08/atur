@@ -31,6 +31,12 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
+// "$1.23" USD cost; em-dash when the model has no price row.
+function formatCost(usd: number | null): string {
+  if (usd == null) return "—";
+  return usd.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
 interface MemberOption {
   id: string;
   label: string;
@@ -115,7 +121,7 @@ export default function TimesheetPage() {
     const rows = agentUsageQuery.data?.results ?? [];
     const map = new Map<
       string,
-      { label: string; model: string; rows: AgentUsageRow[]; totalSeconds: number; totalTokens: number }
+      { label: string; model: string; rows: AgentUsageRow[]; totalSeconds: number; totalTokens: number; totalCost: number | null }
     >();
     for (const r of rows) {
       const entry = map.get(r.agent_name) ?? {
@@ -124,10 +130,14 @@ export default function TimesheetPage() {
         rows: [],
         totalSeconds: 0,
         totalTokens: 0,
+        totalCost: null as number | null,
       };
       entry.rows.push(r);
       entry.totalSeconds += r.total_seconds;
       entry.totalTokens += r.total_tokens;
+      // Skip unpriced rows — null stays null until a priced row appears.
+      entry.totalCost =
+        entry.totalCost == null ? r.cost_usd : r.cost_usd == null ? entry.totalCost : entry.totalCost + r.cost_usd;
       map.set(r.agent_name, entry);
     }
     return Array.from(map.entries())
@@ -280,7 +290,7 @@ export default function TimesheetPage() {
         <h2 className="text-lg font-semibold">AI Agent Usage</h2>
         <span className="text-sm text-muted-foreground ml-auto">
           {agentUsageQuery.data
-            ? `${formatTokens(agentUsageQuery.data.totals.total_tokens)} tokens · ${formatDuration(agentUsageQuery.data.totals.total_seconds)}`
+            ? `${formatTokens(agentUsageQuery.data.totals.total_tokens)} tokens · ${formatDuration(agentUsageQuery.data.totals.total_seconds)} · ${formatCost(agentUsageQuery.data.totals.cost_usd)}`
             : ""}
         </span>
       </div>
@@ -302,7 +312,8 @@ export default function TimesheetPage() {
                   <span className="ml-2 font-mono text-xs text-muted-foreground">{group.model}</span>
                 </span>
                 <span className="text-sm text-muted-foreground">
-                  {formatTokens(group.totalTokens)} tokens · {formatDuration(group.totalSeconds)}
+                  {formatTokens(group.totalTokens)} tokens · {formatDuration(group.totalSeconds)} ·{" "}
+                  {formatCost(group.totalCost)}
                 </span>
               </div>
               <table className="w-full text-sm">
@@ -314,6 +325,7 @@ export default function TimesheetPage() {
                     <th className="px-4 py-2 font-medium text-right">In</th>
                     <th className="px-4 py-2 font-medium text-right">Out</th>
                     <th className="px-4 py-2 font-medium text-right">Tokens</th>
+                    <th className="px-4 py-2 font-medium text-right">Cost</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -339,6 +351,9 @@ export default function TimesheetPage() {
                       </td>
                       <td className="px-4 py-2 text-right font-medium">
                         {formatTokens(r.total_tokens)}
+                      </td>
+                      <td className="px-4 py-2 text-right font-medium tabular-nums">
+                        {formatCost(r.cost_usd)}
                       </td>
                     </tr>
                   ))}
