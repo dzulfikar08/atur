@@ -52,6 +52,7 @@ State UUIDs are needed for `update_issue` (changing status). Label UUIDs are nee
 | Nempel                | `nempel`             |
 | Mailflare             | `mailflare`          |
 | intip                 | `intip`              |
+| AturPDF               | `aturpdf`            |
 
 > **IMPORTANT**: Slugs verified 2026-09-03 (all owned by `ab39f025…` / dzulfikar). If `list_workspaces` returns different results, trust the live data.
 
