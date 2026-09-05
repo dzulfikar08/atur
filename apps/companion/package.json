@@ -1,0 +1,15 @@
+{
+  "name": "@atur/companion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/daemon.ts",
+    "build": "bun build --compile src/daemon.ts --outfile companion",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0"
+  }
+}
