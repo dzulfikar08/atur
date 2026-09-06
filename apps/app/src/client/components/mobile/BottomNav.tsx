@@ -15,6 +15,7 @@ import {
   Building2,
   Users,
   Layers,
+  Columns3,
 } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
@@ -35,6 +36,8 @@ const moreItems = [
   { to: "crm", icon: Users, label: "CRM" },
   { to: "crm/companies", icon: Building2, label: "Companies" },
   { to: "integrations", icon: Puzzle, label: "Integrations" },
+  // Absolute route — Panes lives outside the workspace slug scope.
+  { to: "/panes", icon: Columns3, label: "Panes" },
   { to: "admin", icon: Shield, label: "Admin" },
   { to: "settings", icon: Settings, label: "Settings" },
 ];
@@ -165,7 +168,7 @@ export default function BottomNav() {
         <div className="space-y-0.5">
           {moreItems.map((item) => {
             const Icon = item.icon;
-            const targetPath = `/${slug}/${item.to}`;
+            const targetPath = item.to.startsWith("/") ? item.to : `/${slug}/${item.to}`;
             return (
               <NavLink
                 key={item.to}

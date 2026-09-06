@@ -11,7 +11,15 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { FolderKanban, CircleDot, FileText, Settings, Plus, LayoutDashboard } from "@/lib/icons";
+import {
+  FolderKanban,
+  CircleDot,
+  FileText,
+  Settings,
+  Plus,
+  LayoutDashboard,
+  Columns3,
+} from "@/lib/icons";
 
 export default function CommandPalette() {
   const [open, setOpen] = useState(false);
@@ -65,6 +73,11 @@ export default function CommandPalette() {
           <CommandItem onSelect={() => run(() => navigate(`${basePath}/pages`))}>
             <FileText className="h-4 w-4" />
             Pages
+          </CommandItem>
+          <CommandItem onSelect={() => run(() => navigate("/panes"))}>
+            <Columns3 className="h-4 w-4" />
+            {/* Absolute route — Panes is not slug-scoped. */}
+            Panes
           </CommandItem>
           <CommandItem onSelect={() => run(() => navigate(`${basePath}/settings`))}>
             <Settings className="h-4 w-4" />

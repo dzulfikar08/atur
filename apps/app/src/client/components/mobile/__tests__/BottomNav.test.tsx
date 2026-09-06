@@ -48,6 +48,15 @@ describe("BottomNav", () => {
     expect(await screen.findByRole("button", { name: "Create workspace" })).toBeInTheDocument();
   });
 
+  it("links Panes to the absolute /panes route from the More drawer", async () => {
+    const user = userEvent.setup();
+    renderWith(<BottomNav />);
+    await user.click(screen.getByRole("button", { name: "More" }));
+    const link = await screen.findByRole("link", { name: "Panes" });
+    // Absolute, NOT slug-scoped: /panes, not /acme/panes.
+    expect(link).toHaveAttribute("href", "/panes");
+  });
+
   it("lists the active workspace in the More drawer", async () => {
     const user = userEvent.setup();
     renderWith(<BottomNav />);
