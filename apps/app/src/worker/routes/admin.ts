@@ -21,5 +21,11 @@ export const adminRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     if (!user?.isSuperuser) {
       return c.json({ error: "forbidden" }, 403);
     }
-    return c.json(await runD1Backup(c.env));
+    try {
+      return c.json(await runD1Backup(c.env));
+    } catch (e) {
+      // Ops route: surface the raw failure to the superuser instead of a
+      // generic 500 — the cron path logs the error, here the caller debugs.
+      return c.json({ error: String(e instanceof Error ? (e.stack ?? e.message) : e) }, 500);
+    }
   });
