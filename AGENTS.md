@@ -267,20 +267,27 @@ update_issue(state_id=need_review)
 
 Use `upload_image` + `add_comment` to attach screenshot evidence when verifying work with Playwright or other browser automation.
 
-**`upload_image` accepts a file path (not base64):**
+**`upload_image` runs remotely — it cannot read your local disk. Read the file
+yourself, base64-encode the bytes, and pass them as `content_base64`:**
 
 ```
-upload_image(file_path="/absolute/path/to/screenshot.png")
-  → returns { id, url, size }
+upload_image(
+  content_base64="<base64 file bytes>",   # required; a data: URL prefix is tolerated
+  filename="evidence.png",                # required; the extension seeds the MIME type
+  mime_type="image/png",                  # optional override (image/* and application/pdf only)
+  issue_id="<uuid>",                      # optional; links the asset to an issue
+)
+  → { id, url, size, filename }           # url = https://app.diatur.com/api/assets/<uuid>
 ```
 
-MIME type is auto-detected from file extension. Override with optional `mime_type` param.
+Uploads are capped at 25 MB. Stored assets live in R2 and are served through
+the worker (auth-checked, XSS-safe MIME, edge image resizing via `?w=`/`?format=`).
 
 **Workflow:**
 
 ```
 1. Take screenshot with Playwright → saves to local file
-2. upload_image(file_path="/path/to/screenshot.png")
+2. Read the file, base64-encode it, then upload_image(content_base64=…, filename=…)
    → returns { id, url, size }
 3. add_comment(
      project_id, issue_id, workspace,
@@ -295,8 +302,9 @@ MIME type is auto-detected from file extension. Override with optional `mime_typ
 # Take screenshot
 browser_take_screenshot(filename="evidence.png")
 
-# Upload directly from file path
-upload_image(file_path="/absolute/path/to/evidence.png")
+# Base64-encode the screenshot, then upload
+base64 -w0 evidence.png        # copy the output
+upload_image(content_base64="<paste base64>", filename="evidence.png")
 # → { "url": "https://app.diatur.com/api/assets/<uuid>" }
 
 # Comment with embedded image
