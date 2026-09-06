@@ -19,6 +19,11 @@ database_id = "08a18888-5e9a-4384-8ec2-03e73adab633"
 binding = "R2"
 bucket_name = "atur-assets"
 
+# Daily D1 → R2 backups (services/backup.ts): dump + prune, bucket atur-backups.
+[[r2_buckets]]
+binding = "BACKUPS"
+bucket_name = "atur-backups"
+
 [[kv_namespaces]]
 binding = "RATE_LIMIT"
 id = "767d9b9dfa0e4f79a70f7f3c3e205f69"
@@ -44,10 +49,10 @@ verified_address = "noreply@diatur.com"
 [observability]
 enabled = true
 
-# Daily 08:00 UTC cron → scheduled() handler sends due-date reminder emails to
-# issue followers. Each recipient's local day (users.user_timezone) dedupes sends.
+# Daily 08:00 UTC cron → scheduled() sends due-date reminder emails to issue
+# followers. Daily 03:30 UTC cron → D1 dump to R2 (services/backup.ts).
 [triggers]
-crons = ["0 8 * * *"]
+crons = ["0 8 * * *", "30 3 * * *"]
 
 [assets]
 directory = "./dist/client"

@@ -4,6 +4,7 @@ import { logger } from "hono/logger";
 import { errorMiddleware } from "./middleware/error";
 import { snakeCaseMiddleware } from "./middleware/snakecase";
 import { authMiddleware } from "./middleware/auth";
+import { adminRoutes } from "./routes/admin";
 import { healthRoutes } from "./routes/health";
 import { authRoutes } from "./routes/auth";
 import { workspaceRoutes } from "./routes/workspaces";
@@ -15,7 +16,7 @@ import { pageRoutes } from "./routes/pages";
 import { viewRoutes } from "./routes/views";
 import { stateRoutes } from "./routes/states";
 import { projectFolderRoutes } from "./routes/projectFolders";
-import { workspaceLinkRoutes } from "./routes/workspaceLinks";
+import { workspaceLinkRoutes, workspaceLinksListRoute } from "./routes/workspaceLinks";
 import { labelRoutes } from "./routes/labels";
 import { memberRoutes } from "./routes/members";
 import { sprintRoutes } from "./routes/sprints";
@@ -87,6 +88,10 @@ export function createApp(): Hono<{ Bindings: Env }> {
 
   app.route("/api/users", userRoutes);
 
+  // Unscoped bindings list (DEV-29). Must mount BEFORE workspaceRoutes below:
+  // workspaceRoutes owns GET /api/workspaces/:slug and would swallow
+  // /api/workspaces/links (Hono resolves overlapping sub-apps in mount order).
+  app.route("/api/workspaces", workspaceLinksListRoute);
   app.route("/api/workspaces", workspaceRoutes);
   app.route("/api/workspaces/:slug/projects", projectRoutes);
   app.route("/api/workspaces/:slug/portal-settings", portalSettingsRoutes);
@@ -130,6 +135,7 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/api/workspaces/:slug/projects/:projectId/feedback-board", feedbackAdminRoutes);
   // Herdr execution-plane proxy: pane list + WS attach relay (ATUR-2).
   app.route("/api/panes", paneRoutes);
-
+  // Platform-operator ops (superuser-gated): manual D1 → R2 backup trigger.
+  app.route("/api/admin", adminRoutes);
   return app;
 }

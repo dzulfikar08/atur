@@ -31,6 +31,7 @@ const McpIntegrationPage = lazy(() => import("@/pages/integrations/McpIntegratio
 const PolarIntegrationPage = lazy(() => import("@/pages/integrations/PolarIntegrationPage"));
 const IntegrationsIndexPage = lazy(() => import("@/pages/integrations/IntegrationsIndexPage"));
 const AdminDashboardPage = lazy(() => import("@/pages/admin/AdminDashboardPage"));
+const WorkspaceBindingsPage = lazy(() => import("@/pages/admin/WorkspaceBindingsPage"));
 const NotificationsPage = lazy(() => import("@/pages/notifications/NotificationsPage"));
 const TimesheetPage = lazy(() => import("@/pages/timesheet/TimesheetPage"));
 const CrmPage = lazy(() => import("@/pages/crm/CrmPage"));
@@ -176,6 +177,7 @@ export default function App() {
           <Route path="/:slug/integrations/mcp" element={<McpIntegrationPage />} />
           <Route path="/:slug/integrations/polar" element={<PolarIntegrationPage />} />
           <Route path="/:slug/admin" element={<AdminDashboardPage />} />
+          <Route path="/:slug/admin/bindings" element={<WorkspaceBindingsPage />} />
           <Route path="/:slug/notifications" element={<NotificationsPage />} />
           <Route path="/:slug/timesheet" element={<TimesheetPage />} />
           <Route path="/:slug/crm" element={<CrmPage />} />

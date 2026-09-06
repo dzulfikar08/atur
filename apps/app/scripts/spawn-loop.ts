@@ -44,6 +44,7 @@ const SIGKILL_GRACE_MS = 45_000; // wait for SIGKILL to land before deferring to
 const REQUEUE_GRACE_MS = 20_000; // pause before verifying a requeue stuck (zombie writes land within seconds)
 const STATE_DIR = join(homedir(), ".local/state/spawn-loop");
 const CLAIMS_FILE = join(STATE_DIR, "claims.json");
+const SWEPT_FILE = join(STATE_DIR, "swept.json");
 const WT_DIR = join(STATE_DIR, "worktrees");
 const PROMPT_DIR = "/tmp/spawn-loop";
 
@@ -56,6 +57,7 @@ const val = (name: string, fallback: string) => {
 const ONCE = flag("--once");
 const DRY = flag("--dry-run");
 const STATUS = flag("--status");
+const SWEEP = flag("--sweep"); // reconcile In-Progress claims with no live crew entry
 const INTERVAL = Number(val("--interval", String(process.env.INTERVAL_SEC ?? 300))) * 1000;
 const MAX_ACTIVE = Number(val("--max", String(process.env.MAX_ACTIVE ?? 2)));
 const SCOUT_MODEL = val("--scout-model", process.env.SCOUT_MODEL ?? "") || null;
@@ -117,10 +119,27 @@ function loadClaims(): Claims {
     return {};
   }
 }
-
 function saveClaims(c: Claims) {
   mkdirSync(STATE_DIR, { recursive: true });
   writeFileSync(CLAIMS_FILE, JSON.stringify(c, null, 2));
+}
+
+// Swept = issues already check-in-commented by --sweep; the timestamp keeps
+// each check-in a one-time event so the sweep can run every tick without
+// comment spam. Re-comment only after a fresh claim comment appears again.
+type Swept = Record<string, number>;
+
+function loadSwept(): Swept {
+  try {
+    return JSON.parse(readFileSync(SWEPT_FILE, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function saveSwept(s: Swept) {
+  mkdirSync(STATE_DIR, { recursive: true });
+  writeFileSync(SWEPT_FILE, JSON.stringify(s, null, 2));
 }
 
 function freshClaims(): Claims {
@@ -507,8 +526,47 @@ async function supervise(claims: Claims): Promise<number> {
   return active;
 }
 
+// DEV-29 gap: restart-proofing only covers loop-managed claims. --sweep
+// extends reconciliation to claims made outside the loop (agent claimed via
+// MCP, then its pane died): an In-Progress issue with a "Picked up by"
+// comment but no live crew entry gets ONE check-in comment asking the human
+// to requeue or confirm — Atur must never silently claim live work it
+// cannot see. swept.json keeps each check-in a one-time event.
+async function sweepWorkspace(slug: string, projectId: string, states: Json[], claims: Claims, swept: Swept) {
+  const inProgress = states.find((s) => /in progress/i.test(String(s.name)));
+  if (!inProgress) return;
+  const issues = rowsOf(
+    await api(
+      "GET",
+      `/api/workspaces/${slug}/projects/${projectId}/issues?state=${inProgress.id}&limit=50`,
+    ),
+  );
+  for (const issue of issues) {
+    const issueId = issue.id as string;
+    if (claims[issueId] || swept[issueId]) continue;
+    if (!(await hasClaimComment(slug, projectId, issueId))) continue;
+    const seq = (issue.sequence_id ?? issue.sequenceId) as number;
+    if (DRY) {
+      console.log(`  [sweep] would check in on ${slug}-${seq} (untracked In-Progress claim)`);
+      continue;
+    }
+    await api(
+      "POST",
+      `/api/workspaces/${slug}/projects/${projectId}/issues/${issueId}/comments`,
+      {
+        comment_html:
+          "<p>Sweep check-in: this issue is In Progress with a claim comment, but the spawn-loop host has no live crew entry for it — likely a crashed or restarted harness. If the agent is dead, comment what happened and requeue to Todo; if it is still working from another host or session, ignore this note.</p>",
+      },
+    );
+    swept[issueId] = Date.now();
+    saveSwept(swept);
+    console.log(`  [sweep] check-in posted on ${slug}-${seq}`);
+  }
+}
+
 async function tick(ompPath: string) {
   const claims = freshClaims();
+  const swept = SWEEP ? loadSwept() : {};
   let active = await supervise(claims);
   for (const { slug, ident } of WATCH) {
     if (active >= MAX_ACTIVE) break;
@@ -540,6 +598,7 @@ async function tick(ompPath: string) {
     const doneStateIds = states
       .filter((s) => s.group === "completed" || s.groupName === "completed")
       .map((s) => s.id as string);
+    if (SWEEP) await sweepWorkspace(slug, projectId, states, claims, swept);
     const link = (await api<Json | null>("GET", `/api/workspaces/${slug}/links`)) as Json | null;
     const binding = {
       local_path: str(link?.local_path),
@@ -576,9 +635,6 @@ async function tick(ompPath: string) {
           ts: Date.now(),
           ws: slug,
           seq,
-          pid: spawned.pid,
-          projectId,
-          watchStateId: watch.id as string,
           watchStateName: String(watch.name),
           reviewStateId: review ? (review.id as string) : null,
           doneStateIds,
@@ -624,7 +680,7 @@ async function main() {
   if (!ompPath) throw new Error("omp binary not found on PATH");
   mkdirSync(WT_DIR, { recursive: true });
   console.log(
-    `spawn-loop: base=${BASE} watch=${WATCH.map((w) => `${w.slug}:${w.ident}`).join(",")} max=${MAX_ACTIVE} ${DRY ? "[DRY-RUN]" : ""} ${ONCE ? "[once]" : `[every ${INTERVAL / 1000}s]`}${SCOUT_MODEL ? ` scout=${SCOUT_MODEL}` : ""}${SHIP_MODEL ? ` ship=${SHIP_MODEL}` : ""}`,
+    `spawn-loop: base=${BASE} watch=${WATCH.map((w) => `${w.slug}:${w.ident}`).join(",")} max=${MAX_ACTIVE} ${DRY ? "[DRY-RUN]" : ""} ${SWEEP ? "[sweep]" : ""} ${ONCE ? "[once]" : `[every ${INTERVAL / 1000}s]`}${SCOUT_MODEL ? ` scout=${SCOUT_MODEL}` : ""}${SHIP_MODEL ? ` ship=${SHIP_MODEL}` : ""}`,
   );
   for (;;) {
     console.log(new Date().toISOString());
