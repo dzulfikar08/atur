@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { format, isValid, parseISO } from "date-fns";
 import { api, type AgentUsageRow, type TimesheetRow } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Card } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -24,6 +25,25 @@ function formatDuration(totalSeconds: number): string {
   return `${h}h ${m}m`;
 }
 
+// "10:25" clock-style h:mm for grid values.
+function formatHm(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  return `${h}:${String(m).padStart(2, "0")}`;
+}
+
+// "38.5h" decimal hours for the summary cards.
+function formatHours(totalSeconds: number): string {
+  const h = totalSeconds / 3600;
+  return Number.isInteger(h) ? `${h}h` : `${h.toFixed(1)}h`;
+}
+
+// "Sep 1" from an ISO yyyy-MM-dd filter value; raw string when unparsable.
+function formatDay(iso: string): string {
+  const d = parseISO(iso);
+  return isValid(d) ? format(d, "MMM d") : iso;
+}
+
 // "12.0k" / "1.2M" token counts for the agent usage tables.
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -37,23 +57,65 @@ function formatCost(usd: number | null): string {
   return usd.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
+// Sheet column label (design: mono, 10.5px, tracked-out, dim).
+const colClass =
+  "shrink-0 text-center font-ops-mono text-[10.5px] font-semibold tracking-[1px] text-muted-foreground/70";
+// Sheet cell value (mono, dim).
+const cellClass = "shrink-0 text-center font-ops-mono text-[11px] text-muted-foreground";
+// Sheet cell total (mono, bold, foreground).
+const cellTotalClass = "shrink-0 text-center font-ops-mono text-[11.5px] font-bold text-foreground";
+
+// Mono key + issue title in the label column.
+function IssueLabel({ sequenceId, name }: { sequenceId: number; name: string }) {
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-2">
+      <span className="shrink-0 font-ops-mono text-[11px] font-bold text-muted-foreground/70">
+        {sequenceId}
+      </span>
+      <span className="truncate text-[13px] font-semibold text-foreground">{name}</span>
+    </div>
+  );
+}
+
+// "hour chip" — mono value on an inset surface (design's day-value chip).
+function HourChip({ children }: { children: ReactNode }) {
+  return (
+    <span className="rounded-[6px] bg-(--surface-card-hover) px-[7px] py-[3px] font-ops-mono text-[11px] text-muted-foreground">
+      {children}
+    </span>
+  );
+}
+
 interface MemberOption {
   id: string;
   label: string;
 }
 
 // Defensive member field mapping — workspace member rows vary in shape
-// (top-level fields vs nested .member). Fall back across both.
-function toMemberOption(m: any): MemberOption {
-  const id = m?.id ?? m?.member?.id ?? m?.user_id ?? "";
+// (top-level fields vs nested .member), and the API types them as plain
+// rows. Read defensively across both shapes without trusting the shape.
+function toMemberOption(m: unknown): MemberOption {
+  const row: Record<string, unknown> =
+    typeof m === "object" && m !== null ? (m as Record<string, unknown>) : {};
+  const nestedRaw = row.member;
+  const nested: Record<string, unknown> =
+    typeof nestedRaw === "object" && nestedRaw !== null
+      ? (nestedRaw as Record<string, unknown>)
+      : {};
+  const firstString = (...candidates: unknown[]): string => {
+    for (const c of candidates) if (typeof c === "string" && c) return c;
+    return "";
+  };
+  const id = firstString(row.id, nested.id, row.user_id);
   const label =
-    m?.display_name ??
-    m?.member?.display_name ??
-    m?.username ??
-    m?.member?.username ??
-    m?.email ??
-    m?.member?.email ??
-    id;
+    firstString(
+      row.display_name,
+      nested.display_name,
+      row.username,
+      nested.username,
+      row.email,
+      nested.email,
+    ) || id;
   return { id, label };
 }
 
@@ -157,6 +219,12 @@ export default function TimesheetPage() {
   }, [agentUsageQuery.data]);
 
   const totals = timesheetQuery.data?.totals;
+  const agentTotals = agentUsageQuery.data?.totals;
+
+  const rangeLabel =
+    from || to
+      ? `${from ? formatDay(from) : "…"} – ${to ? formatDay(to) : "…"}`
+      : "All time";
 
   function exportCsv() {
     const rows = timesheetQuery.data?.results ?? [];
@@ -187,19 +255,27 @@ export default function TimesheetPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4">
-      <div className="flex items-center gap-2">
-        <Timer className="h-5 w-5 text-primary" />
-        <h1 className="text-xl font-semibold">Timesheet</h1>
-        <span className="text-sm text-muted-foreground ml-auto">
-          {totals
-            ? `${formatDuration(totals.total_seconds)} · ${totals.total_entries} entries`
-            : ""}
-        </span>
+    <div className="flex flex-col gap-[18px] p-4 md:p-6">
+      {/* Top bar */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2.5">
+          <Timer className="h-4 w-4 text-muted-foreground" />
+          <h1 className="text-[15px] font-bold text-foreground">Timesheet</h1>
+        </div>
+        <span className="font-ops-mono text-[12px] text-muted-foreground/70">{rangeLabel}</span>
+        <div className="min-w-4 flex-1" />
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-auto rounded-[9px] border-border bg-(--surface-elevated) px-[13px] py-[8px] text-[13px] font-semibold text-muted-foreground hover:bg-(--surface-card-hover) hover:text-foreground"
+          onClick={exportCsv}
+        >
+          <Download className="h-3.5 w-3.5" /> Export CSV
+        </Button>
       </div>
 
       {/* Filters */}
-      <Card className="p-3 flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
           <label className="text-xs text-muted-foreground">From</label>
           <DatePicker value={from || null} onChange={(v) => setFrom(v || "")} className="w-40" />
@@ -243,136 +319,171 @@ export default function TimesheetPage() {
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" size="sm" className="h-9 ml-auto" onClick={exportCsv}>
-          <Download className="h-4 w-4 mr-1" /> CSV
-        </Button>
-      </Card>
+      </div>
 
-      {/* Table */}
+      {/* Summary — only the metrics the data actually carries */}
+      {(totals || agentTotals) && (
+        <div className="flex flex-wrap gap-[14px]">
+          {totals && (
+            <div className="flex flex-col gap-[3px] rounded-[11px] border border-border bg-(--surface-elevated) px-[18px] py-[12px]">
+              <span className="font-ops-mono text-[10.5px] font-semibold tracking-[1px] text-muted-foreground/70">
+                total
+              </span>
+              <span className="font-ops-mono text-[19px] font-bold text-foreground">
+                {formatHours(totals.total_seconds)}
+              </span>
+            </div>
+          )}
+          {agentTotals && (
+            <div className="flex flex-col gap-[3px] rounded-[11px] border border-border bg-(--surface-elevated) px-[18px] py-[12px]">
+              <span className="font-ops-mono text-[10.5px] font-semibold tracking-[1px] text-muted-foreground/70">
+                agent time
+              </span>
+              <span className="font-ops-mono text-[19px] font-bold text-foreground">
+                {formatHours(agentTotals.total_seconds)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Timesheet sheets */}
       {timesheetQuery.isLoading ? (
         <div className="animate-pulse text-sm text-muted-foreground">Loading…</div>
       ) : grouped.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-muted-foreground">
+        <div className="rounded-[14px] border border-border bg-(--surface-elevated) p-8 text-center text-sm text-muted-foreground">
           No time logged in this range.
-        </Card>
+        </div>
       ) : (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-[18px]">
           {grouped.map((group) => (
-            <Card key={group.user_id} className="overflow-hidden">
-              <div className="flex items-center justify-between bg-muted/40 px-4 py-2 border-b">
-                <span className="text-sm font-medium">{group.label}</span>
-                <span className="text-sm text-muted-foreground">{formatDuration(group.total)}</span>
+            <section
+              key={group.user_id}
+              className="overflow-hidden rounded-[14px] border border-border bg-(--surface-elevated)"
+            >
+              {/* Head: member label in the issue slot + mono column labels */}
+              <div className="flex items-center gap-2.5 bg-(--surface-card) px-[18px] py-[11px]">
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">
+                  {group.label}
+                </span>
+                <span className={`${colClass} w-[52px]`}>entries</span>
+                <span className={`${colClass} w-[64px]`}>tracked</span>
               </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-muted-foreground">
-                    <th className="px-4 py-2 font-medium">Issue</th>
-                    <th className="px-4 py-2 font-medium text-right">Entries</th>
-                    <th className="px-4 py-2 font-medium text-right">Tracked</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {group.rows.map((r) => (
-                    <tr key={`${r.user_id}-${r.issue_id}`} className="border-t">
-                      <td className="px-4 py-2">
-                        <span className="font-mono text-xs text-muted-foreground mr-2">
-                          {r.sequence_id}
-                        </span>
-                        {r.issue_name}
-                      </td>
-                      <td className="px-4 py-2 text-right text-muted-foreground">
-                        {r.entry_count}
-                      </td>
-                      <td className="px-4 py-2 text-right font-medium">
-                        {formatDuration(r.total_seconds)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Card>
+              {group.rows.map((r) => (
+                <div
+                  key={`${r.user_id}-${r.issue_id}`}
+                  className="flex items-center gap-2.5 border-t border-border px-[18px] py-[12px]"
+                >
+                  <IssueLabel sequenceId={r.sequence_id} name={r.issue_name} />
+                  <span className={`${cellClass} flex w-[52px] justify-center`}>
+                    {r.entry_count}
+                  </span>
+                  <span className="flex w-[64px] shrink-0 justify-center">
+                    <HourChip>{formatHm(r.total_seconds)}</HourChip>
+                  </span>
+                </div>
+              ))}
+              {/* Footer: group totals */}
+              <div className="flex items-center gap-2.5 border-t border-border bg-(--surface-card) px-[18px] py-[12px]">
+                <span className="min-w-0 flex-1 font-ops-mono text-[10.5px] font-semibold tracking-[1px] text-muted-foreground/70">
+                  total
+                </span>
+                <span className={`${cellClass} flex w-[52px] justify-center`}>
+                  {group.rows.reduce((n, r) => n + r.entry_count, 0)}
+                </span>
+                <span className={`${cellTotalClass} w-[64px]`}>{formatHm(group.total)}</span>
+              </div>
+            </section>
           ))}
         </div>
       )}
 
       {/* AI agent usage — separate KPI lane, excluded from human totals */}
-      <div className="flex items-center gap-2 pt-2">
-        <Bot className="h-5 w-5 text-primary" />
-        <h2 className="text-lg font-semibold">AI Agent Usage</h2>
-        <span className="text-sm text-muted-foreground ml-auto">
-          {agentUsageQuery.data
-            ? `${formatTokens(agentUsageQuery.data.totals.total_tokens)} tokens · ${formatDuration(agentUsageQuery.data.totals.total_seconds)} · ${formatCost(agentUsageQuery.data.totals.cost_usd)}`
-            : ""}
-        </span>
+      <div className="flex flex-wrap items-center gap-2.5 pt-2">
+        <Bot className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-[15px] font-bold text-foreground">AI Agent Usage</h2>
+        {agentTotals && (
+          <span className="font-ops-mono text-[12px] text-muted-foreground/70">
+            {formatTokens(agentTotals.total_tokens)} tokens · {formatDuration(agentTotals.total_seconds)} ·{" "}
+            {formatCost(agentTotals.cost_usd)}
+          </span>
+        )}
       </div>
       {agentUsageQuery.isLoading ? (
         <div className="animate-pulse text-sm text-muted-foreground">Loading…</div>
       ) : agentGroups.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-muted-foreground">
+        <div className="rounded-[14px] border border-border bg-(--surface-elevated) p-8 text-center text-sm text-muted-foreground">
           No agent usage in this range. Agents log it with{" "}
-          <code className="font-mono text-xs">create_time_entry</code> using{" "}
-          <code className="font-mono text-xs">source="agent"</code>.
-        </Card>
+          <code className="font-ops-mono text-xs">create_time_entry</code> using{" "}
+          <code className="font-ops-mono text-xs">source="agent"</code>.
+        </div>
       ) : (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-[18px]">
           {agentGroups.map((group) => (
-            <Card key={group.agent} className="overflow-hidden">
-              <div className="flex items-center justify-between bg-muted/40 px-4 py-2 border-b">
-                <span className="text-sm font-medium">
-                  {group.label}
-                  <span className="ml-2 font-mono text-xs text-muted-foreground">
-                    {group.model}
-                  </span>
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  {formatTokens(group.totalTokens)} tokens · {formatDuration(group.totalSeconds)} ·{" "}
-                  {formatCost(group.totalCost)}
-                </span>
-              </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-muted-foreground">
-                    <th className="px-4 py-2 font-medium">Issue</th>
-                    <th className="px-4 py-2 font-medium text-right">Entries</th>
-                    <th className="px-4 py-2 font-medium text-right">Tracked</th>
-                    <th className="px-4 py-2 font-medium text-right">In</th>
-                    <th className="px-4 py-2 font-medium text-right">Out</th>
-                    <th className="px-4 py-2 font-medium text-right">Tokens</th>
-                    <th className="px-4 py-2 font-medium text-right">Cost</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <section
+              key={group.agent}
+              className="overflow-hidden rounded-[14px] border border-border bg-(--surface-elevated)"
+            >
+              <div className="overflow-x-auto">
+                <div className="min-w-[760px]">
+                  {/* Head: agent + model in the issue slot + mono column labels */}
+                  <div className="flex items-center gap-2.5 bg-(--surface-card) px-[18px] py-[11px]">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <span className="truncate text-[13px] font-semibold text-foreground">
+                        {group.label}
+                      </span>
+                      <span className="shrink-0 font-ops-mono text-[11px] text-muted-foreground/70">
+                        {group.model}
+                      </span>
+                    </div>
+                    <span className={`${colClass} w-[52px]`}>entries</span>
+                    <span className={`${colClass} w-[64px]`}>tracked</span>
+                    <span className={`${colClass} w-[64px]`}>in</span>
+                    <span className={`${colClass} w-[64px]`}>out</span>
+                    <span className={`${colClass} w-[72px]`}>tokens</span>
+                    <span className={`${colClass} w-[72px]`}>cost</span>
+                  </div>
                   {group.rows.map((r) => (
-                    <tr key={`${r.agent_name}-${r.issue_id}`} className="border-t">
-                      <td className="px-4 py-2">
-                        <span className="font-mono text-xs text-muted-foreground mr-2">
-                          {r.sequence_id}
-                        </span>
-                        {r.issue_name}
-                      </td>
-                      <td className="px-4 py-2 text-right text-muted-foreground">
-                        {r.entry_count}
-                      </td>
-                      <td className="px-4 py-2 text-right text-muted-foreground">
-                        {formatDuration(r.total_seconds)}
-                      </td>
-                      <td className="px-4 py-2 text-right text-muted-foreground">
-                        {formatTokens(r.input_tokens)}
-                      </td>
-                      <td className="px-4 py-2 text-right text-muted-foreground">
-                        {formatTokens(r.output_tokens)}
-                      </td>
-                      <td className="px-4 py-2 text-right font-medium">
+                    <div
+                      key={`${r.agent_name}-${r.issue_id}`}
+                      className="flex items-center gap-2.5 border-t border-border px-[18px] py-[12px]"
+                    >
+                      <IssueLabel sequenceId={r.sequence_id} name={r.issue_name} />
+                      <span className={`${cellClass} w-[52px]`}>{r.entry_count}</span>
+                      <span className={`${cellClass} w-[64px]`}>{formatHm(r.total_seconds)}</span>
+                      <span className={`${cellClass} w-[64px]`}>{formatTokens(r.input_tokens)}</span>
+                      <span className={`${cellClass} w-[64px]`}>{formatTokens(r.output_tokens)}</span>
+                      <span className={`${cellTotalClass} w-[72px]`}>
                         {formatTokens(r.total_tokens)}
-                      </td>
-                      <td className="px-4 py-2 text-right font-medium tabular-nums">
+                      </span>
+                      <span className={`${cellTotalClass} w-[72px] tabular-nums`}>
                         {formatCost(r.cost_usd)}
-                      </td>
-                    </tr>
+                      </span>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </Card>
+                  {/* Footer: agent totals */}
+                  <div className="flex items-center gap-2.5 border-t border-border bg-(--surface-card) px-[18px] py-[12px]">
+                    <span className="min-w-0 flex-1 font-ops-mono text-[10.5px] font-semibold tracking-[1px] text-muted-foreground/70">
+                      total
+                    </span>
+                    <span className={`${cellClass} w-[52px]`}>
+                      {group.rows.reduce((n, r) => n + r.entry_count, 0)}
+                    </span>
+                    <span className={`${cellTotalClass} w-[64px]`}>
+                      {formatHm(group.totalSeconds)}
+                    </span>
+                    <span className={`${cellClass} w-[64px]`} />
+                    <span className={`${cellClass} w-[64px]`} />
+                    <span className={`${cellTotalClass} w-[72px]`}>
+                      {formatTokens(group.totalTokens)}
+                    </span>
+                    <span className={`${cellTotalClass} w-[72px] tabular-nums`}>
+                      {formatCost(group.totalCost)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </section>
           ))}
         </div>
       )}

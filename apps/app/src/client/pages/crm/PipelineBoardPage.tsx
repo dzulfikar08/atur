@@ -4,8 +4,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type Deal, type DealCurrencyTotal, type State } from "@/lib/api";
 import { formatCurrencyTotals, isOpenGroup, money } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, ChevronDown, ChevronRight } from "@/lib/icons";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -55,43 +53,46 @@ function DealCard({
     opacity: isDragging ? 0.4 : 1,
   };
   const overdue = openStage && isOverdue(deal);
+  // Company is the joined customer; fall back to the deal title itself.
+  const company = deal.customer_name ?? deal.name;
   return (
-    <Card
+    <div
       ref={setNodeRef}
       style={style}
-      className="cursor-grab active:cursor-grabbing hover:shadow-md select-none"
+      className="flex cursor-grab select-none flex-col gap-2 rounded-xl border border-border/80 bg-[var(--surface-elevated)] px-[15px] py-[14px] transition-colors hover:border-border active:cursor-grabbing"
       {...listeners}
       {...attributes}
       onClick={onClick}
     >
-      <CardContent className="p-3">
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-medium truncate">{deal.name}</p>
-          {openStage && isStale(deal) && (
-            <span
-              title="No updates in 14+ days"
-              className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-500"
-            />
-          )}
-        </div>
-        {deal.customer_name && (
-          <p className="text-xs text-muted-foreground mt-0.5 truncate">{deal.customer_name}</p>
+      <div className="flex items-center gap-2">
+        <span className="truncate text-sm font-bold text-foreground">{company}</span>
+        {openStage && isStale(deal) && (
+          <span
+            title="No updates in 14+ days"
+            className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--state-amber)]"
+          />
         )}
-        <div className="flex items-center justify-between mt-1.5">
-          <p className="text-xs font-medium">{money(deal.amount_cents, deal.currency)}</p>
-          {deal.expected_close_at && (
-            <span
-              className={cn(
-                "text-[11px] px-1.5 py-0.5 rounded",
-                overdue ? "text-destructive bg-destructive/10" : "text-muted-foreground",
-              )}
-            >
-              {closeDateLabel(deal.expected_close_at)}
-            </span>
+        <span className="flex-1" />
+        <span className="shrink-0 font-ops-mono text-[12px] font-bold text-[var(--state-green)]">
+          {money(deal.amount_cents, deal.currency)}
+        </span>
+      </div>
+      {deal.customer_name && deal.customer_name !== deal.name && (
+        <p className="truncate text-[12.5px] text-muted-foreground">{deal.name}</p>
+      )}
+      {deal.expected_close_at && (
+        <span
+          className={cn(
+            "w-fit rounded-md px-[9px] py-1 font-ops-mono text-[10.5px]",
+            overdue
+              ? "bg-destructive/10 text-destructive"
+              : "bg-[var(--surface-card-hover)] text-muted-foreground",
           )}
-        </div>
-      </CardContent>
-    </Card>
+        >
+          close {closeDateLabel(deal.expected_close_at)}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -124,7 +125,7 @@ function Column({
         terminal ? "opacity-70" : "",
       )}
     >
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-2.5">
         <button
           className="flex items-center gap-2 text-left"
           onClick={onToggle}
@@ -137,21 +138,23 @@ function Column({
               <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
             ))}
           <span
-            className="h-2 w-2 rounded-full"
-            style={{ backgroundColor: state.color || "#6b7280" }}
+            className="h-[9px] w-[9px] rounded-full"
+            style={{ backgroundColor: state.color || "var(--muted-foreground)" }}
           />
-          <span className="text-sm font-medium">{state.name}</span>
-          <span className="text-xs text-muted-foreground">{deals.length}</span>
+          <span className="font-ops-mono text-[11.5px] font-bold uppercase tracking-[1px] text-muted-foreground">
+            {state.name}
+          </span>
+          <span className="font-ops-mono text-[11px] text-muted-foreground/70">{deals.length}</span>
         </button>
         <span
-          className="text-xs text-muted-foreground"
+          className="font-ops-mono text-[11px] text-muted-foreground"
           title={totals.map((t) => `${t.currency}: ${t.count}`).join(", ")}
         >
           {formatCurrencyTotals(totals)}
         </span>
       </div>
       {!collapsed && (
-        <div className="space-y-2 min-h-[60px]">
+        <div className="space-y-2.5 min-h-[60px]">
           {deals.map((d) => (
             <DealCard key={d.id} deal={d} openStage={!terminal} onClick={() => onDealClick(d)} />
           ))}
@@ -161,25 +164,20 @@ function Column({
   );
 }
 
-function Metric({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
+function Stat({ label, value, tone }: { label: string; value: string; tone?: "green" | "danger" }) {
   return (
-    <Card className="flex-1 min-w-[150px]">
-      <CardContent className="p-4">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        {value === "" ? (
-          <Skeleton className="h-6 w-24 mt-1" />
-        ) : (
-          <p
-            className={cn(
-              "text-lg font-semibold tracking-tight truncate",
-              danger && value !== "0" && "text-destructive",
-            )}
-          >
-            {value}
-          </p>
+    <span className="flex items-center gap-[7px]">
+      <span className="font-ops-mono text-[11px] text-muted-foreground">{label}</span>
+      <span
+        className={cn(
+          "truncate font-ops-mono text-[12.5px] font-bold",
+          tone === "green" && "text-[var(--state-green)]",
+          tone === "danger" && "text-destructive",
         )}
-      </CardContent>
-    </Card>
+      >
+        {value}
+      </span>
+    </span>
   );
 }
 
@@ -276,22 +274,30 @@ export default function PipelineBoardPage() {
 
   return (
     <div className="flex flex-col h-full -m-4 md:-m-6 lg:-m-8">
-      <div className="px-4 py-3 border-b">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <h1 className="text-lg font-semibold">Pipeline</h1>
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> New Deal
-          </Button>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <Metric label="Open value" value={totals ? formatCurrencyTotals(totals.open) : ""} />
-          <Metric
-            label="Won this month"
-            value={totals ? formatCurrencyTotals(totals.won_this_month) : ""}
+      <div className="flex shrink-0 flex-wrap items-center gap-4 border-b px-4 py-3 md:px-6 md:py-[13px]">
+        <h1 className="text-[15px] font-bold">Pipeline</h1>
+        <div className="flex flex-wrap items-center gap-[18px]">
+          <Stat label="open value" value={totals ? formatCurrencyTotals(totals.open) : "—"} />
+          <Stat
+            label="won this month"
+            value={totals ? formatCurrencyTotals(totals.won_this_month) : "—"}
+            tone="green"
           />
-          <Metric label="Active deals" value={totals ? String(openCount) : ""} />
-          <Metric label="Overdue" value={totals ? String(overdueCount) : ""} danger />
+          <Stat label="active deals" value={totals ? String(openCount) : "—"} />
+          <Stat
+            label="overdue"
+            value={totals ? String(overdueCount) : "—"}
+            tone={overdueCount > 0 ? "danger" : undefined}
+          />
         </div>
+        <span className="flex-1" />
+        <Button
+          size="sm"
+          onClick={() => setCreateOpen(true)}
+          className="gap-[7px] rounded-[9px] bg-foreground px-3.5 font-bold text-background hover:bg-foreground/90"
+        >
+          <Plus className="h-3.5 w-3.5" /> New deal
+        </Button>
       </div>
 
       {states.length === 0 ? (
@@ -301,7 +307,7 @@ export default function PipelineBoardPage() {
         </p>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-          <div className="flex gap-4 p-4 overflow-x-auto flex-1">
+          <div className="flex gap-3.5 px-4 py-4 overflow-x-auto flex-1 md:px-6 md:py-[18px]">
             {openStates.map((s) => (
               <Column
                 key={s.id}

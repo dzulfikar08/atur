@@ -45,6 +45,8 @@ import {
   Package,
   Pencil,
   Check,
+  CheckCircle2,
+  ChevronRight,
   ArrowUpDown,
   User,
   Bell,
@@ -153,6 +155,21 @@ const PRIORITY_DOT: Record<string, string> = {
   low: "bg-blue-500",
   none: "bg-gray-400",
 };
+
+// Ops-console state pill palette: state group → surface/foreground token vars.
+// Green = done, amber = in review/started, blue = todo/in play, gray = backlog.
+const STATE_GROUP_PILL: Record<string, { bg: string; fg: string }> = {
+  backlog: { bg: "var(--surface-card-hover)", fg: "var(--muted-foreground)" },
+  unstarted: { bg: "var(--state-blue-soft)", fg: "var(--state-blue)" },
+  started: { bg: "var(--state-amber-soft)", fg: "var(--state-amber)" },
+  completed: { bg: "var(--state-green-soft)", fg: "var(--state-green)" },
+  cancelled: { bg: "var(--surface-card-hover)", fg: "var(--muted-foreground)" },
+};
+
+// Evidence-first activity: a comment carries proof when it embeds images
+// (pasted/dropped/attached shots) or is written up as evidence — those get
+// the amber evidence panel; ordinary prose keeps the plain thread look.
+
 // Render a single activity row as inline JSX. Handles creation, comments, and
 // field changes (with priority/value formatting), attributing each to an actor.
 function renderActivityText(a: IssueActivity): ReactNode {
@@ -189,9 +206,9 @@ function renderActivityText(a: IssueActivity): ReactNode {
       <>
         {actor} changed <span className="font-medium text-foreground">{fieldLabel}</span>
         {" from "}
-        <span className="font-mono text-xs bg-muted px-1 rounded">{formatVal(a.old_value)}</span>
+        <span className="font-ops-mono text-xs bg-muted px-1 rounded">{formatVal(a.old_value)}</span>
         {" to "}
-        <span className="font-mono text-xs bg-muted px-1 rounded">{formatVal(a.new_value)}</span>
+        <span className="font-ops-mono text-xs bg-muted px-1 rounded">{formatVal(a.new_value)}</span>
       </>
     );
   }
@@ -798,6 +815,12 @@ export default function IssueDetail() {
 
   const [moduleSelectValue, setModuleSelectValue] = useState("");
 
+  // State pill: the state's group picks the color family; the dot keeps the
+  // state's own color when the project defines one.
+  const currentState = issue?.state ?? states.find((s) => s.id === issue?.state_id) ?? null;
+  const fallbackPill = { bg: "var(--surface-card-hover)", fg: "var(--muted-foreground)" };
+  const statePill = (currentState?.group && STATE_GROUP_PILL[currentState.group]) || fallbackPill;
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -820,14 +843,22 @@ export default function IssueDetail() {
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <span className="text-sm text-muted-foreground">
-          {issue.project_detail?.identifier || "PROJ"}-{String(issue.sequence_id).padStart(4, "0")}
-        </span>
+        {/* Breadcrumb: project › issue key (ops-console topbar, mono key) */}
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[13.5px] text-muted-foreground truncate">
+            {issue.project_detail?.name || "Project"}
+          </span>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="font-ops-mono text-[13.5px] font-bold whitespace-nowrap">
+            {issue.project_detail?.identifier || "PROJ"}-
+            {String(issue.sequence_id).padStart(4, "0")}
+          </span>
+        </div>
         <div className="ml-auto flex items-center gap-1">
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-destructive"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive"
             onClick={() => setConfirmDeleteOpen(true)}
             aria-label="Delete issue"
           >
@@ -902,7 +933,9 @@ export default function IssueDetail() {
               </div>
             ) : (
               <div className="flex items-center gap-1 mb-4 group">
-                <h1 className="text-xl font-semibold">{issue.name}</h1>
+                <h1 className="text-[24px]/[29px] font-extrabold tracking-[-0.6px]">
+                  {issue.name}
+                </h1>
                 <Button
                   size="icon"
                   variant="ghost"
@@ -934,13 +967,17 @@ export default function IssueDetail() {
               </div>
             ) : (
               <div className="mb-6 group">
-                {issue.description_html ? (
-                  <div className="text-sm text-foreground max-w-none prose prose-sm">
-                    <CommentContent html={issue.description_html} />
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground text-sm italic">No description provided</p>
-                )}
+                <div className="rounded-[12px] border border-border bg-[var(--surface-elevated)] py-[18px] px-5">
+                  {issue.description_html ? (
+                    <div className="text-sm leading-[23px] text-muted-foreground max-w-none prose prose-sm">
+                      <CommentContent html={issue.description_html} />
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-sm italic">
+                      No description provided
+                    </p>
+                  )}
+                </div>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -1020,7 +1057,7 @@ export default function IssueDetail() {
                                 setRelationSearch("");
                               }}
                             >
-                              <span className="text-muted-foreground text-xs">
+                              <span className="font-ops-mono text-muted-foreground text-xs">
                                 #{String(i.sequence_id).padStart(4, "0")}
                               </span>
                               <span className="truncate">{i.name}</span>
@@ -1110,7 +1147,7 @@ export default function IssueDetail() {
                               )
                             }
                           >
-                            <span className="text-muted-foreground mr-1">
+                            <span className="font-ops-mono text-muted-foreground mr-1">
                               #{String(relIssue.sequence_id).padStart(4, "0")}
                             </span>
                             {relIssue.name}
@@ -1151,7 +1188,7 @@ export default function IssueDetail() {
                     }
                   >
                     <GitBranch className="h-3 w-3" />
-                    <span className="text-muted-foreground">
+                    <span className="font-ops-mono text-muted-foreground">
                       #{String(parentIssue.sequence_id).padStart(4, "0")}
                     </span>
                     {parentIssue.name}
@@ -1176,7 +1213,7 @@ export default function IssueDetail() {
                       }
                     >
                       <GitBranch className="h-3 w-3 text-muted-foreground shrink-0" />
-                      <span className="text-muted-foreground text-xs">
+                      <span className="font-ops-mono text-muted-foreground text-xs">
                         #{String(si.sequence_id).padStart(4, "0")}
                       </span>
                       <span className="text-sm truncate flex-1">{si.name}</span>
@@ -1219,9 +1256,11 @@ export default function IssueDetail() {
 
           {/* Properties */}
           <div className="mt-auto border-t px-4 md:px-5 lg:px-6 py-4 md:py-5">
+            {/* Properties card (ops-console right-rail styling) */}
+            <div className="rounded-[12px] border border-border bg-[var(--surface-elevated)] p-4 md:p-5">
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-5">
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 block">
                   Follow
                 </label>
                 <Button
@@ -1242,7 +1281,7 @@ export default function IssueDetail() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                   <User className="h-3 w-3" /> Assignee
                 </label>
                 <div className="space-y-1.5">
@@ -1307,15 +1346,28 @@ export default function IssueDetail() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 block">
                   State
                 </label>
                 <Select
                   value={issue.state_id || ""}
                   onValueChange={(v) => updateMutation.mutate({ state_id: v })}
                 >
-                  <SelectTrigger className="h-8 text-sm">
-                    <SelectValue placeholder="Set state" />
+                  <SelectTrigger
+                    className="h-auto w-fit gap-1.5 rounded-full border-0 px-2.5 py-1 font-ops-mono text-[12px] font-bold [&>svg]:h-3 [&>svg]:w-3 [&>svg]:opacity-70"
+                    style={{ backgroundColor: statePill.bg, color: statePill.fg }}
+                  >
+                    {currentState ? (
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          className="ops-dot"
+                          style={currentState.color ? { background: currentState.color } : undefined}
+                        />
+                        {currentState.name}
+                      </span>
+                    ) : (
+                      <span className="font-normal">Set state</span>
+                    )}
                   </SelectTrigger>
                   <SelectContent>
                     {states.map((s) => (
@@ -1334,7 +1386,7 @@ export default function IssueDetail() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 block">
                   Priority
                 </label>
                 <Select
@@ -1358,7 +1410,7 @@ export default function IssueDetail() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 block">
                   Estimate (pts)
                 </label>
                 <Select
@@ -1367,7 +1419,7 @@ export default function IssueDetail() {
                     updateMutation.mutate({ estimate_points: v === "__none__" ? null : Number(v) })
                   }
                 >
-                  <SelectTrigger className="h-8 text-sm">
+                  <SelectTrigger className="h-8 text-sm font-ops-mono">
                     <SelectValue placeholder="No estimate" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1382,7 +1434,7 @@ export default function IssueDetail() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                   <Calendar className="h-3 w-3" /> Start Date
                 </label>
                 <DatePicker
@@ -1392,7 +1444,7 @@ export default function IssueDetail() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                   <Calendar className="h-3 w-3" /> Target Date
                 </label>
                 <DatePicker
@@ -1402,7 +1454,7 @@ export default function IssueDetail() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                   <Package className="h-3 w-3" /> Modules
                 </label>
                 {issueModulesLoading ? (
@@ -1469,20 +1521,23 @@ export default function IssueDetail() {
             <Separator className="my-4" />
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-5">
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                   <Clock className="h-3 w-3" /> Created
                 </label>
-                <p className="text-sm">{new Date(issue.created_at).toLocaleDateString()}</p>
+                <p className="font-ops-mono text-sm">
+                  {new Date(issue.created_at).toLocaleDateString()}
+                </p>
               </div>
 
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                   <Clock className="h-3 w-3" /> Updated
                 </label>
-                <p className="text-sm">
+                <p className="font-ops-mono text-sm">
                   {formatDistanceToNow(new Date(issue.updated_at), { addSuffix: true })}
                 </p>
               </div>
+            </div>
             </div>
           </div>
         </div>
@@ -1574,6 +1629,101 @@ export default function IssueDetail() {
                   <div className="space-y-4">
                     {sortedComments.map((c) => {
                       const isMine = c.actor_id === currentUser?.id;
+                      // Evidence-first: comments that embed images (pasted/dropped
+                      // shots) or spell out evidence get the amber proof panel;
+                      // plain prose keeps the standard thread look.
+                      // comment_stripped is null on this API — read the text
+                      // signal out of the HTML instead.
+                      const isEvidence =
+                        /<img\b/i.test(c.comment_html) ||
+                        /evidence/i.test(c.comment_html.replace(/<[^>]*>/g, " "));
+                      const body =
+                        editingCommentId === c.id ? (
+                          <div className="space-y-2">
+                            <CommentEditor
+                              value={editCommentText}
+                              onChange={setEditCommentText}
+                              placeholder="Edit comment..."
+                              resetKey={editingCommentId}
+                              members={mentionMembers}
+                            />
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                disabled={
+                                  !editCommentText.replace(/<[^>]*>/g, "").trim() ||
+                                  editCommentMutation.isPending
+                                }
+                                onClick={() =>
+                                  editCommentMutation.mutate({
+                                    commentId: c.id,
+                                    comment_html: editCommentText,
+                                  })
+                                }
+                              >
+                                {editCommentMutation.isPending ? "Saving..." : "Save"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingCommentId(null);
+                                  setEditCommentText("");
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            className={
+                              isEvidence
+                                ? "text-[13.5px] leading-[21px] text-foreground"
+                                : "text-sm"
+                            }
+                          >
+                            <CommentContent html={c.comment_html} />
+                          </div>
+                        );
+                      if (isEvidence) {
+                        return (
+                          <div
+                            key={c.id}
+                            className="group rounded-[12px] border px-5 py-[18px]"
+                            style={{
+                              backgroundColor: "var(--state-amber-soft)",
+                              borderColor: "var(--state-amber)",
+                            }}
+                          >
+                            <div className="flex items-center gap-2 mb-3">
+                              <CheckCircle2
+                                className="h-4 w-4 shrink-0"
+                                style={{ color: "var(--state-amber)" }}
+                              />
+                              <span
+                                className="text-sm font-bold truncate"
+                                style={{ color: "var(--state-amber)" }}
+                              >
+                                {c.actor_detail?.display_name || "User"} posted evidence
+                              </span>
+                              <span className="ml-auto font-ops-mono text-xs text-muted-foreground shrink-0">
+                                {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
+                              </span>
+                              {isMine && editingCommentId !== c.id && (
+                                <button
+                                  className="p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                                  onClick={() => startEditComment(c)}
+                                  aria-label="Edit comment"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                            {body}
+                          </div>
+                        );
+                      }
                       return (
                         <div key={c.id} className="flex gap-3 group">
                           <Avatar className="h-8 w-8">
@@ -1592,7 +1742,7 @@ export default function IssueDetail() {
                               <span className="text-sm font-medium">
                                 {c.actor_detail?.display_name || "User"}
                               </span>
-                              <span className="text-xs text-muted-foreground">
+                              <span className="font-ops-mono text-xs text-muted-foreground">
                                 {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
                               </span>
                               {isMine && editingCommentId !== c.id && (
@@ -1605,48 +1755,7 @@ export default function IssueDetail() {
                                 </button>
                               )}
                             </div>
-                            {editingCommentId === c.id ? (
-                              <div className="space-y-2">
-                                <CommentEditor
-                                  value={editCommentText}
-                                  onChange={setEditCommentText}
-                                  placeholder="Edit comment..."
-                                  resetKey={editingCommentId}
-                                  members={mentionMembers}
-                                />
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    size="sm"
-                                    disabled={
-                                      !editCommentText.replace(/<[^>]*>/g, "").trim() ||
-                                      editCommentMutation.isPending
-                                    }
-                                    onClick={() =>
-                                      editCommentMutation.mutate({
-                                        commentId: c.id,
-                                        comment_html: editCommentText,
-                                      })
-                                    }
-                                  >
-                                    {editCommentMutation.isPending ? "Saving..." : "Save"}
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => {
-                                      setEditingCommentId(null);
-                                      setEditCommentText("");
-                                    }}
-                                  >
-                                    Cancel
-                                  </Button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="text-sm">
-                                <CommentContent html={c.comment_html} />
-                              </div>
-                            )}
+                            {body}
                           </div>
                         </div>
                       );
@@ -1672,7 +1781,7 @@ export default function IssueDetail() {
                         <div className="flex-1 min-w-0">
                           <span className="text-muted-foreground">{renderActivityText(a)}</span>
                           {a.created_at && (
-                            <span className="text-xs text-muted-foreground ml-2">
+                            <span className="font-ops-mono text-xs text-muted-foreground ml-2">
                               {formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}
                             </span>
                           )}
@@ -1759,7 +1868,7 @@ export default function IssueDetail() {
                           )}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{name}</p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="font-ops-mono text-xs text-muted-foreground">
                               {fmtSize}
                               {type && ` · ${type}`}
                               {att.created_at &&
@@ -1801,7 +1910,7 @@ export default function IssueDetail() {
               <>
                 {/* Log time form */}
                 <div className="rounded-lg border p-3 mb-4">
-                  <h4 className="text-xs font-semibold mb-2">Log Time</h4>
+                  <h4 className="font-ops-mono text-xs font-semibold mb-2">Log Time</h4>
                   <div className="flex items-center gap-2 mb-2">
                     <Input
                       type="number"
@@ -1851,12 +1960,12 @@ export default function IssueDetail() {
                 {/* Total */}
                 <div className="flex items-center gap-2 mb-3">
                   <Timer className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-medium">
+                  <span className="font-ops-mono text-sm font-medium">
                     Total: {Math.floor(totalTimeSeconds / 3600)}h{" "}
                     {Math.floor((totalTimeSeconds % 3600) / 60)}m
                   </span>
                   {agentTokens && agentTokens.total_tokens > 0 && (
-                    <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                    <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-ops-mono text-[11px] text-muted-foreground">
                       agent: {(agentTokens.total_tokens / 1000).toFixed(1)}k tokens
                       {agentTokens.cost_usd != null &&
                         ` · $${agentTokens.cost_usd < 0.01 && agentTokens.cost_usd > 0 ? agentTokens.cost_usd.toFixed(4) : agentTokens.cost_usd.toFixed(2)}`}
@@ -1880,10 +1989,10 @@ export default function IssueDetail() {
                           className="flex items-center justify-between gap-3 rounded-lg border p-3 hover:bg-muted/20"
                         >
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium">
+                            <p className="font-ops-mono text-sm font-medium">
                               {hrs}h {mins}m
                               {entry.source === "agent" && (
-                                <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-normal text-muted-foreground">
+                                <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-ops-mono text-[10px] font-normal text-muted-foreground">
                                   {entry.agent_name ?? "agent"}
                                   {entry.model ? ` · ${entry.model}` : ""}
                                   {(entry.input_tokens != null || entry.output_tokens != null) &&
@@ -1970,8 +2079,12 @@ export default function IssueDetail() {
                         Visible to customer
                       </label>
                     )}
+                    {/* Primary action — the design's strong light button ("only
+                        humans merge" spirit); this page's human-only action is
+                        posting the response. Handler unchanged. */}
                     <Button
                       size="sm"
+                      className="h-8 rounded-[11px] bg-primary px-4 text-[13px] font-bold text-primary-foreground shadow-none"
                       disabled={
                         !commentText.replace(/<[^>]*>/g, "").trim() || commentMutation.isPending
                       }

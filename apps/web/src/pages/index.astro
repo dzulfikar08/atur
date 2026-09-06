@@ -1,84 +1,490 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Icon from "../components/Icon.astro";
-import InteractiveBoard from "../components/InteractiveBoard.astro";
-import PagesDemo from "../components/PagesDemo.astro";
-import TimesheetDemo from "../components/TimesheetDemo.astro";
-import CrmDemo from "../components/CrmDemo.astro";
+import "../styles/landing.css";
 
 const APP_URL = "https://app.diatur.com";
-const features = [
-  { icon: "kanban", title: "Plan and ship", description: "Projects, issues, cycles, and kanban boards give the team one clear place to move work forward." },
-  { icon: "bot", title: "Assign work to agents", description: "Write the issue with the context an agent needs, assign it, and an agent claims the work — in a branch against your repo." },
-  { icon: "terminal", title: "Watch agents work", description: "Every agent runs in a live terminal pane you can open in the browser. No black box — you see exactly what it is doing." },
-  { icon: "checkmarkCircle", title: "Evidence before review", description: "Agents don't just say done. What changed and the proof land on the issue as comments a human can check." },
-  { icon: "share", title: "One agent, whole operation", description: "70+ MCP tools span issues, tickets, deals, time, and pages — one surface, because the data model is connected." },
-  { icon: "flow", title: "A workspace that connects", description: "Pages with wikilinks, backlinks, and a knowledge graph tie docs to issues, customers, and deals." },
-  { icon: "comment", title: "Listen to customers", description: "Collect feedback and support tickets in a portal your customers can actually use." },
-  { icon: "contactBook", title: "Keep relationships warm", description: "Contacts, companies, and pipeline stages stay close to the work they influence." },
-  { icon: "timer", title: "Know where time goes", description: "Track time against issues and projects without rebuilding the same report in another tool." },
+
+const boardCols = [
+  {
+    name: "Backlog",
+    dot: "var(--lp-text-3)",
+    count: "3",
+    cards: [
+      { key: "ATUR-41", title: "Add webhook retries with backoff", chip: null },
+      { key: "ATUR-44", title: "Draft v0.9 changelog", chip: { kind: "gray", icon: "bot", text: "queued" } },
+    ],
+  },
+  {
+    name: "In progress",
+    dot: "var(--lp-blue)",
+    count: "2 · WIP 3",
+    cards: [
+      { key: "ATUR-38", title: "Rate-limit login attempts", chip: { kind: "green", icon: "terminal", text: "firstmate · working" } },
+      { key: "ATUR-39", title: "Fix OAuth callback race", chip: { kind: "green", icon: "terminal", text: "sonnet · working" } },
+    ],
+  },
+  {
+    name: "Needs review",
+    dot: "var(--lp-amber)",
+    count: "2",
+    hot: true,
+    cards: [
+      { key: "ATUR-35", title: "Invite email returns 500 on verify", chip: { kind: "amber", icon: "checkmarkCircle", text: "evidence ready" } },
+      { key: "ATUR-33", title: "Migrate assets to R2", chip: { kind: "amber", icon: "checkmarkCircle", text: "evidence ready" } },
+    ],
+  },
+  {
+    name: "Done",
+    dot: "var(--lp-green)",
+    count: "12",
+    cards: [
+      { key: "ATUR-28", title: "Cycle burndown chart", chip: { kind: "green", icon: "gitMerge", text: "merged · dzul" } },
+      { key: "ATUR-26", title: "Portal ticket threading", chip: { kind: "green", icon: "gitMerge", text: "merged · dzul" } },
+    ],
+  },
 ];
-const metrics = [["70+", "MCP tools"], ["1", "Connected workspace"], ["0", "Unreviewed merges"], ["24/7", "Agents on shift"]];
-const workflow = [
-  ["01", "Write it like a brief", "Link the repo, the customer, the page. An agent claims the issue with everything it needs already attached."],
-  ["02", "An agent picks it up", "It claims the issue and ships the work in an isolated branch — with its live terminal one click away in your browser."],
-  ["03", "You review the proof", "Evidence lands on the issue: what changed and why it works. Approve and merge — nothing ships without you."],
+
+const metrics = [
+  ["70+", "MCP tools for agents"],
+  ["1", "connected workspace"],
+  ["0", "unreviewed merges"],
+  ["24/7", "agents on shift"],
 ];
-const pageItems = [
-  { icon: "file", text: "Rich text with slash commands and callouts" },
-  { icon: "link", text: "Wikilinks with backlink references" },
-  { icon: "flow", text: "Interactive knowledge graph visualization" },
-  { icon: "whiteboard", text: "Embedded drawing whiteboards" },
+
+const steps = [
+  ["Write it like a brief", "Link the repo, the customer, the page. The issue carries everything an agent needs — no context lost in a handoff."],
+  ["An agent picks it up", "It claims the issue and ships in an isolated branch. Its live terminal is one click away in your browser — no black box."],
+  ["You review the proof", "What changed and why it works land on the issue as evidence. Approve and merge — nothing ships without you."],
 ];
+
+const groups = [
+  {
+    icon: "kanban",
+    title: "Plan & ship",
+    rows: [
+      ["kanban", "Projects, issues, and cycles"],
+      ["gitBranch", "Agent work on branches, proof on issues"],
+      ["timer", "Time tracked where work happens"],
+    ],
+  },
+  {
+    icon: "contactBook",
+    title: "Keep customers close",
+    rows: [
+      ["contactBook", "Contacts, companies, and pipeline"],
+      ["lifeBuoy", "Support portal and feedback board"],
+      ["chart", "Reports that follow projects"],
+    ],
+  },
+  {
+    icon: "file",
+    title: "Remember everything",
+    rows: [
+      ["notebookPen", "Pages with slash commands and callouts"],
+      ["link", "Wikilinks with backlinks"],
+      ["flow", "A knowledge graph of the work"],
+    ],
+  },
+];
+
 const reasons = [
-  { icon: "check", title: "Agents never merge", description: "Every agent task ends at Need Review. What changed and the proof sit on the issue — and only a human clicks merge." },
-  { icon: "userMultiple", title: "A blocked agent asks", description: "Missing a credential or a decision? The agent moves the issue to Needs You and comments exactly what it needs. Answer, and it resumes." },
-  { icon: "layers", title: "Autonomy you set", description: "Per workspace: agents leave a branch, open a PR, or — only if you say so — merge after green checks. Widen it deliberately." },
+  ["gitPullRequest", "Agents never merge", "Every agent task ends at Need Review. What changed and the proof sit on the issue — and only a human clicks merge."],
+  ["comment", "A blocked agent asks", "Missing a credential or a decision? It moves the issue to Needs You and comments exactly what it needs. Answer, and it resumes."],
+  ["slidersHorizontal", "Autonomy you set", "Per workspace: leave a branch, open a PR, or — only if you say so — merge after green checks. Widen it deliberately."],
 ];
+
+const surfaces = [
+  ["issues", "var(--lp-green)"],
+  ["tickets", "var(--lp-blue)"],
+  ["deals", "var(--lp-amber)"],
+  ["time", "var(--lp-text-3)"],
+  ["pages", "var(--lp-text-3)"],
+];
+
+const termLines: [string, string, string][] = [
+  ["$", "# claude mcp add atur --transport http \\", "cmd"],
+  ["", "    https://app.diatur.com/mcp \\", "cmd"],
+  ["", "    -H \"X-API-Key: pk_live_…\"", "cmd"],
+  ["", "", "dim"],
+  ["#", "# 70+ tools. one connected data model.", "dim"],
+  ["", "", "dim"],
+  ["$", "atur claim ATUR-41 --agent firstmate", "cmd"],
+  ["✓", "claimed · branch feat/webhook-retries · pane wJ:pJ", "ok"],
+  ["→", "evidence will post to the issue at Need Review", "dim"],
+];
+
+const MCP_CMD = "claude mcp add atur --transport http https://app.diatur.com/mcp -H \"X-API-Key: <your-key>\"";
+
+const compareRows = [
+  ["issues & cycles", "linear or jira — $8–10/seat", "✓ built in"],
+  ["agent execution", "— nothing ships proof", "✓ claims, ships, posts evidence"],
+  ["pages & graph", "notion — $10/seat", "✓ wikilinks + knowledge graph"],
+  ["crm & portal", "hubspot + zendesk", "✓ deals, contacts, support portal"],
+  ["time", "toggl — $9/seat", "✓ rolled up per issue"],
+  ["price model", "per-seat, grows with you", "✓ flat — team $29/mo"],
+];
+
+const posts = [
+  ["origin", "why-we-built-atur", "Why we built Atur", "Small teams don't fail from lack of tools. They fail from context scattered across too many of them — and now agents inherit that mess."],
+  ["comparison", "atur-vs-linear", "Atur vs Linear", "Linear made issues fast. Atur makes issues something an agent can pick up, ship, and answer for — with the review still yours."],
+  ["engineering", "how-atur-is-built", "How Atur is built", "One Hono worker on Cloudflare, one D1 database, and an MCP server that exposes the same data model your team uses."],
+];
+
 const plans = [
-  ["Starter", "$9", "For individuals and small teams building a calmer operating system.", ["Projects, issues, and cycles", "Support portal and feedback", "CRM contacts and pipeline", "Pages and knowledge graph", "Time tracking", "AI agents via MCP"]],
-  ["Team", "$29", "For growing teams bringing delivery and customer work together.", ["Everything in Starter", "Unlimited team members", "Flat price — not per seat", "Custom domain", "Daily automatic backups", "Priority support", "Onboarding assistance"]],
+  {
+    name: "Starter",
+    price: "$9",
+    blurb: "For individuals and small teams building a calmer operating system.",
+    items: ["Projects, issues, and cycles", "Support portal and feedback", "CRM contacts and pipeline", "Pages and knowledge graph", "Time tracking", "AI agents via MCP"],
+    hot: false,
+  },
+  {
+    name: "Team",
+    price: "$29",
+    blurb: "For growing teams bringing delivery and customer work together.",
+    items: ["Everything in Starter", "Flat price — the whole team, not per seat", "Custom domain", "Daily automatic backups", "Priority support", "Onboarding assistance"],
+    hot: true,
+  },
 ];
 ---
 
-<BaseLayout title="Atur — One workspace for teams and their agents" description="Atur connects projects, customers, docs, and time in one workspace — and gives your AI agents 70+ MCP tools to ship real work, with evidence on every issue and a human holding the merge." canonical="/" showChrome={false}>
-  <div class="old-landing">
-    <nav class="landing-nav">
-      <a class="landing-brand" href="/"><img src="/logo-128.png" alt="" width="32" height="32" />Atur</a>
-      <div class="landing-links"><a href="#features">What it does</a><a href="#agents">Agents</a><a href="#pages">Pages</a><a href="#time">Time</a><a href="#crm">CRM</a><a href="#pricing">Pricing</a><a href="/blog">Blog</a></div>
-      <div class="landing-actions"><a href={`${APP_URL}/auth/login`}>Sign in</a><a class="landing-button" href={`${APP_URL}/auth/login`}>Open workspace <b>→</b></a></div>
-      <details class="landing-mobile"><summary>☰</summary><div><a href="#features">What it does</a><a href="#agents">Agents</a><a href="#pages">Pages</a><a href="#time">Time</a><a href="#crm">CRM</a><a href="#pricing">Pricing</a><a href="/blog">Blog</a><a href={`${APP_URL}/auth/login`}>Sign in</a><a href={`${APP_URL}/auth/login`}>Open workspace</a></div></details>
+<BaseLayout
+  title="Atur — One workspace for teams and their agents"
+  description="Atur connects projects, customers, docs, and time in one workspace — and gives your AI agents 70+ MCP tools to ship real work, with evidence on every issue and a human holding the merge."
+  canonical="/"
+  showChrome={false}
+>
+  <div class="lp">
+    <nav class="lp-nav">
+      <a class="lp-brand" href="/"><span class="lp-brand-mark"><Icon name="terminal" size={16} /></span>Atur</a>
+      <div class="lp-links">
+        <a href="#mcp">Product</a>
+        <a href="#agents">Agents</a>
+        <a href="#pricing">Pricing</a>
+        <a href="/blog">Blog</a>
+      </div>
+      <div class="lp-nav-actions">
+        <a class="signin" href={`${APP_URL}/auth/login`}>Sign in</a>
+        <a class="lp-btn" href={`${APP_URL}/auth/login`}>Open workspace <Icon name="arrowRight" size={15} class="i" /></a>
+      </div>
     </nav>
 
-    <section class="landing-hero">
-      <div class="landing-grid-lines"></div><div class="landing-noise"></div>
-      <div class="landing-container landing-hero-content">
-      <span class="landing-badge"><i></i> Your team and its agents, one workspace</span>
-      <h1>You review the work.<br /><em>the agents do the rest.</em></h1>
-      <p>Atur is the connected workspace where small teams run the whole operation — projects, customers, docs, time — and where AI agents do real work: they claim issues, ship them, and post the evidence for your review. Nothing merges without you.</p>
-      <div class="landing-hero-actions"><a class="landing-button large" href={`${APP_URL}/auth/login`}>Start with Atur <b>→</b></a><a class="landing-outline large" href="#agents">See how agents work <b>↓</b></a></div>
+    <header class="lp-hero">
+      <h1>You review the work.</h1>
+      <p class="h1-serif">the agents do the rest.</p>
+      <p class="sub">
+        Atur runs your whole operation — projects, customers, docs, time — and your AI agents work
+        the board like teammates: they claim issues, ship them, and post the evidence. Nothing
+        merges without you.
+      </p>
+      <div class="lp-hero-ctas">
+        <a class="lp-btn lp-btn-lg" href={`${APP_URL}/auth/login`}>Start free <Icon name="arrowRight" size={17} class="i" /></a>
+        <a class="lp-btn lp-btn-lg lp-btn-ghost" href="#agents">See how agents work <Icon name="arrowDown" size={16} class="i" /></a>
+      </div>
 
-        <InteractiveBoard />
-        <div class="landing-metrics">{metrics.map(([value, label]) => <div><strong>{value}</strong><span>{label}</span></div>)}</div>
+      <div class="lp-proof">
+        <div class="lp-proof-chrome">
+          <span class="url">app.diatur.com / joyodigitama / Q3 Launch</span>
+          <span class="spacer"></span>
+          <span class="lp-live-chip"><span class="lp-dot"></span>2 agents working</span>
+        </div>
+        <div class="lp-board">
+          {boardCols.map((col) => (
+            <div class="lp-col">
+              <div class="lp-col-head">
+                <span class="cdot" style={`background:${col.dot}`}></span>
+                <span class="name">{col.name}</span>
+                <span class="count">{col.count}</span>
+              </div>
+              {col.cards.map((card) => (
+                <div class="lp-card" style={col.hot && card.chip?.kind === "amber" ? "border-color:var(--lp-amber)" : ""}>
+                  <span class="key">{card.key}</span>
+                  <span class="title">{card.title}</span>
+                  {card.chip && (
+                    <span class={`lp-chip ${card.chip.kind}`}><Icon name={card.chip.icon} size={11} />{card.chip.text}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div class="lp-metrics">
+        {metrics.map(([v, l]) => (
+          <div class="lp-stat"><strong>{v}</strong><span>{l}</span></div>
+        ))}
+      </div>
+    </header>
+
+    <section id="agents" class="lp-section">
+      <div class="wrap">
+        <div class="lp-section-head">
+          <div class="lp-eyebrow-row">
+            <span class="lp-eyebrow-label">THE AGENT LOOP</span>
+            <span class="lp-eyebrow-line"></span>
+          </div>
+          <h2 class="lp-h2">From issue to shipped,</h2>
+          <p class="lp-h2-serif">with a human at the wheel.</p>
+          <p class="lp-section-sub">
+            Agents work your board like teammates. They claim the issue, ship it in a branch, and
+            post the evidence — the merge stays yours.
+          </p>
+        </div>
+        <div class="lp-steps">
+          {steps.map(([title, body], i) => (
+            <article class="lp-step">
+              <span class="num">{String(i + 1).padStart(2, "0")}</span>
+              <h3>{title}</h3>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+        <div class="lp-flow">
+          <span class="lp-flow-pill blue"><span class="lp-dot"></span>In progress</span>
+          <Icon name="arrowRight" size={16} class="lp-flow-sep" />
+          <span class="lp-flow-pill amber"><span class="lp-dot"></span>Need review</span>
+          <Icon name="arrowRight" size={16} class="lp-flow-sep" />
+          <span class="lp-flow-pill green"><span class="lp-dot"></span>Done</span>
+        </div>
       </div>
     </section>
 
-    <section id="features" class="landing-section"><div class="landing-container"><div class="landing-heading"><small>One connected workspace</small><h2>Everything your team needs,<br /><em>connected for small teams</em></h2><p>Atur is designed for small teams whose work does not fit neatly into one category — and for the agents they put to work on it. Bring the operating pieces together without making everyone learn five systems.</p></div><div class="landing-feature-grid">{features.map((f) => <article><span class="feature-icon"><Icon name={f.icon} size={20} /></span><h3>{f.title}</h3><p>{f.description}</p></article>)}</div></div></section>
+    <section class="lp-section elevated">
+      <div class="wrap">
+        <div class="lp-section-head">
+          <div class="lp-eyebrow-row">
+            <span class="lp-eyebrow-label">ONE CONNECTED WORKSPACE</span>
+            <span class="lp-eyebrow-line"></span>
+          </div>
+          <h2 class="lp-h2">Everything your team needs,</h2>
+          <p class="lp-h2-serif">connected for small teams.</p>
+          <p class="lp-section-sub">
+            Work that doesn't fit one tool shouldn't need five. Bring delivery, customers, docs, and
+            time together — for the team and the agents they put to work on it.
+          </p>
+        </div>
+        <div class="lp-groups">
+          {groups.map((g) => (
+            <article class="lp-group">
+              <span class="ic"><Icon name={g.icon} size={19} /></span>
+              <h3>{g.title}</h3>
+              <ul>
+                {g.rows.map(([ic, text]) => (
+                  <li><Icon name={ic} size={14} />{text}</li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
 
-    <section id="agents" class="landing-section landing-workflow"><div class="landing-container"><div class="landing-heading"><small>The agent loop</small><h2>From issue to shipped,<br /><em>with a human at the wheel</em></h2><p>Atur is not a chatbot bolted onto a tracker. Agents work your board like teammates — they claim, ship, and post evidence, and the review stays yours.</p></div><div class="workflow-grid">{workflow.map(([number, title, description]) => <article><span>{number}</span><h3>{title}</h3><p>{description}</p></article>)}</div></div></section>
+    <section class="lp-section">
+      <div class="wrap">
+        <div class="lp-control-panel">
+          <span class="eyebrow">WHY ATUR</span>
+          <div class="lp-control-h2">
+            <h2 class="lp-h2">Agent speed,</h2>
+            <p class="lp-h2-serif">human judgment.</p>
+          </div>
+          <div class="lp-reasons">
+            {reasons.map(([icon, title, body]) => (
+              <div class="lp-reason">
+                <Icon name={icon} size={20} />
+                <h3>{title}</h3>
+                <p>{body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <section id="pages" class="landing-section"><div class="landing-container"><div class="landing-split"><div><small>Knowledge that stays useful</small><h2>Write it once.<br /><em>Find it again.</em></h2><p>Keep the decisions, specs, and working notes that make delivery easier. Atur's linked pages give your team a shared memory instead of another folder nobody opens.</p><ul>{pageItems.map((item) => <li><span><Icon name={item.icon} size={13} /></span>{item.text}</li>)}</ul></div><div class="landing-split-note"><span><Icon name="flow" size={16} /></span><p>A page can lead to an issue, a customer, a drawing — the context stays connected as work changes.</p></div></div><PagesDemo /></div></section>
+    <section id="mcp" class="lp-section" style="padding-top:0">
+      <div class="lp-mcp">
+        <div class="lp-mcp-left">
+          <div class="lp-eyebrow-row">
+            <span class="lp-eyebrow-num">01</span>
+            <span class="lp-eyebrow-label">MCP NATIVE</span>
+            <span class="lp-eyebrow-line"></span>
+          </div>
+          <h2 class="lp-h2">One agent,</h2>
+          <p class="lp-h2-serif">the whole operation.</p>
+          <p class="body">
+            Atur ships an MCP server with 70+ tools over one connected data model — issues, tickets,
+            deals, time, pages. Scope an agent to a project; every action it takes is an auditable
+            record.
+          </p>
+          <div class="lp-surface-chips">
+            {surfaces.map(([name, color]) => (
+              <span class="lp-surface-chip"><span class="lp-dot" style={`background:${color}`}></span>{name}</span>
+            ))}
+          </div>
+          <div class="lp-meta-row">
+            <span class="lp-meta"><strong>70+</strong><span>tools</span></span>
+            <span class="lp-meta-sep"></span>
+            <span class="lp-meta"><strong>1</strong><span>connected model</span></span>
+            <span class="lp-meta-sep"></span>
+            <span class="lp-meta audit"><Icon name="shieldCheck" size={14} /><span>auditable</span></span>
+          </div>
+        </div>
+        <div class="lp-term">
+          <div class="lp-term-chrome">
+            <div class="left">
+              <span class="tdot" style="background:#ff5f57"></span>
+              <span class="tdot" style="background:#febc2e"></span>
+              <span class="tdot" style="background:#28c840"></span>
+              <span class="title">agent setup — zsh</span>
+            </div>
+            <span class="compat"><span class="lp-dot" style="background:var(--lp-green)"></span>claude • cursor • windsurf</span>
+          </div>
+          <div class="lp-term-body">
+            {termLines.map(([p, t, kind]) => (
+              <div class="lp-term-line">
+                <span class={`p ${p === "$" || p === "✓" ? "ok" : ""}`}>{p}</span>
+                <span class={`t ${kind === "dim" ? "dim" : ""}`}>{t}</span>
+              </div>
+            ))}
+          </div>
+          <div class="lp-term-foot">
+            <div class="left">
+              <span class="icon-box"><Icon name="shieldCheck" size={12} /></span>
+              <span class="kv">
+                <span class="k">Scoped to one project</span>
+                <span class="v">Agent only sees what you scope it to</span>
+              </span>
+            </div>
+            <button class="lp-copy-btn" data-copy={MCP_CMD} type="button">
+              <Icon name="copy" size={12} />Copy
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <section id="time" class="landing-section"><div class="landing-container"><div class="landing-split"><div><small>Know where time goes</small><h2>Time that reports<br /><em>itself</em></h2><p>Log hours against issues and projects without rebuilding the same report in another tool. Atur rolls up the week for you.</p><ul><li><span><Icon name="timer" size={13} /></span>Per-issue time entries with live totals</li><li><span><Icon name="download" size={13} /></span>Export a CSV in one click</li><li><span><Icon name="table" size={13} /></span>Reports follow projects, not people</li></ul></div><div class="landing-split-note"><span><Icon name="chart" size={16} /></span><p>Every hour lands against an issue — so the same report answers “who did what” and “what did it cost.”</p></div></div><TimesheetDemo /></div></section>
+    <section id="pricing" class="lp-section" style="padding-top:0">
+      <div class="wrap">
+        <div class="lp-section-head">
+          <div class="lp-eyebrow-row">
+            <span class="lp-eyebrow-label">PRICING</span>
+            <span class="lp-eyebrow-line"></span>
+          </div>
+          <h2 class="lp-h2">A flat price,</h2>
+          <p class="lp-h2-serif">not a per-seat tax.</p>
+          <p class="lp-section-sub">
+            Simple plans for a connected workspace. Pay one flat rate for the whole team — no
+            per-seat math as you grow.
+          </p>
+        </div>
+        <div class="lp-plans">
+          {plans.map((plan) => (
+            <article class={`lp-plan${plan.hot ? " hot" : ""}`}>
+              {plan.hot && <span class="tag">FOR GROWING TEAMS</span>}
+              <h3>{plan.name}</h3>
+              <div class="price"><strong>{plan.price}</strong><span>/ month</span></div>
+              <p class="blurb">{plan.blurb}</p>
+              <ul>
+                {plan.items.map((item) => (
+                  <li><Icon name="check" size={14} />{item}</li>
+                ))}
+              </ul>
+              <a class="plan-btn" href={`${APP_URL}/auth/login`}>Start with {plan.name}</a>
+            </article>
+          ))}
+        </div>
+        <p class="lp-reassure">No credit card required to try it.</p>
+      </div>
+    </section>
 
-    <section id="crm" class="landing-section"><div class="landing-container"><div class="landing-split"><div><small>Keep relationships warm</small><h2>Customers stay<br /><em>close to the work</em></h2><p>Contacts, companies, and pipeline stages live next to the issues they influence. Drag a deal forward, and the context travels with it.</p><ul><li><span><Icon name="kanban" size={13} /></span>Pipeline board with draggable deals</li><li><span><Icon name="link" size={13} /></span>Contacts linked to issues and tickets</li><li><span><Icon name="clock" size={13} /></span>Deal stage history on every card</li></ul></div><div class="landing-split-note"><span><Icon name="contactBook" size={16} /></span><p>A support ticket can open a deal, and a deal can surface the issues keeping it alive.</p></div></div><CrmDemo /></div></section>
+    <section class="lp-section" style="padding-top:0">
+      <div class="wrap">
+        <div class="lp-section-head" style="align-items:flex-start;text-align:left">
+          <div class="lp-eyebrow-row">
+            <span class="lp-eyebrow-num">02</span>
+            <span class="lp-eyebrow-label">THE STACK IT REPLACES</span>
+            <span class="lp-eyebrow-line"></span>
+          </div>
+          <h2 class="lp-h2" style="font-size:30px;letter-spacing:-1px">Five subscriptions, one flat workspace.</h2>
+        </div>
+        <div class="lp-compare">
+          {compareRows.map(([surface, stack, atur], i) => (
+            <div class={`lp-compare-row${i === 0 ? " head" : ""}`}>
+              <span class="a">{surface}</span>
+              <span class="b">{stack}</span>
+              <span class={`c${i === 0 ? "" : " mono"}`}>{atur}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
 
-    <section class="landing-section landing-reasons"><div class="landing-container"><div class="landing-heading"><small>Why Atur</small><h2>Agent speed,<br /><em>human judgment.</em></h2></div><div class="reason-grid">{reasons.map((r) => <article><span><Icon name={r.icon} size={18} /></span><h3>{r.title}</h3><p>{r.description}</p></article>)}</div></div></section>
+    <section class="lp-section" style="padding-top:0;padding-bottom:96px">
+      <div class="wrap">
+        <div class="lp-blog-head">
+          <div class="lp-eyebrow-row">
+            <span class="lp-eyebrow-num">03</span>
+            <span class="lp-eyebrow-label">FROM THE BUILD LOG</span>
+            <span class="lp-eyebrow-line"></span>
+          </div>
+          <a class="all" href="/blog">read the blog →</a>
+        </div>
+        <div class="lp-blog-cards">
+          {posts.map(([tag, slug, title, ex]) => (
+            <a class="lp-post" href={`/blog/${slug}`}>
+              <span class="ptag">{tag}</span>
+              <h3>{title}</h3>
+              <p>{ex}</p>
+              <span class="go">read →</span>
+            </a>
+          ))}
+        </div>
+      </div>
+    </section>
 
-    <section id="pricing" class="landing-section"><div class="landing-container"><div class="landing-heading"><small>Pricing</small><h2>A flat price,<br /><em>not a per-seat tax</em></h2><p>Simple plans for a connected workspace. Pay one flat rate for the whole team — no per-seat math as you grow, and no credit card required to try it.</p></div><div class="plans">{plans.map(([name, price, blurb, items], i) => <article class={i === 1 ? "popular" : ""}>{i === 1 && <label>For growing teams</label>}<h3>{name}</h3><strong>{price}<small>/month</small></strong><p>{blurb}</p><ul>{items.map((item) => <li><Icon name="check" size={13} /> {item}</li>)}</ul><a class={i === 1 ? "landing-button" : "landing-outline"} href={`${APP_URL}/auth/login`}>{i === 1 ? "Start with Team →" : "Start with Starter"}</a></article>)}</div><p class="trial-note">Try Atur without a credit card. Upgrade when the workspace earns its place.</p></div></section>
+    <section class="lp-section" style="padding-top:0">
+      <div class="wrap">
+        <div class="lp-cta-panel">
+          <span class="eyebrow">04 — START</span>
+          <h2>Give your work</h2>
+          <p class="h2-serif">one place to land.</p>
+          <p>
+            Open a workspace, bind your repos, and give an agent its first issue. You keep the
+            review — it takes the busywork.
+          </p>
+          <a class="lp-btn lp-btn-lg" href={`${APP_URL}/auth/login`}>Open Atur <Icon name="arrowRight" size={16} class="i" /></a>
+        </div>
+      </div>
+    </section>
 
-    <section class="landing-section landing-cta"><div class="landing-container"><h2>Give your work<br /><em>one place to land.</em></h2><p>Open a workspace, bind your repos, and give an agent its first issue. You keep the review — it takes the busywork.</p><a class="landing-button large" href={`${APP_URL}/auth/login`}>Open Atur <b>→</b></a></div></section>
-    <section class="landing-section landing-mcp"><div class="landing-container"><span><Icon name="bot" size={26} /></span><h2>One agent,<br /><em>the whole operation.</em></h2><p>Atur ships an MCP server with 70+ tools across issues, tickets, deals, time, and pages — one surface over one connected data model. Scope an agent to a project or a function, and every action it takes is an auditable record your team can see.</p><div><a class="landing-button large" href={`${APP_URL}/auth/login`}>Connect your first agent <b>→</b></a><small>Find setup commands in <strong>AI / MCP</strong> inside the app.</small></div></div></section>
-    <footer class="landing-footer"><a class="landing-brand" href="/"><img src="/logo-128.png" alt="" width="28" height="28" />Atur</a><div><a href="#features">What it does</a><a href="#agents">Agents</a><a href="#pages">Pages</a><a href="#time">Time</a><a href="#crm">CRM</a><a href="#pricing">Pricing</a></div><span>© 2026 Atur</span></footer>
+    <footer class="lp-footer">
+      <a class="brand" href="/"><span class="lp-brand-mark"><Icon name="terminal" size={12} /></span>Atur</a>
+      <nav>
+        <a href="#mcp">Product</a>
+        <a href="#agents">Agents</a>
+        <a href="#pricing">Pricing</a>
+        <a href="/blog">Blog</a>
+      </nav>
+      <span class="copy">© 2026 Atur</span>
+    </footer>
   </div>
 </BaseLayout>
+
+<script>
+  document.querySelectorAll<HTMLButtonElement>(".lp-copy-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const text = btn.dataset.copy ?? "";
+      try {
+        await navigator.clipboard.writeText(text);
+        const label = btn.lastChild;
+        if (label && label.nodeType === 3) label.textContent = " Copied";
+        setTimeout(() => {
+          if (label && label.nodeType === 3) label.textContent = "Copy";
+        }, 1600);
+      } catch {
+        /* clipboard unavailable — non-critical */
+      }
+    });
+  });
+</script>

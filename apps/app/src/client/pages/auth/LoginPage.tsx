@@ -8,17 +8,9 @@ import { Eye, EyeOff, Loader2 } from "@/lib/icons";
 
 import { useAuthStore } from "@/stores/auth";
 import { ApiError } from "@/lib/api";
-import { AuthDivider, GoogleButton } from "@/components/auth/GoogleButton";
+import { GoogleButton } from "@/components/auth/GoogleButton";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
@@ -39,6 +31,12 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
+// Ops-console field styling (design: inset surfaces, 13.5px input text).
+const fieldLabelClass = "text-[12.5px] font-semibold text-muted-foreground";
+const fieldInputClass =
+  "h-auto rounded-[9px] border-border bg-(--surface-card) px-[13px] py-[11px] text-[13.5px] md:text-[13.5px]";
+const primaryButtonClass = "h-auto rounded-[10px] py-[13px] text-[14.5px] font-extrabold";
+
 function readErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
     try {
@@ -57,6 +55,9 @@ function redirectAfterLogin(): string {
   return redirect;
 }
 
+// Ops-console login: centered 400px card on a near-black field with a soft
+// radial glow behind it. All auth paths (password, email code, Google) are
+// unchanged — visual refresh only.
 export default function LoginPage() {
   const navigate = useNavigate();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -93,118 +94,148 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
-          <div className="mb-2 flex items-center justify-center gap-2">
-            <img src="/logo-128.png" alt="" className="h-9 w-9 rounded-lg bg-primary" />
-            <span className="text-xl font-bold tracking-tight">Atur</span>
-          </div>
-          <CardTitle className="text-2xl">Welcome back</CardTitle>
-          <CardDescription>Sign in to your account to continue</CardDescription>
-        </CardHeader>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-12">
+      {/* Soft radial glow behind the card (token-based, coherent in light mode) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-0 h-[700px] w-[700px] -translate-x-1/2 rounded-full"
+        style={{
+          background:
+            "radial-gradient(ellipse 50% 50% at 50% 50%, color-mix(in srgb, var(--foreground) 7%, transparent) 0%, transparent 100%)",
+        }}
+      />
 
-        <CardContent>
-          <Tabs defaultValue="password" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="password">Password</TabsTrigger>
-              <TabsTrigger value="otp">Email code</TabsTrigger>
-            </TabsList>
+      <div className="relative z-[1] flex w-full max-w-[400px] flex-col gap-5 rounded-[18px] border border-border bg-(--surface-elevated) p-9 shadow-[0_24px_60px_-16px_rgba(0,0,0,0.67)]">
+        {/* Brand */}
+        <div className="flex items-center gap-2.5">
+          <img src="/logo-128.png" alt="" className="h-[34px] w-[34px] rounded-[9px] bg-primary" />
+          <span className="text-[18px] font-bold text-foreground">Atur</span>
+        </div>
 
-            <TabsContent value="password" className="mt-4">
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                  {error && (
-                    <div
-                      role="alert"
-                      className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-                    >
-                      {error}
-                    </div>
+        <div>
+          <h1 className="text-[23px] font-extrabold tracking-[-0.5px] text-foreground">
+            Welcome back
+          </h1>
+          <p className="text-[14px] text-muted-foreground">
+            Sign in to your workspace to continue.
+          </p>
+        </div>
+
+        <Tabs defaultValue="password" className="w-full">
+          <TabsList className="flex h-auto w-full gap-[2px] rounded-[9px] bg-(--surface-card) p-[3px] ring-0">
+            <TabsTrigger
+              value="password"
+              className="h-auto flex-1 rounded-[7px] px-0 py-[7px] text-[13px] font-medium text-muted-foreground ring-0 data-[state=active]:bg-(--surface-card-hover) data-[state=active]:font-bold data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:ring-0"
+            >
+              Password
+            </TabsTrigger>
+            <TabsTrigger
+              value="otp"
+              className="h-auto flex-1 rounded-[7px] px-0 py-[7px] text-[13px] font-medium text-muted-foreground ring-0 data-[state=active]:bg-(--surface-card-hover) data-[state=active]:font-bold data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:ring-0"
+            >
+              Email code
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="password" className="mt-4">
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+                {error && (
+                  <div
+                    role="alert"
+                    className="rounded-[9px] border border-destructive/50 bg-destructive/10 px-3.5 py-2.5 text-[13px] text-destructive"
+                  >
+                    {error}
+                  </div>
+                )}
+
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className={fieldLabelClass}>Email</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="email"
+                          placeholder="you@company.com"
+                          autoComplete="email"
+                          className={fieldInputClass}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
                   )}
+                />
 
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className={fieldLabelClass}>Password</FormLabel>
+                      <div className="relative">
                         <FormControl>
                           <Input
-                            type="email"
-                            placeholder="you@example.com"
-                            autoComplete="email"
+                            type={showPassword ? "text" : "password"}
+                            placeholder="••••••••••"
+                            autoComplete="current-password"
+                            className={`${fieldInputClass} pr-10`}
                             {...field}
                           />
                         </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((s) => !s)}
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                          className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  <FormField
-                    control={form.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Password</FormLabel>
-                        <div className="relative">
-                          <FormControl>
-                            <Input
-                              type={showPassword ? "text" : "password"}
-                              placeholder="Enter your password"
-                              autoComplete="current-password"
-                              className="pr-10"
-                              {...field}
-                            />
-                          </FormControl>
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword((s) => !s)}
-                            aria-label={showPassword ? "Hide password" : "Show password"}
-                            className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
-                          >
-                            {showPassword ? (
-                              <EyeOff className="h-4 w-4" />
-                            ) : (
-                              <Eye className="h-4 w-4" />
-                            )}
-                          </button>
-                        </div>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <Button type="submit" className={`w-full ${primaryButtonClass}`} disabled={loading}>
+                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Sign in
+                </Button>
+              </form>
+            </Form>
+          </TabsContent>
 
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Sign in
-                  </Button>
-                </form>
-              </Form>
-            </TabsContent>
+          <TabsContent value="otp" className="mt-4">
+            <OtpLogin />
+          </TabsContent>
+        </Tabs>
 
-            <TabsContent value="otp" className="mt-4">
-              <OtpLogin />
-            </TabsContent>
-          </Tabs>
+        {/* Divider */}
+        <div className="flex w-full items-center gap-3">
+          <div className="h-px flex-1 bg-border" />
+          <span className="text-[12px] text-muted-foreground">or</span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
 
-          <AuthDivider />
+        {/* GoogleButton owns the handler/flow; restyle its inner button to the
+            ops-console look from here (component file is shared). */}
+        <div className="w-full [&_a]:block [&_button]:h-auto [&_button]:w-full [&_button]:rounded-[10px] [&_button]:border-border [&_button]:bg-(--surface-card) [&_button]:py-[12px] [&_button]:text-[14px] [&_button]:font-semibold [&_button:hover]:bg-(--surface-card-hover) [&_button:hover]:text-foreground">
           <GoogleButton />
-        </CardContent>
+        </div>
 
-        <CardFooter className="justify-center">
-          <p className="text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <Link
-              to="/auth/register"
-              className="font-medium text-primary underline-offset-4 hover:underline"
-            >
-              Register
-            </Link>
-          </p>
-        </CardFooter>
-      </Card>
+        <p className="w-full text-center text-[13.5px] text-muted-foreground">
+          New to Atur?{" "}
+          <Link to="/auth/register" className="font-semibold text-foreground hover:underline">
+            Create a workspace
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }
@@ -262,11 +293,11 @@ function OtpLogin() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {error && (
         <div
           role="alert"
-          className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          className="rounded-[9px] border border-destructive/50 bg-destructive/10 px-3.5 py-2.5 text-[13px] text-destructive"
         >
           {error}
         </div>
@@ -275,18 +306,25 @@ function OtpLogin() {
       {step === "email" ? (
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="otp-email">Email</Label>
+            <Label htmlFor="otp-email" className={fieldLabelClass}>
+              Email
+            </Label>
             <Input
               id="otp-email"
               type="email"
-              placeholder="you@example.com"
+              placeholder="you@company.com"
               autoComplete="email"
+              className={fieldInputClass}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && sendCode()}
             />
           </div>
-          <Button className="w-full" onClick={sendCode} disabled={loading || !email.trim()}>
+          <Button
+            className={`w-full ${primaryButtonClass}`}
+            onClick={sendCode}
+            disabled={loading || !email.trim()}
+          >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {loading ? "Sending…" : "Send verification code"}
           </Button>
@@ -294,7 +332,9 @@ function OtpLogin() {
       ) : (
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="otp-code">Verification code</Label>
+            <Label htmlFor="otp-code" className={fieldLabelClass}>
+              Verification code
+            </Label>
             <InputOTP
               id="otp-code"
               maxLength={6}
@@ -331,12 +371,16 @@ function OtpLogin() {
           </div>
 
           {devCode && (
-            <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+            <p className="rounded-[9px] border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
               Dev mode (no email provider configured). Your code: <strong>{devCode}</strong>
             </p>
           )}
 
-          <Button className="w-full" onClick={verify} disabled={loading || code.length !== 6}>
+          <Button
+            className={`w-full ${primaryButtonClass}`}
+            onClick={verify}
+            disabled={loading || code.length !== 6}
+          >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {loading ? "Verifying…" : "Sign in"}
           </Button>
