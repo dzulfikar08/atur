@@ -14,6 +14,9 @@ const paneText = new Map<string, string>();
 let readFailure: { code: string; message: string } | null = null;
 let getFailure: { code: string; message: string } | null = null;
 const readCalls: string[] = [];
+/** Fired inside the pane.read stub before resolving — lets a test mutate
+ *  fixture state mid-subscribe (e.g. simulate a disconnect during the await). */
+let readHook: (() => void) | null = null;
 
 class StubHerdrError extends Error {
   constructor(
@@ -37,6 +40,7 @@ mock.module("./herdr", () => ({
         return Promise.resolve({ pane: { pane_id: p.pane_id, cwd: "/srv/acme" } });
       case "pane.read": {
         readCalls.push(p.pane_id ?? "");
+        readHook?.();
         if (readFailure) {
           return Promise.reject(new StubHerdrError("pane.read", readFailure.code, readFailure.message));
         }
@@ -91,10 +95,19 @@ function until<T>(fn: () => T | undefined | null | false, timeoutMs = 3000, step
   return promise;
 }
 
-function fakeObserveClient(): { client: ObserveClient; sent: string[]; closes: { code: number; reason?: string }[] } {
+function fakeObserveClient(): {
+  client: ObserveClient;
+  state: { open: boolean };
+  sent: string[];
+  closes: { code: number; reason?: string }[];
+} {
   const sent: string[] = [];
   const closes: { code: number; reason?: string }[] = [];
+  const state = { open: true };
   const client: ObserveClient = {
+    get readyState() {
+      return state.open ? 1 : 3;
+    },
     send: (data: string) => {
       sent.push(data);
     },
@@ -103,7 +116,7 @@ function fakeObserveClient(): { client: ObserveClient; sent: string[]; closes: {
     },
     getBufferedAmount: () => 0,
   };
-  return { client, sent, closes };
+  return { client, state, sent, closes };
 }
 
 function frames(sent: string[]): Record<string, unknown>[] {
@@ -117,6 +130,7 @@ afterEach(() => {
   paneText.clear();
   readFailure = null;
   getFailure = null;
+  readHook = null;
   readCalls.length = 0;
   observeHub.stop();
 });
@@ -254,6 +268,17 @@ describe("pane parser", () => {
     expect(second.blocks[1]!.endedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     expect(second.blocks[2]!.endedAt).toBeNull();
   });
+
+  test("duplicate identical blocks keep distinct stable ids across parses", () => {
+    const box = ["╭──╮", "│ $ echo hi │", "├─── Output ──┤", "│ hi │", "╰──╯"].join("\r\n");
+    const screen = `${box}\r\n${box}`;
+    const p = new SessionParser();
+    const first = p.parse(screen);
+    const ids = first.blocks.map((b) => b.id);
+    expect(ids).toHaveLength(4);
+    expect(new Set(ids).size).toBe(4);
+    expect(p.parse(screen).blocks.map((b) => b.id)).toEqual(ids);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -273,6 +298,7 @@ describe("observe hub", () => {
 
     paneText.set("p1", `${TOOL_BOX}\r\n\r\nExtra line.`);
     const update = await until(() => frames(sent).find((f) => f.type === "blocks"));
+    expect(update!.mode).toBe("structured");
     const blocks = update!.blocks as Record<string, unknown>[];
     expect(blocks.map((b) => b.kind)).toEqual(["tool", "output", "output"]);
   });
@@ -283,7 +309,7 @@ describe("observe hub", () => {
     await observeHub.subscribe(client, "sh");
     const sentFrames = frames(sent);
     expect(sentFrames[0]).toMatchObject({ type: "snapshot", mode: "raw", blocks: [] });
-    expect(sentFrames[1]).toMatchObject({ type: "raw", paneId: "sh" });
+    expect(sentFrames[1]).toMatchObject({ type: "raw", mode: "raw", paneId: "sh" });
     expect((sentFrames[1]!.text as string)).toContain("notes.txt");
 
     paneText.set("sh", "$ ls\r\nnotes.txt\r\nsrc");
@@ -327,6 +353,23 @@ describe("observe hub", () => {
     observeHub.detach(client);
     // Negative condition (polls must STOP): nothing signals timer absence,
     // so proving it needs real wall time; fake timers cannot show this.
+    await new Promise((r) => setTimeout(r, 700));
+    expect(readCalls.length).toBe(readsBefore);
+  });
+
+  test("client disconnecting during subscribe is never adopted", async () => {
+    paneText.set("p5", TOOL_BOX);
+    const { client, state, sent } = fakeObserveClient();
+    // The socket dies while subscribe is awaiting pane.get/readScreen; the
+    // close handler's detach is a no-op (not yet an observer).
+    readHook = () => {
+      state.open = false;
+    };
+    const ok = await observeHub.subscribe(client, "p5");
+    expect(ok).toBe(true);
+    expect(sent).toHaveLength(0);
+    // The session must be disposed, not left polling a dead socket forever.
+    const readsBefore = readCalls.length;
     await new Promise((r) => setTimeout(r, 700));
     expect(readCalls.length).toBe(readsBefore);
   });

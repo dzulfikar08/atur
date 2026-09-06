@@ -70,6 +70,11 @@ function parseBlocks(value: unknown): ObserveBlock[] {
   return value.map(parseBlock).filter((b): b is ObserveBlock => b !== null);
 }
 
+/** Frame `mode` → state updater; absent/unknown mode keeps the current one. */
+function resolveMode(value: unknown): (prev: ObserveMode) => ObserveMode {
+  return (prev) => (value === "raw" || value === "structured" ? value : prev);
+}
+
 /** Everything the Transcript view needs to render one pane's stream. */
 export interface PaneObserve {
   status: ObserveStatus;
@@ -102,7 +107,9 @@ export function usePaneObserve(paneId: string, enabled: boolean): PaneObserve {
     }
     let disposed = false;
     let attempts = 0;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    // Live socket (reassigned across reconnects); closed in cleanup below.
+    let ws: WebSocket | null = null;
 
     const connect = () => {
       if (disposed) return;
@@ -113,11 +120,12 @@ export function usePaneObserve(paneId: string, enabled: boolean): PaneObserve {
       const wsUrl = isNative()
         ? resolveWsUrl(`/api/panes/observe?${qs}`)
         : `${protocol}//${window.location.host}/api/panes/observe?${qs}`;
-      const ws = new WebSocket(wsUrl);
+      const socket = new WebSocket(wsUrl);
+      ws = socket;
 
-      ws.onopen = () => {
+      socket.onopen = () => {
         if (disposed) {
-          ws.close();
+          socket.close();
           return;
         }
         setStatus("connected");
@@ -147,11 +155,15 @@ export function usePaneObserve(paneId: string, enabled: boolean): PaneObserve {
             }
             break;
           }
-          // Full replacement on each change — never merge.
+          // Full replacement on each change — never merge. Frames carry the
+          // current mode: the bridge can transition structured ↔ raw
+          // mid-stream; absent mode keeps the current one.
           case "blocks":
+            setMode(resolveMode(msg.mode));
             setBlocks(parseBlocks(msg.blocks));
             break;
           case "raw":
+            setMode(resolveMode(msg.mode));
             if (typeof msg.text === "string") setRawText(msg.text);
             break;
           case "error":
@@ -177,7 +189,11 @@ export function usePaneObserve(paneId: string, enabled: boolean): PaneObserve {
 
     return () => {
       disposed = true;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
+      clearTimeout(reconnectTimer);
+      // Close the live socket: a Transcript→Terminal toggle must not strand
+      // an open connection (and its bridge poller). onopen's disposed guard
+      // covers the open-after-disposal race (same pattern as usePaneAttach).
+      ws?.close(1000, "unmount");
     };
   }, [paneId, enabled, retryKey]);
 

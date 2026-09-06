@@ -10,8 +10,8 @@
  * Server → client (JSON text frames only):
  *   {type:"snapshot", paneId, mode:"structured", blocks:[Block]}  first message
  *   {type:"snapshot", paneId, mode:"raw", blocks:[]}              …or raw degrade
- *   {type:"raw", paneId, text}                                    full pane text (raw mode)
- *   {type:"blocks", blocks:[Block]}                               full replacement on change
+ *   {type:"raw", mode:"raw", paneId, text}                        full pane text (raw mode)
+ *   {type:"blocks", mode, blocks:[Block]}                         full replacement on change
  *   {type:"error", error}                                         bridge-level failure
  *
  * Block: {id, kind:"tool"|"output"|"model"|"error", title, model,
@@ -268,11 +268,19 @@ export class SessionParser {
    *  exactly the blocks present in this parse (scrolled-off entries die). */
   private stamp(blocks: RawBlock[], now: number): ObserveBlock[] {
     const identity = new Map<string, { id: number; startedAt: number; endedAt?: number }>();
+    const seenKeys = new Map<string, number>();
     const stamped: ObserveBlock[] = [];
     for (let i = 0; i < blocks.length; i++) {
       const b = blocks[i]!;
       const blockText = b.lines.join("\n");
-      const key = `${b.kind}\x00${b.title ?? ""}\x00${b.model ?? ""}\x00${blockText}`;
+      // Two identical blocks can share a screen (e.g. twin one-line boxes).
+      // Disambiguate occurrences within THIS parse before consulting the
+      // cross-parse identity map, or the second occurrence would overwrite
+      // the first's entry and both would flip to one id on the next parse.
+      let key = `${b.kind}\x00${b.title ?? ""}\x00${b.model ?? ""}\x00${blockText}`;
+      const occurrence = seenKeys.get(key) ?? 0;
+      seenKeys.set(key, occurrence + 1);
+      if (occurrence > 0) key = `${key}#${occurrence}`;
       const prev = this.identity.get(key);
       const isBottom = i === blocks.length - 1;
       const id = prev?.id ?? this.nextId++;
@@ -303,6 +311,9 @@ export class SessionParser {
 
 /** Minimal socket surface ObserveHub needs — ServerWebSocket satisfies it. */
 export interface ObserveClient {
+  /** WebSocket READY_STATE (1 = open). Bun's send() on a closed socket is a
+   *  silent no-op, so liveness must be checked before adopting a client. */
+  readonly readyState: number;
   send(data: string): unknown;
   close(code?: number, reason?: string): unknown;
   getBufferedAmount(): number;
@@ -363,6 +374,10 @@ class ObserveSession {
    *  after its snapshot is in flight, so broadcasts can never overtake it. */
   async snapshot(ws: ObserveClient): Promise<void> {
     const res = await this.readScreen();
+    // The client may have disconnected during the subscribe awaits; its
+    // close handler's detach was a no-op (not yet an observer). Adopting a
+    // dead socket here would pin the 400ms poller until the pane dies.
+    if (ws.readyState !== 1) return;
     this.lastRaw = res.read.text;
     const parsed = this.parser.parse(res.read.text);
     ws.send(
@@ -374,7 +389,7 @@ class ObserveSession {
       }),
     );
     if (parsed.mode === "raw") {
-      ws.send(JSON.stringify({ type: "raw", paneId: this.paneId, text: parsed.text }));
+      ws.send(JSON.stringify({ type: "raw", mode: "raw", paneId: this.paneId, text: parsed.text }));
     }
     this.observers.add(ws);
   }
@@ -390,8 +405,8 @@ class ObserveSession {
       const parsed = this.parser.parse(res.read.text);
       const payload =
         parsed.mode === "structured"
-          ? JSON.stringify({ type: "blocks", blocks: parsed.blocks })
-          : JSON.stringify({ type: "raw", paneId: this.paneId, text: parsed.text });
+          ? JSON.stringify({ type: "blocks", mode: "structured", blocks: parsed.blocks })
+          : JSON.stringify({ type: "raw", mode: "raw", paneId: this.paneId, text: parsed.text });
       for (const ws of this.observers) {
         if (ws.getBufferedAmount() > MAX_BUFFERED_BYTES) continue;
         ws.send(payload);
@@ -455,6 +470,12 @@ export class ObserveHub {
         this.sessions.delete(paneId);
       }
       throw e;
+    }
+    if (session.observers.size === 0) {
+      // Snapshot skipped adoption (client disconnected mid-subscribe): don't
+      // leave a poller running for a session nobody is attached to.
+      session.dispose();
+      this.sessions.delete(paneId);
     }
     return true;
   }
