@@ -12,6 +12,7 @@ import {
   Settings,
   ChevronDown,
   ChevronRight,
+  Columns3,
   LayoutDashboard,
   Layers,
   Gauge,
@@ -38,6 +39,8 @@ interface NavItem {
   icon: React.ElementType;
   label: string;
   end?: boolean;
+  /** Absolute route (not slug-scoped), e.g. /panes. */
+  absolute?: boolean;
 }
 
 const navGroups: { label: string; items: NavItem[] }[] = [
@@ -46,6 +49,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     items: [
       { to: "", icon: LayoutDashboard, label: "Dashboard", end: true },
       { to: "projects", icon: FolderKanban, label: "Projects" },
+      { to: "/panes", icon: Columns3, label: "Panes", absolute: true },
     ],
   },
   {
@@ -95,10 +99,14 @@ export default function Sidebar() {
 
   const isActive = (item: NavItem) => {
     if (item.end) return location.pathname === basePath;
+    // Absolute items (Panes) live outside the workspace slug scope.
+    if (item.absolute)
+      return location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
     return location.pathname.startsWith(`${basePath}/${item.to}`);
   };
 
-  const go = (to: string) => navigate(`${basePath}/${to}`.replace(/\/$/, ""));
+  const go = (to: string, absolute?: boolean) =>
+    navigate(absolute ? to : `${basePath}/${to}`.replace(/\/$/, ""));
 
   const initials =
     user?.display_name
@@ -228,7 +236,7 @@ export default function Sidebar() {
                 const Icon = item.icon;
                 const row = (
                   <button
-                    onClick={() => go(item.to)}
+                    onClick={() => go(item.to, item.absolute)}
                     aria-current={active ? "page" : undefined}
                     className={cn(
                       "flex h-7 w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 text-[13px] outline-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",

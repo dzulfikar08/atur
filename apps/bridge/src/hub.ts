@@ -14,6 +14,9 @@ import { HerdrError, rpc } from "./herdr";
 export interface BridgeMeta {
   paneId: string;
   joined: boolean;
+  /** /observe connection: read-only transcript stream — routed to the
+   *  ObserveHub, never to the attach input path. */
+  observe?: boolean;
 }
 
 type Ws = ServerWebSocket<BridgeMeta>;

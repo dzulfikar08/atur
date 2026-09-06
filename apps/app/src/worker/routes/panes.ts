@@ -259,3 +259,89 @@ paneRoutes.get("/attach", async (c) => {
 
   return new Response(null, { status: 101, webSocket: pair[0] });
 });
+paneRoutes.get("/observe", async (c) => {
+  const pane = c.req.query("pane");
+  if (!pane) throw new HTTPException(400, { message: "pane is required" });
+  // The relay below answers with a WebSocket; without an upgrade request
+  // (e.g. a stray curl) workerd would reject the 101 as a 500 — be explicit.
+  if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
+    throw new HTTPException(426, { message: "websocket upgrade required" });
+  }
+  const user = c.get("user");
+
+  // Identical per-pane authz as /attach (DEV-32): the viewer must be a member
+  // of the workspace the pane is bound to. Unbound panes are not observable.
+  const db = getDb(c.env.DB);
+  const slug = await paneWorkspaceSlug(db, c.env, pane);
+  if (!slug) {
+    throw new HTTPException(403, {
+      message: "pane is not bound to an atur workspace",
+    });
+  }
+  if (!(await isMemberOfSlug(db, slug, user.sub))) {
+    throw new HTTPException(403, {
+      message: "not a member of the pane's workspace",
+    });
+  }
+
+  const base = bridgeBase(c.env);
+  if (!base) return c.json({ error: "execution plane unreachable" }, 502);
+  const headers = bridgeHeaders(c.env);
+  headers.set("Upgrade", "websocket");
+  let upgrade: Response;
+  try {
+    upgrade = await fetch(`${base}/observe?pane=${encodeURIComponent(pane)}`, { headers });
+  } catch {
+    return c.json({ error: "execution plane unreachable" }, 502);
+  }
+
+  // Bridge refused the upgrade (e.g. unknown pane) — surface its JSON reply.
+  if (upgrade.status !== 101 || !upgrade.webSocket) {
+    return new Response(upgrade.body, {
+      status: upgrade.status,
+      headers: { "content-type": upgrade.headers.get("content-type") ?? "application/json" },
+    });
+  }
+
+  // No pane_audit row here: the table has no action column, so an observe
+  // session would be indistinguishable from a keyboard attach (DEV-33).
+
+  const origin = upgrade.webSocket; // bridge side
+  origin.accept();
+
+  const pair = new WebSocketPair();
+  const server = pair[1]; // browser side of the relay
+  server.accept();
+
+  // Text frames only, verbatim bridge → client. The observe channel is
+  // read-only: the daemon closes (1008) any client frame, and the app client
+  // never sends after open — the client→bridge relay below only ever forwards
+  // frames that would tear the channel down either way.
+  origin.addEventListener("message", (event) => {
+    if (typeof event.data === "string") server.send(event.data);
+  });
+  server.addEventListener("message", (event) => {
+    if (typeof event.data === "string") origin.send(event.data);
+  });
+
+  // Either side closing (or erroring) tears the relay down; there is no audit
+  // row to stamp (see above).
+  const detach = () => {
+    try {
+      origin.close();
+    } catch {
+      /* already closed */
+    }
+    try {
+      server.close();
+    } catch {
+      /* already closed */
+    }
+  };
+  origin.addEventListener("close", detach);
+  origin.addEventListener("error", detach);
+  server.addEventListener("close", detach);
+  server.addEventListener("error", detach);
+
+  return new Response(null, { status: 101, webSocket: pair[0] });
+});

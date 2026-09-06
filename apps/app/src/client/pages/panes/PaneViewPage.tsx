@@ -6,8 +6,12 @@ import "@xterm/xterm/css/xterm.css";
 import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Code2 } from "@/lib/icons";
+import { ArrowLeft, Code2, FileText } from "@/lib/icons";
 import { usePaneAttach, type PaneAttachStatus } from "@/hooks/usePaneAttach";
+import { usePaneObserve } from "@/hooks/usePaneObserve";
+import TranscriptView from "@/components/panes/TranscriptView";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 const STATUS_LABELS: Record<PaneAttachStatus, string> = {
   connecting: "Connecting…",
@@ -71,6 +75,12 @@ export default function PaneViewPage() {
     onKeyboard: (you) => setOwnsKeyboard(you),
     onError: (message) => setBridgeError(message),
   });
+
+  // Transcript view (DEV-33): read-only structured stream beside the raw
+  // xterm. Terminal stays the default; the observe socket only connects
+  // while the Transcript view is open.
+  const [view, setView] = useState<"terminal" | "transcript">("terminal");
+  const observe = usePaneObserve(paneId ?? "", view === "transcript");
 
   // One terminal per mount; the socket hook owns (re)connection, this effect
   // only owns the xterm instance and its keyboard wiring.
@@ -142,39 +152,68 @@ export default function PaneViewPage() {
 
       {bridgeError && <p className="text-sm text-destructive">Bridge error: {bridgeError}</p>}
 
-      {/* Terminal */}
-      <div className="relative min-h-[320px] h-[65vh] overflow-auto rounded-lg border bg-[#0a0a0a] p-2">
-        <div ref={containerRef} className="h-full" />
+      {/* Terminal | Transcript — shadcn tabs, the repo's standard toggle.
+          forceMount keeps the xterm DOM alive across switches: its effect is
+          keyed by paneId only, so unmounting would orphan the Terminal from
+          its (rebuilt) container. Radix leaves hiding to us via data-state,
+          hence the explicit `hidden` class. */}
+      <Tabs
+        value={view}
+        onValueChange={(v) => setView(v as "terminal" | "transcript")}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <TabsList>
+          <TabsTrigger value="terminal">
+            <Code2 className="mr-1.5 h-3.5 w-3.5" />
+            Terminal
+          </TabsTrigger>
+          <TabsTrigger value="transcript">
+            <FileText className="mr-1.5 h-3.5 w-3.5" />
+            Transcript
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value="terminal"
+          forceMount
+          className={cn("min-h-0 flex-1", view !== "terminal" && "hidden")}
+        >
+          <div className="relative min-h-[320px] h-[65vh] overflow-auto rounded-lg border bg-[#0a0a0a] p-2">
+            <div ref={containerRef} className="h-full" />
 
-        {paneGone && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-lg bg-black/85">
-            <Code2 className="h-8 w-8 text-muted-foreground" />
-            {status === "exited" ? (
-              <>
-                <p className="font-medium text-foreground">Pane exited</p>
-                <p className="text-sm text-muted-foreground">
-                  The terminal pane closed on the execution plane.
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="font-medium text-foreground">Execution plane unreachable</p>
-                <p className="text-sm text-muted-foreground">
-                  Gave up after several attempts — the bridge may be offline.
-                </p>
-              </>
+            {paneGone && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-lg bg-black/85">
+                <Code2 className="h-8 w-8 text-muted-foreground" />
+                {status === "exited" ? (
+                  <>
+                    <p className="font-medium text-foreground">Pane exited</p>
+                    <p className="text-sm text-muted-foreground">
+                      The terminal pane closed on the execution plane.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium text-foreground">Execution plane unreachable</p>
+                    <p className="text-sm text-muted-foreground">
+                      Gave up after several attempts — the bridge may be offline.
+                    </p>
+                  </>
+                )}
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={retry}>
+                    Reconnect
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => navigate("/panes")}>
+                    Back to panes
+                  </Button>
+                </div>
+              </div>
             )}
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={retry}>
-                Reconnect
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/panes")}>
-                Back to panes
-              </Button>
-            </div>
           </div>
-        )}
-      </div>
+        </TabsContent>
+        <TabsContent value="transcript" className="min-h-0 flex-1">
+          <TranscriptView {...observe} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
