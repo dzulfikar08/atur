@@ -2,8 +2,9 @@
  * DEV-33 contract test: drives usePaneObserve + TranscriptView against a mock
  * of the bridge observe channel (snapshot/blocks/raw/error frames) without
  * the live daemon. Also pins the reconnect policy (1s → 2s → 4s → 8s backoff,
- * then unreachable + manual retry) and the read-only rule (the hook never
- * sends a frame after open).
+ * then unreachable + manual retry), the read-only rule (the hook never sends
+ * a frame after open), socket cleanup on unmount, and mode transitions
+ * carried on blocks/raw frames.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act, fireEvent } from "@testing-library/react";
@@ -18,6 +19,7 @@ class MockWebSocket {
   url: string;
   readyState = 0;
   sent: string[] = [];
+  closeCalls: number[] = [];
   onopen: (() => void) | null = null;
   onclose: (() => void) | null = null;
   onmessage: ((ev: { data: unknown }) => void) | null = null;
@@ -31,8 +33,9 @@ class MockWebSocket {
     this.sent.push(data);
   }
 
-  close() {
+  close(code?: number) {
     this.readyState = 3;
+    this.closeCalls.push(code ?? 0);
   }
 
   // ——— test drivers ———
@@ -240,6 +243,29 @@ describe("usePaneObserve + TranscriptView against the bridge contract", () => {
     expect(screen.getByText(/more/)).toBeInTheDocument();
   });
 
+  it("follows mode transitions carried on blocks and raw frames", () => {
+    render(<Harness />);
+    drive((ws) => {
+      ws.open();
+      ws.push(structuredSnapshot);
+    });
+    expect(latest?.mode).toBe("structured");
+    expect(screen.getByText("claude-sonnet-4")).toBeInTheDocument();
+
+    // structured → raw via a blocks frame carrying mode.
+    drive((ws) => ws.push({ type: "blocks", mode: "raw", blocks: [] }));
+    expect(latest?.mode).toBe("raw");
+    expect(screen.queryByText("claude-sonnet-4")).not.toBeInTheDocument();
+
+    // raw → structured via a raw frame carrying mode.
+    drive((ws) => ws.push({ type: "raw", mode: "structured", text: "ignored" }));
+    expect(latest?.mode).toBe("structured");
+
+    // Absent mode keeps the current mode.
+    drive((ws) => ws.push({ type: "raw", text: "plain output" }));
+    expect(latest?.mode).toBe("structured");
+  });
+
   it("shows the waiting placeholder on an empty live pane", () => {
     render(<Harness />);
     drive((ws) => {
@@ -247,6 +273,18 @@ describe("usePaneObserve + TranscriptView against the bridge contract", () => {
       ws.push({ type: "snapshot", paneId: "p1", mode: "structured", blocks: [] });
     });
     expect(screen.getByText("waiting for output…")).toBeInTheDocument();
+  });
+
+  it("closes the live socket on unmount (no stranded connection)", () => {
+    const { unmount } = render(<Harness />);
+    drive((ws) => ws.open());
+    const ws = currentSocket();
+    expect(ws.readyState).toBe(1);
+    expect(ws.closeCalls).toEqual([]);
+    unmount();
+    // Normal closure with the unmount reason; no reconnect afterwards.
+    expect(ws.closeCalls).toContain(1000);
+    expect(MockWebSocket.instances).toHaveLength(1);
   });
 
   it("surfaces error frames, exhausts backoff into unreachable, then retries", () => {
