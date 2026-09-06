@@ -61,15 +61,6 @@
   font-size: 19px;
   letter-spacing: -0.3px;
 }
-.lp-brand-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--lp-text);
-  display: grid;
-  place-items: center;
-  color: var(--lp-bg);
-}
 .lp-links {
   display: flex;
   gap: 30px;
@@ -1073,11 +1064,6 @@
   font-weight: 700;
   font-size: 15px;
   color: var(--lp-text-2);
-}
-.lp-footer .brand .lp-brand-mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
 }
 .lp-footer nav {
   display: flex;
