@@ -365,7 +365,9 @@ export default function WorkspaceBindingsPage() {
                       <dt>Updated</dt>
                       <dd>{formatDate(link.updated_at)}</dd>
                     </dl>
-                    {canEdit && <RowActions link={link} onEdit={setEditing} onDelete={setDeleteTarget} />}
+                    {canEdit && (
+                      <RowActions link={link} onEdit={setEditing} onDelete={setDeleteTarget} />
+                    )}
                   </div>
                 ))}
               </div>
@@ -419,7 +421,11 @@ export default function WorkspaceBindingsPage() {
                         </TableCell>
                         {canEdit && (
                           <TableCell>
-                            <RowActions link={link} onEdit={setEditing} onDelete={setDeleteTarget} />
+                            <RowActions
+                              link={link}
+                              onEdit={setEditing}
+                              onDelete={setDeleteTarget}
+                            />
                           </TableCell>
                         )}
                       </TableRow>

@@ -27,19 +27,20 @@ function sqlLiteral(v: unknown): string {
   if (v === null || v === undefined) return "NULL";
   if (typeof v === "number") return Number.isFinite(v) ? String(v) : "NULL";
   if (typeof v === "boolean") return v ? "1" : "0";
-  if (v instanceof Uint8Array) return `X'${[...v].map((b) => b.toString(16).padStart(2, "0")).join("")}'`;
+  if (v instanceof Uint8Array)
+    return `X'${[...v].map((b) => b.toString(16).padStart(2, "0")).join("")}'`;
   return `'${String(v).replace(/'/g, "''")}'`;
 }
 
-export async function buildDumpSql(env: Env): Promise<{ sql: string; tables: number; rows: number }> {
+export async function buildDumpSql(
+  env: Env,
+): Promise<{ sql: string; tables: number; rows: number }> {
   const objects = await env.DB.prepare(
     `SELECT name, sql, type FROM sqlite_master
      WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '\\_%' ESCAPE '\\'
      ORDER BY type DESC, rowid`,
   ).all<SchemaRow>();
-  const tables = objects.results.filter(
-    (r) => r.type === "table" && !SKIP_TABLES.has(r.name),
-  );
+  const tables = objects.results.filter((r) => r.type === "table" && !SKIP_TABLES.has(r.name));
   const parts: string[] = [
     `-- Atur D1 dump ${new Date().toISOString()}`,
     "-- Restore: migrate a fresh database (bun run db:migrate:local/remote), then",
@@ -51,7 +52,9 @@ export async function buildDumpSql(env: Env): Promise<{ sql: string; tables: num
   let rowCount = 0;
   for (const t of tables) {
     parts.push(`${t.sql.replace(/^CREATE TABLE/i, "CREATE TABLE IF NOT EXISTS")};`);
-    const { results } = await env.DB.prepare(`SELECT * FROM "${t.name}"`).all<Record<string, unknown>>();
+    const { results } = await env.DB.prepare(`SELECT * FROM "${t.name}"`).all<
+      Record<string, unknown>
+    >();
     for (const row of results) {
       const cols = Object.keys(row);
       parts.push(

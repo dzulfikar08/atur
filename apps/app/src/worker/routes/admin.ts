@@ -9,8 +9,10 @@ import { runD1Backup } from "../services/backup";
 // Platform-operator routes: single-tenant ops actions that span workspaces.
 // Gated on users.is_superuser (the only platform-wide role flag), never on
 // workspace membership.
-export const adminRoutes = new Hono<{ Bindings: Env }>({ strict: false })
-  .post("/backup-d1", authMiddleware, async (c) => {
+export const adminRoutes = new Hono<{ Bindings: Env }>({ strict: false }).post(
+  "/backup-d1",
+  authMiddleware,
+  async (c) => {
     const db = getDb(c.env.DB);
     const { sub } = c.get("user");
     const user = await db
@@ -28,4 +30,5 @@ export const adminRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       // generic 500 — the cron path logs the error, here the caller debugs.
       return c.json({ error: String(e instanceof Error ? (e.stack ?? e.message) : e) }, 500);
     }
-  });
+  },
+);

@@ -68,7 +68,9 @@ export default function PanesPage() {
         <h1 className="text-[15px] font-bold">Live panes</h1>
         <span className="ops-chip ops-chip-green">
           <span className="ops-dot" />
-          {panes.filter((p) => p.agent_status !== null && p.agent_status in LIVE_STATUS).length}{" "}
+          {
+            panes.filter((p) => p.agent_status !== null && p.agent_status in LIVE_STATUS).length
+          }{" "}
           attached
         </span>
         <span className="flex-1" />

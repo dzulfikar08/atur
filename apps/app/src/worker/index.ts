@@ -59,11 +59,7 @@ export default {
   // reminder emails to issue followers (each recipient's local day derives
   // from users.user_timezone); 03:30 UTC dumps D1 to the atur-backups R2
   // bucket (services/backup.ts).
-  async scheduled(
-    controller: ScheduledController,
-    env: Env,
-    ctx: ExecutionContext,
-  ): Promise<void> {
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     if (controller.cron === "30 3 * * *") {
       ctx.waitUntil(
         runD1Backup(env).catch((e: unknown) => {

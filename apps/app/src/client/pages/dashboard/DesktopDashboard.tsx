@@ -115,9 +115,7 @@ function AgentRow({ pane }: { pane: PaneListItem }) {
           <span className="max-w-40 shrink-0 truncate text-[13.5px] font-bold text-foreground">
             {name}
           </span>
-          {context && (
-            <span className="truncate text-[13px] text-muted-foreground">{context}</span>
-          )}
+          {context && <span className="truncate text-[13px] text-muted-foreground">{context}</span>}
           {/* PaneListItem carries no timestamp — render the design's unknown-time dash. */}
           <span className="ml-1 shrink-0 font-ops-mono text-[12.5px] text-muted-foreground/70">
             —
@@ -296,10 +294,7 @@ function ThisWeekCard({ slug, isAll }: { slug: string; isAll: boolean }) {
   const closedThisWeek = (trendQuery.data ?? [])
     .filter((p) => p.date >= weekFrom)
     .reduce((n, p) => n + p.completed, 0);
-  const agentRuns = (agentUsageQuery.data?.results ?? []).reduce(
-    (n, r) => n + r.entry_count,
-    0,
-  );
+  const agentRuns = (agentUsageQuery.data?.results ?? []).reduce((n, r) => n + r.entry_count, 0);
 
   const rows: { label: string; value: string }[] = [];
   if (trendQuery.data) {
@@ -309,7 +304,10 @@ function ThisWeekCard({ slug, isAll }: { slug: string; isAll: boolean }) {
     rows.push({ label: "Agent runs", value: String(agentRuns) });
   }
   if (timesheetQuery.data) {
-    rows.push({ label: "Time logged", value: formatHours(timesheetQuery.data.totals.total_seconds) });
+    rows.push({
+      label: "Time logged",
+      value: formatHours(timesheetQuery.data.totals.total_seconds),
+    });
   }
   if (rows.length === 0) return null;
 
@@ -320,9 +318,7 @@ function ThisWeekCard({ slug, isAll }: { slug: string; isAll: boolean }) {
         <div key={row.label} className="flex items-center">
           <span className="text-[13px] text-muted-foreground/70">{row.label}</span>
           <span className="min-w-2 flex-1" />
-          <span className="font-ops-mono text-[13.5px] font-bold text-foreground">
-            {row.value}
-          </span>
+          <span className="font-ops-mono text-[13.5px] font-bold text-foreground">{row.value}</span>
         </div>
       ))}
     </section>

@@ -14,9 +14,7 @@ function fakeR2() {
     },
     async list({ prefix }: { prefix: string }) {
       return {
-        objects: [...store.keys()]
-          .filter((k) => k.startsWith(prefix))
-          .map((key) => ({ key })),
+        objects: [...store.keys()].filter((k) => k.startsWith(prefix)).map((key) => ({ key })),
       };
     },
     async delete(key: string) {

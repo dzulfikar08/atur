@@ -67,11 +67,11 @@ function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={["/acme/admin/bindings"]}>
-          <Routes>
-            <Route path="/:slug/admin/bindings" element={<WorkspaceBindingsPage />} />
-          </Routes>
-        </MemoryRouter>
+      <MemoryRouter initialEntries={["/acme/admin/bindings"]}>
+        <Routes>
+          <Route path="/:slug/admin/bindings" element={<WorkspaceBindingsPage />} />
+        </Routes>
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
