@@ -40,6 +40,8 @@ import {
   ChevronDown,
   ChevronRight,
   Plus,
+  Bot,
+  Check,
   List,
   Columns3,
   GitBranch,
@@ -96,6 +98,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useDroppable } from "@dnd-kit/core";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { GitMergeIcon, TerminalIcon } from "@hugeicons/core-free-icons";
 
 const createIssueSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -107,23 +111,84 @@ const createIssueSchema = z.object({
 
 type CreateIssueForm = z.infer<typeof createIssueSchema>;
 
-const STATE_COLORS: Record<string, string> = {
-  backlog: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-  unstarted: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-  started: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
-  completed: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-  cancelled: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+// --- Ops-console board styling (atur.pen design system) ---
+
+// Status color per state group, overridden by a review/blocked state name
+// (amber) or the state's own API color.
+const GROUP_DOT_COLORS: Record<string, string> = {
+  backlog: "var(--muted-foreground)",
+  unstarted: "var(--state-blue)",
+  started: "var(--state-blue)",
+  completed: "var(--state-green)",
+  cancelled: "var(--muted-foreground)",
 };
 
-// Column-level treatment per state group: subtle tinted surface + top accent bar,
-// so adjacent columns read as distinct regions at a glance.
-const COLUMN_STYLES: Record<string, string> = {
-  backlog: "border-t-gray-300 bg-gray-50 dark:border-t-gray-600 dark:bg-gray-900/40",
-  unstarted: "border-t-blue-400 bg-blue-50/70 dark:border-t-blue-600 dark:bg-blue-950/30",
-  started: "border-t-yellow-400 bg-yellow-50/70 dark:border-t-yellow-600 dark:bg-yellow-950/30",
-  completed: "border-t-green-400 bg-green-50/70 dark:border-t-green-600 dark:bg-green-950/30",
-  cancelled: "border-t-red-400 bg-red-50/70 dark:border-t-red-600 dark:bg-red-950/30",
+const REVIEW_STATE_RE = /review|blocked/i;
+const isReviewStateName = (name?: string | null) => !!name && REVIEW_STATE_RE.test(name);
+
+const stateDotColor = (state: State) =>
+  isReviewStateName(state.name)
+    ? "var(--state-amber)"
+    : state.color || GROUP_DOT_COLORS[state.group] || "var(--muted-foreground)";
+
+// Column count chip: plain issue count, plus summed estimate points on WIP
+// columns — "2 · WIP 3" — when any card carries points.
+const columnCountLabel = (state: State, issues: Issue[]) => {
+  if (state.group !== "started") return String(issues.length);
+  const wip = issues.reduce((sum, i) => sum + (i.estimate_points ?? 0), 0);
+  return wip > 0 ? `${issues.length} · WIP ${wip}` : String(issues.length);
 };
+
+// Card status chip derived from data the issue already carries: done → merged
+// (green, merge icon), review/blocked state → evidence (amber, check icon),
+// else an assignee implies an agent run — working (green) or queued (gray).
+type IssueChip = {
+  tone: "green" | "amber" | "gray";
+  icon: "merge" | "check" | "terminal" | "bot";
+  text: string;
+};
+
+function issueStatusChip(issue: Issue, state?: State | null): IssueChip | null {
+  const group = state?.group ?? issue.state?.group;
+  const assignee = issue.assignees?.[0];
+  const who = (assignee?.display_name || assignee?.username || assignee?.email || "").trim();
+
+  if (group === "completed") {
+    const ago = issue.completed_at
+      ? ` · ${formatDistanceToNow(parseISO(issue.completed_at))} ago`
+      : "";
+    return { tone: "green", icon: "merge", text: who ? `merged by ${who}${ago}` : `done${ago}` };
+  }
+  if (isReviewStateName(state?.name ?? issue.state?.name)) {
+    return { tone: "amber", icon: "check", text: who ? `${who} · needs review` : "needs review" };
+  }
+  if (who) {
+    return group === "started"
+      ? { tone: "green", icon: "terminal", text: `${who} · working` }
+      : { tone: "gray", icon: "bot", text: `${who} · queued` };
+  }
+  return null;
+}
+
+function IssueStatusChip({ issue, state }: { issue: Issue; state?: State | null }) {
+  const chip = issueStatusChip(issue, state);
+  if (!chip) return null;
+  const tone =
+    chip.tone === "amber"
+      ? "ops-chip-amber"
+      : chip.tone === "green"
+        ? "ops-chip-green"
+        : "ops-chip-gray";
+  return (
+    <span className={`ops-chip ${tone}`}>
+      {chip.icon === "merge" && <HugeiconsIcon icon={GitMergeIcon} size={11} />}
+      {chip.icon === "terminal" && <HugeiconsIcon icon={TerminalIcon} size={11} />}
+      {chip.icon === "check" && <Check className="h-3 w-3" />}
+      {chip.icon === "bot" && <Bot className="h-3 w-3" />}
+      {chip.text}
+    </span>
+  );
+}
 
 const PRIORITY_COLORS: Record<string, string> = {
   urgent: "text-red-600 bg-red-50 dark:bg-red-950",
@@ -148,30 +213,100 @@ function DroppableColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`min-w-[260px] sm:min-w-[280px] w-[260px] sm:w-[280px] flex-shrink-0 snap-start rounded-lg border border-border border-t-2 p-2 transition-colors flex flex-col max-h-full ${
-        COLUMN_STYLES[state.group] ?? COLUMN_STYLES.backlog
-      } ${isOver ? "ring-2 ring-primary/50" : ""}`}
+      className={`flex min-h-0 w-[260px] sm:w-[280px] min-w-[260px] sm:min-w-[280px] shrink-0 snap-start flex-col max-h-full rounded-[12px] transition-colors ${
+        isOver ? "ring-2 ring-primary/50" : ""
+      }`}
     >
-      <div className="flex items-center gap-2 mb-3">
-        <Badge className={STATE_COLORS[state.group] || STATE_COLORS.backlog} variant="secondary">
+      <div className="mb-2.5 flex items-center gap-2 px-1">
+        <span
+          className="h-[9px] w-[9px] shrink-0 rounded-full"
+          style={{ backgroundColor: stateDotColor(state) }}
+        />
+        <span className="truncate font-ops-mono text-[11.5px] font-bold uppercase tracking-[1px] text-muted-foreground">
           {state.name}
-        </Badge>
-        <span className="text-xs text-muted-foreground">{stateIssues.length}</span>
+        </span>
+        <span className="whitespace-nowrap rounded-full border border-border bg-[var(--surface-elevated)] px-2 py-0.5 font-ops-mono text-[11px] font-semibold leading-none text-muted-foreground">
+          {columnCountLabel(state, stateIssues)}
+        </span>
       </div>
       <SortableContext items={stateIssues.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-        <div className="flex-1 min-h-[60px] space-y-2 overflow-y-auto">{children}</div>
+        <div className="min-h-[60px] flex-1 space-y-2.5 overflow-y-auto">{children}</div>
       </SortableContext>
     </div>
+  );
+}
+
+// Shared card body: mono key row, title, status chip, then module chips and
+// assignee avatars. Used by the board card and the drag overlay.
+function BoardCardBody({
+  issue,
+  state,
+  moduleMap,
+}: {
+  issue: Issue;
+  state?: State | null;
+  moduleMap: Map<string, Module>;
+}) {
+  const issueModules = (issue.module_ids ?? [])
+    .map((mid) => moduleMap.get(mid))
+    .filter(Boolean) as Module[];
+
+  return (
+    <CardContent className="flex flex-col gap-2 p-3.5">
+      <div className="flex items-center gap-2">
+        {issue.parent_id && <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground" />}
+        <span className="font-ops-mono text-[11px] font-bold tracking-[0.5px] text-muted-foreground">
+          #{String(issue.sequence_id).padStart(4, "0")}
+        </span>
+        {issue.priority && issue.priority !== "none" && (
+          <span className="font-ops-mono text-[10px] font-semibold uppercase text-muted-foreground/80">
+            {issue.priority}
+          </span>
+        )}
+      </div>
+      <p className="text-[13.5px] font-semibold leading-[18px]">{issue.name}</p>
+      <IssueStatusChip issue={issue} state={state} />
+      {issueModules.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {issueModules.map((m) => (
+            <span key={m.id} className="ops-chip ops-chip-gray">
+              <Package className="h-2.5 w-2.5" />
+              {m.name}
+            </span>
+          ))}
+        </div>
+      )}
+      {(issue.assignees ?? []).length > 0 && (
+        <div className="flex -space-x-1.5">
+          {(issue.assignees ?? []).slice(0, 3).map((a) => (
+            <span
+              key={a.id}
+              title={a.display_name || a.email || a.username || ""}
+              className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] font-medium text-muted-foreground"
+            >
+              {(a.display_name || a.email || a.username || "?").charAt(0).toUpperCase()}
+            </span>
+          ))}
+          {(issue.assignees ?? []).length > 3 && (
+            <span className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] text-muted-foreground">
+              +{(issue.assignees ?? []).length - 3}
+            </span>
+          )}
+        </div>
+      )}
+    </CardContent>
   );
 }
 
 // --- Sortable Issue Card ---
 function SortableIssueCard({
   issue,
+  state,
   onClick,
   moduleMap,
 }: {
   issue: Issue;
+  state?: State;
   onClick: () => void;
   moduleMap: Map<string, Module>;
 }) {
@@ -186,120 +321,43 @@ function SortableIssueCard({
     zIndex: isDragging ? 50 : undefined,
   };
 
-  const issueModules = (issue.module_ids ?? [])
-    .map((mid) => moduleMap.get(mid))
-    .filter(Boolean) as Module[];
+  const needsReview = isReviewStateName(state?.name ?? issue.state?.name);
 
   return (
     <Card
       ref={setNodeRef}
       style={style}
-      className={`cursor-pointer transition-shadow select-none duration-200 hover:shadow-elevated ${
-        isDragging ? "shadow-lg ring-2 ring-primary/30" : ""
-      }`}
+      className={`cursor-pointer select-none rounded-xl bg-[var(--surface-elevated)] shadow-none transition-colors duration-200 hover:bg-[var(--surface-card-hover)] ${
+        needsReview ? "border-[color:var(--state-amber)]" : ""
+      } ${isDragging ? "ring-2 ring-primary/30" : ""}`}
       onClick={onClick}
       {...attributes}
       {...listeners}
     >
-      <CardContent className="p-3">
-        <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{issue.name}</p>
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-              {issue.parent_id && <GitBranch className="h-3 w-3" />}
-              {String(issue.sequence_id).padStart(4, "0")}
-            </p>
-          </div>
-          {issue.priority && issue.priority !== "none" && (
-            <Badge variant="outline" className="text-[10px] ml-2 shrink-0">
-              {issue.priority}
-            </Badge>
-          )}
-        </div>
-        {issueModules.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
-            {issueModules.map((m) => (
-              <Badge key={m.id} variant="secondary" className="text-[10px] gap-1">
-                <Package className="h-2.5 w-2.5" />
-                {m.name}
-              </Badge>
-            ))}
-          </div>
-        )}
-        {(issue.assignees ?? []).length > 0 && (
-          <div className="flex -space-x-1.5 mt-2">
-            {(issue.assignees ?? []).slice(0, 3).map((a) => (
-              <span
-                key={a.id}
-                title={a.display_name || a.email || a.username || ""}
-                className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] font-medium text-muted-foreground"
-              >
-                {(a.display_name || a.email || a.username || "?").charAt(0).toUpperCase()}
-              </span>
-            ))}
-            {(issue.assignees ?? []).length > 3 && (
-              <span className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] text-muted-foreground">
-                +{(issue.assignees ?? []).length - 3}
-              </span>
-            )}
-          </div>
-        )}
-      </CardContent>
+      <BoardCardBody issue={issue} state={state} moduleMap={moduleMap} />
     </Card>
   );
 }
 
 // --- Drag Overlay Card ---
-function DragOverlayCard({ issue, moduleMap }: { issue: Issue; moduleMap: Map<string, Module> }) {
-  const issueModules = (issue.module_ids ?? [])
-    .map((mid) => moduleMap.get(mid))
-    .filter(Boolean) as Module[];
+function DragOverlayCard({
+  issue,
+  state,
+  moduleMap,
+}: {
+  issue: Issue;
+  state?: State | null;
+  moduleMap: Map<string, Module>;
+}) {
+  const needsReview = isReviewStateName(state?.name ?? issue.state?.name);
 
   return (
-    <Card className="shadow-xl ring-2 ring-primary/30 rotate-2 w-[260px] sm:w-[280px]">
-      <CardContent className="p-3">
-        <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{issue.name}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {String(issue.sequence_id).padStart(4, "0")}
-            </p>
-          </div>
-          {issue.priority && issue.priority !== "none" && (
-            <Badge variant="outline" className="text-[10px] ml-2 shrink-0">
-              {issue.priority}
-            </Badge>
-          )}
-        </div>
-        {issueModules.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
-            {issueModules.map((m) => (
-              <Badge key={m.id} variant="secondary" className="text-[10px] gap-1">
-                <Package className="h-2.5 w-2.5" />
-                {m.name}
-              </Badge>
-            ))}
-          </div>
-        )}
-        {(issue.assignees ?? []).length > 0 && (
-          <div className="flex -space-x-1.5 mt-2">
-            {(issue.assignees ?? []).slice(0, 3).map((a) => (
-              <span
-                key={a.id}
-                title={a.display_name || a.email || a.username || ""}
-                className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] font-medium text-muted-foreground"
-              >
-                {(a.display_name || a.email || a.username || "?").charAt(0).toUpperCase()}
-              </span>
-            ))}
-            {(issue.assignees ?? []).length > 3 && (
-              <span className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] text-muted-foreground">
-                +{(issue.assignees ?? []).length - 3}
-              </span>
-            )}
-          </div>
-        )}
-      </CardContent>
+    <Card
+      className={`w-[260px] sm:w-[280px] rotate-2 rounded-xl bg-[var(--surface-elevated)] shadow-xl ring-2 ring-primary/30 ${
+        needsReview ? "border-[color:var(--state-amber)]" : ""
+      }`}
+    >
+      <BoardCardBody issue={issue} state={state} moduleMap={moduleMap} />
     </Card>
   );
 }
@@ -437,6 +495,14 @@ export default function ProjectBoard() {
 
   const moduleMap = useMemo(() => new Map(modules.map((m) => [m.id, m])), [modules]);
   const memberMap = useMemo(() => new Map(members.map((m) => [m.memberId, m])), [members]);
+
+  // Distinct assignees across the project's issues — the toolbar "agents on
+  // this board" chip.
+  const onBoardAgents = useMemo(() => {
+    const ids = new Set<string>();
+    for (const i of issues) for (const a of i.assignees ?? []) ids.add(a.id);
+    return ids.size;
+  }, [issues]);
 
   // Project members in the shape the mention picker expects.
   const mentionMembers = useMemo(
@@ -892,20 +958,35 @@ export default function ProjectBoard() {
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b">
         <div className="flex flex-wrap items-center gap-2">
           <Tabs value={view} onValueChange={setView}>
-            <TabsList className="h-8">
-              <TabsTrigger value="board" className="text-xs px-2">
+            <TabsList className="h-8 rounded-[9px] bg-[var(--surface-elevated)] p-[3px] ring-0">
+              <TabsTrigger
+                value="board"
+                className="rounded-[7px] px-2 text-xs data-[state=active]:bg-[var(--surface-card-hover)]"
+              >
                 <Columns3 className="h-3 w-3 mr-1" /> Board
               </TabsTrigger>
-              <TabsTrigger value="list" className="text-xs px-2">
+              <TabsTrigger
+                value="list"
+                className="rounded-[7px] px-2 text-xs data-[state=active]:bg-[var(--surface-card-hover)]"
+              >
                 <List className="h-3 w-3 mr-1" /> List
               </TabsTrigger>
-              <TabsTrigger value="sheet" className="text-xs px-2">
+              <TabsTrigger
+                value="sheet"
+                className="rounded-[7px] px-2 text-xs data-[state=active]:bg-[var(--surface-card-hover)]"
+              >
                 <Table2 className="h-3 w-3 mr-1" /> Sheet
               </TabsTrigger>
-              <TabsTrigger value="calendar" className="text-xs px-2">
+              <TabsTrigger
+                value="calendar"
+                className="rounded-[7px] px-2 text-xs data-[state=active]:bg-[var(--surface-card-hover)]"
+              >
                 <Calendar className="h-3 w-3 mr-1" /> Calendar
               </TabsTrigger>
-              <TabsTrigger value="gantt" className="text-xs px-2">
+              <TabsTrigger
+                value="gantt"
+                className="rounded-[7px] px-2 text-xs data-[state=active]:bg-[var(--surface-card-hover)]"
+              >
                 <GanttChart className="h-3 w-3 mr-1" /> Gantt
               </TabsTrigger>
             </TabsList>
@@ -913,7 +994,7 @@ export default function ProjectBoard() {
           <Button
             variant="outline"
             size="sm"
-            className="h-8 gap-1.5 text-xs"
+            className="h-8 gap-1.5 rounded-full text-xs"
             onClick={() => navigate(`/${slug}/projects/${projectId}/cycles`)}
           >
             <Timer className="h-3.5 w-3.5" /> Sprints
@@ -921,7 +1002,7 @@ export default function ProjectBoard() {
           <Button
             variant="outline"
             size="sm"
-            className="h-8 gap-1.5 text-xs"
+            className="h-8 gap-1.5 rounded-full text-xs"
             onClick={() => navigate(`/${slug}/projects/${projectId}/modules`)}
           >
             <Package className="h-3.5 w-3.5" /> Modules
@@ -934,9 +1015,14 @@ export default function ProjectBoard() {
           />
           <Popover open={viewsOpen} onOpenChange={setViewsOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+              <Button variant="outline" size="sm" className="h-7 gap-1 rounded-full text-xs">
                 <Bookmark className="h-3 w-3" />
-                Views {savedViews.length > 0 && `(${savedViews.length})`}
+                Views{" "}
+                {savedViews.length > 0 && (
+                  <span className="font-ops-mono text-[11px] font-semibold text-muted-foreground">
+                    {savedViews.length}
+                  </span>
+                )}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-64 p-2" align="start">
@@ -991,6 +1077,12 @@ export default function ProjectBoard() {
           </Popover>
         </div>
         <div className="flex items-center gap-2">
+          {onBoardAgents > 0 && (
+            <span className="ops-chip ops-chip-green">
+              <span className="ops-dot" />
+              {onBoardAgents} agent{onBoardAgents === 1 ? "" : "s"} on this board
+            </span>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -1288,13 +1380,14 @@ export default function ProjectBoard() {
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex gap-4 p-4 overflow-x-auto flex-1 min-h-0 snap-x">
+          <div className="flex gap-3.5 overflow-x-auto px-6 py-[18px] flex-1 min-h-0 snap-x">
             {groupedByState.map(({ state, issues: stateIssues }) => (
               <DroppableColumn key={state.id} state={state} stateIssues={stateIssues}>
                 {stateIssues.map((issue) => (
                   <SortableIssueCard
                     key={issue.id}
                     issue={issue}
+                    state={state}
                     moduleMap={moduleMap}
                     onClick={() =>
                       navigate(`/${slug}/projects/${projectId}/issues/${issue.sequence_id}`)
@@ -1305,7 +1398,13 @@ export default function ProjectBoard() {
             ))}
           </div>
           <DragOverlay>
-            {activeIssue ? <DragOverlayCard issue={activeIssue} moduleMap={moduleMap} /> : null}
+            {activeIssue ? (
+              <DragOverlayCard
+                issue={activeIssue}
+                state={states.find((s) => s.id === activeIssue.state_id)}
+                moduleMap={moduleMap}
+              />
+            ) : null}
           </DragOverlay>
         </DndContext>
       )}

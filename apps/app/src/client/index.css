@@ -2,6 +2,10 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/manrope";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/jetbrains-mono/700.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -56,6 +60,17 @@
 
 :root {
   --radius: 0.625rem;
+  /* Ops-console design system (atur.pen) */
+  --font-mono-ops: "JetBrains Mono", ui-monospace, monospace;
+  --state-green: #34d399;
+  --state-green-soft: rgba(52, 211, 153, 0.12);
+  --state-amber: #fbbf24;
+  --state-amber-soft: rgba(251, 191, 36, 0.12);
+  --state-blue: #60a5fa;
+  --state-blue-soft: rgba(96, 165, 250, 0.12);
+  --surface-elevated: #101013;
+  --surface-card: #141417;
+  --surface-card-hover: #1a1a1f;
   /* Monochrome graphite neutrals — crisp, plane/linear-like grayscale */
   --background: oklch(0.984 0 0);
   --foreground: oklch(0.16 0 0);
@@ -92,6 +107,11 @@
 }
 
 .dark {
+  --surface-elevated: #101013;
+  --surface-card: #141417;
+  --surface-card-hover: #1a1a1f;
+}
+.dark {
   --background: oklch(0.155 0 0);
   --foreground: oklch(0.97 0 0);
   --card: oklch(0.195 0 0);
@@ -124,6 +144,46 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.62 0 0);
+}
+
+/* Ops-console shared utilities (atur.pen design system) */
+.font-ops-mono {
+  font-family: var(--font-mono-ops);
+}
+.ops-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-family: var(--font-mono-ops);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  width: fit-content;
+}
+.ops-chip-green {
+  background: var(--state-green-soft);
+  color: var(--state-green);
+}
+.ops-chip-amber {
+  background: var(--state-amber-soft);
+  color: var(--state-amber);
+}
+.ops-chip-blue {
+  background: var(--state-blue-soft);
+  color: var(--state-blue);
+}
+.ops-chip-gray {
+  background: var(--surface-card-hover);
+  color: var(--muted-foreground);
+}
+.ops-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  flex-shrink: 0;
 }
 
 @layer base {
