@@ -1847,13 +1847,31 @@ async function handleToolRaw(
         .limit(1);
     }
     case "get_issue": {
-      await assertIssueAccess(db, params.issue_id as string, userId);
+      // Accept issue_id (UUID) or sequence_id (human number within a project).
+      // Sequence lookups resolve scoped to project_id so numbers stay unique.
+      let issueId = params.issue_id as string | undefined;
+      if (!issueId && params.sequence_id != null) {
+        if (!params.project_id)
+          throw new HTTPException(400, { message: "project_id is required with sequence_id" });
+        const [ref] = await db
+          .select({ id: schema.issues.id })
+          .from(schema.issues)
+          .where(
+            and(
+              eq(schema.issues.projectId, params.project_id as string),
+              eq(schema.issues.sequenceId, Number(params.sequence_id)),
+              isNull(schema.issues.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (!ref) throw new HTTPException(404, { message: "Issue not found" });
+        issueId = ref.id;
+      }
+      await assertIssueAccess(db, issueId as string, userId);
       const [issue] = await db
         .select()
         .from(schema.issues)
-        .where(
-          and(isNull(schema.issues.deletedAt), eq(schema.issues.id, params.issue_id as string)),
-        )
+        .where(and(isNull(schema.issues.deletedAt), eq(schema.issues.id, issueId as string)))
         .limit(1);
       if (!issue) throw new HTTPException(404, { message: "Issue not found" });
       return issue;

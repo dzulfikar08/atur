@@ -35,17 +35,26 @@ mock.module("./herdr", () => ({
     switch (method) {
       case "pane.get":
         if (getFailure) {
-          return Promise.reject(new StubHerdrError("pane.get", getFailure.code, getFailure.message));
+          return Promise.reject(
+            new StubHerdrError("pane.get", getFailure.code, getFailure.message),
+          );
         }
         return Promise.resolve({ pane: { pane_id: p.pane_id, cwd: "/srv/acme" } });
       case "pane.read": {
         readCalls.push(p.pane_id ?? "");
         readHook?.();
         if (readFailure) {
-          return Promise.reject(new StubHerdrError("pane.read", readFailure.code, readFailure.message));
+          return Promise.reject(
+            new StubHerdrError("pane.read", readFailure.code, readFailure.message),
+          );
         }
         return Promise.resolve({
-          read: { pane_id: p.pane_id, text: paneText.get(p.pane_id ?? "") ?? "", revision: 1, truncated: false },
+          read: {
+            pane_id: p.pane_id,
+            text: paneText.get(p.pane_id ?? "") ?? "",
+            revision: 1,
+            truncated: false,
+          },
         });
       }
       default:
@@ -66,7 +75,7 @@ const TOOL_BOX = [
   "│ $ jq -e '.keys' mcp.json           │",
   "├─── Output ─────────────────────────┤",
   "│ [                                  │",
-  "│   \"pencil\"                        │",
+  '│   "pencil"                        │',
   "│ ]                                  │",
   "│ ⟦Wall: 0.01s | Timeout: 300s⟧     │",
   "╰────────────────────────────────────╯",
@@ -76,7 +85,11 @@ const MODEL_BADGE_LINE = "⠇ 7s · ◒ GLM-5.3-Flash · ▲ 1.2k tok";
 
 /** Polls for a real condition instead of sleeping a guessed duration; the
  *  hub runs its own real timers, so fake clocks cannot advance it. */
-function until<T>(fn: () => T | undefined | null | false, timeoutMs = 3000, stepMs = 20): Promise<T> {
+function until<T>(
+  fn: () => T | undefined | null | false,
+  timeoutMs = 3000,
+  stepMs = 20,
+): Promise<T> {
   const { promise, resolve, reject } = Promise.withResolvers<T>();
   const deadline = Date.now() + timeoutMs;
   const tick = () => {
@@ -152,7 +165,7 @@ describe("pane parser", () => {
     const out = blocks[1]!;
     expect(out.kind).toBe("output");
     expect(out.title).toBeNull();
-    expect(out.text).toContain("\"pencil\"");
+    expect(out.text).toContain('"pencil"');
     expect(out.text).toContain("⟦Wall: 0.01s | Timeout: 300s⟧");
     expect(out.lineCount).toBe(4);
   });
@@ -170,7 +183,14 @@ describe("pane parser", () => {
   });
 
   test("detects model badges", () => {
-    const screen = ["╭──╮", "│ $ ls │", "├─── Output ──┤", "│ files │", "╰──╯", MODEL_BADGE_LINE].join("\r\n");
+    const screen = [
+      "╭──╮",
+      "│ $ ls │",
+      "├─── Output ──┤",
+      "│ files │",
+      "╰──╯",
+      MODEL_BADGE_LINE,
+    ].join("\r\n");
     const { mode, blocks } = parser.parse(screen);
     expect(mode).toBe("structured");
     const model = blocks.find((b) => b.kind === "model");
@@ -294,7 +314,10 @@ describe("observe hub", () => {
     expect(snap.type).toBe("snapshot");
     expect(snap.paneId).toBe("p1");
     expect(snap.mode).toBe("structured");
-    expect((snap.blocks as Record<string, unknown>[]).map((b) => b.kind)).toEqual(["tool", "output"]);
+    expect((snap.blocks as Record<string, unknown>[]).map((b) => b.kind)).toEqual([
+      "tool",
+      "output",
+    ]);
 
     paneText.set("p1", `${TOOL_BOX}\r\n\r\nExtra line.`);
     const update = await until(() => frames(sent).find((f) => f.type === "blocks"));
@@ -310,10 +333,14 @@ describe("observe hub", () => {
     const sentFrames = frames(sent);
     expect(sentFrames[0]).toMatchObject({ type: "snapshot", mode: "raw", blocks: [] });
     expect(sentFrames[1]).toMatchObject({ type: "raw", mode: "raw", paneId: "sh" });
-    expect((sentFrames[1]!.text as string)).toContain("notes.txt");
+    expect(sentFrames[1]!.text as string).toContain("notes.txt");
 
     paneText.set("sh", "$ ls\r\nnotes.txt\r\nsrc");
-    const update = await until(() => frames(sent).filter((f) => f.type === "raw").at(1));
+    const update = await until(() =>
+      frames(sent)
+        .filter((f) => f.type === "raw")
+        .at(1),
+    );
     expect(update!.text).toContain("src");
   });
 
@@ -395,7 +422,10 @@ function connect(path: string, token: string | null = TOKEN): Promise<WsHandle> 
     headers: token === null ? undefined : { "x-bridge-token": token },
   } as unknown as string[]);
   const messages: Record<string, unknown>[] = [];
-  const { promise: closeInfo, resolve: resolveClose } = Promise.withResolvers<{ code: number; reason: string }>();
+  const { promise: closeInfo, resolve: resolveClose } = Promise.withResolvers<{
+    code: number;
+    reason: string;
+  }>();
   ws.addEventListener("close", (ev) => resolveClose({ code: ev.code, reason: ev.reason }));
   ws.addEventListener("message", (ev) => {
     try {

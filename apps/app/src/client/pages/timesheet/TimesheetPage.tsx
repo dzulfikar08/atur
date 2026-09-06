@@ -222,9 +222,7 @@ export default function TimesheetPage() {
   const agentTotals = agentUsageQuery.data?.totals;
 
   const rangeLabel =
-    from || to
-      ? `${from ? formatDay(from) : "…"} – ${to ? formatDay(to) : "…"}`
-      : "All time";
+    from || to ? `${from ? formatDay(from) : "…"} – ${to ? formatDay(to) : "…"}` : "All time";
 
   function exportCsv() {
     const rows = timesheetQuery.data?.results ?? [];
@@ -404,8 +402,8 @@ export default function TimesheetPage() {
         <h2 className="text-[15px] font-bold text-foreground">AI Agent Usage</h2>
         {agentTotals && (
           <span className="font-ops-mono text-[12px] text-muted-foreground/70">
-            {formatTokens(agentTotals.total_tokens)} tokens · {formatDuration(agentTotals.total_seconds)} ·{" "}
-            {formatCost(agentTotals.cost_usd)}
+            {formatTokens(agentTotals.total_tokens)} tokens ·{" "}
+            {formatDuration(agentTotals.total_seconds)} · {formatCost(agentTotals.cost_usd)}
           </span>
         )}
       </div>
@@ -451,8 +449,12 @@ export default function TimesheetPage() {
                       <IssueLabel sequenceId={r.sequence_id} name={r.issue_name} />
                       <span className={`${cellClass} w-[52px]`}>{r.entry_count}</span>
                       <span className={`${cellClass} w-[64px]`}>{formatHm(r.total_seconds)}</span>
-                      <span className={`${cellClass} w-[64px]`}>{formatTokens(r.input_tokens)}</span>
-                      <span className={`${cellClass} w-[64px]`}>{formatTokens(r.output_tokens)}</span>
+                      <span className={`${cellClass} w-[64px]`}>
+                        {formatTokens(r.input_tokens)}
+                      </span>
+                      <span className={`${cellClass} w-[64px]`}>
+                        {formatTokens(r.output_tokens)}
+                      </span>
                       <span className={`${cellTotalClass} w-[72px]`}>
                         {formatTokens(r.total_tokens)}
                       </span>

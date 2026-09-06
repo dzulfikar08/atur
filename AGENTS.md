@@ -6,6 +6,27 @@
 
 **Local dev**: `cd apps/app && bun run dev` (vite dev server — worker + SPA on one origin). **Deploy**: `cd apps/app && bun run deploy`. **D1 remote**: `bunx wrangler d1 execute atur-db --remote --command "..."`. **Typecheck**: `bun run typecheck` from the repo root.
 
+### Pre-Push Gate — REQUIRED before every `git push`
+
+CI runs the exact same checks; a push that turns CI red is a failed push. From the repo root, run all
+four and fix every failure (across ALL projects — every app and package in the monorepo — not just
+the files you touched):
+
+```bash
+bun run fmt:check   # formatting (oxfmt). Fix with: bun run fmt
+bun run lint        # oxlint
+bun run typecheck   # @atur/app + @atur/bridge
+bun run test        # app test suite
+```
+
+Rules:
+
+- If a check fails for a reason unrelated to your change (pre-existing red), do not silently push —
+  say so in the commit/PR and link the failing run, or fix it if cheap.
+- Never weaken a check (no `--no-verify`, no skipping scripts) to get a push through.
+- After `bun install`, dependency bumps, or lockfile changes, re-run the full gate: stale caches and
+  new deps can break checks that passed before (e.g. vite's optimize cache on a running dev server).
+
 ### HOW TO USE ATUR — Read This First
 
 Atur tools are prefixed `mcp__atur__`. ALWAYS pass `workspace` (slug) AND `project_id` (UUID) where accepted — do not skip them.

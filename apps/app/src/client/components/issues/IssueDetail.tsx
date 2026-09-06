@@ -206,9 +206,13 @@ function renderActivityText(a: IssueActivity): ReactNode {
       <>
         {actor} changed <span className="font-medium text-foreground">{fieldLabel}</span>
         {" from "}
-        <span className="font-ops-mono text-xs bg-muted px-1 rounded">{formatVal(a.old_value)}</span>
+        <span className="font-ops-mono text-xs bg-muted px-1 rounded">
+          {formatVal(a.old_value)}
+        </span>
         {" to "}
-        <span className="font-ops-mono text-xs bg-muted px-1 rounded">{formatVal(a.new_value)}</span>
+        <span className="font-ops-mono text-xs bg-muted px-1 rounded">
+          {formatVal(a.new_value)}
+        </span>
       </>
     );
   }
@@ -973,9 +977,7 @@ export default function IssueDetail() {
                       <CommentContent html={issue.description_html} />
                     </div>
                   ) : (
-                    <p className="text-muted-foreground text-sm italic">
-                      No description provided
-                    </p>
+                    <p className="text-muted-foreground text-sm italic">No description provided</p>
                   )}
                 </div>
                 <Button
@@ -1258,219 +1260,58 @@ export default function IssueDetail() {
           <div className="mt-auto border-t px-4 md:px-5 lg:px-6 py-4 md:py-5">
             {/* Properties card (ops-console right-rail styling) */}
             <div className="rounded-[12px] border border-border bg-[var(--surface-elevated)] p-4 md:p-5">
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-5">
-              <div>
-                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 block">
-                  Follow
-                </label>
-                <Button
-                  variant={subscribed ? "secondary" : "outline"}
-                  size="sm"
-                  className="h-7 w-full text-xs gap-1"
-                  onClick={() => (subscribed ? unfollowMutation.mutate() : followMutation.mutate())}
-                  disabled={followMutation.isPending || unfollowMutation.isPending}
-                >
-                  <Bell className="h-3 w-3" />
-                  {subscribed ? "Following" : "Follow"}
-                  {followerCount > 0 && (
-                    <span className="ml-auto text-muted-foreground text-[10px]">
-                      {followerCount}
-                    </span>
-                  )}
-                </Button>
-              </div>
-
-              <div>
-                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                  <User className="h-3 w-3" /> Assignee
-                </label>
-                <div className="space-y-1.5">
-                  {currentAssigneeIds.size > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {(issue.assignees ?? []).map((a) => (
-                        <Badge key={a.id} variant="secondary" className="text-xs gap-1 pr-1">
-                          <Avatar className="h-4 w-4">
-                            {a.avatar ? (
-                              <AvatarImage
-                                src={a.avatar}
-                                alt={a.display_name || a.email || "User"}
-                              />
-                            ) : null}
-                            <AvatarFallback className="text-[9px]">
-                              {(a.display_name || a.email || a.username || "?")
-                                .charAt(0)
-                                .toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          {a.display_name || a.email || a.username}
-                          <button
-                            className="ml-0.5 hover:text-destructive"
-                            onClick={() => removeAssigneeMutation.mutate(a.id)}
-                            disabled={removeAssigneeMutation.isPending}
-                            aria-label="Remove assignee"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  <Select value="" onValueChange={(v) => v && toggleAssignee(v)}>
-                    <SelectTrigger className="h-7 text-xs">
-                      <SelectValue
-                        placeholder={
-                          currentAssigneeIds.size > 0 ? "Add assignee..." : "Assign to someone..."
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {members.map((m) => (
-                        <SelectItem key={m.memberId} value={m.memberId}>
-                          {m.displayName || m.username || m.email}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {currentUser && !currentAssigneeIds.has(currentUser.id) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 w-full text-xs gap-1"
-                      onClick={() => addAssigneeMutation.mutate(currentUser.id)}
-                      disabled={addAssigneeMutation.isPending}
-                    >
-                      <User className="h-3 w-3" /> Assign to me
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 block">
-                  State
-                </label>
-                <Select
-                  value={issue.state_id || ""}
-                  onValueChange={(v) => updateMutation.mutate({ state_id: v })}
-                >
-                  <SelectTrigger
-                    className="h-auto w-fit gap-1.5 rounded-full border-0 px-2.5 py-1 font-ops-mono text-[12px] font-bold [&>svg]:h-3 [&>svg]:w-3 [&>svg]:opacity-70"
-                    style={{ backgroundColor: statePill.bg, color: statePill.fg }}
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-5">
+                <div>
+                  <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 block">
+                    Follow
+                  </label>
+                  <Button
+                    variant={subscribed ? "secondary" : "outline"}
+                    size="sm"
+                    className="h-7 w-full text-xs gap-1"
+                    onClick={() =>
+                      subscribed ? unfollowMutation.mutate() : followMutation.mutate()
+                    }
+                    disabled={followMutation.isPending || unfollowMutation.isPending}
                   >
-                    {currentState ? (
-                      <span className="flex items-center gap-1.5">
-                        <span
-                          className="ops-dot"
-                          style={currentState.color ? { background: currentState.color } : undefined}
-                        />
-                        {currentState.name}
+                    <Bell className="h-3 w-3" />
+                    {subscribed ? "Following" : "Follow"}
+                    {followerCount > 0 && (
+                      <span className="ml-auto text-muted-foreground text-[10px]">
+                        {followerCount}
                       </span>
-                    ) : (
-                      <span className="font-normal">Set state</span>
                     )}
-                  </SelectTrigger>
-                  <SelectContent>
-                    {states.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        <span className="flex items-center gap-2">
-                          <span
-                            className="h-2 w-2 rounded-full"
-                            style={{ backgroundColor: s.color || "#9ca3af" }}
-                          />
-                          {s.name}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                  </Button>
+                </div>
 
-              <div>
-                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 block">
-                  Priority
-                </label>
-                <Select
-                  value={issue.priority || "none"}
-                  onValueChange={(v) => updateMutation.mutate({ priority: v })}
-                >
-                  <SelectTrigger className="h-8 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["none", "low", "medium", "high", "urgent"].map((p) => (
-                      <SelectItem key={p} value={p}>
-                        <span className="flex items-center gap-2 capitalize">
-                          <span className={`h-2 w-2 rounded-full ${PRIORITY_DOT[p]}`} />
-                          {PRIORITY_LABELS[p]}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 block">
-                  Estimate (pts)
-                </label>
-                <Select
-                  value={issue.estimate_points != null ? String(issue.estimate_points) : "__none__"}
-                  onValueChange={(v) =>
-                    updateMutation.mutate({ estimate_points: v === "__none__" ? null : Number(v) })
-                  }
-                >
-                  <SelectTrigger className="h-8 text-sm font-ops-mono">
-                    <SelectValue placeholder="No estimate" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
-                    {[0, 1, 2, 3, 5, 8, 13, 21].map((p) => (
-                      <SelectItem key={p} value={String(p)}>
-                        {p}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                  <Calendar className="h-3 w-3" /> Start Date
-                </label>
-                <DatePicker
-                  value={issue.start_date}
-                  onChange={(v) => updateMutation.mutate({ start_date: v })}
-                />
-              </div>
-
-              <div>
-                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                  <Calendar className="h-3 w-3" /> Target Date
-                </label>
-                <DatePicker
-                  value={issue.target_date}
-                  onChange={(v) => updateMutation.mutate({ target_date: v })}
-                />
-              </div>
-
-              <div>
-                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                  <Package className="h-3 w-3" /> Modules
-                </label>
-                {issueModulesLoading ? (
-                  <p className="text-xs text-muted-foreground animate-pulse">Loading...</p>
-                ) : (
+                <div>
+                  <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                    <User className="h-3 w-3" /> Assignee
+                  </label>
                   <div className="space-y-1.5">
-                    {issueModules.length > 0 && (
+                    {currentAssigneeIds.size > 0 && (
                       <div className="flex flex-wrap gap-1">
-                        {issueModules.map((m: Module) => (
-                          <Badge key={m.id} variant="secondary" className="text-xs gap-1 pr-1">
-                            <Package className="h-2.5 w-2.5" />
-                            {m.name}
+                        {(issue.assignees ?? []).map((a) => (
+                          <Badge key={a.id} variant="secondary" className="text-xs gap-1 pr-1">
+                            <Avatar className="h-4 w-4">
+                              {a.avatar ? (
+                                <AvatarImage
+                                  src={a.avatar}
+                                  alt={a.display_name || a.email || "User"}
+                                />
+                              ) : null}
+                              <AvatarFallback className="text-[9px]">
+                                {(a.display_name || a.email || a.username || "?")
+                                  .charAt(0)
+                                  .toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            {a.display_name || a.email || a.username}
                             <button
                               className="ml-0.5 hover:text-destructive"
-                              onClick={() => removeModuleMutation.mutate(m.id)}
-                              disabled={removeModuleMutation.isPending}
+                              onClick={() => removeAssigneeMutation.mutate(a.id)}
+                              disabled={removeAssigneeMutation.isPending}
+                              aria-label="Remove assignee"
                             >
                               <X className="h-3 w-3" />
                             </button>
@@ -1478,66 +1319,241 @@ export default function IssueDetail() {
                         ))}
                       </div>
                     )}
-                    {projectModules.length > 0 &&
-                      (() => {
-                        const issueModuleIds = new Set(issueModules.map((m: Module) => m.id));
-                        const available = projectModules.filter((m) => !issueModuleIds.has(m.id));
-                        return available.length > 0 ? (
-                          <Select
-                            value={moduleSelectValue}
-                            onValueChange={(v) => {
-                              addModuleMutation.mutate(v);
-                              setModuleSelectValue("");
-                            }}
-                          >
-                            <SelectTrigger className="h-7 text-xs">
-                              <SelectValue placeholder="Add to module..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {available.map((m) => (
-                                <SelectItem key={m.id} value={m.id}>
-                                  {m.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : issueModules.length === 0 ? (
-                          <p className="text-xs text-muted-foreground italic">
-                            No modules available
-                          </p>
-                        ) : null;
-                      })()}
-                    {projectModules.length === 0 && issueModules.length === 0 && (
-                      <p className="text-xs text-muted-foreground italic">No modules in project</p>
+                    <Select value="" onValueChange={(v) => v && toggleAssignee(v)}>
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue
+                          placeholder={
+                            currentAssigneeIds.size > 0 ? "Add assignee..." : "Assign to someone..."
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {members.map((m) => (
+                          <SelectItem key={m.memberId} value={m.memberId}>
+                            {m.displayName || m.username || m.email}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {currentUser && !currentAssigneeIds.has(currentUser.id) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 w-full text-xs gap-1"
+                        onClick={() => addAssigneeMutation.mutate(currentUser.id)}
+                        disabled={addAssigneeMutation.isPending}
+                      >
+                        <User className="h-3 w-3" /> Assign to me
+                      </Button>
                     )}
                   </div>
+                </div>
+
+                <div>
+                  <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 block">
+                    State
+                  </label>
+                  <Select
+                    value={issue.state_id || ""}
+                    onValueChange={(v) => updateMutation.mutate({ state_id: v })}
+                  >
+                    <SelectTrigger
+                      className="h-auto w-fit gap-1.5 rounded-full border-0 px-2.5 py-1 font-ops-mono text-[12px] font-bold [&>svg]:h-3 [&>svg]:w-3 [&>svg]:opacity-70"
+                      style={{ backgroundColor: statePill.bg, color: statePill.fg }}
+                    >
+                      {currentState ? (
+                        <span className="flex items-center gap-1.5">
+                          <span
+                            className="ops-dot"
+                            style={
+                              currentState.color ? { background: currentState.color } : undefined
+                            }
+                          />
+                          {currentState.name}
+                        </span>
+                      ) : (
+                        <span className="font-normal">Set state</span>
+                      )}
+                    </SelectTrigger>
+                    <SelectContent>
+                      {states.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          <span className="flex items-center gap-2">
+                            <span
+                              className="h-2 w-2 rounded-full"
+                              style={{ backgroundColor: s.color || "#9ca3af" }}
+                            />
+                            {s.name}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 block">
+                    Priority
+                  </label>
+                  <Select
+                    value={issue.priority || "none"}
+                    onValueChange={(v) => updateMutation.mutate({ priority: v })}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["none", "low", "medium", "high", "urgent"].map((p) => (
+                        <SelectItem key={p} value={p}>
+                          <span className="flex items-center gap-2 capitalize">
+                            <span className={`h-2 w-2 rounded-full ${PRIORITY_DOT[p]}`} />
+                            {PRIORITY_LABELS[p]}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 block">
+                    Estimate (pts)
+                  </label>
+                  <Select
+                    value={
+                      issue.estimate_points != null ? String(issue.estimate_points) : "__none__"
+                    }
+                    onValueChange={(v) =>
+                      updateMutation.mutate({
+                        estimate_points: v === "__none__" ? null : Number(v),
+                      })
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-sm font-ops-mono">
+                      <SelectValue placeholder="No estimate" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {[0, 1, 2, 3, 5, 8, 13, 21].map((p) => (
+                        <SelectItem key={p} value={String(p)}>
+                          {p}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                    <Calendar className="h-3 w-3" /> Start Date
+                  </label>
+                  <DatePicker
+                    value={issue.start_date}
+                    onChange={(v) => updateMutation.mutate({ start_date: v })}
+                  />
+                </div>
+
+                <div>
+                  <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                    <Calendar className="h-3 w-3" /> Target Date
+                  </label>
+                  <DatePicker
+                    value={issue.target_date}
+                    onChange={(v) => updateMutation.mutate({ target_date: v })}
+                  />
+                </div>
+
+                <div>
+                  <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                    <Package className="h-3 w-3" /> Modules
+                  </label>
+                  {issueModulesLoading ? (
+                    <p className="text-xs text-muted-foreground animate-pulse">Loading...</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {issueModules.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {issueModules.map((m: Module) => (
+                            <Badge key={m.id} variant="secondary" className="text-xs gap-1 pr-1">
+                              <Package className="h-2.5 w-2.5" />
+                              {m.name}
+                              <button
+                                className="ml-0.5 hover:text-destructive"
+                                onClick={() => removeModuleMutation.mutate(m.id)}
+                                disabled={removeModuleMutation.isPending}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      {projectModules.length > 0 &&
+                        (() => {
+                          const issueModuleIds = new Set(issueModules.map((m: Module) => m.id));
+                          const available = projectModules.filter((m) => !issueModuleIds.has(m.id));
+                          return available.length > 0 ? (
+                            <Select
+                              value={moduleSelectValue}
+                              onValueChange={(v) => {
+                                addModuleMutation.mutate(v);
+                                setModuleSelectValue("");
+                              }}
+                            >
+                              <SelectTrigger className="h-7 text-xs">
+                                <SelectValue placeholder="Add to module..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {available.map((m) => (
+                                  <SelectItem key={m.id} value={m.id}>
+                                    {m.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : issueModules.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic">
+                              No modules available
+                            </p>
+                          ) : null;
+                        })()}
+                      {projectModules.length === 0 && issueModules.length === 0 && (
+                        <p className="text-xs text-muted-foreground italic">
+                          No modules in project
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {slug && projectId && issueId && (
+                  <CustomFieldValues
+                    slug={slug}
+                    projectId={projectId}
+                    issueSeqId={Number(issueId)}
+                  />
                 )}
               </div>
+              <Separator className="my-4" />
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-5">
+                <div>
+                  <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> Created
+                  </label>
+                  <p className="font-ops-mono text-sm">
+                    {new Date(issue.created_at).toLocaleDateString()}
+                  </p>
+                </div>
 
-              {slug && projectId && issueId && (
-                <CustomFieldValues slug={slug} projectId={projectId} issueSeqId={Number(issueId)} />
-              )}
-            </div>
-            <Separator className="my-4" />
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-5">
-              <div>
-                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                  <Clock className="h-3 w-3" /> Created
-                </label>
-                <p className="font-ops-mono text-sm">
-                  {new Date(issue.created_at).toLocaleDateString()}
-                </p>
+                <div>
+                  <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> Updated
+                  </label>
+                  <p className="font-ops-mono text-sm">
+                    {formatDistanceToNow(new Date(issue.updated_at), { addSuffix: true })}
+                  </p>
+                </div>
               </div>
-
-              <div>
-                <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                  <Clock className="h-3 w-3" /> Updated
-                </label>
-                <p className="font-ops-mono text-sm">
-                  {formatDistanceToNow(new Date(issue.updated_at), { addSuffix: true })}
-                </p>
-              </div>
-            </div>
             </div>
           </div>
         </div>

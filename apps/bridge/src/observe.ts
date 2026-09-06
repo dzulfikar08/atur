@@ -97,9 +97,7 @@ export class SessionParser {
   }
 
   private parseInner(text: string): ParsedPane {
-    const lines = text
-      .split(/\r\n|\n/)
-      .map((l) => l.replace(/\r$/, "").trimEnd());
+    const lines = text.split(/\r\n|\n/).map((l) => l.replace(/\r$/, "").trimEnd());
     while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
     const now = Date.now();
 
@@ -191,7 +189,11 @@ export class SessionParser {
         continue;
       }
       if (head === "│") {
-        const stripped = rawLine.slice(1).replace(/\s*│\s*$/, "").trimEnd().replace(/^ /, "");
+        const stripped = rawLine
+          .slice(1)
+          .replace(/\s*│\s*$/, "")
+          .trimEnd()
+          .replace(/^ /, "");
         if (inBox) {
           const part = outLines ?? toolLines;
           if (part === null) continue;
@@ -232,7 +234,13 @@ export class SessionParser {
           prev.lines.push(rawLine.trim());
           prev.changedAt = now;
         } else {
-          blocks.push({ kind: "model", title: null, model, lines: [rawLine.trim()], changedAt: now });
+          blocks.push({
+            kind: "model",
+            title: null,
+            model,
+            lines: [rawLine.trim()],
+            changedAt: now,
+          });
         }
         continue;
       }

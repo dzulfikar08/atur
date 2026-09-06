@@ -532,7 +532,13 @@ async function supervise(claims: Claims): Promise<number> {
 // comment but no live crew entry gets ONE check-in comment asking the human
 // to requeue or confirm — Atur must never silently claim live work it
 // cannot see. swept.json keeps each check-in a one-time event.
-async function sweepWorkspace(slug: string, projectId: string, states: Json[], claims: Claims, swept: Swept) {
+async function sweepWorkspace(
+  slug: string,
+  projectId: string,
+  states: Json[],
+  claims: Claims,
+  swept: Swept,
+) {
   const inProgress = states.find((s) => /in progress/i.test(String(s.name)));
   if (!inProgress) return;
   const issues = rowsOf(
@@ -550,14 +556,10 @@ async function sweepWorkspace(slug: string, projectId: string, states: Json[], c
       console.log(`  [sweep] would check in on ${slug}-${seq} (untracked In-Progress claim)`);
       continue;
     }
-    await api(
-      "POST",
-      `/api/workspaces/${slug}/projects/${projectId}/issues/${issueId}/comments`,
-      {
-        comment_html:
-          "<p>Sweep check-in: this issue is In Progress with a claim comment, but the spawn-loop host has no live crew entry for it — likely a crashed or restarted harness. If the agent is dead, comment what happened and requeue to Todo; if it is still working from another host or session, ignore this note.</p>",
-      },
-    );
+    await api("POST", `/api/workspaces/${slug}/projects/${projectId}/issues/${issueId}/comments`, {
+      comment_html:
+        "<p>Sweep check-in: this issue is In Progress with a claim comment, but the spawn-loop host has no live crew entry for it — likely a crashed or restarted harness. If the agent is dead, comment what happened and requeue to Todo; if it is still working from another host or session, ignore this note.</p>",
+    });
     swept[issueId] = Date.now();
     saveSwept(swept);
     console.log(`  [sweep] check-in posted on ${slug}-${seq}`);
