@@ -125,12 +125,20 @@ function drive(fn: (ws: MockWebSocket) => void) {
 
 describe("usePaneObserve + TranscriptView against the bridge contract", () => {
   it("renders structured blocks with model badge, tool title, and timing", () => {
-    render(<Harness />);
-    expect(currentSocket().url).toBe("ws://localhost/api/panes/observe?pane=p1");
-    drive((ws) => {
-      ws.open();
-      ws.push(structuredSnapshot);
-    });
+    // TranscriptView derives running-block duration from Date.now(); pin it to
+    // the fixture epoch so the test is deterministic regardless of wall clock.
+    const realNow = Date.now;
+    Date.now = () => Date.parse(iso(0));
+    try {
+      render(<Harness />);
+      expect(currentSocket().url).toBe("ws://localhost/api/panes/observe?pane=p1");
+      drive((ws) => {
+        ws.open();
+        ws.push(structuredSnapshot);
+      });
+    } finally {
+      Date.now = realNow;
+    }
 
     // Model badge shows block.model; tool shows its title.
     expect(screen.getByText("claude-sonnet-4")).toBeInTheDocument();
