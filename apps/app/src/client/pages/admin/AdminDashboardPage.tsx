@@ -18,6 +18,7 @@ import {
   TrendingUp,
   TrendingDown,
   FolderKanban,
+  Link2,
   ArrowUpRight,
 } from "@/lib/icons";
 
@@ -136,6 +137,13 @@ export default function AdminDashboardPage() {
       <div className="flex items-center gap-3">
         <Shield className="h-6 w-6" />
         <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+        <Link
+          to={`/${slug}/admin/bindings`}
+          className="ml-auto inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground hover:underline"
+        >
+          <Link2 className="h-4 w-4" />
+          Bindings
+        </Link>
       </div>
 
       {/* Stats Cards */}

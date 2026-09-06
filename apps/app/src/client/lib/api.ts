@@ -740,6 +740,15 @@ export const api = {
     }),
   // ── Panes (herdr execution plane, proxied by the Worker; see ATUR-2) ──
   listPanes: () => apiFetch<PanesListResponse>("/panes"),
+  // ── Workspace links (DEV-29 control-plane bindings; /admin/bindings) ──
+  listWorkspaceLinks: () => apiFetch<{ results: WorkspaceLink[] }>("/workspaces/links"),
+  updateWorkspaceLink: (workspace: string, data: WorkspaceLinkPatch) =>
+    apiFetch<WorkspaceLink>(`/workspaces/${workspace}/links`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteWorkspaceLink: (workspace: string) =>
+    apiFetch<void>(`/workspaces/${workspace}/links`, { method: "DELETE" }),
 };
 
 // --- Types ---
@@ -766,6 +775,32 @@ export interface PaneListItem {
 
 export interface PanesListResponse {
   panes: PaneListItem[];
+}
+
+// ── Workspace link (DEV-29 control-plane binding; snake_case wire format) ──
+// One row of workspace_links: which repo(s), local checkout, branch, and
+// herdr workspace back a given Atur workspace (see services/workspaceLinks.ts).
+export interface WorkspaceLink {
+  workspace: string;
+  repo_urls: string[] | null;
+  local_path: string | null;
+  default_branch: string | null;
+  herdr_workspace: string | null;
+  notes: string | null;
+  mode: "local-only" | "direct-PR" | null;
+  auto_merge: "yolo" | null;
+  updated_at: string | null;
+}
+
+// PUT body mirrors upsertLinkSchema (all fields optional, at least one).
+export interface WorkspaceLinkPatch {
+  repo_urls?: string[] | null;
+  local_path?: string | null;
+  default_branch?: string | null;
+  herdr_workspace?: string | null;
+  notes?: string | null;
+  mode?: "local-only" | "direct-PR" | null;
+  auto_merge?: "yolo" | null;
 }
 
 // ── Portfolio strategy (DEV-22) ──

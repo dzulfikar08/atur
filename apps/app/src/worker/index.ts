@@ -1,4 +1,5 @@
 import { createApp } from "./app";
+import { runD1Backup } from "./services/backup";
 import { runDueDateReminders } from "./services/reminders";
 import { OAUTH_NAV_PATHS } from "./lib/oauth";
 import type { Env } from "./lib/env";
@@ -54,15 +55,23 @@ export default {
 
     return env.ASSETS.fetch(request);
   },
-
-  // Cron trigger (see wrangler.toml [triggers]): daily due-date reminder emails
-  // for issue followers. Runs at 08:00 UTC; each recipient's local day is
-  // derived from users.user_timezone for the dedup date.
+  // Cron triggers (wrangler.toml [triggers]): 08:00 UTC sends due-date
+  // reminder emails to issue followers (each recipient's local day derives
+  // from users.user_timezone); 03:30 UTC dumps D1 to the atur-backups R2
+  // bucket (services/backup.ts).
   async scheduled(
-    _controller: ScheduledController,
+    controller: ScheduledController,
     env: Env,
     ctx: ExecutionContext,
   ): Promise<void> {
+    if (controller.cron === "30 3 * * *") {
+      ctx.waitUntil(
+        runD1Backup(env).catch((e: unknown) => {
+          console.error("d1 backup failed:", e);
+        }),
+      );
+      return;
+    }
     ctx.waitUntil(runDueDateReminders(env));
   },
 } satisfies ExportedHandler<Env>;

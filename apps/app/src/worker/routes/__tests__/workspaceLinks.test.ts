@@ -28,9 +28,10 @@ vi.mock("../../services/workspaceLinks", async (importOriginal) => ({
   get: vi.fn(),
   upsert: vi.fn(),
   remove: vi.fn(),
+  list: vi.fn(),
 }));
 
-import { workspaceLinkRoutes } from "../../routes/workspaceLinks";
+import { workspaceLinkRoutes, workspaceLinksListRoute } from "../../routes/workspaceLinks";
 import * as linksService from "../../services/workspaceLinks";
 import * as workspaceRepo from "../../repositories/workspaces";
 import * as membersRepo from "../../repositories/members";
@@ -38,6 +39,7 @@ import * as membersRepo from "../../repositories/members";
 const getLink = vi.mocked(linksService.get);
 const upsertLink = vi.mocked(linksService.upsert);
 const removeLink = vi.mocked(linksService.remove);
+const listLinks = vi.mocked(linksService.list);
 const findBySlug = vi.mocked(workspaceRepo.findBySlug);
 const isWorkspaceMember = vi.mocked(membersRepo.isWorkspaceMember);
 const findMembership = vi.mocked(membersRepo.findMembership);
@@ -68,6 +70,7 @@ function testApp() {
   const app = new Hono<{ Bindings: Env }>();
   app.use("*", errorMiddleware);
   app.route("/api/workspaces/:slug/links", workspaceLinkRoutes);
+  app.route("/api/workspaces", workspaceLinksListRoute);
   return app;
 }
 
@@ -193,5 +196,19 @@ describe("workspace link routes (DEV-29 control plane)", () => {
     );
     expect(res.status).toBe(403);
     expect(removeLink).not.toHaveBeenCalled();
+  });
+
+  it("GET /links (unscoped) lists all bindings on auth alone", async () => {
+    listLinks.mockResolvedValue({ results: [LINK] });
+    const res = await testApp().request("/api/workspaces/links", undefined, {
+      DB: {},
+    } as never);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ results: [LINK] });
+    expect(listLinks).toHaveBeenCalledTimes(1);
+    // Auth-only gate — mirrors MCP get_workspace_links: no workspace
+    // resolution or membership lookup may run for the unscoped read.
+    expect(findBySlug).not.toHaveBeenCalled();
+    expect(isWorkspaceMember).not.toHaveBeenCalled();
   });
 });
