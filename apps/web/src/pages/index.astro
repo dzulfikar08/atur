@@ -53,9 +53,9 @@ const metrics = [
 ];
 
 const steps = [
-  ["Write it like a brief", "Link the repo, the customer, the page. The issue carries everything an agent needs — no context lost in a handoff."],
-  ["An agent picks it up", "It claims the issue and ships in an isolated branch. Its live terminal is one click away in your browser — no black box."],
-  ["You review the proof", "What changed and why it works land on the issue as evidence. Approve and merge — nothing ships without you."],
+  ["Write it like a brief", "Link the repo, the customer, the page. The issue carries everything an agent needs, with no context lost in a handoff."],
+  ["An agent picks it up", "It claims the issue and ships in an isolated branch. Its live terminal is one click away in your browser. No black box."],
+  ["You review the proof", "What changed and why it works land on the issue as evidence. Approve and merge. Nothing ships without you."],
 ];
 
 const groups = [
@@ -89,9 +89,9 @@ const groups = [
 ];
 
 const reasons = [
-  ["gitPullRequest", "Agents never merge", "Every agent task ends at Need Review. What changed and the proof sit on the issue — and only a human clicks merge."],
+  ["gitPullRequest", "Agents never merge", "Every agent task ends at Need Review. What changed and the proof sit on the issue, and only a human clicks merge."],
   ["comment", "A blocked agent asks", "Missing a credential or a decision? It moves the issue to Needs You and comments exactly what it needs. Answer, and it resumes."],
-  ["slidersHorizontal", "Autonomy you set", "Per workspace: leave a branch, open a PR, or — only if you say so — merge after green checks. Widen it deliberately."],
+  ["slidersHorizontal", "Autonomy you set", "Per workspace: leave a branch, open a PR, or (only if you say so) merge after green checks. Widen it deliberately."],
 ];
 
 const surfaces = [
@@ -117,17 +117,17 @@ const termLines: [string, string, string][] = [
 const MCP_CMD = "claude mcp add atur --transport http https://app.diatur.com/mcp -H \"X-API-Key: <your-key>\"";
 
 const compareRows = [
-  ["issues & cycles", "linear or jira — $8–10/seat", "✓ built in"],
-  ["agent execution", "— nothing ships proof", "✓ claims, ships, posts evidence"],
-  ["pages & graph", "notion — $10/seat", "✓ wikilinks + knowledge graph"],
+  ["issues & cycles", "linear or jira: $8–10/seat", "✓ built in"],
+  ["agent execution", "nothing ships proof", "✓ claims, ships, posts evidence"],
+  ["pages & graph", "notion: $10/seat", "✓ wikilinks + knowledge graph"],
   ["crm & portal", "hubspot + zendesk", "✓ deals, contacts, support portal"],
-  ["time", "toggl — $9/seat", "✓ rolled up per issue"],
-  ["price model", "per-seat, grows with you", "✓ flat — team $29/mo"],
+  ["time", "toggl: $9/seat", "✓ rolled up per issue"],
+  ["price model", "per-seat, grows with you", "✓ flat: team $29/mo"],
 ];
 
 const posts = [
-  ["origin", "why-we-built-atur", "Why we built Atur", "Small teams don't fail from lack of tools. They fail from context scattered across too many of them — and now agents inherit that mess."],
-  ["comparison", "atur-vs-linear", "Atur vs Linear", "Linear made issues fast. Atur makes issues something an agent can pick up, ship, and answer for — with the review still yours."],
+  ["origin", "why-we-built-atur", "Why we built Atur", "Small teams don't fail from lack of tools. They fail from context scattered across too many of them, and now agents inherit that mess."],
+  ["comparison", "atur-vs-linear", "Atur vs Linear", "Linear made issues fast. Atur makes issues something an agent can pick up, ship, and answer for, with the review still yours."],
   ["engineering", "how-atur-is-built", "How Atur is built", "One Hono worker on Cloudflare, one D1 database, and an MCP server that exposes the same data model your team uses."],
 ];
 
@@ -143,15 +143,15 @@ const plans = [
     name: "Team",
     price: "$29",
     blurb: "For growing teams bringing delivery and customer work together.",
-    items: ["Everything in Starter", "Flat price — the whole team, not per seat", "Custom domain", "Daily automatic backups", "Priority support", "Onboarding assistance"],
+    items: ["Everything in Starter", "Flat price: the whole team, not per seat", "Custom domain", "Daily automatic backups", "Priority support", "Onboarding assistance"],
     hot: true,
   },
 ];
 ---
 
 <BaseLayout
-  title="Atur — One workspace for teams and their agents"
-  description="Atur connects projects, customers, docs, and time in one workspace — and gives your AI agents 70+ MCP tools to ship real work, with evidence on every issue and a human holding the merge."
+  title="Atur: one workspace for teams and their agents"
+  description="Atur connects projects, customers, docs, and time in one workspace, and gives your AI agents 70+ MCP tools to ship real work, with evidence on every issue and a human holding the merge."
   canonical="/"
   showChrome={false}
 >
@@ -174,7 +174,7 @@ const plans = [
       <h1>You review the work.</h1>
       <p class="h1-serif">the agents do the rest.</p>
       <p class="sub">
-        Atur runs your whole operation — projects, customers, docs, time — and your AI agents work
+        Atur runs your whole operation (projects, customers, docs, time) and your AI agents work
         the board like teammates: they claim issues, ship them, and post the evidence. Nothing
         merges without you.
       </p>
@@ -229,7 +229,7 @@ const plans = [
           <p class="lp-h2-serif">with a human at the wheel.</p>
           <p class="lp-section-sub">
             Agents work your board like teammates. They claim the issue, ship it in a branch, and
-            post the evidence — the merge stays yours.
+            post the evidence. The merge stays yours.
           </p>
         </div>
         <div class="lp-steps">
@@ -262,7 +262,7 @@ const plans = [
           <p class="lp-h2-serif">connected for small teams.</p>
           <p class="lp-section-sub">
             Work that doesn't fit one tool shouldn't need five. Bring delivery, customers, docs, and
-            time together — for the team and the agents they put to work on it.
+            time together, for the team and the agents they put to work on it.
           </p>
         </div>
         <div class="lp-groups">
@@ -313,7 +313,7 @@ const plans = [
           <h2 class="lp-h2">One agent,</h2>
           <p class="lp-h2-serif">the whole operation.</p>
           <p class="body">
-            Atur ships an MCP server with 70+ tools over one connected data model — issues, tickets,
+            Atur ships an MCP server with 70+ tools over one connected data model: issues, tickets,
             deals, time, pages. Scope an agent to a project; every action it takes is an auditable
             record.
           </p>
@@ -336,7 +336,7 @@ const plans = [
               <span class="tdot" style="background:#ff5f57"></span>
               <span class="tdot" style="background:#febc2e"></span>
               <span class="tdot" style="background:#28c840"></span>
-              <span class="title">agent setup — zsh</span>
+              <span class="title">agent setup: zsh</span>
             </div>
             <span class="compat"><span class="lp-dot" style="background:var(--lp-green)"></span>claude • cursor • windsurf</span>
           </div>
@@ -374,7 +374,7 @@ const plans = [
           <h2 class="lp-h2">A flat price,</h2>
           <p class="lp-h2-serif">not a per-seat tax.</p>
           <p class="lp-section-sub">
-            Simple plans for a connected workspace. Pay one flat rate for the whole team — no
+            Simple plans for a connected workspace. Pay one flat rate for the whole team. No
             per-seat math as you grow.
           </p>
         </div>
@@ -446,12 +446,12 @@ const plans = [
     <section class="lp-section" style="padding-top:0">
       <div class="wrap">
         <div class="lp-cta-panel">
-          <span class="eyebrow">04 — START</span>
+          <span class="eyebrow">04 · START</span>
           <h2>Give your work</h2>
           <p class="h2-serif">one place to land.</p>
           <p>
             Open a workspace, bind your repos, and give an agent its first issue. You keep the
-            review — it takes the busywork.
+            review, and it takes the busywork.
           </p>
           <a class="lp-btn lp-btn-lg" href={`${APP_URL}/auth/login`}>Open Atur <Icon name="arrowRight" size={16} class="i" /></a>
         </div>
@@ -473,17 +473,19 @@ const plans = [
 
 <script>
   document.querySelectorAll<HTMLButtonElement>(".lp-copy-btn").forEach((btn) => {
+    const setLabel = (text: string) => {
+      const label = btn.lastChild;
+      if (label && label.nodeType === 3) label.textContent = text;
+    };
     btn.addEventListener("click", async () => {
       const text = btn.dataset.copy ?? "";
       try {
         await navigator.clipboard.writeText(text);
-        const label = btn.lastChild;
-        if (label && label.nodeType === 3) label.textContent = " Copied";
-        setTimeout(() => {
-          if (label && label.nodeType === 3) label.textContent = "Copy";
-        }, 1600);
+        setLabel(" Copied");
+        setTimeout(() => setLabel("Copy"), 1600);
       } catch {
-        /* clipboard unavailable — non-critical */
+        setLabel(" Copy failed");
+        setTimeout(() => setLabel("Copy"), 1600);
       }
     });
   });
