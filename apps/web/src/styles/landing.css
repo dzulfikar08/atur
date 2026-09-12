@@ -2,6 +2,24 @@
    Atur landing — "operations console" design system.
    Monochrome graphite + JetBrains Mono for machine facts.
    Spec: design canvas atur.pen (Landing v2).
+
+   Direction record (antislop R-37 / R-31):
+   - Reading: agent-ops landing for small technical teams.
+     Dials ENERGY 2 / RHYTHM 2 / MOTION 1 (hover states only).
+   - Dark graphite theme: the product is an operations console
+     for agent work, so dark is identity, not a trend (R-21).
+   - Manrope carries people-words; Instrument Serif italic is
+     the human counterpoint in every heading pair; JetBrains
+     Mono renders machine facts only (R-06).
+   - Blue/amber/green are the board's real state colors and
+     the page's only accents (R-29).
+   - Eyebrow rows (num + label + line) are the repeated
+     section-marker motif of the console (R-06, R-31).
+   - Icons: one consistent stroke set picked for relevance to
+     the row it labels, at console weight (R-04).
+   - The terminal panel shows the real `claude mcp add`
+     command behind a working copy button: evidence, not a
+     costume (R-05, C-2).
    ============================================================ */
 
 .lp {
@@ -12,7 +30,7 @@
   --lp-border: #232329;
   --lp-text: #fafafa;
   --lp-text-2: #a1a1aa;
-  --lp-text-3: #6d6d78;
+  --lp-text-3: #8b8b96; /* >=4.5:1 on bg/card/elevated, AA for the 11-14px text it carries (R-25) */
   --lp-green: #34d399;
   --lp-green-soft: rgba(52, 211, 153, 0.12);
   --lp-blue: #60a5fa;
@@ -61,10 +79,10 @@
   font-size: 19px;
   letter-spacing: -0.3px;
 }
-.lp-links {
-  display: flex;
-  gap: 30px;
-  align-items: center;
+.lp-nav-actions .signin {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .lp-links a {
   font-size: 14px;
@@ -79,10 +97,6 @@
   gap: 20px;
   align-items: center;
 }
-.lp-nav-actions .signin {
-  font-size: 14px;
-  font-weight: 600;
-}
 .lp-btn {
   display: inline-flex;
   align-items: center;
@@ -94,6 +108,7 @@
   background: var(--lp-text);
   color: var(--lp-bg);
   transition: opacity 0.15s;
+  white-space: nowrap;
 }
 .lp-btn:hover {
   opacity: 0.85;
