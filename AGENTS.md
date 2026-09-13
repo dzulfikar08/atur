@@ -284,6 +284,38 @@ update_issue(state_id=need_review)
 8. **Always add comments** when changing state — document WHAT changed and WHY (e.g. "Development complete, files changed: X, Y").
 9. **"Need Review" and "Needs You" states must exist per project** — if missing, create them: `create_state(name="Need Review", group="started", color="#F97316")` and `create_state(name="Needs You", group="started", color="#EC4899", description="Agent paused mid-work — needs human input, decision, or approval. Agent comments exactly what it needs; human answers in a comment; agent resumes In Progress.")`.
 
+### Headless Browser — Obscura by Default
+
+For any headless browser task — reading a web page, scraping content, extracting
+links, or smoke-fetching a deployed site — use **`obscura`** (`/usr/bin/obscura`)
+by default. Do NOT install or launch Playwright/Puppeteer/Chromium for these;
+reach for interactive browser tooling only when you need clicks, logins, or
+screenshots (Obscura has no screenshot mode).
+
+```
+obscura fetch "https://example.com" --dump markdown      # one page → markdown
+obscura fetch "https://example.com" --dump text          # rendered text
+obscura fetch "https://example.com" --dump links         # every link
+obscura fetch "https://example.com" --dump original      # raw HTTP body, no JS (JSON/images/JS)
+obscura fetch "https://example.com" -e "document.title"  # run JS in the page
+obscura serve --port 9222                                # CDP endpoint for real browser clients
+obscura mcp                                              # MCP server (stdio); --http --port 3000 for HTTP
+```
+
+Rules:
+
+- **Default flags**: `--wait 5 --timeout 30`; pass `--wait 2` for fast checks.
+- **Bot-protected sites**: add `--stealth` and `--user-agent "<real UA>"`.
+- **Non-HTML resources** (JSON APIs, images, raw files): `--dump original`
+  bypasses the browser layer entirely.
+- **Localhost / dev servers**: Obscura blocks loopback + RFC1918 by default
+  (SSRF protection). Use `--allow-private-network` when fetching
+  `http://localhost:N` or LAN addresses — e.g. verifying a local dev server.
+- `scrape` needs a separate `obscura-worker` binary (not installed here) — for
+  multiple pages, loop `obscura fetch` instead.
+- Screenshots still need Playwright/`browser` tooling → see Screenshot Evidence
+  Workflow below.
+
 ### Screenshot Evidence Workflow (AI Agents)
 
 Use `upload_image` + `add_comment` to attach screenshot evidence when verifying work with Playwright or other browser automation.
