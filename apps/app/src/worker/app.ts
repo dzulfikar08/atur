@@ -46,8 +46,6 @@ import { feedbackAdminRoutes } from "./routes/feedback_admin";
 import { widgetRoutes } from "./routes/widget";
 import { paneRoutes } from "./routes/panes";
 import { polarWebhookRoutes, polarRoutes } from "./routes/polar";
-import { paywuzRoutes } from "./routes/paywuz";
-import { mayarRoutes } from "./routes/mayar";
 import { meRoutes } from "./routes/me";
 import type { Env } from "./lib/env";
 
@@ -117,8 +115,6 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/api/workspaces/:slug/webhooks", webhookRoutes);
   app.route("/api/workspaces/:slug/integrations", integrationRoutes);
   app.route("/api/workspaces/:slug/polar", polarRoutes);
-  app.route("/api/workspaces/:slug/paywuz", paywuzRoutes);
-  app.route("/api/workspaces/:slug/mayar", mayarRoutes);
   app.route("/api/workspaces/:slug/exports", exportRoutes);
   app.route("/api/workspaces/:slug/imports", importRoutes);
   app.route("/api/search", searchRoutes);

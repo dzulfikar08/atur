@@ -120,13 +120,6 @@
       "when": 1788674447166,
       "tag": "0016_workspace_links",
       "breakpoints": true
-    },
-    {
-      "idx": 17,
-      "version": "6",
-      "when": 1789461479204,
-      "tag": "0017_sparkling_the_leader",
-      "breakpoints": true
     }
   ]
 }
