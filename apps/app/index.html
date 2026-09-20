@@ -2,6 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // The PWA service worker was removed (it served stale precached HTML and
+      // swallowed the Google OAuth redirect back). Browsers keep a registered
+      // SW until an update check sees the gone script, so actively unregister
+      // it and drop its precache. Safe no-op for never-PWA clients.
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          for (var r of regs) r.unregister();
+        });
+      }
+      if ("caches" in window) {
+        caches.keys().then(function (keys) {
+          for (var k of keys) caches.delete(k);
+        });
+      }
+    </script>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
