@@ -97,6 +97,7 @@ import SaveMoneyDollarIcon from "@hugeicons/core-free-icons/SaveMoneyDollarIcon"
 import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
 import Settings01Icon from "@hugeicons/core-free-icons/Settings01Icon";
 import Shield01Icon from "@hugeicons/core-free-icons/Shield01Icon";
+import StickyNote02Icon from "@hugeicons/core-free-icons/StickyNote02Icon";
 import SlidersHorizontalIcon from "@hugeicons/core-free-icons/SlidersHorizontalIcon";
 import SmartPhone01Icon from "@hugeicons/core-free-icons/SmartPhone01Icon";
 import StarsIcon from "@hugeicons/core-free-icons/StarsIcon";
@@ -191,6 +192,9 @@ export const FileIcon = (props: IconProps) => <HugeiconsIcon icon={File01Icon} {
 export const FileImage = (props: IconProps) => <HugeiconsIcon icon={Image01Icon} {...props} />;
 export const FilePlus = (props: IconProps) => <HugeiconsIcon icon={FileAddIcon} {...props} />;
 export const FileText = (props: IconProps) => <HugeiconsIcon icon={DocumentIcon} {...props} />;
+export const StickyNote = (props: IconProps) => (
+  <HugeiconsIcon icon={StickyNote02Icon} {...props} />
+);
 export const Filter = (props: IconProps) => <HugeiconsIcon icon={FilterIcon} {...props} />;
 export const FolderKanban = (props: IconProps) => (
   <HugeiconsIcon icon={FolderKanbanIcon} {...props} />
