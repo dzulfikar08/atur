@@ -697,6 +697,15 @@ export const api = {
     const data = await apiFetch<{ results: AllPage[] }>(`/me/pages/`);
     return data.results;
   },
+  listNotes: async () => {
+    const data = await apiFetch<{ results: Note[] }>(`/me/notes/`);
+    return data.results;
+  },
+  createNote: (content: string) =>
+    apiFetch<Note>(`/me/notes/`, { method: "POST", body: JSON.stringify({ content }) }),
+  updateNote: (noteId: string, content: string) =>
+    apiFetch<Note>(`/me/notes/${noteId}`, { method: "PATCH", body: JSON.stringify({ content }) }),
+  deleteNote: (noteId: string) => apiFetch<void>(`/me/notes/${noteId}`, { method: "DELETE" }),
   listAllContacts: async (params?: { status?: string; search?: string }) => {
     const qs = new URLSearchParams();
     if (params?.status) qs.set("status", params.status);
@@ -1246,6 +1255,14 @@ export type AllContact = Contact & {
   workspace_slug: string;
   workspace_name: string;
 };
+
+export interface Note {
+  id: string;
+  user_id: string;
+  content: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
 
 export interface Deal {
   id: string;

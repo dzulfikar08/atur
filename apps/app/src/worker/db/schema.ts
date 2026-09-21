@@ -1375,3 +1375,21 @@ export const paneAudit = sqliteTable(
   },
   (table) => [index("idx_pane_audit_user").on(table.userId, table.attachedAt)],
 );
+
+// Personal quick notes (braindump). Plain-text content; @mentions of
+// workspaces/projects/issues are parsed from the text at render time
+// (client lib/mentions.ts) — no structured mention columns by design.
+// Private to the author: routes/notes.ts only ever touches user_id rows.
+export const notes = sqliteTable(
+  "notes",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    createdAt: text("created_at"),
+    updatedAt: text("updated_at"),
+  },
+  (table) => [index("idx_notes_user").on(table.userId, table.createdAt)],
+);

@@ -47,6 +47,9 @@ import { widgetRoutes } from "./routes/widget";
 import { paneRoutes } from "./routes/panes";
 import { polarWebhookRoutes, polarRoutes } from "./routes/polar";
 import { meRoutes } from "./routes/me";
+// Personal notes — static /notes prefix must win over meRoutes' generic
+// /api/me sub-app, so mount it first (Hono resolves in mount order).
+import { noteRoutes } from "./routes/notes";
 import type { Env } from "./lib/env";
 
 export function createApp(): Hono<{ Bindings: Env }> {
@@ -120,6 +123,7 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/api/search", searchRoutes);
   app.route("/api/workspaces/:slug/search", searchRoutes);
   app.route("/api/workspaces/:slug/analytics", analyticsRoutes);
+  app.route("/api/me/notes", noteRoutes);
   app.route("/api/me", meRoutes);
   app.route("/api/workspaces/:slug/timesheet", timesheetRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/issues/:issueId/comments", commentRoutes);

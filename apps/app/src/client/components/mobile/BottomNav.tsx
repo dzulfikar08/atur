@@ -6,6 +6,7 @@ import {
   CircleDot,
   Search,
   Menu,
+  StickyNote,
   FileText,
   Puzzle,
   Shield,
@@ -32,6 +33,7 @@ const mainTabs = [
 ];
 
 const moreItems = [
+  { to: "notes", icon: StickyNote, label: "Notes" },
   { to: "pages", icon: FileText, label: "Pages" },
   { to: "crm", icon: Users, label: "CRM" },
   { to: "crm/companies", icon: Building2, label: "Companies" },

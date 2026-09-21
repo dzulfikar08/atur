@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useParams } from "react-router-dom";
 import {
   FolderKanban,
   Circle,
+  StickyNote,
   Timer,
   FileText,
   Users,
@@ -56,6 +57,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Your Work",
     items: [
       { to: "issues", icon: Circle, label: "My Issues" },
+      { to: "notes", icon: StickyNote, label: "Notes" },
       { to: "timesheet", icon: Timer, label: "Timesheet" },
       { to: "pages", icon: FileText, label: "Pages" },
     ],
