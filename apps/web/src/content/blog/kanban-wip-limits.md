@@ -86,7 +86,11 @@ from a tool where every card sat in one giant "In Progress" column, the
 cycles fit together in one board.
 
 Start with one limit on your worst column. One week of "finish over start" is
-usually enough to sell the team on the rest.
+usually enough to sell the team on the rest. Once the board tells the truth,
+an agent can read it: [AI standup notes][s] are written from that state, and
+[AI sprint planning][sp] drafts the cycle from it.
 
 [c]: /blog/helpdesk-metrics-that-matter
 [wf]: /#agents
+[s]: /blog/ai-standup-notes
+[sp]: /blog/ai-sprint-planning

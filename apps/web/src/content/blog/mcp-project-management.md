@@ -33,7 +33,9 @@ Because the server speaks the same state model as the rest of Atur, an agent-dri
 
 Agents make mistakes at the speed of token generation, so the rule is to review, not delegate. Every agent action is a diff that a human can approve, and scoped keys make a runaway agent's reach small. Teams that start with read-plus-draft (summarize, draft replies, suggest states) before granting write access report far more confidence than teams that flip the switch on day one.
 
-For the kanban discipline that gives those AI-suggested states something stable to act on, read [how WIP limits keep a board moving][k], and see the [workflow section][w] of the site for how states, projects, and cycles fit together.
+For the kanban discipline that gives those AI-suggested states something stable to act on, read [how WIP limits keep a board moving][k], the review habit in [AI ticket triage][t] and [agent-drafted release notes][r], and the [workflow section][w] of the site for how states, projects, and cycles fit together.
 
 [k]: /blog/kanban-wip-limits
+[t]: /blog/ai-ticket-triage
+[r]: /blog/ai-release-notes
 [w]: /#agents

@@ -33,7 +33,8 @@ States let a team signal "in progress" or "waiting on customer" without an email
 
 Switching tools does not have to mean dumping email. The practical middle path is to route support mail into a ticketed portal so nothing is lost in a forgotten draft, while still letting customers reply by email if they prefer. That preserves the familiarity of a shared inbox while gaining the states, assignments, and history that keep a growing team honest.
 
-Most teams make the switch when they hit one concrete trigger: either response consistency is failing, or they are spending more time coordinating who handles what than actually helping people. The [features page][f] shows how Atur turns mail into tracked tickets with SLAs and per-customer history, and for the numbers behind what good support actually measures, read [helpdesk metrics that matter][m].
+Most teams make the switch when they hit one concrete trigger: either response consistency is failing, or they are spending more time coordinating who handles what than actually helping people. The [features page][f] shows how Atur turns mail into tracked tickets with SLAs and per-customer history. For the numbers behind what good support actually measures, read [helpdesk metrics that matter][m]; for where the first-reply draft can come from, [AI ticket triage][t].
 
 [f]: /#features
 [m]: /blog/helpdesk-metrics-that-matter
+[t]: /blog/ai-ticket-triage
