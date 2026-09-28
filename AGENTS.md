@@ -328,6 +328,7 @@ browser.open({ url, app: { path: "/usr/bin/chromium", args: [
   "--user-data-dir=/tmp/<unique-profile>", "--window-size=1600,1000"
 ]}, viewport: { width: 1600, height: 1000 } })
 ```
+
 or start it as a supervised process and attach via `app: { cdp_url:
 "http://127.0.0.1:<port>" }`. Headless is the standing owner preference —
 applies to every project and every agent session.
