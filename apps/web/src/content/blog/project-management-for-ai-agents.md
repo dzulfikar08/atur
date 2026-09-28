@@ -65,6 +65,7 @@ Two ways. Evidence (diffs, test output, screenshots) lands on the issue itself, 
 
 ### How do I keep an agent from shipping work nobody reviewed?
 
-The workflow ends at a review state until a person acts, and the merge stays yours. A blocked agent has a path too: it moves the issue to a Needs You state and comments exactly what it needs, then resumes when you answer.
+The workflow ends at a review state until a person acts, and the merge stays yours. A blocked agent has a path too: it moves the issue to a Needs You state and comments exactly what it needs, then resumes when you answer. For the single-agent version of the same idea, see [Claude as a project management frontend][c].
 
 [m]: /blog/mcp-project-management
+[c]: /blog/claude-project-management
