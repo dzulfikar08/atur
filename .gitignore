@@ -35,3 +35,4 @@ status-cache.json
 
 # Machine-local Claude Code artifacts (worktrees, session state)
 .claude/
+data/
