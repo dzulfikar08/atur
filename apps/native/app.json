@@ -2,7 +2,7 @@
   "expo": {
     "name": "Atur",
     "slug": "atur",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "atur",
@@ -19,7 +19,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.diatur.app"
+      "package": "com.diatur.app",
+      "versionCode": 2
     },
     "web": {
       "output": "single",
