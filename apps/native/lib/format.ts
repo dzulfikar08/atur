@@ -24,6 +24,24 @@ export function htmlToText(html: string | null | undefined): string {
       .trim()
   );
 }
+export type RichBlock = { type: "text"; text: string } | { type: "image"; src: string };
+
+/** Rich-text HTML → ordered text and image blocks, so inline images render in place. */
+export function htmlToBlocks(html: string | null | undefined): RichBlock[] {
+  if (!html) return [];
+  const blocks: RichBlock[] = [];
+  const imgTag = /<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
+  let last = 0;
+  for (const match of html.matchAll(imgTag)) {
+    const text = htmlToText(html.slice(last, match.index));
+    if (text) blocks.push({ type: "text", text });
+    blocks.push({ type: "image", src: match[1].replace(/&amp;/g, "&") });
+    last = match.index + match[0].length;
+  }
+  const tail = htmlToText(html.slice(last));
+  if (tail) blocks.push({ type: "text", text: tail });
+  return blocks;
+}
 
 /** Plain text typed on the phone → the paragraph HTML the web editor stores. */
 export function textToHtml(text: string): string {

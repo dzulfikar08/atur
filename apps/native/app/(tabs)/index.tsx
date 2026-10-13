@@ -21,6 +21,8 @@ import {
 } from "@/components/ui";
 import { api, type Issue } from "@/lib/api";
 import { displayName } from "@/lib/format";
+import { ALL, useCurrentWorkspace } from "@/lib/workspace";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 
 function greeting(): string {
   const hour = new Date().getHours();
@@ -63,15 +65,19 @@ function IssueSection({
 
 export default function Home() {
   const me = useQuery({ queryKey: ["me"], queryFn: api.me });
+  const { slug, workspace } = useCurrentWorkspace();
+  // /api/me/issues filters by workspace id; undefined = all workspaces.
+  const workspaceId = workspace?.id;
   const decisions = useQuery({ queryKey: ["decisions"], queryFn: api.decisions });
   const needsYou = useQuery({
-    queryKey: ["my-issues", "needs_you"],
-    queryFn: () => api.myIssues({ state_key: "needs_you", limit: 20 }),
+    queryKey: ["my-issues", "needs_you", workspaceId],
+    queryFn: () => api.myIssues({ state_key: "needs_you", workspace: workspaceId, limit: 20 }),
   });
   const inProgress = useQuery({
-    queryKey: ["my-issues", "in_progress"],
-    queryFn: () => api.myIssues({ state_key: "in_progress", limit: 20 }),
+    queryKey: ["my-issues", "in_progress", workspaceId],
+    queryFn: () => api.myIssues({ state_key: "in_progress", workspace: workspaceId, limit: 20 }),
   });
+  const waiting = (decisions.data ?? []).filter((d) => slug === ALL || d.workspace_slug === slug);
 
   const refreshing = decisions.isRefetching || needsYou.isRefetching || inProgress.isRefetching;
   const refresh = () => {
@@ -86,6 +92,7 @@ export default function Home() {
   return (
     <View style={styles.flex}>
       <Screen refreshing={refreshing} onRefresh={refresh}>
+        {noWorkspaces ? null : <WorkspaceSwitcher />}
         <PageHeader
           title={greeting()}
           caption={me.data ? displayName(me.data) : undefined}
@@ -107,14 +114,14 @@ export default function Home() {
           />
         ) : (
           <>
-            {decisions.data && decisions.data.length > 0 ? (
+            {waiting.length > 0 ? (
               <>
                 <SectionTitle
                   title="Decisions waiting"
-                  right={<Text style={styles.count}>{decisions.data.length}</Text>}
+                  right={<Text style={styles.count}>{waiting.length}</Text>}
                 />
                 <ListGroup>
-                  {decisions.data.slice(0, 5).map((d) => (
+                  {waiting.slice(0, 5).map((d) => (
                     <ListRow
                       key={d.id}
                       left={<PriorityIcon priority={d.priority} />}

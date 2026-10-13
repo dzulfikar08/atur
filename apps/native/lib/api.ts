@@ -104,7 +104,12 @@ export interface Comment {
   comment_html: string | null;
   comment_stripped: string | null;
   created_at: string;
-  actor_detail: { id: string; display_name: string | null; email: string | null } | null;
+  actor_detail: {
+    id: string;
+    display_name: string | null;
+    email: string | null;
+    avatar: string | null;
+  } | null;
 }
 
 export interface WorkspaceMember {
@@ -203,6 +208,19 @@ async function request<T>(
   return data as T;
 }
 
+/**
+ * Image source for an Atur URL. Uploads live at /api/assets/<id> and are
+ * auth-checked, so same-origin images carry the bearer token; relative paths
+ * (how the web editor stores them) resolve against the server.
+ */
+export function imageSource(url: string): { uri: string; headers?: Record<string, string> } {
+  const uri = url.startsWith("/") ? `${SERVER_URL}${url}` : url;
+  const token = getToken();
+  return token && uri.startsWith(SERVER_URL)
+    ? { uri, headers: { Authorization: `Bearer ${token}` } }
+    : { uri };
+}
+
 const qs = (params: Record<string, string | number | undefined>) => {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -230,8 +248,14 @@ export const api = {
 
   me: () => request<Me>("/api/users/me"),
   projects: () => request<{ results: Project[] }>("/api/me/projects").then((r) => r.results),
-  myIssues: (params: { state_key?: string; search?: string; offset?: number; limit?: number }) =>
-    request<Paginated<Issue>>(`/api/me/issues${qs(params)}`),
+  myIssues: (params: {
+    state_key?: string;
+    search?: string;
+    /** Workspace id; omit for every workspace. */
+    workspace?: string;
+    offset?: number;
+    limit?: number;
+  }) => request<Paginated<Issue>>(`/api/me/issues${qs(params)}`),
   decisions: () => request<{ results: DecisionItem[] }>("/api/me/decisions").then((r) => r.results),
 
   projectIssues: (

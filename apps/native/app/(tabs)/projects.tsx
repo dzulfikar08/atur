@@ -1,12 +1,11 @@
 import "@/unistyles";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { useState } from "react";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import {
-  Chip,
   EmptyState,
   ErrorNote,
   ListGroup,
@@ -17,15 +16,13 @@ import {
   Text,
 } from "@/components/ui";
 import { api } from "@/lib/api";
+import { ALL, useCurrentWorkspace } from "@/lib/workspace";
 
 export default function Projects() {
   const me = useQuery({ queryKey: ["me"], queryFn: api.me });
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
-  const [picked, setPicked] = useState<string | null>(null);
-
-  const workspaces = me.data?.workspaces ?? [];
-  const slug = picked ?? workspaces[0]?.slug ?? null;
-  const visible = (projects.data ?? []).filter((p) => p.workspace_slug === slug);
+  const { slug } = useCurrentWorkspace();
+  const visible = (projects.data ?? []).filter((p) => slug === ALL || p.workspace_slug === slug);
 
   return (
     <Screen
@@ -35,22 +32,8 @@ export default function Projects() {
         void projects.refetch();
       }}
     >
+      <WorkspaceSwitcher />
       <PageHeader title="Projects" />
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chips}
-        style={styles.chipStrip}
-      >
-        {workspaces.map((w) => (
-          <Chip
-            key={w.id}
-            label={w.name}
-            selected={w.slug === slug}
-            onPress={() => setPicked(w.slug)}
-          />
-        ))}
-      </ScrollView>
       <ErrorNote error={projects.error} />
 
       {projects.isPending || me.isPending ? (
@@ -70,7 +53,12 @@ export default function Projects() {
                 </View>
               }
               title={p.name}
-              subtitle={p.is_pipeline ? "Pipeline" : (p.identifier ?? undefined)}
+              subtitle={[
+                p.is_pipeline ? "Pipeline" : p.identifier,
+                slug === ALL ? p.workspace_name : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
               chevron
               onPress={() =>
                 router.push({
@@ -87,8 +75,6 @@ export default function Projects() {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  chipStrip: { marginHorizontal: -theme.spacing.lg, flexGrow: 0 },
-  chips: { gap: theme.spacing.sm, paddingHorizontal: theme.spacing.lg },
   badge: {
     minWidth: 38,
     height: 30,

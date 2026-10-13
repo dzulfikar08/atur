@@ -26,7 +26,8 @@ import {
 } from "@/components/ui";
 import { api, type Issue, type IssuePatch } from "@/lib/api";
 import { SERVER_URL } from "@/lib/config";
-import { displayName, htmlToText, textToHtml, timeAgo } from "@/lib/format";
+import { RichText } from "@/components/rich-text";
+import { displayName, htmlToBlocks, textToHtml, timeAgo } from "@/lib/format";
 
 type SheetKind = "state" | "priority" | "assignees" | "labels" | null;
 
@@ -102,7 +103,7 @@ export default function IssueDetail() {
   const labelIds = (data.labels ?? []).map((l) => l.id);
   const toggle = (ids: string[], id: string) =>
     ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
-  const description = htmlToText(data.description_html);
+  const hasDescription = htmlToBlocks(data.description_html).length > 0;
   const thread = [...(comments.data?.results ?? [])].reverse();
   const webUrl = `${SERVER_URL}/${slug}/projects/${projectId}/issues/${data.sequence_id}`;
 
@@ -198,10 +199,8 @@ export default function IssueDetail() {
           </ListGroup>
 
           <SectionTitle title="Description" />
-          {description ? (
-            <Text style={styles.description} selectable>
-              {description}
-            </Text>
+          {hasDescription ? (
+            <RichText html={data.description_html} style={styles.description} />
           ) : (
             <Text style={styles.muted}>No description.</Text>
           )}
@@ -219,15 +218,16 @@ export default function IssueDetail() {
             const author = c.actor_detail ? displayName(c.actor_detail) : "Someone";
             return (
               <View key={c.id} style={styles.comment}>
-                <Avatar name={author} size={28} />
+                <Avatar name={author} uri={c.actor_detail?.avatar} size={28} />
                 <View style={styles.flex}>
                   <Text style={styles.commentMeta}>
                     <Text style={styles.commentAuthor}>{author}</Text>
                     {`  ${timeAgo(c.created_at)}`}
                   </Text>
-                  <Text style={styles.commentBody} selectable>
-                    {c.comment_stripped || htmlToText(c.comment_html)}
-                  </Text>
+                  <RichText
+                    html={c.comment_html || c.comment_stripped}
+                    style={styles.commentBody}
+                  />
                 </View>
               </View>
             );
@@ -299,7 +299,7 @@ export default function IssueDetail() {
             key: m.member_id,
             label: displayName(m.member!),
             selected: assigneeIds.includes(m.member_id),
-            left: <Avatar name={displayName(m.member!)} size={24} />,
+            left: <Avatar name={displayName(m.member!)} uri={m.member!.avatar} size={24} />,
           }))}
         onSelect={(id) => update.mutate({ assignee_ids: toggle(assigneeIds, id) })}
       />

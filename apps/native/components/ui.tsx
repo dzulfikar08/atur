@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { Fragment, type ComponentProps } from "react";
+import React, { Fragment, useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
+  Image,
   Modal,
   Pressable,
   RefreshControl,
@@ -17,7 +18,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import type { Priority, StateGroup } from "@/lib/api";
+import { imageSource, type Priority, type StateGroup } from "@/lib/api";
 
 // Atur mobile kit: graphite canvas, white hairline cards, one near-black
 // primary. Color is reserved for meaning (state group, priority, danger).
@@ -453,14 +454,34 @@ export function PriorityIcon({
   );
 }
 
-export function Avatar({ name, size = 28 }: { name: string; size?: number }) {
+/** Round picture (user avatar / workspace logo); initial letter until it loads or if it fails. */
+export function Avatar({
+  name,
+  uri,
+  size = 28,
+  square,
+}: {
+  name: string;
+  uri?: string | null;
+  size?: number;
+  square?: boolean;
+}) {
+  const [failed, setFailed] = useState(false);
   const initial = (name.trim()[0] ?? "?").toUpperCase();
+  const radius = square ? size * 0.25 : size / 2;
   return (
     <View
       accessibilityLabel={name}
-      style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}
+      style={[styles.avatar, { width: size, height: size, borderRadius: radius }]}
     >
       <Text style={[styles.avatarText, { fontSize: size * 0.42 }]}>{initial}</Text>
+      {uri && !failed ? (
+        <Image
+          source={imageSource(uri)}
+          onError={() => setFailed(true)}
+          style={[RNStyleSheet.absoluteFill, { borderRadius: radius }]}
+        />
+      ) : null}
     </View>
   );
 }
@@ -590,7 +611,7 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  rowLeft: { width: 30, alignItems: "center", justifyContent: "center" },
+  rowLeft: { minWidth: 30, alignItems: "center", justifyContent: "center" },
   rowTitle: { fontSize: theme.fontSize.base, fontFamily: theme.fonts.medium },
   rowSubtitle: { fontSize: theme.fontSize.sm, color: theme.colors.mutedForeground, marginTop: 2 },
   rowValue: { fontSize: theme.fontSize.sm, color: theme.colors.mutedForeground },

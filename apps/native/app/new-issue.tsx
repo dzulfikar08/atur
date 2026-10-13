@@ -19,12 +19,14 @@ import {
 } from "@/components/ui";
 import { api, type Priority } from "@/lib/api";
 import { textToHtml } from "@/lib/format";
+import { ALL, useCurrentWorkspace } from "@/lib/workspace";
 
 type SheetKind = "project" | "state" | "priority" | null;
 
 export default function NewIssue() {
   const qc = useQueryClient();
   const params = useLocalSearchParams<{ slug?: string; projectId?: string }>();
+  const { slug: current } = useCurrentWorkspace();
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
 
   const [projectId, setProjectId] = useState<string | undefined>(params.projectId);
@@ -129,11 +131,13 @@ export default function NewIssue() {
         visible={sheet === "project"}
         title="Project"
         onClose={() => setSheet(null)}
-        options={(projects.data ?? []).map((p) => ({
-          key: p.id,
-          label: `${p.name}  ·  ${p.workspace_name}`,
-          selected: p.id === projectId,
-        }))}
+        options={(projects.data ?? [])
+          .filter((p) => current === ALL || p.workspace_slug === current)
+          .map((p) => ({
+            key: p.id,
+            label: current === ALL ? `${p.name}  ·  ${p.workspace_name}` : p.name,
+            selected: p.id === projectId,
+          }))}
         onSelect={(id) => {
           setProjectId(id);
           setStateId(undefined);

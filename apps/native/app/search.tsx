@@ -8,15 +8,17 @@ import { StyleSheet } from "react-native-unistyles";
 import { IssueRow } from "@/components/issue-row";
 import { EmptyState, ErrorNote, Input, Loading } from "@/components/ui";
 import { api } from "@/lib/api";
+import { useCurrentWorkspace } from "@/lib/workspace";
 
-/** Title search across every workspace the user belongs to (/api/me/issues). */
+/** Issue title search in the current workspace, or all of them (/api/me/issues). */
 export default function Search() {
   const [text, setText] = useState("");
   const query = useDeferredValue(text.trim());
+  const { workspace } = useCurrentWorkspace();
 
   const results = useQuery({
-    queryKey: ["my-issues", "search", query],
-    queryFn: () => api.myIssues({ search: query, limit: 50 }),
+    queryKey: ["my-issues", "search", query, workspace?.id],
+    queryFn: () => api.myIssues({ search: query, workspace: workspace?.id, limit: 50 }),
     enabled: query.length >= 2,
   });
 
@@ -44,7 +46,7 @@ export default function Search() {
           query.length < 2 ? (
             <EmptyState
               icon="search"
-              title="Search all workspaces"
+              title={workspace ? `Search ${workspace.name}` : "Search all workspaces"}
               body="Type at least two letters."
             />
           ) : results.isPending ? (
