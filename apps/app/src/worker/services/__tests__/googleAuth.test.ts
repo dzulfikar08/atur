@@ -6,16 +6,22 @@ import {
   googleAuthorizeUrl,
   pkcePair,
   randomToken,
+  sha256Base64Url as challengeOf,
 } from "../../lib/oauth";
 import {
+  consumeNativeCode,
   consumeState,
   exchangeCode,
   fetchProfile,
+  nativeCodeKey,
   oauthStateKey,
+  saveNativeCode,
   saveState,
   signInWithGoogle,
 } from "../googleAuth";
+import * as googleAuth from "../googleAuth";
 import { authRoutes } from "../../routes/auth";
+import * as usersRepo from "../../repositories/users";
 
 // Thenable that also chains like a drizzle query builder (same pattern as
 // dev8_authz.test.ts). Each select() call consumes the next fixture.
@@ -90,6 +96,7 @@ function jsonResponse(body: unknown, status = 200) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 const PROFILE = {
@@ -147,7 +154,7 @@ describe("oauth state KV (services/googleAuth)", () => {
   it("saveState/consumeState round-trips the verifier", async () => {
     const { kv } = fakeKv();
     await saveState(kv, "s1", "ver-1");
-    expect(await consumeState(kv, "s1")).toBe("ver-1");
+    expect(await consumeState(kv, "s1")).toEqual({ verifier: "ver-1", nativeChallenge: null });
   });
 
   it("consumeState: unknown state → null", async () => {
@@ -157,7 +164,7 @@ describe("oauth state KV (services/googleAuth)", () => {
   it("consumeState is single-use: second call → null", async () => {
     const { kv } = fakeKv();
     await saveState(kv, "s1", "ver-1");
-    expect(await consumeState(kv, "s1")).toBe("ver-1");
+    expect((await consumeState(kv, "s1"))?.verifier).toBe("ver-1");
     expect(await consumeState(kv, "s1")).toBeNull();
   });
 
@@ -165,6 +172,29 @@ describe("oauth state KV (services/googleAuth)", () => {
     const { kv, map } = fakeKv();
     await saveState(kv, "s1", "ver-1");
     expect(map.has(oauthStateKey("s1"))).toBe(true);
+  });
+
+  it("saveState carries the native challenge when given", async () => {
+    const { kv } = fakeKv();
+    await saveState(kv, "s2", "ver-2", "chal-2");
+    expect(await consumeState(kv, "s2")).toEqual({ verifier: "ver-2", nativeChallenge: "chal-2" });
+  });
+});
+
+describe("native one-time codes (services/googleAuth)", () => {
+  it("saveNativeCode/consumeNativeCode round-trips under auth:native:google:", async () => {
+    const { kv, map } = fakeKv();
+    await saveNativeCode(kv, "nc-1", { token: "tok", challenge: "cha" });
+    expect([...map.keys()].some((k) => k.startsWith("auth:native:google:"))).toBe(true);
+    expect(await consumeNativeCode(kv, "nc-1")).toEqual({ token: "tok", challenge: "cha" });
+  });
+
+  it("consumeNativeCode is single-use; unknown → null", async () => {
+    const { kv } = fakeKv();
+    expect(await consumeNativeCode(kv, "nope")).toBeNull();
+    await saveNativeCode(kv, "nc-1", { token: "tok", challenge: "cha" });
+    await consumeNativeCode(kv, "nc-1");
+    expect(await consumeNativeCode(kv, "nc-1")).toBeNull();
   });
 });
 
@@ -448,5 +478,192 @@ describe("GET /auth/google routes", () => {
     expect(location.searchParams.get("error")).toBe("state_invalid");
     // The attacker's state must NOT have been consumed from KV.
     expect(await kv.get("auth:oauth:google:attacker-state")).not.toBeNull();
+  });
+});
+
+// ── Native app flow (atur:// scheme) ─────────────────────────────────────────
+describe("native google flow (routes)", () => {
+  const CHALLENGE = "A".repeat(43); // base64url(sha256) shape: 43 chars
+
+  const nativeEnv = (kv: KVNamespace) =>
+    oauthEnv({ RATE_LIMIT: kv, GOOGLE_CLIENT_ID: "cid", GOOGLE_CLIENT_SECRET: "sec" });
+
+  it("start with native_challenge stores it in the state and redirects to Google", async () => {
+    const { kv } = fakeKv();
+    const res = await authRoutes.request(
+      `/google?native_challenge=${CHALLENGE}`,
+      {},
+      nativeEnv(kv),
+    );
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("Location")!);
+    expect(location.host).toBe("accounts.google.com");
+    // The state cookie is still bound — the Custom Tab keeps cookies.
+    expect(res.headers.get("Set-Cookie") ?? "").toContain("plane-oauth-state=");
+
+    const raw = await kv.get(`auth:oauth:google:${location.searchParams.get("state")}`);
+    expect(JSON.parse(raw!)).toMatchObject({ nativeChallenge: CHALLENGE });
+    expect(JSON.parse(raw!).verifier).toBeTruthy();
+  });
+
+  it("start with a malformed native_challenge → native error redirect, not the SPA", async () => {
+    const { kv } = fakeKv();
+    const res = await authRoutes.request("/google?native_challenge=too-short", {}, nativeEnv(kv));
+    expect(res.status).toBe(302);
+    const location = res.headers.get("Location")!;
+    expect(location.startsWith("atur://auth/callback?")).toBe(true);
+    const q = new URLSearchParams(location.slice("atur://auth/callback?".length));
+    expect(q.get("error")).toBe("oauth_failed");
+    expect(q.get("error_description")).toBe(GOOGLE_ERROR_MESSAGES.oauth_failed);
+  });
+
+  it("native callback success → 302 to atur://auth/callback?code=…, no session cookie", async () => {
+    const { kv } = fakeKv();
+    await saveState(kv, "nat-state", "verifier-1", CHALLENGE);
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse({ access_token: "at", id_token: null })) // token
+        .mockResolvedValueOnce(
+          jsonResponse({
+            sub: "g-sub-1",
+            email: "user@example.com",
+            email_verified: true,
+            name: "Test User",
+            picture: null,
+          }),
+        ), // userinfo
+    );
+    vi.spyOn(googleAuth, "signInWithGoogle").mockResolvedValue({
+      token: "sess-native",
+      user: { id: "u1", email: "user@example.com", username: "user" },
+    });
+
+    const res = await authRoutes.request(
+      "/google/callback?code=gcode&state=nat-state",
+      { headers: { cookie: "plane-oauth-state=nat-state" } },
+      nativeEnv(kv),
+    );
+
+    expect(res.status).toBe(302);
+    const location = res.headers.get("Location")!;
+    expect(location.startsWith("atur://auth/callback?code=")).toBe(true);
+    expect(res.headers.get("Set-Cookie") ?? "").not.toContain("plane-session=");
+
+    // The code is one-time, in KV, and exchanges for the session token.
+    const nativeCode = new URLSearchParams(location.slice("atur://auth/callback?".length)).get(
+      "code",
+    )!;
+    const stored = await consumeNativeCode(kv, nativeCode);
+    expect(stored).toEqual({ token: expect.any(String), challenge: CHALLENGE });
+    expect(await kv.get(nativeCodeKey(nativeCode))).toBeNull();
+  });
+
+  it("POST /native/exchange: right verifier → session_token + user; wrong → 400; reuse → 400", async () => {
+    const { kv } = fakeKv();
+    const verifier = "verifier-1";
+    // The stored challenge must be the hash of the verifier, as the route computes it.
+    const challenge = await challengeOf(verifier);
+    await saveNativeCode(kv, "nc-x", { token: "sess-1", challenge });
+    vi.spyOn(usersRepo, "findByToken").mockResolvedValue({
+      id: "u1",
+      email: "user@example.com",
+      username: "user",
+    } as never);
+    const env = nativeEnv(kv);
+
+    const ok = await authRoutes.request(
+      "/native/exchange",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: "nc-x", verifier }),
+      },
+      env,
+    );
+    expect(ok.status).toBe(200);
+    const body = (await ok.json()) as { session_token: string; user: Record<string, unknown> };
+    expect(body.session_token).toBe("sess-1");
+    expect(body.user).toEqual({ id: "u1", email: "user@example.com", username: "user" });
+
+    // Single-use: a replayed code is gone.
+    const reused = await authRoutes.request(
+      "/native/exchange",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: "nc-x", verifier }),
+      },
+      env,
+    );
+    expect(reused.status).toBe(400);
+
+    // Wrong verifier against a fresh code → 400 (challenge mismatch).
+    await saveNativeCode(kv, "nc-y", { token: "sess-2", challenge });
+    const bad = await authRoutes.request(
+      "/native/exchange",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: "nc-y", verifier: "wrong-verifier-wrong-verifier-wrong" }),
+      },
+      env,
+    );
+    expect(bad.status).toBe(400);
+  });
+
+  it("web callback is unchanged: session cookie + SPA redirect, no native code", async () => {
+    const { kv } = fakeKv();
+    await saveState(kv, "web-state", "verifier-1");
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse({ access_token: "at", id_token: null }))
+        .mockResolvedValueOnce(
+          jsonResponse({
+            sub: "g-sub-1",
+            email: "user@example.com",
+            email_verified: true,
+            name: "Test User",
+            picture: null,
+          }),
+        ),
+    );
+    vi.spyOn(googleAuth, "signInWithGoogle").mockResolvedValue({
+      token: "sess-web",
+      user: { id: "u1", email: "user@example.com", username: "user" },
+    });
+
+    const res = await authRoutes.request(
+      "/google/callback?code=gcode&state=web-state",
+      { headers: { cookie: "plane-oauth-state=web-state" } },
+      nativeEnv(kv),
+    );
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe("/auth/callback/google");
+    expect(res.headers.get("Set-Cookie") ?? "").toContain("plane-session=");
+  });
+
+  it("POST /sign-out with Bearer session token clears it; pk_live_ key untouched", async () => {
+    const clearToken = vi.spyOn(usersRepo, "clearToken").mockResolvedValue(undefined);
+    const sessionRes = await authRoutes.request(
+      "/sign-out",
+      { method: "POST", headers: { authorization: "Bearer sess-tok" } },
+      oauthEnv({}),
+    );
+    expect(sessionRes.status).toBe(200);
+    expect(clearToken).toHaveBeenCalledWith(expect.anything(), "sess-tok");
+
+    clearToken.mockClear();
+    const keyRes = await authRoutes.request(
+      "/sign-out",
+      { method: "POST", headers: { authorization: "Bearer pk_live_abc" } },
+      oauthEnv({}),
+    );
+    expect(keyRes.status).toBe(200);
+    expect(clearToken).not.toHaveBeenCalled();
   });
 });

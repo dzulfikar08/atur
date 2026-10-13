@@ -40,8 +40,20 @@ export type GoogleAuthResult = {
 
 export const oauthStateKey = (state: string) => `auth:oauth:google:${state}`;
 
-export async function saveState(kv: KVNamespace, state: string, verifier: string): Promise<void> {
-  await kv.put(oauthStateKey(state), JSON.stringify({ verifier }), {
+// Single-use native-app exchange code, stored in the same KV (RATE_LIMIT) under
+// a distinct prefix. Short TTL: the app exchanges it seconds after the
+// callback redirect.
+export const NATIVE_CODE_TTL_SECONDS = 120;
+
+export type OAuthState = { verifier: string; nativeChallenge: string | null };
+
+export async function saveState(
+  kv: KVNamespace,
+  state: string,
+  verifier: string,
+  nativeChallenge: string | null = null,
+): Promise<void> {
+  await kv.put(oauthStateKey(state), JSON.stringify({ verifier, nativeChallenge }), {
     expirationTtl: OAUTH_STATE_TTL_SECONDS,
   });
 }
@@ -52,14 +64,50 @@ export async function saveState(kv: KVNamespace, state: string, verifier: string
 // consistent across colos, so a near-simultaneous replay inside the
 // propagation window can still validate; the route's state-cookie binding and
 // the 600s TTL bound the blast radius to an extra session, never a mutation.
-export async function consumeState(kv: KVNamespace, state: string): Promise<string | null> {
+export async function consumeState(kv: KVNamespace, state: string): Promise<OAuthState | null> {
   const key = oauthStateKey(state);
   const raw = await kv.get(key);
   if (!raw) return null;
   await kv.delete(key);
   try {
-    const parsed = JSON.parse(raw) as { verifier?: string };
-    return typeof parsed.verifier === "string" ? parsed.verifier : null;
+    const parsed = JSON.parse(raw) as { verifier?: string; nativeChallenge?: string | null };
+    if (typeof parsed.verifier !== "string") return null;
+    return { verifier: parsed.verifier, nativeChallenge: parsed.nativeChallenge ?? null };
+  } catch {
+    return null;
+  }
+}
+
+// ── Native one-time exchange codes (KV, single-use) ──────────────────────────
+// The native callback must not set a session cookie (the OS browser holding it
+// is not the app), so it mints a one-time code and 302s to atur://auth/callback;
+// the app then swaps code + its PKCE verifier for the session token.
+
+export const nativeCodeKey = (code: string) => `auth:native:google:${code}`;
+
+export async function saveNativeCode(
+  kv: KVNamespace,
+  code: string,
+  value: { token: string; challenge: string },
+): Promise<void> {
+  await kv.put(nativeCodeKey(code), JSON.stringify(value), {
+    expirationTtl: NATIVE_CODE_TTL_SECONDS,
+  });
+}
+
+// Single-use, same delete-before-trust discipline as consumeState.
+export async function consumeNativeCode(
+  kv: KVNamespace,
+  code: string,
+): Promise<{ token: string; challenge: string } | null> {
+  const key = nativeCodeKey(code);
+  const raw = await kv.get(key);
+  if (!raw) return null;
+  await kv.delete(key);
+  try {
+    const parsed = JSON.parse(raw) as { token?: string; challenge?: string };
+    if (typeof parsed.token !== "string" || typeof parsed.challenge !== "string") return null;
+    return { token: parsed.token, challenge: parsed.challenge };
   } catch {
     return null;
   }
