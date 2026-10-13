@@ -59,7 +59,9 @@ export function randomToken(bytes = 32): string {
   return toBase64Url(crypto.getRandomValues(new Uint8Array(bytes)));
 }
 
-async function sha256Base64Url(input: string): Promise<string> {
+// Exported for the native-app flow: POST /auth/native/exchange recomputes the
+// challenge from the presented verifier and compares it to the stored one.
+export async function sha256Base64Url(input: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   return toBase64Url(new Uint8Array(digest));
 }

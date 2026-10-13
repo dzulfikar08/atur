@@ -3,10 +3,11 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { HTTPException } from "hono/http-exception";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, extractToken } from "../middleware/auth";
 import * as authService from "../services/auth";
 import * as usersRepo from "../repositories/users";
 import { SESSION_TTL_SECONDS } from "../lib/session";
+import { z } from "zod";
 import {
   GoogleAuthError,
   GOOGLE_ERROR_MESSAGES,
@@ -14,6 +15,7 @@ import {
   googleAuthorizeUrl,
   pkcePair,
   randomToken,
+  sha256Base64Url,
   type GoogleErrorCode,
 } from "../lib/oauth";
 import * as googleAuth from "../services/googleAuth";
@@ -69,6 +71,29 @@ const GOOGLE_SPA_CALLBACK = "/auth/callback/google";
 // Google, while Lax ones are (top-level GET navigation).
 const OAUTH_STATE_COOKIE = "plane-oauth-state";
 
+// ── Native app flow (atur:// scheme) ─────────────────────────────────────────
+// Hard-coded target: the app opens /auth/google?native_challenge=... in a
+// Custom Tab (expo-web-browser) and the callback 302s here. Never derived from
+// request input — no open-redirect surface.
+const NATIVE_CALLBACK = "atur://auth/callback";
+// A native_challenge is base64url(sha256(verifier)): exactly 43 unpadded
+// base64url chars, same shape pkcePair() produces for S256.
+const NATIVE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/;
+const nativeExchangeSchema = z.object({
+  code: z.string().min(1),
+  verifier: z.string().min(1),
+});
+
+// Native failures are also navigations — back to the app via its custom scheme,
+// same codes/copy as the web SPA callback.
+function redirectNativeError(c: C, code: GoogleErrorCode): Response {
+  const q = new URLSearchParams({
+    error: code,
+    error_description: GOOGLE_ERROR_MESSAGES[code],
+  });
+  return c.redirect(`${NATIVE_CALLBACK}?${q.toString()}`, 302);
+}
+
 // redirect_uri must be byte-identical between the authorize request and the
 // token exchange, and pre-registered in the Google OAuth client (prod host +
 // http://localhost:5173 for dev). Built in one place for exactly that reason.
@@ -108,8 +133,12 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   })
   .post("/sign-out", async (c) => {
     const db = getDb(c.env.DB);
-    const token = getCookie(c, SESSION_COOKIE);
-    if (token) {
+    // Native clients hold no cookie — accept Authorization: Bearer /
+    // X-API-Key too (extractToken falls back to the cookie).
+    const token = extractToken(c);
+    // API keys (pk_live_*) live in api_keys, not users.token — clearToken
+    // would never match them anyway, but never present them to it.
+    if (token && !token.startsWith("pk_live_")) {
       await usersRepo.clearToken(db, token);
     }
     clearSessionCookie(c);
@@ -159,13 +188,24 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .get("/google", async (c) => {
     const kv = c.env.RATE_LIMIT;
     const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = c.env;
+    // Native intent is signaled by the presence of native_challenge; a present
+    // but malformed one must bounce back to the app, not to the web SPA.
+    const nativeChallengeParam = c.req.query("native_challenge");
+    const isNative = nativeChallengeParam != null;
+    const nativeChallenge =
+      isNative && NATIVE_CHALLENGE_RE.test(nativeChallengeParam) ? nativeChallengeParam : null;
+    const fail = (code: GoogleErrorCode) =>
+      isNative ? redirectNativeError(c, code) : redirectGoogleError(c, code);
     if (!kv || !GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-      return redirectGoogleError(c, "oauth_disabled");
+      return fail("oauth_disabled");
+    }
+    if (isNative && !nativeChallenge) {
+      return fail("oauth_failed");
     }
     try {
       const state = randomToken(32);
       const { verifier, challenge } = await pkcePair();
-      await googleAuth.saveState(kv, state, verifier);
+      await googleAuth.saveState(kv, state, verifier, nativeChallenge);
       setCookie(c, OAUTH_STATE_COOKIE, state, {
         httpOnly: true,
         secure: isHttps(c),
@@ -184,7 +224,7 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       );
     } catch (err) {
       console.error("google oauth start failed:", err);
-      return redirectGoogleError(c, "oauth_failed");
+      return fail("oauth_failed");
     }
   })
   .get("/google/callback", async (c) => {
@@ -195,6 +235,9 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       return redirectGoogleError(c, "oauth_disabled");
     }
 
+    // Native intent is only knowable once the state is consumed (the stored
+    // nativeChallenge); until then failures fall back to the web redirect.
+    let nativeFail: ((code: GoogleErrorCode) => Response) | null = null;
     try {
       // Google can bounce back with its own error (user cancelled consent, etc.).
       const providerError = c.req.query("error");
@@ -219,8 +262,13 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       // state. Note: KV get-then-delete is not atomic across colos, so a
       // near-simultaneous replay within the consistency window can slip
       // through — bounded to at most one extra session (no account mutation).
-      const verifier = await googleAuth.consumeState(kv, state);
-      if (!verifier) return redirectGoogleError(c, "state_invalid");
+      const verifierState = await googleAuth.consumeState(kv, state);
+      if (!verifierState) return redirectGoogleError(c, "state_invalid");
+      const { verifier, nativeChallenge } = verifierState;
+      if (nativeChallenge != null) {
+        nativeFail = (code) => redirectNativeError(c, code);
+      }
+      const isNative = nativeChallenge != null;
 
       const tokens = await googleAuth.exchangeCode({
         clientId: GOOGLE_CLIENT_ID,
@@ -235,14 +283,62 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         accessToken: tokens.accessToken,
         idToken: tokens.idToken,
       });
-      setSessionCookie(c, result.token);
-      // Same-origin hop: the browser carries the fresh cookie to the SPA page,
-      // which fetches the user and continues to the original destination.
-      return c.redirect(GOOGLE_SPA_CALLBACK, 302);
+      if (!isNative) {
+        setSessionCookie(c, result.token);
+        // Same-origin hop: the browser carries the fresh cookie to the SPA page,
+        // which fetches the user and continues to the original destination.
+        return c.redirect(GOOGLE_SPA_CALLBACK, 302);
+      }
+      // Native: the Custom Tab would own the cookie, not the app — mint a
+      // one-time code bound to the app's challenge instead. The app swaps
+      // code + verifier at POST /auth/native/exchange.
+      const nativeCode = randomToken(32);
+      await googleAuth.saveNativeCode(kv, nativeCode, {
+        token: result.token,
+        challenge: nativeChallenge,
+      });
+      const q = new URLSearchParams({ code: nativeCode });
+      return c.redirect(`${NATIVE_CALLBACK}?${q.toString()}`, 302);
     } catch (err) {
       console.error("google oauth failed:", err);
-      return redirectGoogleError(c, err instanceof GoogleAuthError ? err.code : "oauth_failed");
+      const code: GoogleErrorCode = err instanceof GoogleAuthError ? err.code : "oauth_failed";
+      return nativeFail ? nativeFail(code) : redirectGoogleError(c, code);
     }
+  })
+  // Native app code-for-token swap (expo-web-browser flow). JSON, not a
+  // navigation — the app calls it directly with the one-time code from the
+  // atur:// redirect plus its own PKCE verifier. No cookie is set.
+  .post("/native/exchange", async (c) => {
+    const kv = c.env.RATE_LIMIT;
+    if (!kv) throw new HTTPException(500, { message: "KV namespace not configured" });
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "invalid_request", message: "Body must be JSON" }, 400);
+    }
+    const parsed = nativeExchangeSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "invalid_request", message: "code and verifier are required" }, 400);
+    }
+    const stored = await googleAuth.consumeNativeCode(kv, parsed.data.code);
+    if (!stored) {
+      return c.json({ error: "invalid_code", message: "Unknown or expired code" }, 400);
+    }
+    const challenge = await sha256Base64Url(parsed.data.verifier);
+    if (challenge !== stored.challenge) {
+      return c.json({ error: "verifier_mismatch", message: "PKCE verifier does not match" }, 400);
+    }
+    // Same user shape as /auth/sign-in — resolve the freshly minted session
+    // token back to its owner.
+    const user = await usersRepo.findByToken(getDb(c.env.DB), stored.token);
+    if (!user) {
+      return c.json({ error: "invalid_code", message: "Session no longer valid" }, 400);
+    }
+    return c.json({
+      session_token: stored.token,
+      user: { id: user.id, email: user.email, username: user.username },
+    });
   })
   .get("/gitlab", (c) => c.json({ url: "" }))
   .get("/gitlab/callback", (c) => c.json({ error: "Not implemented" }, 501))
