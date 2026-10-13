@@ -9,6 +9,8 @@ API, with a separate Astro marketing/blog site.
 - **App** (`apps/app`): Vite 8 · React 19 · Hono · Cloudflare Workers · D1 +
   Drizzle ORM · R2 · KV · Capacitor (iOS/Android) · Tailwind v4
 - **Web** (`apps/web`): Astro 7 · MDX · sitemap (marketing/blog site for SEO)
+- **Native** (`apps/native`): Expo SDK 57 · React Native 0.86 · expo-router ·
+  Unistyles · TanStack Query — Android/iOS client for the same API
 - **Tooling**: bun workspaces · TypeScript 7 · Oxlint / Oxfmt · GitHub Actions
 
 ## Setup
@@ -18,6 +20,7 @@ API, with a separate Astro marketing/blog site.
 bun install                                 # install all workspace deps
 bun run dev:app                             # app: worker + SPA on one origin
 bun run dev:web                             # marketing site dev server
+bun run dev:native                          # Expo dev server for the mobile app
 ```
 
 DB scripts live in `apps/app/` (not exposed at the root); run them from there:
@@ -37,12 +40,13 @@ Root scripts (run from repo root; delegate to the app/web workspaces):
 | ---------------------------- | ------------------------------------------------------------ |
 | `dev:app`                    | Vite dev server for the app (worker + SPA, one origin)       |
 | `dev:web`                    | Dev server for the marketing site (`apps/web`)               |
+| `dev:native`                 | Expo dev server for the mobile app (`apps/native`)           |
 | `build`                      | Production build (app + web)                                 |
 | `build:app`                  | Production build of the app (`dist/client` SPA, worker)      |
 | `build:web`                  | Production build of the marketing site                       |
 | `deploy:app`                 | Build + deploy the app Worker to `app.diatur.com`            |
 | `deploy:web`                 | Deploy the marketing site to Cloudflare Pages (`diatur.com`) |
-| `typecheck`                  | `tsc --noEmit` worker + client (`bun --filter @atur/app`)    |
+| `typecheck`                  | `tsc --noEmit` for app (worker + client), bridge, native     |
 | `test`                       | Vitest (client tests)                                        |
 | `lint` / `fmt` / `fmt:check` | Oxlint / Oxfmt                                               |
 
@@ -60,6 +64,26 @@ App scripts (run from `apps/app/`):
 | `cf-typegen`              | regenerate Cloudflare bindings types                 |
 | `test`                    | Vitest run                                           |
 | `cap:sync` / `cap:open:*` | Capacitor native builds                              |
+
+## Mobile app (`apps/native`)
+
+Expo / React Native client: Home (decisions, needs-you, in-progress across all
+workspaces), Projects → issue lists, issue detail (state, priority, assignees,
+labels, comments), new issue, search, inbox, profile.
+
+- **Auth**: email + password, email code (OTP), or Google. Google uses
+  `GET /auth/google?native_challenge=…` → `atur://auth/callback?code=…` →
+  `POST /auth/native/exchange { code, verifier }` (PKCE; the one-time code is
+  useless without the app's verifier). The session token is stored in
+  SecureStore and sent as `Authorization: Bearer`.
+- **API target**: `EXPO_PUBLIC_SERVER_URL` (default `https://app.diatur.com`).
+  For local dev, `EXPO_PUBLIC_SERVER_URL=http://localhost:5173 bun run web` in
+  `apps/native` previews it in the browser against `bun run dev:app`.
+- **Device**: `cd apps/native && bunx expo run:android` (dev client).
+- **Release APK**: `scripts/build-native-apk.sh` → `apps/native/dist/atur-release.apk`
+  (arm64; `ARCHS=x86_64` for an emulator build). The signing key is generated
+  once into `apps/native/keystore/` (gitignored) — back it up; updates must be
+  signed with the same key.
 
 ## Domains
 

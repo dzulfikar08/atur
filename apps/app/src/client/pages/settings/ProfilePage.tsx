@@ -344,6 +344,25 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
+        {/* Mobile app */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Mobile app</CardTitle>
+            <CardDescription>Atur for Android</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button asChild>
+              <a href={`${apiOrigin}/public/downloads/android`} download>
+                Download for Android
+              </a>
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              An APK file. Android may ask you to allow installs from this source. Already
+              installed? Download again to update.
+            </p>
+          </CardContent>
+        </Card>
+
         {/* Theme */}
         <Card>
           <CardHeader>
