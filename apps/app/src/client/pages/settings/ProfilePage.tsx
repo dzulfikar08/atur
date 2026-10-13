@@ -210,8 +210,8 @@ export default function ProfilePage() {
             <CardDescription>Your account information</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-4">
-              <Avatar className="h-16 w-16">
+            <div className="flex flex-wrap items-center gap-4">
+              <Avatar className="h-16 w-16 shrink-0">
                 {user?.avatar ? (
                   <AvatarImage src={user.avatar} alt={user?.display_name || "User"} />
                 ) : null}
@@ -219,11 +219,14 @@ export default function ProfilePage() {
                   {(user?.display_name || user?.username || "U").charAt(0)}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex-1">
-                <p className="text-lg font-semibold">{user?.display_name || user?.username}</p>
-                <p className="text-sm text-muted-foreground">{user?.email}</p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-lg font-semibold">
+                  {user?.display_name || user?.username}
+                </p>
+                <p className="truncate text-sm text-muted-foreground">{user?.email}</p>
               </div>
-              <div className="flex flex-col gap-2">
+              {/* Own full-width row on phones; stacked column beside the name from sm up. */}
+              <div className="flex w-full gap-2 sm:w-auto sm:flex-col">
                 <input
                   ref={avatarInputRef}
                   type="file"
