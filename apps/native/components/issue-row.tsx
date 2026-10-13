@@ -56,7 +56,7 @@ export function IssueRow({
           </Text>
           <PriorityIcon priority={issue.priority} size={14} />
           {assignees.slice(0, 2).map((a) => (
-            <Avatar key={a.id} name={displayName(a)} size={20} />
+            <Avatar key={a.id} name={displayName(a)} uri={a.avatar} size={20} />
           ))}
         </View>
       </View>

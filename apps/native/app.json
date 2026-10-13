@@ -2,7 +2,7 @@
   "expo": {
     "name": "Atur",
     "slug": "atur",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "atur",
@@ -20,7 +20,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.diatur.app",
-      "versionCode": 2
+      "versionCode": 3
     },
     "web": {
       "output": "single",

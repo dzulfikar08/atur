@@ -1,10 +1,11 @@
 import "@/unistyles";
+import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
 import { Linking, Platform, View } from "react-native";
-import { StyleSheet, UnistylesRuntime } from "react-native-unistyles";
+import { StyleSheet, UnistylesRuntime, useUnistyles } from "react-native-unistyles";
 
 import {
   Avatar,
@@ -22,6 +23,7 @@ import { SERVER_URL } from "@/lib/config";
 import { displayName } from "@/lib/format";
 import { endSession } from "@/lib/session";
 import { loadThemePref, saveThemePref, type ThemePref } from "@/lib/theme-pref";
+import { setCurrentWorkspace, useCurrentWorkspace } from "@/lib/workspace";
 
 const THEMES: { value: ThemePref; label: string }[] = [
   { value: "system", label: "System" },
@@ -31,6 +33,8 @@ const THEMES: { value: ThemePref; label: string }[] = [
 
 export default function Profile() {
   const me = useQuery({ queryKey: ["me"], queryFn: api.me });
+  const { theme } = useUnistyles();
+  const { slug: currentSlug } = useCurrentWorkspace();
   const [themePref, setThemePref] = useState<ThemePref>("system");
 
   useEffect(() => {
@@ -63,7 +67,7 @@ export default function Profile() {
       <ErrorNote error={me.error} />
       {me.data ? (
         <View style={styles.identity}>
-          <Avatar name={name} size={56} />
+          <Avatar name={name} uri={me.data.avatar} size={56} />
           <View style={styles.flex}>
             <Text style={styles.name}>{name}</Text>
             <Text style={styles.email}>{me.data.email}</Text>
@@ -74,7 +78,18 @@ export default function Profile() {
       <SectionTitle title="Workspaces" />
       <ListGroup>
         {(me.data?.workspaces ?? []).map((w) => (
-          <ListRow key={w.id} icon="briefcase-outline" title={w.name} value={w.slug} />
+          <ListRow
+            key={w.id}
+            left={<Avatar name={w.name} uri={w.logo} size={28} square />}
+            title={w.name}
+            subtitle={w.slug}
+            right={
+              w.slug === currentSlug ? (
+                <Ionicons name="checkmark" size={18} color={theme.colors.foreground} />
+              ) : undefined
+            }
+            onPress={() => setCurrentWorkspace(w.slug)}
+          />
         ))}
       </ListGroup>
 
