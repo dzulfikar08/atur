@@ -11,7 +11,7 @@ import { runD1Backup } from "../services/backup";
 // Platform-operator routes: the superuser console (read-only, spans every
 // workspace) and single-tenant ops actions. Gated on users.is_superuser (the
 // only platform-wide role flag), never on workspace membership.
-const requireSuperuser = createMiddleware<{ Bindings: Env }>(async (c, next) => {
+export const requireSuperuser = createMiddleware<{ Bindings: Env }>(async (c, next) => {
   const user = await getDb(c.env.DB)
     .select({ isSuperuser: schema.users.isSuperuser })
     .from(schema.users)

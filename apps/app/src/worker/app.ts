@@ -46,6 +46,7 @@ import { feedbackRoutes } from "./routes/feedback";
 import { feedbackAdminRoutes } from "./routes/feedback_admin";
 import { widgetRoutes } from "./routes/widget";
 import { paneRoutes } from "./routes/panes";
+import { screenRoutes } from "./routes/screen";
 import { polarWebhookRoutes, polarRoutes } from "./routes/polar";
 import { meRoutes } from "./routes/me";
 // Personal notes — static /notes prefix must win over meRoutes' generic
@@ -142,6 +143,8 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/api/workspaces/:slug/projects/:projectId/feedback-board", feedbackAdminRoutes);
   // Herdr execution-plane proxy: pane list + WS attach relay (ATUR-2).
   app.route("/api/panes", paneRoutes);
+  // Desktop sharing (noVNC ↔ bridge wayvnc), superuser-only and audited.
+  app.route("/api/screen", screenRoutes);
   // Platform operator (superuser-gated): read-only console + D1 → R2 backup trigger.
   app.route("/api/admin", adminRoutes);
   return app;
