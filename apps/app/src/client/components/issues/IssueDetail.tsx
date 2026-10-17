@@ -1624,7 +1624,7 @@ export default function IssueDetail() {
           </div>
           <div className="flex gap-1 border-b px-3 pt-1 overflow-x-auto shrink-0">
             <button
-              className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+              className={`whitespace-nowrap px-2.5 py-1.5 text-[0.8125rem] font-medium border-b-2 transition-colors ${
                 activeTab === "comments"
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1635,7 +1635,7 @@ export default function IssueDetail() {
               Comments ({comments.length})
             </button>
             <button
-              className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+              className={`whitespace-nowrap px-2.5 py-1.5 text-[0.8125rem] font-medium border-b-2 transition-colors ${
                 activeTab === "activity"
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1646,7 +1646,7 @@ export default function IssueDetail() {
               Activity ({activities.length})
             </button>
             <button
-              className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+              className={`whitespace-nowrap px-2.5 py-1.5 text-[0.8125rem] font-medium border-b-2 transition-colors ${
                 activeTab === "attachments"
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1657,7 +1657,7 @@ export default function IssueDetail() {
               Attachments ({attachmentCount})
             </button>
             <button
-              className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+              className={`whitespace-nowrap px-2.5 py-1.5 text-[0.8125rem] font-medium border-b-2 transition-colors ${
                 activeTab === "time"
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
