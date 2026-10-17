@@ -62,15 +62,35 @@
   --radius: 0.625rem;
   /* Ops-console design system (atur.pen) */
   --font-mono-ops: "JetBrains Mono", ui-monospace, monospace;
-  --state-green: #34d399;
-  --state-green-soft: rgba(52, 211, 153, 0.12);
-  --state-amber: #fbbf24;
-  --state-amber-soft: rgba(251, 191, 36, 0.12);
-  --state-blue: #60a5fa;
-  --state-blue-soft: rgba(96, 165, 250, 0.12);
-  --surface-elevated: #101013;
-  --surface-card: #141417;
-  --surface-card-hover: #1a1a1f;
+  --state-green: #15803d;
+  --state-green-soft: color-mix(in oklab, var(--state-green) 12%, transparent);
+  --state-amber: #b45309;
+  --state-amber-soft: color-mix(in oklab, var(--state-amber) 12%, transparent);
+  --state-blue: #2563eb;
+  --state-blue-soft: color-mix(in oklab, var(--state-blue) 12%, transparent);
+  /* Surface scale (theme-aware): light = white panels, soft grey hover */
+  --surface-elevated: oklch(1 0 0);
+  --surface-card: oklch(0.985 0 0);
+  --surface-card-hover: oklch(0.965 0 0);
+  /* Design tokens: one palette for state groups and priority, consumed by name.
+     Light values are darkened for >=4.5:1 text contrast on white. */
+  --state-backlog: #64748b;
+  --state-unstarted: #4f46e5;
+  --state-started: #2563eb;
+  --state-review: #c2410c;
+  --state-needs-you: #be185d;
+  --state-completed: #15803d;
+  --state-cancelled: #94a3b8;
+  --priority-urgent: #dc2626;
+  --priority-high: #ea580c;
+  --priority-medium: #ca8a04;
+  --priority-low: #2563eb;
+  --priority-none: #94a3b8;
+  --badge-mix: 12%;
+  /* Type scale: 12px minimum for meta, 13px row text, 14px body */
+  --text-meta: 0.75rem;
+  --text-row: 0.8125rem;
+  --text-body: 0.875rem;
   /* Monochrome graphite neutrals — crisp, plane/linear-like grayscale */
   --background: oklch(0.984 0 0);
   --foreground: oklch(0.16 0 0);
@@ -110,6 +130,22 @@
   --surface-elevated: #101013;
   --surface-card: #141417;
   --surface-card-hover: #1a1a1f;
+  --state-backlog: #94a3b8;
+  --state-unstarted: #818cf8;
+  --state-started: #60a5fa;
+  --state-review: #fb923c;
+  --state-needs-you: #f472b6;
+  --state-completed: #4ade80;
+  --state-cancelled: #64748b;
+  --priority-urgent: #f87171;
+  --priority-high: #fb923c;
+  --priority-medium: #fbbf24;
+  --priority-low: #60a5fa;
+  --priority-none: #64748b;
+  --state-green: #34d399;
+  --state-amber: #fbbf24;
+  --state-blue: #60a5fa;
+  --badge-mix: 16%;
 }
 .dark {
   --background: oklch(0.155 0 0);
@@ -157,7 +193,7 @@
   padding: 4px 9px;
   border-radius: 6px;
   font-family: var(--font-mono-ops);
-  font-size: 10.5px;
+  font-size: var(--text-meta);
   font-weight: 600;
   line-height: 1.2;
   width: fit-content;
@@ -185,6 +221,54 @@
   background: currentColor;
   flex-shrink: 0;
 }
+
+/* State/priority/product badges. Set the group via data-state-group and the
+   priority via data-priority; or override --badge-c inline for a custom
+   state colour. One source of truth for every screen. */
+.state-badge,
+.product-chip {
+  --badge-c: var(--state-backlog);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: var(--text-meta);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--badge-c);
+  background: color-mix(in oklab, var(--badge-c) var(--badge-mix), transparent);
+}
+.state-badge[data-state-group="backlog"] { --badge-c: var(--state-backlog); }
+.state-badge[data-state-group="unstarted"] { --badge-c: var(--state-unstarted); }
+.state-badge[data-state-group="started"] { --badge-c: var(--state-started); }
+.state-badge[data-state-group="review"] { --badge-c: var(--state-review); }
+.state-badge[data-state-group="needs-you"] { --badge-c: var(--state-needs-you); }
+.state-badge[data-state-group="completed"] { --badge-c: var(--state-completed); }
+.state-badge[data-state-group="cancelled"] { --badge-c: var(--state-cancelled); }
+.state-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.priority-dot {
+  --badge-c: var(--priority-none);
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--badge-c);
+  flex-shrink: 0;
+}
+.priority-dot[data-priority="urgent"] { --badge-c: var(--priority-urgent); }
+.priority-dot[data-priority="high"] { --badge-c: var(--priority-high); }
+.priority-dot[data-priority="medium"] { --badge-c: var(--priority-medium); }
+.priority-dot[data-priority="low"] { --badge-c: var(--priority-low); }
+.priority-dot[data-priority="none"] { --badge-c: var(--priority-none); }
 
 @layer base {
   * {
@@ -220,7 +304,9 @@
 /* Focus ring — accent-tinted, softened. Applied to interactive elements that
    opt in via focus-visible:ring-2. */
 :where(button, a, input, select, textarea, [role="button"]):focus-visible {
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ring) 35%, transparent);
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 4px color-mix(in oklab, var(--ring) 75%, transparent);
 }
 
 /* Slim, unobtrusive scrollbars on pointer devices */
