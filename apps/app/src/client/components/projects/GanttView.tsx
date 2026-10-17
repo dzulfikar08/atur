@@ -31,11 +31,7 @@ export interface GanttViewProps {
   states: State[];
   groupBy: GanttGroupBy;
   onOpen: (seq: number) => void;
-  onReschedule: (
-    id: string,
-    start: string | null,
-    target: string | null,
-  ) => void;
+  onReschedule: (id: string, start: string | null, target: string | null) => void;
 }
 
 type Zoom = "day" | "week" | "month";
@@ -50,13 +46,7 @@ const ISO = "yyyy-MM-dd";
 type KeyedState = State & { key?: string | null };
 
 const PRIORITY_ORDER = ["urgent", "high", "medium", "low", "none"];
-const STATE_GROUP_ORDER = [
-  "backlog",
-  "unstarted",
-  "started",
-  "completed",
-  "cancelled",
-];
+const STATE_GROUP_ORDER = ["backlog", "unstarted", "started", "completed", "cancelled"];
 
 /** Dates arrive as `YYYY-MM-DD` (sometimes with a time); read them as local days. */
 const toDay = (value: string): Date => parseISO(value.slice(0, 10));
@@ -72,9 +62,7 @@ function bounds(span: Span): { from: Date; to: Date } | null {
   const { start, target } = span;
   if (!start && !target) return null;
   if (start && target) {
-    return start <= target
-      ? { from: start, to: target }
-      : { from: target, to: start };
+    return start <= target ? { from: start, to: target } : { from: target, to: start };
   }
   const only = (start ?? target)!;
   return { from: only, to: only };
@@ -142,14 +130,7 @@ function dueBucket(target: Date | null, open: boolean, today: Date): string {
   return diff < 0 ? "Earlier" : "Later";
 }
 
-const DUE_ORDER = [
-  "Overdue",
-  "Today",
-  "This week",
-  "Later",
-  "Earlier",
-  "No date",
-];
+const DUE_ORDER = ["Overdue", "Today", "This week", "Later", "Earlier", "No date"];
 
 function groupOf(
   row: Row,
@@ -164,14 +145,10 @@ function groupOf(
       return { key: label, label, order: order < 0 ? 99 : order };
     }
     case "priority": {
-      const p =
-        issue.priority && PRIORITY_ORDER.includes(issue.priority)
-          ? issue.priority
-          : "none";
+      const p = issue.priority && PRIORITY_ORDER.includes(issue.priority) ? issue.priority : "none";
       return {
         key: p,
-        label:
-          p === "none" ? "No priority" : p.charAt(0).toUpperCase() + p.slice(1),
+        label: p === "none" ? "No priority" : p.charAt(0).toUpperCase() + p.slice(1),
         order: PRIORITY_ORDER.indexOf(p),
       };
     }
@@ -193,9 +170,7 @@ function groupOf(
     }
     case "assignee": {
       const a = issue.assignees?.[0];
-      const name = a
-        ? (a.display_name ?? a.username ?? a.email ?? "Assigned")
-        : null;
+      const name = a ? (a.display_name ?? a.username ?? a.email ?? "Assigned") : null;
       return {
         key: name ?? "",
         label: name ?? "Unassigned",
@@ -243,19 +218,14 @@ export default function GanttView({
 
   useEffect(() => setOverrides({}), [issues]);
 
-  const stateById = useMemo(
-    () => new Map(states.map((s) => [s.id, s as KeyedState])),
-    [states],
-  );
+  const stateById = useMemo(() => new Map(states.map((s) => [s.id, s as KeyedState])), [states]);
 
   const { scheduled, unscheduled } = useMemo(() => {
     const scheduled: Row[] = [];
     const unscheduled: Row[] = [];
     for (const issue of issues) {
       const state =
-        (issue.state_id ? stateById.get(issue.state_id) : undefined) ??
-        issue.state ??
-        undefined;
+        (issue.state_id ? stateById.get(issue.state_id) : undefined) ?? issue.state ?? undefined;
       const open = !(
         state?.group === "completed" ||
         state?.group === "cancelled" ||
@@ -322,11 +292,7 @@ export default function GanttView({
   // Land with today in view (left third) whenever zoom or range changes.
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el)
-      el.scrollLeft = Math.max(
-        todayX - el.clientWidth * 0.3 + LABEL_W * 0.3,
-        0,
-      );
+    if (el) el.scrollLeft = Math.max(todayX - el.clientWidth * 0.3 + LABEL_W * 0.3, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom, totalDays]);
 
@@ -344,8 +310,7 @@ export default function GanttView({
     let cursor = rangeStart;
     for (let i = 0; i < totalDays;) {
       let span = 0;
-      while (i + span < totalDays && isSameMonth(addDays(cursor, span), cursor))
-        span++;
+      while (i + span < totalDays && isSameMonth(addDays(cursor, span), cursor)) span++;
       out.push({
         key: format(cursor, "yyyy-MM"),
         label: format(cursor, zoom === "month" ? "MMM yyyy" : "MMMM yyyy"),
@@ -386,8 +351,7 @@ export default function GanttView({
   // Faint weekly gridlines on every timeline cell; Monday is the rangeStart.
   const gridStyle: React.CSSProperties = {
     width: timelineW,
-    backgroundImage:
-      "linear-gradient(to right, var(--border) 1px, transparent 1px)",
+    backgroundImage: "linear-gradient(to right, var(--border) 1px, transparent 1px)",
     backgroundSize: `${(zoom === "month" ? 7 : zoom === "week" ? 7 : 1) * px}px 100%`,
   };
 
@@ -435,15 +399,10 @@ export default function GanttView({
       target?.getTime() !== d.base.target?.getTime();
     if (!changed) return;
     setOverrides((o) => ({ ...o, [row.issue.id]: d.current }));
-    onReschedule(
-      row.issue.id,
-      start ? toIso(start) : null,
-      target ? toIso(target) : null,
-    );
+    onReschedule(row.issue.id, start ? toIso(start) : null, target ? toIso(target) : null);
   };
 
-  const spanOf = (row: Row): Span =>
-    drag?.id === row.issue.id ? drag.current : row.span;
+  const spanOf = (row: Row): Span => (drag?.id === row.issue.id ? drag.current : row.span);
 
   const renderBar = (row: Row) => {
     const span = spanOf(row);
@@ -476,9 +435,7 @@ export default function GanttView({
             aria-label={`${title}, due ${range}`}
             title={`${row.issue.name}\nDue ${range}`}
             onPointerDown={(e) => beginDrag(e, row, "move")}
-            onKeyDown={(e) =>
-              e.key === "Enter" && onOpen(row.issue.sequence_id)
-            }
+            onKeyDown={(e) => e.key === "Enter" && onOpen(row.issue.sequence_id)}
             {...handlers}
             className={cn(
               "size-4 shrink-0 rotate-45 cursor-grab touch-none rounded-[3px] border-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
@@ -554,16 +511,11 @@ export default function GanttView({
         className="sticky left-0 z-20 flex shrink-0 items-center gap-2 border-r border-border bg-background px-3"
         style={{ width: LABEL_W }}
       >
-        <span
-          className="priority-dot"
-          data-priority={row.issue.priority ?? "none"}
-        />
+        <span className="priority-dot" data-priority={row.issue.priority ?? "none"} />
         {product && (
           <span
             className="product-chip shrink-0"
-            style={
-              { "--badge-c": productColor(product) } as React.CSSProperties
-            }
+            style={{ "--badge-c": productColor(product) } as React.CSSProperties}
           >
             {product}
           </span>
@@ -623,8 +575,8 @@ export default function GanttView({
         </label>
         <span className="ml-auto text-muted-foreground">
           {scheduled.length} scheduled
-          {unscheduled.length > 0 && ` · ${unscheduled.length} unscheduled`} ·
-          drag a bar to reschedule
+          {unscheduled.length > 0 && ` · ${unscheduled.length} unscheduled`} · drag a bar to
+          reschedule
         </span>
       </div>
 
@@ -637,10 +589,7 @@ export default function GanttView({
           ref={scrollRef}
           className="min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-background"
         >
-          <div
-            className="relative"
-            style={{ width: LABEL_W + timelineW, minWidth: "100%" }}
-          >
+          <div className="relative" style={{ width: LABEL_W + timelineW, minWidth: "100%" }}>
             {/* Today line sits under the sticky label column. */}
             <div
               aria-hidden
@@ -674,9 +623,7 @@ export default function GanttView({
                     key={t.key}
                     className={cn(
                       "absolute bottom-0 flex h-6 items-center justify-center border-l border-border text-[length:var(--text-meta)] tabular-nums",
-                      t.weekend
-                        ? "bg-muted/60 text-muted-foreground/70"
-                        : "text-muted-foreground",
+                      t.weekend ? "bg-muted/60 text-muted-foreground/70" : "text-muted-foreground",
                     )}
                     style={{ left: t.x, width: t.w }}
                   >
@@ -773,10 +720,7 @@ export default function GanttView({
                     key={row.issue.id}
                     className="group inline-flex max-w-[320px] items-center gap-1.5 rounded-md border border-border bg-background py-0.5 pl-2 pr-0.5"
                   >
-                    <span
-                      className="priority-dot"
-                      data-priority={row.issue.priority ?? "none"}
-                    />
+                    <span className="priority-dot" data-priority={row.issue.priority ?? "none"} />
                     {product && (
                       <span
                         className="product-chip shrink-0"
