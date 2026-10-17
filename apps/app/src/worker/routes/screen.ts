@@ -88,7 +88,11 @@ screenRoutes.get("/ws", async (c) => {
   const server = pair[1]; // browser side of the relay
   server.accept();
 
-  // RFB is binary; frames are piped verbatim both directions.
+  // RFB is binary; frames are piped verbatim both directions. workerd's default
+  // binaryType follows the compat date (Blob on newer ones, which send() would
+  // stringify), so pin ArrayBuffer on both legs.
+  origin.binaryType = "arraybuffer";
+  server.binaryType = "arraybuffer";
   origin.addEventListener("message", (event) => server.send(event.data));
   server.addEventListener("message", (event) => origin.send(event.data));
 
