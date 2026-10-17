@@ -8,8 +8,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import CommentEditor from "@/components/editor/CommentEditor";
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
+import FilterBar from "@/components/issues/FilterBar";
+import { useAuthStore } from "@/stores/auth";
+import { useIssueQuery } from "@/hooks/useIssueQuery";
+import {
+  DEFAULT_QUERY,
+  MY_ISSUES_QUERY,
+  PRESET_VIEWS,
+  SORT_FIELDS,
+  activeFilterCount as activeFilterCountOf,
+  applyIssueQuery,
+  deriveFilterOptions,
+  sameQuery,
+  sortStates,
+  type QueryState,
+  type SortField,
+} from "@/lib/issueQuery";
 import { Plus, Search, SlidersHorizontal } from "@/lib/icons";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -32,10 +48,14 @@ interface Issue {
   project_id: string;
   created_at: string;
   updated_at: string;
+  start_date: string | null;
+  target_date: string | null;
+  is_decision?: boolean | number | null;
+  module_ids?: string[];
   project_name?: string;
   workspace_slug?: string;
   workspace_name?: string;
-  state?: { id: string; name: string; color?: string; group: string } | null;
+  state?: { id: string; name: string; color?: string; group: string; key?: string | null } | null;
   labels?: { id: string; name: string; color?: string }[];
   assignees?: {
     id: string;
@@ -55,15 +75,30 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
   const qc = useQueryClient();
   const [filterOpen, setFilterOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [filterState, setFilterState] = useState<string>("all");
-  const [filterPriority, setFilterPriority] = useState<string>("all");
-  const [filterWorkspace, setFilterWorkspace] = useState<string>("all");
-  const [filterProject, setFilterProject] = useState<string>("all");
-  const [filterAssignee, setFilterAssignee] = useState<string>("all");
-  const [filterLabel, setFilterLabel] = useState<string>("all");
-  const [filterSortBy, setFilterSortBy] = useState<string>("updated_at");
-  const [filterSortDir, setFilterSortDir] = useState<"asc" | "desc">("desc");
-  const [search, setSearch] = useState("");
+  const { query, setQuery, reset } = useIssueQuery(projectId ? DEFAULT_QUERY : MY_ISSUES_QUERY);
+  const me = useAuthStore((s) => s.user?.id ?? null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filterWorkspace = searchParams.get("ws") ?? "all";
+  const filterProject = searchParams.get("project") ?? "all";
+  const setScope = (patch: { ws?: string; project?: string }) =>
+    setSearchParams(
+      (prev) => {
+        const out = new URLSearchParams(prev);
+        for (const [k, v] of Object.entries(patch)) {
+          if (v === "all") out.delete(k);
+          else out.set(k, v);
+        }
+        return out;
+      },
+      { replace: true },
+    );
+  const [search, setSearch] = useState(query.q);
+  useEffect(() => setSearch(query.q), [query.q]);
+  useEffect(() => {
+    if (search === query.q) return;
+    const t = setTimeout(() => setQuery({ q: search }), 250);
+    return () => clearTimeout(t);
+  }, [search, query.q, setQuery]);
   const [newIssueName, setNewIssueName] = useState("");
   const [newIssueDesc, setNewIssueDesc] = useState("");
   const [newIssueState, setNewIssueState] = useState("");
@@ -203,44 +238,24 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to create issue"),
   });
 
-  const filtered = allIssues.filter((i) => {
-    if (filterState !== "all" && i.state_id !== filterState) return false;
-    if (filterPriority !== "all" && i.priority !== filterPriority) return false;
-    if (isAll && filterWorkspace !== "all" && i.workspace_slug !== filterWorkspace) return false;
-    if (isAll && filterProject !== "all" && i.project_id !== filterProject) return false;
-    if (filterAssignee !== "all") {
-      const ids = (i.assignees ?? []).map((a) => a.id);
-      if (filterAssignee === "none") {
-        if (ids.length > 0) return false;
-      } else if (!ids.includes(filterAssignee)) {
-        return false;
-      }
-    }
-    if (filterLabel !== "all") {
-      const ids = (i.labels ?? []).map((l) => l.id);
-      if (!ids.includes(filterLabel)) return false;
-    }
-    if (search) {
-      const q = search.toLowerCase();
-      const stateName = i.state?.name?.toLowerCase() ?? "";
-      if (!i.name.toLowerCase().includes(q) && !stateName.includes(q)) return false;
-    }
-    return true;
-  });
-
-  const priorityOrder: Record<string, number> = { urgent: 4, high: 3, medium: 2, low: 1, none: 0 };
-  const filteredSorted = [...filtered].sort((a, b) => {
-    let cmp = 0;
-    if (filterSortBy === "updated_at")
-      cmp = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
-    else if (filterSortBy === "created_at")
-      cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-    else if (filterSortBy === "sequence_id") cmp = a.sequence_id - b.sequence_id;
-    else if (filterSortBy === "priority")
-      cmp = (priorityOrder[a.priority || "none"] || 0) - (priorityOrder[b.priority || "none"] || 0);
-    else if (filterSortBy === "name") cmp = a.name.localeCompare(b.name);
-    return filterSortDir === "desc" ? -cmp : cmp;
-  });
+  const scoped = useMemo(
+    () =>
+      allIssues.filter(
+        (i) =>
+          (!isAll || filterWorkspace === "all" || i.workspace_slug === filterWorkspace) &&
+          (!isAll || filterProject === "all" || i.project_id === filterProject),
+      ),
+    [allIssues, isAll, filterWorkspace, filterProject],
+  );
+  const derivedStates = useMemo(() => {
+    const map = new Map<string, QueryState>();
+    for (const i of allIssues) if (i.state) map.set(i.state.id, { ...i.state, sequence: 0 });
+    return sortStates([...map.values()]);
+  }, [allIssues]);
+  const filteredSorted = useMemo(
+    () => applyIssueQuery(scoped, query, me, { states: derivedStates }),
+    [scoped, query, me, derivedStates],
+  );
 
   // Nest sub-issues under their parent card (indent + ↳ marker). Orphans
   // (parent filtered out) stay top-level but keep the marker.
@@ -257,42 +272,10 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
     [filteredSorted],
   );
 
-  // Distinct assignees / labels across the fetched issues (for the filter sheet).
-  const stateOptions = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; group: string; color?: string }>();
-    for (const i of allIssues) {
-      if (i.state)
-        map.set(i.state.id, {
-          id: i.state.id,
-          name: i.state.name,
-          group: i.state.group,
-          color: i.state.color,
-        });
-    }
-    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [allIssues]);
-
-  const assigneeOptions = useMemo(() => {
-    const map = new Map<string, { id: string; display_name?: string; email?: string }>();
-    for (const i of allIssues) {
-      for (const a of i.assignees ?? []) {
-        map.set(a.id, { id: a.id, display_name: a.display_name, email: a.email });
-      }
-    }
-    return [...map.values()].sort((a, b) =>
-      (a.display_name || a.email || "").localeCompare(b.display_name || b.email || ""),
-    );
-  }, [allIssues]);
-
-  const labelOptions = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; color?: string }>();
-    for (const i of allIssues) {
-      for (const l of i.labels ?? []) {
-        map.set(l.id, { id: l.id, name: l.name, color: l.color });
-      }
-    }
-    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [allIssues]);
+  const options = useMemo(
+    () => deriveFilterOptions(scoped, derivedStates),
+    [scoped, derivedStates],
+  );
 
   const { pullDistance, isRefreshing, progress, pullHandlers } = usePullToRefresh({
     onRefresh: async () => {
@@ -302,14 +285,10 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
     },
   });
 
-  const activeFilterCount = [
-    filterState !== "all",
-    filterPriority !== "all",
-    isAll && filterWorkspace !== "all",
-    isAll && filterProject !== "all",
-    filterAssignee !== "all",
-    filterLabel !== "all",
-  ].filter(Boolean).length;
+  const activeFilterCount =
+    activeFilterCountOf(query, projectId ? DEFAULT_QUERY : MY_ISSUES_QUERY) +
+    (isAll && filterWorkspace !== "all" ? 1 : 0) +
+    (isAll && filterProject !== "all" ? 1 : 0);
 
   return (
     <div className="space-y-3 overflow-y-auto" {...pullHandlers}>
@@ -332,83 +311,48 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
         <Button
           variant="outline"
           size="icon"
-          className="h-9 w-9 shrink-0"
+          className="relative h-9 w-9 shrink-0"
+          aria-label="Filters"
           onClick={() => setFilterOpen(true)}
         >
           <SlidersHorizontal className="h-4 w-4" />
+          {activeFilterCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-xs text-primary-foreground">
+              {activeFilterCount}
+            </span>
+          )}
         </Button>
         <Button size="icon" className="h-9 w-9 shrink-0" onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" />
         </Button>
       </div>
 
-      {/* Active filters */}
-      {activeFilterCount > 0 && (
-        <div className="flex gap-1.5 flex-wrap">
-          {filterState !== "all" && (
-            <Badge
-              variant="secondary"
-              className="text-xs gap-1 cursor-pointer"
-              onClick={() => setFilterState("all")}
+      {/* Saved presets */}
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
+        {[
+          {
+            id: "all",
+            name: projectId ? "All" : "My open work",
+            query: projectId ? DEFAULT_QUERY : MY_ISSUES_QUERY,
+          },
+          ...PRESET_VIEWS,
+        ].map((t) => {
+          const active = sameQuery({ ...t.query, view: "list" }, { ...query, view: "list" });
+          return (
+            <button
+              key={t.id}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setQuery({ ...t.query, view: query.view })}
+              className={`h-8 shrink-0 rounded-full border px-3 text-xs font-medium ${
+                active ? "bg-accent text-foreground" : "text-muted-foreground"
+              }`}
             >
-              {stateOptions.find((s) => s.id === filterState)?.name || "State"} ✕
-            </Badge>
-          )}
-          {filterPriority !== "all" && (
-            <Badge
-              variant="secondary"
-              className="text-xs gap-1 cursor-pointer"
-              onClick={() => setFilterPriority("all")}
-            >
-              {filterPriority} ✕
-            </Badge>
-          )}
-          {filterAssignee !== "all" && (
-            <Badge
-              variant="secondary"
-              className="text-xs gap-1 cursor-pointer"
-              onClick={() => setFilterAssignee("all")}
-            >
-              {filterAssignee === "none"
-                ? "Unassigned"
-                : assigneeOptions.find((a) => a.id === filterAssignee)?.display_name ||
-                  assigneeOptions.find((a) => a.id === filterAssignee)?.email ||
-                  "Assignee"}{" "}
-              ✕
-            </Badge>
-          )}
-          {filterLabel !== "all" && (
-            <Badge
-              variant="secondary"
-              className="text-xs gap-1 cursor-pointer"
-              onClick={() => setFilterLabel("all")}
-            >
-              {labelOptions.find((l) => l.id === filterLabel)?.name || "Label"} ✕
-            </Badge>
-          )}
-          {isAll && filterWorkspace !== "all" && (
-            <Badge
-              variant="secondary"
-              className="text-xs gap-1 cursor-pointer"
-              onClick={() => {
-                setFilterWorkspace("all");
-                setFilterProject("all");
-              }}
-            >
-              {workspaces.find((w) => w.slug === filterWorkspace)?.name || filterWorkspace} ✕
-            </Badge>
-          )}
-          {isAll && filterProject !== "all" && (
-            <Badge
-              variant="secondary"
-              className="text-xs gap-1 cursor-pointer"
-              onClick={() => setFilterProject("all")}
-            >
-              {allProjects.find((p) => p.id === filterProject)?.name || "Project"} ✕
-            </Badge>
-          )}
-        </div>
-      )}
+              {t.name}
+            </button>
+          );
+        })}
+      </div>
 
       {/* Issue count */}
       <p className="text-xs text-muted-foreground">
@@ -446,162 +390,98 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
         <div className="space-y-4">
           {isAll && (
             <>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                  Workspace
-                </label>
-                <Select
-                  value={filterWorkspace}
-                  onValueChange={(v) => {
-                    setFilterWorkspace(v);
-                    setFilterProject("all");
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Workspaces" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Workspaces</SelectItem>
-                    {workspaces.map((w) => (
-                      <SelectItem key={w.id} value={w.slug}>
-                        {w.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                  Project
-                </label>
-                <Select value={filterProject} onValueChange={setFilterProject}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Projects" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Projects</SelectItem>
-                    {allProjects
-                      .filter(
-                        (p) => filterWorkspace === "all" || p.workspace_slug === filterWorkspace,
-                      )
-                      .map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
-          )}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">State</label>
-            <Select value={filterState} onValueChange={setFilterState}>
-              <SelectTrigger>
-                <SelectValue placeholder="All States" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All States</SelectItem>
-                {stateOptions.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-              Priority
-            </label>
-            <Select value={filterPriority} onValueChange={setFilterPriority}>
-              <SelectTrigger>
-                <SelectValue placeholder="All Priority" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Priority</SelectItem>
-                {["urgent", "high", "medium", "low", "none"].map((p) => (
-                  <SelectItem key={p} value={p}>
-                    {p}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-              Assignee
-            </label>
-            <Select value={filterAssignee} onValueChange={setFilterAssignee}>
-              <SelectTrigger>
-                <SelectValue placeholder="All Assignees" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Assignees</SelectItem>
-                <SelectItem value="none">Unassigned</SelectItem>
-                {assigneeOptions.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.display_name || a.email || a.id.slice(0, 8)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {labelOptions.length > 0 && (
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                Label
-              </label>
-              <Select value={filterLabel} onValueChange={setFilterLabel}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Labels" />
+              <Select
+                value={filterWorkspace}
+                onValueChange={(v) => setScope({ ws: v, project: "all" })}
+              >
+                <SelectTrigger aria-label="Workspace">
+                  <SelectValue placeholder="All Workspaces" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Labels</SelectItem>
-                  {labelOptions.map((l) => (
-                    <SelectItem key={l.id} value={l.id}>
-                      {l.name}
+                  <SelectItem value="all">All Workspaces</SelectItem>
+                  {workspaces.map((w) => (
+                    <SelectItem key={w.id} value={w.slug}>
+                      {w.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterProject} onValueChange={(v) => setScope({ project: v })}>
+                <SelectTrigger aria-label="Project">
+                  <SelectValue placeholder="All Projects" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Projects</SelectItem>
+                  {allProjects
+                    .filter(
+                      (p) => filterWorkspace === "all" || p.workspace_slug === filterWorkspace,
+                    )
+                    .map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </>
+          )}
+          <FilterBar {...options} query={query} onChange={(patch) => setQuery(patch)} />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Sort by
+              </label>
+              <Select
+                value={query.sort.field}
+                onValueChange={(v) => setQuery({ sort: { ...query.sort, field: v as SortField } })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SORT_FIELDS.map((f) => (
+                    <SelectItem key={f} value={f}>
+                      {f.replace(/_/g, " ")}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-          )}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-              Sort by
-            </label>
-            <Select value={filterSortBy} onValueChange={(v) => setFilterSortBy(v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Updated" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="updated_at">Updated</SelectItem>
-                <SelectItem value="created_at">Created</SelectItem>
-                <SelectItem value="sequence_id">ID</SelectItem>
-                <SelectItem value="priority">Priority</SelectItem>
-                <SelectItem value="name">Title</SelectItem>
-              </SelectContent>
-            </Select>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Order
+              </label>
+              <Select
+                value={query.sort.dir}
+                onValueChange={(v) =>
+                  setQuery({ sort: { ...query.sort, dir: v as "asc" | "desc" } })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="desc">Descending</SelectItem>
+                  <SelectItem value="asc">Ascending</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Order</label>
-            <Select
-              value={filterSortDir}
-              onValueChange={(v) => setFilterSortDir(v as "asc" | "desc")}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => {
+                reset();
+                setScope({ ws: "all", project: "all" });
+              }}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Descending" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="desc">Descending</SelectItem>
-                <SelectItem value="asc">Ascending</SelectItem>
-              </SelectContent>
-            </Select>
+              Clear
+            </Button>
+            <Button className="flex-1" onClick={() => setFilterOpen(false)}>
+              Apply
+            </Button>
           </div>
-          <Button className="w-full" onClick={() => setFilterOpen(false)}>
-            Apply
-          </Button>
         </div>
       </BottomSheet>
 

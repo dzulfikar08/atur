@@ -13,6 +13,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useNavigate } from "react-router-dom";
+import FilterBar from "@/components/issues/FilterBar";
+import { useAuthStore } from "@/stores/auth";
+import { useIssueQuery } from "@/hooks/useIssueQuery";
+import {
+  DEFAULT_QUERY,
+  PRESET_VIEWS,
+  activeFilterCount,
+  applyIssueQuery,
+  deriveFilterOptions,
+  sameQuery,
+  sortStates,
+} from "@/lib/issueQuery";
 import { ChevronDown, ChevronRight, Plus, SlidersHorizontal, Timer } from "@/lib/icons";
 import MobileIssueCard from "./MobileIssueCard";
 import BottomSheet from "./BottomSheet";
@@ -137,7 +149,8 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
     new Set(["started", "unstarted"]),
   );
   const [filterOpen, setFilterOpen] = useState(false);
-  const [filterPriority, setFilterPriority] = useState<string>("all");
+  const { query, setQuery, reset } = useIssueQuery(DEFAULT_QUERY);
+  const me = useAuthStore((s) => s.user?.id ?? null);
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
@@ -215,16 +228,27 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
     onError: () => toast.error("Failed to create issue"),
   });
 
-  const filtered = useMemo(() => {
-    return issues.filter((i) => {
-      if (filterPriority !== "all" && i.priority !== filterPriority) return false;
-      return true;
-    });
-  }, [issues, filterPriority]);
+  // Sections always list every state (completed ones start collapsed), so the
+  // done filter is expressed by that collapse rather than by dropping the section.
+  const filtered = useMemo(
+    () => applyIssueQuery(issues, { ...query, done: "show" }, me, { states }),
+    [issues, query, me, states],
+  );
+  const options = useMemo(
+    () => ({
+      ...deriveFilterOptions(issues, states),
+      assignees: members.map((m) => ({
+        id: m.memberId,
+        name: m.displayName || m.username || m.email || m.memberId.slice(0, 8),
+      })),
+    }),
+    [issues, states, members],
+  );
+  const activeFilters = activeFilterCount(query);
 
   const grouped = useMemo(() => {
     const groups: { state: State; issues: Issue[] }[] = [];
-    for (const state of states) {
+    for (const state of sortStates(states)) {
       const stateIssues = filtered.filter((i) => i.state_id === state.id);
       groups.push({ state, issues: stateIssues });
     }
@@ -330,6 +354,7 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
             onClick={() => setFilterOpen(true)}
           >
             <SlidersHorizontal className="h-3 w-3" /> Filter
+            {activeFilters > 0 ? ` · ${activeFilters}` : ""}
           </Button>
           <Button
             variant="outline"
@@ -339,15 +364,6 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
           >
             <Timer className="h-3 w-3" /> Sprints
           </Button>
-          {filterPriority !== "all" && (
-            <Badge
-              variant="secondary"
-              className="text-xs gap-1 cursor-pointer"
-              onClick={() => setFilterPriority("all")}
-            >
-              {filterPriority} ✕
-            </Badge>
-          )}
           <div className="flex-1" />
           <Button size="sm" className="h-8 text-xs gap-1" onClick={() => setCreateOpen(true)}>
             <Plus className="h-3 w-3" /> New
@@ -415,27 +431,39 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
         {/* Filter sheet */}
         <BottomSheet open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter">
           <div className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                Priority
-              </label>
-              <Select value={filterPriority} onValueChange={setFilterPriority}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Priority</SelectItem>
-                  {["urgent", "high", "medium", "low", "none"].map((p) => (
-                    <SelectItem key={p} value={p}>
-                      {p}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <Input
+              placeholder="Search issues…"
+              aria-label="Search issues"
+              defaultValue={query.q}
+              onChange={(e) => setQuery({ q: e.target.value })}
+            />
+            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
+              {[{ id: "all", name: "All", query: DEFAULT_QUERY }, ...PRESET_VIEWS].map((t) => {
+                const active = sameQuery({ ...t.query, view: "list" }, { ...query, view: "list" });
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setQuery({ ...t.query, view: query.view })}
+                    className={`h-8 shrink-0 rounded-full border px-3 text-xs font-medium ${
+                      active ? "bg-accent text-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    {t.name}
+                  </button>
+                );
+              })}
             </div>
-            <Button className="w-full" onClick={() => setFilterOpen(false)}>
-              Apply
-            </Button>
+            <FilterBar {...options} query={query} onChange={(patch) => setQuery(patch)} />
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={reset}>
+                Clear
+              </Button>
+              <Button className="flex-1" onClick={() => setFilterOpen(false)}>
+                Apply
+              </Button>
+            </div>
           </div>
         </BottomSheet>
 
