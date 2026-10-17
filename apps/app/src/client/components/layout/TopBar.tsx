@@ -28,6 +28,9 @@ const routeLabels: Record<string, string> = {
   search: "Search",
 };
 
+// Top-level routes outside any workspace (no :slug param).
+const rootSectionLabels: Record<string, string> = { admin: "Platform", panes: "Panes" };
+
 // Helper to list pages for search results
 function listPages(slug: string) {
   return apiFetch<{ results: Page[] }>(`/workspaces/${slug}/pages/`).then((r) => r.results);
@@ -139,29 +142,33 @@ export default function TopBar() {
     </button>
   );
 
-  // Build breadcrumb from current route
+  // Build breadcrumb from current route. Non-slug routes (/panes, /admin) get a
+  // single section crumb; their pages carry their own back links.
   const pathSegments = location.pathname.replace(`/${slug}`, "").split("/").filter(Boolean);
+  const rootSection = pathSegments[0] ?? "";
 
-  const breadcrumbs = [
-    { label: slug ?? "Workspace", path: `/${slug}` },
-    ...pathSegments.map((segment, i) => {
-      // A project UUID segment (the one right after "projects") is unreadable —
-      // show the project's identifier (or name) instead.
-      let label = routeLabels[segment] ?? segment;
-      let path = `/${slug}/${pathSegments.slice(0, i + 1).join("/")}`;
-      if (pathSegments[i - 1] === "projects") {
-        const p = projectById.get(segment);
-        if (p) label = p.identifier || p.name || "Project";
-      }
-      // "issues" is a workspace-level page (My Issues), but inside a project
-      // detail route its naive path (/:slug/projects/:id/issues) matches no
-      // route and renders a blank page — point it at the real page instead.
-      if (segment === "issues") {
-        path = `/${slug}/issues`;
-      }
-      return { label, path };
-    }),
-  ];
+  const breadcrumbs = !slug
+    ? [{ label: rootSectionLabels[rootSection] ?? rootSection, path: `/${rootSection}` }]
+    : [
+        { label: slug, path: `/${slug}` },
+        ...pathSegments.map((segment, i) => {
+          // A project UUID segment (the one right after "projects") is unreadable —
+          // show the project's identifier (or name) instead.
+          let label = routeLabels[segment] ?? segment;
+          let path = `/${slug}/${pathSegments.slice(0, i + 1).join("/")}`;
+          if (pathSegments[i - 1] === "projects") {
+            const p = projectById.get(segment);
+            if (p) label = p.identifier || p.name || "Project";
+          }
+          // "issues" is a workspace-level page (My Issues), but inside a project
+          // detail route its naive path (/:slug/projects/:id/issues) matches no
+          // route and renders a blank page — point it at the real page instead.
+          if (segment === "issues") {
+            path = `/${slug}/issues`;
+          }
+          return { label, path };
+        }),
+      ];
 
   const ThemeIcon = theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
 

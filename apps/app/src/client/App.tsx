@@ -53,6 +53,9 @@ const PortalRouteGuard = lazy(() => import("@/components/portal/PortalRouteGuard
 const PortalLayout = lazy(() => import("@/components/portal/PortalLayout"));
 const PanesPage = lazy(() => import("@/pages/panes/PanesPage"));
 const PaneViewPage = lazy(() => import("@/pages/panes/PaneViewPage"));
+const PlatformPage = lazy(() => import("@/pages/platform/PlatformPage"));
+const PlatformUserPage = lazy(() => import("@/pages/platform/PlatformUserPage"));
+const PlatformWorkspacePage = lazy(() => import("@/pages/platform/PlatformWorkspacePage"));
 
 function PageLoader() {
   return (
@@ -153,6 +156,10 @@ export default function App() {
           {/* Pane observation — herdr execution plane via Worker proxy (ATUR-2) */}
           <Route path="/panes" element={<PanesPage />} />
           <Route path="/panes/:paneId" element={<PaneViewPage />} />
+          {/* Platform console: superuser-only, spans every workspace */}
+          <Route path="/admin" element={<PlatformPage />} />
+          <Route path="/admin/users/:userId" element={<PlatformUserPage />} />
+          <Route path="/admin/workspaces/:wsSlug" element={<PlatformWorkspacePage />} />
           <Route path="/:slug" element={<DashboardPage />} />
           <Route path="/:slug/issues" element={<MyIssuesPage />} />
           <Route path="/:slug/notes" element={<NotesPage />} />

@@ -165,8 +165,8 @@ const plans = [
         <a href="/blog">Blog</a>
       </div>
       <div class="lp-nav-actions">
-        <a class="signin" href={`${APP_URL}/auth/login`}>Sign in</a>
-        <a class="lp-btn" href={`${APP_URL}/auth/login`}>Open workspace <Icon name="arrowRight" size={15} class="i" /></a>
+        <a class="signin" href={`${APP_URL}/auth/login`} data-revklik-goal="signin_click" data-revklik-goal-location="nav">Sign in</a>
+        <a class="lp-btn" href={`${APP_URL}/auth/login`} data-revklik-goal="signup_click" data-revklik-goal-location="nav">Open workspace <Icon name="arrowRight" size={15} class="i" /></a>
       </div>
     </nav>
 
@@ -179,7 +179,7 @@ const plans = [
         merges without you.
       </p>
       <div class="lp-hero-ctas">
-        <a class="lp-btn lp-btn-lg" href={`${APP_URL}/auth/login`}>Start free <Icon name="arrowRight" size={17} class="i" /></a>
+        <a class="lp-btn lp-btn-lg" href={`${APP_URL}/auth/login`} data-revklik-goal="signup_click" data-revklik-goal-location="hero">Start free <Icon name="arrowRight" size={17} class="i" /></a>
         <a class="lp-btn lp-btn-lg lp-btn-ghost" href="#agents">See how agents work <Icon name="arrowDown" size={16} class="i" /></a>
       </div>
 
@@ -390,7 +390,7 @@ const plans = [
                   <li><Icon name="check" size={14} />{item}</li>
                 ))}
               </ul>
-              <a class="plan-btn" href={`${APP_URL}/auth/login`}>Start with {plan.name}</a>
+              <a class="plan-btn" href={`${APP_URL}/auth/login`} data-revklik-goal="signup_click" data-revklik-goal-location="pricing" data-revklik-goal-plan={plan.name}>Start with {plan.name}</a>
             </article>
           ))}
         </div>
@@ -453,7 +453,7 @@ const plans = [
             Open a workspace, bind your repos, and give an agent its first issue. You keep the
             review, and it takes the busywork.
           </p>
-          <a class="lp-btn lp-btn-lg" href={`${APP_URL}/auth/login`}>Open Atur <Icon name="arrowRight" size={16} class="i" /></a>
+          <a class="lp-btn lp-btn-lg" href={`${APP_URL}/auth/login`} data-revklik-goal="signup_click" data-revklik-goal-location="closing">Open Atur <Icon name="arrowRight" size={16} class="i" /></a>
         </div>
       </div>
     </section>
