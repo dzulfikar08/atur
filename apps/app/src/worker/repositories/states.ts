@@ -1,4 +1,4 @@
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, asc, sql } from "drizzle-orm";
 import type { DbClient } from "../db/index";
 import { states } from "../db/schema";
 import { v4 as uuid } from "uuid";
@@ -22,11 +22,18 @@ const stateCols = {
   updatedAt: states.updatedAt,
 };
 
+// Workflow order: group first, then the state's own sequence, then name — so
+// states sharing the default sequence (65535) never depend on SQLite row order.
 export async function listByProject(db: DbClient, projectId: string) {
   return db
     .select(stateCols)
     .from(states)
-    .where(and(eq(states.projectId, projectId), isNull(states.deletedAt)));
+    .where(and(eq(states.projectId, projectId), isNull(states.deletedAt)))
+    .orderBy(
+      sql`CASE ${states.groupName} WHEN 'backlog' THEN 0 WHEN 'unstarted' THEN 1 WHEN 'started' THEN 2 WHEN 'completed' THEN 3 WHEN 'cancelled' THEN 4 ELSE 5 END`,
+      asc(states.sequence),
+      asc(states.name),
+    );
 }
 
 export async function findById(db: DbClient, id: string) {

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { v4 as uuid } from "uuid";
 import { HTTPException } from "hono/http-exception";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { DbClient } from "../db/index";
 import * as schema from "../db/schema";
 import * as issuesRepo from "../repositories/issues";
@@ -220,44 +220,31 @@ export async function getById(db: DbClient, issueId: string) {
 
 export async function list(
   db: DbClient,
-  projectId: string,
-  opts: {
-    offset: number;
-    limit: number;
-    state?: string;
-    priority?: string;
-    search?: string;
-    labels?: string[];
-    assignee?: string;
-  },
+  project: { id: string; workspaceId: string },
+  opts: issuesRepo.IssueListOpts & { labelNames?: string[] },
 ) {
-  const project = await db.query.projects.findFirst({
-    where: and(eq(schema.projects.id, projectId), isNull(schema.projects.deletedAt)),
-  });
-  if (!project) throw new HTTPException(404, { message: "Project not found" });
-
-  // The REST contract filters by label NAME (e.g. ?labels=agent-ready); the
-  // repo filters by label UUID, so resolve names → IDs first.
-  if (opts.labels && opts.labels.length > 0) {
+  // The REST contract also filters by label NAME (e.g. ?labels=agent-ready);
+  // the repo filters by label UUID, so resolve names → IDs first.
+  const { labelNames, ...repoOpts } = opts;
+  if (labelNames && labelNames.length > 0) {
     const labelRows = await db
       .select({ id: schema.labels.id })
       .from(schema.labels)
       .where(
         and(
-          inArray(schema.labels.name, opts.labels),
+          inArray(schema.labels.name, labelNames),
           eq(schema.labels.workspaceId, project.workspaceId),
           isNull(schema.labels.deletedAt),
         ),
       );
-    const labelIds = labelRows.map((l) => l.id);
-    if (labelIds.length === 0) {
+    if (labelRows.length === 0) {
       // No matching label → no issues can match.
       return paginatedResponse([], 0, opts.offset, opts.limit);
     }
-    opts = { ...opts, labels: labelIds };
+    repoOpts.labels = [...(repoOpts.labels ?? []), ...labelRows.map((l) => l.id)];
   }
 
-  const { data, total } = await issuesRepo.listByProject(db, projectId, opts);
+  const { data, total } = await issuesRepo.listByProject(db, project.id, repoOpts);
 
   const enriched = await enrichIssues(db, data);
 
@@ -485,58 +472,56 @@ export async function setAssignees(db: DbClient, issueId: string, assigneeIds: s
   }
 }
 
-async function enrichIssue(
+export async function enrichIssue(
   db: DbClient,
   issue: NonNullable<Awaited<ReturnType<typeof issuesRepo.findById>>>,
 ) {
   // Workspace-scoped reads (DEV-21 belt-and-braces): legacy cross-workspace
-  // link rows render empty instead of leaking foreign names/emails.
-  const labels = issue ? await issuesRepo.listLabels(db, issue.id, issue.workspaceId) : [];
-  const assignees = issue ? await issuesRepo.listAssignees(db, issue.id, issue.workspaceId) : [];
-
-  let state = null;
-  if (issue?.stateId) {
-    const [s] = await db
-      .select({
-        id: schema.states.id,
-        name: schema.states.name,
-        color: schema.states.color,
-        group: schema.states.groupName,
-        key: schema.states.key,
-      })
-      .from(schema.states)
-      // Workspace-scoped: a legacy row pointing at a foreign state must
-      // render as stateless, not leak the foreign state's name/color.
-      .where(
-        and(eq(schema.states.id, issue.stateId), eq(schema.states.workspaceId, issue.workspaceId)),
-      )
-      .limit(1);
-    state = s ?? null;
-  }
-
-  const moduleIds = issue
-    ? (
-        await db
-          .select({ moduleId: schema.moduleIssues.moduleId })
-          .from(schema.moduleIssues)
-          .innerJoin(schema.modules, eq(schema.moduleIssues.moduleId, schema.modules.id))
+  // link rows render empty instead of leaking foreign names/emails. The
+  // lookups are independent, so they run concurrently.
+  const [labels, assignees, stateRows, moduleRows] = await Promise.all([
+    issuesRepo.listLabels(db, issue.id, issue.workspaceId),
+    issuesRepo.listAssignees(db, issue.id, issue.workspaceId),
+    issue.stateId
+      ? db
+          .select({
+            id: schema.states.id,
+            name: schema.states.name,
+            color: schema.states.color,
+            group: schema.states.groupName,
+            key: schema.states.key,
+          })
+          .from(schema.states)
+          // Workspace-scoped: a legacy row pointing at a foreign state must
+          // render as stateless, not leak the foreign state's name/color.
           .where(
             and(
-              eq(schema.moduleIssues.issueId, issue.id),
-              isNull(schema.moduleIssues.deletedAt),
-              isNull(schema.modules.deletedAt),
-              eq(schema.modules.workspaceId, issue.workspaceId),
+              eq(schema.states.id, issue.stateId),
+              eq(schema.states.workspaceId, issue.workspaceId),
             ),
           )
-      ).map((r) => r.moduleId)
-    : [];
+          .limit(1)
+      : Promise.resolve([]),
+    db
+      .select({ moduleId: schema.moduleIssues.moduleId })
+      .from(schema.moduleIssues)
+      .innerJoin(schema.modules, eq(schema.moduleIssues.moduleId, schema.modules.id))
+      .where(
+        and(
+          eq(schema.moduleIssues.issueId, issue.id),
+          isNull(schema.moduleIssues.deletedAt),
+          isNull(schema.modules.deletedAt),
+          eq(schema.modules.workspaceId, issue.workspaceId),
+        ),
+      ),
+  ]);
 
   return {
     ...issue,
     labels,
     assignees,
-    state,
-    moduleIds,
+    state: stateRows[0] ?? null,
+    moduleIds: moduleRows.map((r) => r.moduleId),
   };
 }
 
@@ -551,15 +536,16 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-export async function enrichIssues(
-  db: DbClient,
-  issueList: NonNullable<Awaited<ReturnType<typeof issuesRepo.findById>>>[],
-) {
+type EnrichableIssue = { id: string; stateId: string | null; workspaceId: string };
+
+export async function enrichIssues<T extends EnrichableIssue>(db: DbClient, issueList: T[]) {
   if (issueList.length === 0) return [];
 
   const issueIds = issueList.map((i) => i.id);
   const stateIds = [...new Set(issueList.map((i) => i.stateId).filter(Boolean) as string[])];
+  const workspaceIds = [...new Set(issueList.map((i) => i.workspaceId))];
 
+  // Independent lookups: run every chunked query concurrently.
   const stateQueries = chunk(stateIds, ENRICH_CHUNK).map((ids) =>
     db
       .select({
@@ -573,10 +559,6 @@ export async function enrichIssues(
       .from(schema.states)
       .where(inArray(schema.states.id, ids)),
   );
-  const stateChunks: Awaited<(typeof stateQueries)[number]>[] = [];
-  for (const q of stateQueries) stateChunks.push(await q);
-  const stateRows = stateChunks.flat();
-  const stateMap = new Map(stateRows.map((s) => [s.id, s] as const));
 
   const assigneeQueries = chunk(issueIds, ENRICH_CHUNK).map((ids) =>
     db
@@ -587,30 +569,30 @@ export async function enrichIssues(
         username: schema.users.username,
         displayName: schema.users.displayName,
         avatar: schema.users.avatar,
+        isBot: schema.users.isBot,
+        workspaceId: schema.workspaceMembers.workspaceId,
       })
       .from(schema.issueAssignees)
       .innerJoin(schema.users, eq(schema.issueAssignees.assigneeId, schema.users.id))
-      .innerJoin(schema.issues, eq(schema.issueAssignees.issueId, schema.issues.id))
+      // Belt-and-braces (DEV-21): an assignee only renders when they are an
+      // active member of the OWNING issue's workspace. The member row carries
+      // its workspace; rows for other workspaces drop out below.
+      .innerJoin(
+        schema.workspaceMembers,
+        and(
+          eq(schema.workspaceMembers.memberId, schema.users.id),
+          eq(schema.workspaceMembers.isActive, 1),
+          isNull(schema.workspaceMembers.deletedAt),
+        ),
+      )
       .where(
         and(
           inArray(schema.issueAssignees.issueId, ids),
           isNull(schema.issueAssignees.deletedAt),
-          // Belt-and-braces (DEV-21): an assignee only renders when they are an
-          // active member of the OWNING issue's workspace (correlated to the
-          // joined issues row). Legacy foreign link rows drop out here.
-          sql`EXISTS (SELECT 1 FROM workspace_members wm WHERE wm.member_id = ${schema.users.id} AND wm.workspace_id = ${schema.issues.workspaceId} AND wm.is_active = 1 AND wm.deleted_at IS NULL)`,
+          inArray(schema.workspaceMembers.workspaceId, workspaceIds),
         ),
       ),
   );
-  const assigneeChunks: Awaited<(typeof assigneeQueries)[number]>[] = [];
-  for (const q of assigneeQueries) assigneeChunks.push(await q);
-  const assigneeRows = assigneeChunks.flat();
-
-  const assigneeMap = new Map<string, typeof assigneeRows>();
-  for (const row of assigneeRows) {
-    if (!assigneeMap.has(row.issueId)) assigneeMap.set(row.issueId, []);
-    assigneeMap.get(row.issueId)!.push(row);
-  }
 
   const labelQueries = chunk(issueIds, ENRICH_CHUNK).map((ids) =>
     db
@@ -625,15 +607,7 @@ export async function enrichIssues(
       .innerJoin(schema.labels, eq(schema.issueLabels.labelId, schema.labels.id))
       .where(and(inArray(schema.issueLabels.issueId, ids), isNull(schema.issueLabels.deletedAt))),
   );
-  const labelChunks: Awaited<(typeof labelQueries)[number]>[] = [];
-  for (const q of labelQueries) labelChunks.push(await q);
-  const labelRows = labelChunks.flat();
 
-  const labelMap = new Map<string, typeof labelRows>();
-  for (const row of labelRows) {
-    if (!labelMap.has(row.issueId)) labelMap.set(row.issueId, []);
-    labelMap.get(row.issueId)!.push(row);
-  }
   const moduleQueries = chunk(issueIds, ENRICH_CHUNK).map((ids) =>
     db
       .select({
@@ -651,12 +625,33 @@ export async function enrichIssues(
         ),
       ),
   );
-  const moduleChunks: Awaited<(typeof moduleQueries)[number]>[] = [];
-  for (const q of moduleQueries) moduleChunks.push(await q);
-  const moduleRows = moduleChunks.flat();
+
+  const [stateChunks, assigneeChunks, labelChunks, moduleChunks] = await Promise.all([
+    Promise.all(stateQueries),
+    Promise.all(assigneeQueries),
+    Promise.all(labelQueries),
+    Promise.all(moduleQueries),
+  ]);
+
+  const stateMap = new Map(stateChunks.flat().map((s) => [s.id, s] as const));
+
+  const assigneeRows = assigneeChunks.flat();
+  const assigneeMap = new Map<string, typeof assigneeRows>();
+  for (const row of assigneeRows) {
+    if (!assigneeMap.has(row.issueId)) assigneeMap.set(row.issueId, []);
+    assigneeMap.get(row.issueId)!.push(row);
+  }
+
+  const labelRows = labelChunks.flat();
+  const labelMap = new Map<string, typeof labelRows>();
+  for (const row of labelRows) {
+    if (!labelMap.has(row.issueId)) labelMap.set(row.issueId, []);
+    labelMap.get(row.issueId)!.push(row);
+  }
 
   // Keep the module's workspace on the row: the final map drops legacy
   // foreign links (same belt-and-braces rule as labels/states below).
+  const moduleRows = moduleChunks.flat();
   const moduleMap = new Map<string, typeof moduleRows>();
   for (const row of moduleRows) {
     if (!moduleMap.has(row.issueId)) moduleMap.set(row.issueId, []);
@@ -665,13 +660,17 @@ export async function enrichIssues(
 
   return issueList.map((issue) => {
     const assignees =
-      assigneeMap.get(issue.id)?.map((a) => ({
-        id: a.id,
-        email: a.email,
-        username: a.username,
-        displayName: a.displayName,
-        avatar: a.avatar,
-      })) ?? [];
+      assigneeMap
+        .get(issue.id)
+        ?.filter((a) => a.workspaceId === issue.workspaceId)
+        .map((a) => ({
+          id: a.id,
+          email: a.email,
+          username: a.username,
+          displayName: a.displayName,
+          avatar: a.avatar,
+          isBot: a.isBot,
+        })) ?? [];
     // Workspace filter mirrors the state rule: legacy foreign label links
     // render empty instead of leaking names/colors.
     const labels =

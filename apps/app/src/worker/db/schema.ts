@@ -291,7 +291,10 @@ export const states = sqliteTable(
     updatedAt: text("updated_at"),
     deletedAt: text("deleted_at"),
   },
-  (table) => [index("idx_states_project").on(table.projectId)],
+  (table) => [
+    index("idx_states_project").on(table.projectId),
+    index("idx_states_project_sequence").on(table.projectId, table.sequence),
+  ],
 );
 
 export const labels = sqliteTable(
@@ -379,6 +382,9 @@ export const issues = sqliteTable(
     index("idx_issues_workspace").on(table.workspaceId),
     index("idx_issues_state").on(table.stateId),
     index("idx_issues_deleted_at").on(table.deletedAt),
+    index("idx_issues_project_deleted").on(table.projectId, table.deletedAt),
+    index("idx_issues_target_date").on(table.targetDate),
+    index("idx_issues_workspace_updated").on(table.workspaceId, table.updatedAt),
   ],
 );
 
@@ -407,7 +413,10 @@ export const issueAssignees = sqliteTable(
     updatedAt: text("updated_at"),
     deletedAt: text("deleted_at"),
   },
-  (table) => [index("idx_issue_assignees_issue").on(table.issueId)],
+  (table) => [
+    index("idx_issue_assignees_issue").on(table.issueId),
+    index("idx_issue_assignees_assignee").on(table.assigneeId),
+  ],
 );
 
 export const issueLabels = sqliteTable(
@@ -424,7 +433,10 @@ export const issueLabels = sqliteTable(
     updatedAt: text("updated_at"),
     deletedAt: text("deleted_at"),
   },
-  (table) => [index("idx_issue_labels_issue").on(table.issueId)],
+  (table) => [
+    index("idx_issue_labels_issue").on(table.issueId),
+    index("idx_issue_labels_label").on(table.labelId),
+  ],
 );
 
 export const issueComments = sqliteTable(
