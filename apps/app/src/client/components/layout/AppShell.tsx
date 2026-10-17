@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
@@ -8,20 +8,81 @@ import CommandPalette from "./CommandPalette";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useUiPrefsStore } from "@/stores/ui";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { useNavProjects } from "@/hooks/useMyWork";
 
-// Toggle sidebar collapse with Cmd/Ctrl+B
+/** True while the user is typing, or a dialog/menu owns the keyboard. */
+function keyboardBusy(target: EventTarget | null): boolean {
+  if (target instanceof HTMLElement) {
+    const tag = target.tagName;
+    if (
+      tag === "INPUT" ||
+      tag === "TEXTAREA" ||
+      tag === "SELECT" ||
+      target.isContentEditable
+    ) {
+      return true;
+    }
+  }
+  return !!document.querySelector(
+    '[role="dialog"], [role="menu"], [role="listbox"]',
+  );
+}
+
+// Cmd/Ctrl+B toggles the sidebar. Plain keys (no modifiers, not while typing):
+// c = new issue, g t = Today, g p = project, / = focus the issue filter.
 function ShellShortcuts() {
   const toggle = useSidebarStore((s) => s.toggle);
+  const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+  const { primary } = useNavProjects(slug);
+  const goPrefix = useRef(0);
+
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === "b" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         toggle();
+        return;
+      }
+      if (
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey ||
+        e.repeat ||
+        keyboardBusy(e.target)
+      )
+        return;
+      if (!slug) return;
+
+      const awaitingGo = Date.now() - goPrefix.current < 1200;
+      goPrefix.current = 0;
+      const projectPath = primary
+        ? `/${slug}/projects/${primary.id}`
+        : `/${slug}/projects`;
+
+      if (e.key === "g") {
+        goPrefix.current = Date.now();
+      } else if (awaitingGo && e.key === "t") {
+        navigate(`/${slug}`);
+      } else if (awaitingGo && e.key === "p") {
+        navigate(projectPath);
+      } else if (e.key === "c" && primary) {
+        e.preventDefault();
+        navigate(`${projectPath}?new=1`);
+      } else if (e.key === "/") {
+        const input = document.querySelector<HTMLInputElement>(
+          "input[data-issue-search]",
+        );
+        if (input) {
+          e.preventDefault();
+          input.focus();
+          input.select();
+        }
       }
     };
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
-  }, [toggle]);
+  }, [toggle, slug, primary, navigate]);
   return null;
 }
 
