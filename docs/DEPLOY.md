@@ -123,3 +123,24 @@ bun run db:migrate:remote  # apply to the remote D1 database
   loads and posts to `app.diatur.com/public/feedback/...`.
 - MCP: `mcp__atur__list_workspaces` works from Claude Code / Cursor with the
   `X-API-Key` header against `https://app.diatur.com/mcp`.
+
+## 6. Screen (desktop sharing)
+
+`https://app.diatur.com/screen` shows and controls the ThinkPad desktop in the
+browser (noVNC). Platform superusers only; every session is a `pane_audit` row
+with `pane_id = 'screen:desktop'` (`attached_at` / `detached_at`).
+
+Path: browser → Worker `/api/screen/ws` (superuser gate + audit) → tunnel →
+`atur-bridge` `/screen` (`x-bridge-token`) → loopback wayvnc.
+
+- The bridge owns wayvnc: it starts it on the first viewer and stops it 15 s
+  after the last leaves (`SCREEN_GRACE_MS`). It always binds `127.0.0.1:5900`
+  (`SCREEN_VNC_PORT`) with no VNC auth, so nothing but the bridge can reach it,
+  and it refuses to relay to a listener it didn't start.
+- wayvnc is the user-level extract at `~/.local/opt/wayvnc` (override with
+  `SCREEN_WAYVNC_BIN` / `SCREEN_WAYVNC_LIBDIR`). Needs the Wayland session
+  (`WAYLAND_DISPLAY`, default `wayland-1`).
+- Each viewer connect/disconnect fires a `notify-send` on the desktop.
+- `GET /api/screen/status` (superuser) → `{available, running, viewers}`.
+- Restarting `atur-bridge` ends open viewer sessions (wayvnc lives in its
+  cgroup); herdr panes are unaffected.
