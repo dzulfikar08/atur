@@ -97,7 +97,8 @@ export default function Sidebar() {
 
   const activeSlug = currentSlug ?? slug;
   const isAll = activeSlug === "all";
-  const basePath = `/${slug ?? ""}`;
+  // Non-slug routes (/panes, /admin) keep nav pointed at the last workspace.
+  const basePath = `/${slug ?? currentSlug ?? ""}`;
 
   const isActive = (item: NavItem) => {
     if (item.end) return location.pathname === basePath;

@@ -53,6 +53,7 @@ async function serveMe(c: Context<{ Bindings: Env }>) {
     user_timezone: user.userTimezone,
     is_active: !!user.isActive,
     is_email_verified: !!user.isEmailVerified,
+    is_superuser: !!user.isSuperuser,
     is_password_autoset: false,
     created_at: user.createdAt,
     theme: null,

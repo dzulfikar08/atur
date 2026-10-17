@@ -8,6 +8,7 @@ interface User {
   display_name: string;
   username: string;
   avatar: string | null;
+  is_superuser?: boolean;
 }
 
 interface AuthState {

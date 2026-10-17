@@ -94,6 +94,16 @@ labels, comments), new issue, search, inbox, profile.
 
 The MCP endpoint is `https://app.diatur.com/mcp`.
 
+**Platform console**: `https://app.diatur.com/admin` (also "Platform admin" in the account
+menu) is a read-only view across every workspace: totals and daily charts, users, workspaces,
+the activity feed, and agent token/cost usage. Access requires `users.is_superuser = 1`; the
+API lives under `/api/admin/*` and 403s everyone else. Grant it in D1:
+`UPDATE users SET is_superuser = 1 WHERE email = '<email>';`
+
+**Analytics**: `diatur.com` loads the Revklik tag (site "Atur",
+`954201cb-3d15-47ae-857b-6e32c79e1f4c`, set in `apps/web/src/layouts/BaseLayout.astro`).
+Sign-in and signup links carry `data-revklik-goal` attributes. The app itself is not tracked.
+
 ## Cloudflare resources
 
 | Resource      | Binding      | Value / name                                       | Where in `apps/app/wrangler.toml` |

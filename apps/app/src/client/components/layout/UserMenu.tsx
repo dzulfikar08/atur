@@ -64,6 +64,9 @@ export default function UserMenu({
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={goToProfile}>Profile & Settings</DropdownMenuItem>
+        {user?.is_superuser && (
+          <DropdownMenuItem onClick={() => navigate("/admin")}>Platform admin</DropdownMenuItem>
+        )}
         {showThemeOptions && (
           <>
             <DropdownMenuSeparator />

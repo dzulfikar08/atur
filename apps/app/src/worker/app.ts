@@ -142,7 +142,7 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/api/workspaces/:slug/projects/:projectId/feedback-board", feedbackAdminRoutes);
   // Herdr execution-plane proxy: pane list + WS attach relay (ATUR-2).
   app.route("/api/panes", paneRoutes);
-  // Platform-operator ops (superuser-gated): manual D1 → R2 backup trigger.
+  // Platform operator (superuser-gated): read-only console + D1 → R2 backup trigger.
   app.route("/api/admin", adminRoutes);
   return app;
 }
