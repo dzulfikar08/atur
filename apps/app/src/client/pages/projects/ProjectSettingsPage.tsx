@@ -29,11 +29,11 @@ import {
 } from "@/components/ui/select";
 
 const STATE_GROUPS = [
-  { value: "backlog", label: "Backlog", color: "#6b7280" },
-  { value: "unstarted", label: "Todo", color: "#3b82f6" },
-  { value: "started", label: "In Progress", color: "#f59e0b" },
-  { value: "completed", label: "Done", color: "#22c55e" },
-  { value: "cancelled", label: "Cancelled", color: "#ef4444" },
+  { value: "backlog", label: "Backlog", color: "var(--state-backlog)" },
+  { value: "unstarted", label: "Todo", color: "var(--state-unstarted)" },
+  { value: "started", label: "In Progress", color: "var(--state-started)" },
+  { value: "completed", label: "Done", color: "var(--state-completed)" },
+  { value: "cancelled", label: "Cancelled", color: "var(--state-cancelled)" },
 ] as const;
 
 const ROLE_LABELS: Record<number, string> = {

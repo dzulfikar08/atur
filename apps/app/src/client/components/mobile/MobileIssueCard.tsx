@@ -1,6 +1,5 @@
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 
 interface MobileIssueCardProps {
   issue: {
@@ -35,23 +34,6 @@ interface MobileIssueCardProps {
   isSubIssue?: boolean;
 }
 
-const STATE_DOT_COLORS: Record<string, string> = {
-  backlog: "bg-gray-400",
-  unstarted: "bg-blue-400",
-  started: "bg-yellow-400",
-  completed: "bg-emerald-400",
-  cancelled: "bg-red-400",
-  triage: "bg-purple-400",
-};
-
-const PRIORITY_DOTS: Record<string, string> = {
-  urgent: "bg-red-500",
-  high: "bg-orange-500",
-  medium: "bg-yellow-500",
-  low: "bg-blue-500",
-  none: "bg-gray-300",
-};
-
 export default function MobileIssueCard({
   issue,
   slug,
@@ -78,7 +60,7 @@ export default function MobileIssueCard({
     >
       <div className="flex items-start gap-3">
         {/* State dot */}
-        <div className={cn("h-2.5 w-2.5 rounded-full mt-1.5 shrink-0", STATE_DOT_COLORS[group])} />
+        <span className="state-dot mt-1.5 !h-2.5 !w-2.5" data-state-group={group} />
 
         <div className="flex-1 min-w-0">
           {/* Title — sub-issues indent with a ↳ marker, parents show a sub-count */}
@@ -95,7 +77,7 @@ export default function MobileIssueCard({
               {issue.name}
             </p>
             {childCount > 0 && (
-              <Badge variant="secondary" className="text-[10px] h-4 px-1.5 shrink-0">
+              <Badge variant="secondary" className="text-xs h-4 px-1.5 shrink-0">
                 {childCount} sub
               </Badge>
             )}
@@ -108,30 +90,25 @@ export default function MobileIssueCard({
             </span>
 
             {state && (
-              <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+              <Badge variant="secondary" className="text-xs h-4 px-1.5">
                 {state.name}
               </Badge>
             )}
 
             {issue.priority && issue.priority !== "none" && (
-              <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                <span
-                  className={cn(
-                    "h-1.5 w-1.5 rounded-full",
-                    PRIORITY_DOTS[issue.priority] || PRIORITY_DOTS.none,
-                  )}
-                />
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <span className="priority-dot !h-1.5 !w-1.5" data-priority={issue.priority} />
                 {issue.priority}
               </span>
             )}
 
             {issue.project_name && (
-              <span className="text-[10px] text-muted-foreground truncate">
+              <span className="text-xs text-muted-foreground truncate">
                 {issue.project_name}
               </span>
             )}
             {issue.workspace_name && (
-              <span className="text-[10px] text-muted-foreground/70 truncate">
+              <span className="text-xs text-muted-foreground/70 truncate">
                 {issue.workspace_name}
               </span>
             )}
@@ -143,14 +120,14 @@ export default function MobileIssueCard({
                 <Badge
                   key={l.id}
                   variant="outline"
-                  className="text-[9px] h-4 px-1.5"
+                  className="text-xs h-4 px-1.5"
                   style={{ borderColor: l.color || undefined }}
                 >
                   {l.name}
                 </Badge>
               ))}
               {issue.labels.length > 2 && (
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   +{issue.labels.length - 2}
                 </span>
               )}

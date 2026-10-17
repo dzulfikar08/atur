@@ -48,14 +48,6 @@ interface CycleDetailProps {
   onBack: () => void;
 }
 
-const PRIORITY_COLORS: Record<string, string> = {
-  urgent: "text-red-600 dark:text-red-400",
-  high: "text-orange-600 dark:text-orange-400",
-  medium: "text-yellow-600 dark:text-yellow-400",
-  low: "text-blue-600 dark:text-blue-400",
-  none: "text-muted-foreground",
-};
-
 function IssueRow({
   issue,
   stateLookup,
@@ -79,16 +71,14 @@ function IssueRow({
         </span>
         <span className="text-sm truncate">{issue.name}</span>
         {state && (
-          <Badge variant="secondary" className="text-[10px] shrink-0 hidden sm:inline-flex">
+          <Badge variant="secondary" className="text-xs shrink-0 hidden sm:inline-flex">
             {state.name}
           </Badge>
         )}
         {issue.priority && issue.priority !== "none" && (
           <span
-            className={cn(
-              "text-[10px] font-medium uppercase shrink-0 hidden sm:inline",
-              PRIORITY_COLORS[issue.priority] ?? PRIORITY_COLORS.none,
-            )}
+            className="priority-text hidden shrink-0 text-xs font-medium uppercase sm:inline"
+            data-priority={issue.priority}
           >
             {issue.priority}
           </span>
@@ -116,11 +106,11 @@ function IssueRow({
 }
 
 const STATE_GROUP_COLORS: Record<string, string> = {
-  backlog: "#6b7280",
-  unstarted: "#6366f1",
-  started: "#f59e0b",
-  completed: "#10b981",
-  cancelled: "#ef4444",
+  backlog: "var(--state-backlog)",
+  unstarted: "var(--state-unstarted)",
+  started: "var(--state-started)",
+  completed: "var(--state-completed)",
+  cancelled: "var(--state-cancelled)",
 };
 
 const STATE_GROUP_LABELS: Record<string, string> = {
@@ -226,7 +216,7 @@ export default function CycleDetail({ slug, projectId, cycleId, onBack }: CycleD
       .map(([group, count]) => ({
         name: STATE_GROUP_LABELS[group] ?? group,
         value: count,
-        color: STATE_GROUP_COLORS[group] ?? "#6b7280",
+        color: STATE_GROUP_COLORS[group] ?? "var(--state-backlog)",
       }))
       .sort((a, b) => b.value - a.value);
   }, [inSprintIssues, stateLookup]);
@@ -324,15 +314,16 @@ export default function CycleDetail({ slug, projectId, cycleId, onBack }: CycleD
             <div className="space-y-1.5">
               <div className="h-2 w-full max-w-md rounded-full bg-muted">
                 <div
-                  className={cn(
-                    "h-2 rounded-full transition-all",
-                    percent >= 100
-                      ? "bg-emerald-500"
-                      : percent >= 50
-                        ? "bg-blue-500"
-                        : "bg-amber-500",
-                  )}
-                  style={{ width: `${Math.min(percent, 100)}%` }}
+                  className="h-2 rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(percent, 100)}%`,
+                    background:
+                      percent >= 100
+                        ? "var(--state-completed)"
+                        : percent >= 50
+                          ? "var(--state-started)"
+                          : "var(--state-review)",
+                  }}
                 />
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">

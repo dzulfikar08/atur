@@ -20,7 +20,7 @@ import { toast } from "sonner";
 import UserMenu from "./UserMenu";
 
 const routeLabels: Record<string, string> = {
-  "": "Dashboard",
+  "": "Today",
   projects: "Projects",
   issues: "My Issues",
   pages: "Pages",
@@ -160,14 +160,19 @@ export default function TopBar() {
             const p = projectById.get(segment);
             if (p) label = p.identifier || p.name || "Project";
           }
-          // "issues" is a workspace-level page (My Issues), but inside a project
-          // detail route its naive path (/:slug/projects/:id/issues) matches no
-          // route and renders a blank page — point it at the real page instead.
-          if (segment === "issues") {
+          // Inside a project (/projects/:id/issues/:seq) the "issues" crumb has no route
+          // of its own: it is dropped below, and the sequence reads as PROJ-42.
+          const inProject = pathSegments[0] === "projects" && i >= 2;
+          if (inProject && pathSegments[i - 1] === "issues") {
+            const p = projectById.get(pathSegments[1] ?? "");
+            label = `${p?.identifier || "ISSUE"}-${segment}`;
+          } else if (segment === "issues" && !inProject) {
+            // Workspace-level My Issues page.
             path = `/${slug}/issues`;
           }
-          return { label, path };
-        }),
+          return { label, path, hidden: inProject && segment === "issues" };
+        }).filter((crumb) => !crumb.hidden),
+        ...(pathSegments.length === 0 ? [{ label: "Today", path: `/${slug}` }] : []),
       ];
 
   const ThemeIcon = theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
@@ -184,7 +189,7 @@ export default function TopBar() {
       {/* Breadcrumb - left */}
       <nav className="hidden items-center gap-1 text-sm md:flex min-w-0">
         {breadcrumbs.map((crumb, i) => (
-          <span key={crumb.path} className="flex items-center gap-1">
+          <span key={`${i}:${crumb.path}`} className="flex items-center gap-1">
             {i > 0 && <span className="text-muted-foreground">/</span>}
             <button
               onClick={() => navigate(crumb.path)}
@@ -218,7 +223,7 @@ export default function TopBar() {
                   autoFocus
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search issues, projects..."
+                  placeholder="Search pages..."
                   className="h-8 text-sm"
                   onKeyDown={(e) => {
                     if (e.key === "Escape") setSearchOpen(false);
