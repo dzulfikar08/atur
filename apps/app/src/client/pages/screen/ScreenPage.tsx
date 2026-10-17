@@ -217,7 +217,11 @@ export default function ScreenPage() {
       ref={rootRef}
       className={cn(
         "flex min-h-0 flex-col gap-2 bg-background",
-        fullscreen ? "fixed inset-0 z-50 p-2" : "h-full",
+        // AppShell's <main> has no fixed height, so size against the viewport
+        // minus the top bar and the shell's padding at each breakpoint.
+        fullscreen
+          ? "fixed inset-0 z-50 p-2"
+          : "h-[calc(100dvh-9.5rem)] md:h-[calc(100dvh-6.5rem)] lg:h-[calc(100dvh-7.5rem)]",
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
