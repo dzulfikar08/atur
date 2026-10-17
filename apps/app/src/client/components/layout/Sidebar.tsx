@@ -18,6 +18,7 @@ import {
   Layers,
   Star,
   Gauge,
+  Monitor,
 } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
@@ -63,6 +64,9 @@ const workItems: NavItem[] = [
   { to: "pages", icon: FileText, label: "Pages" },
   { to: "/panes", icon: Columns3, label: "Panes", absolute: true },
 ];
+
+// Desktop sharing: platform owner only (the Worker enforces it too).
+const screenItem: NavItem = { to: "/screen", icon: Monitor, label: "Screen", absolute: true };
 
 // Rarely used day to day: folded away until opened (or until one is active).
 const manageItems: NavItem[] = [
@@ -458,7 +462,7 @@ export default function Sidebar() {
             <SectionLabel collapsed={collapsed} first={false}>
               Work
             </SectionLabel>
-            {workItems.map((item) => (
+            {(user?.is_superuser ? [...workItems, screenItem] : workItems).map((item) => (
               <NavRow
                 key={item.to}
                 item={item}

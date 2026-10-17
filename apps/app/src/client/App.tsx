@@ -53,6 +53,7 @@ const PortalRouteGuard = lazy(() => import("@/components/portal/PortalRouteGuard
 const PortalLayout = lazy(() => import("@/components/portal/PortalLayout"));
 const PanesPage = lazy(() => import("@/pages/panes/PanesPage"));
 const PaneViewPage = lazy(() => import("@/pages/panes/PaneViewPage"));
+const ScreenPage = lazy(() => import("@/pages/screen/ScreenPage"));
 const PlatformPage = lazy(() => import("@/pages/platform/PlatformPage"));
 const PlatformUserPage = lazy(() => import("@/pages/platform/PlatformUserPage"));
 const PlatformWorkspacePage = lazy(() => import("@/pages/platform/PlatformWorkspacePage"));
@@ -156,6 +157,8 @@ export default function App() {
           {/* Pane observation — herdr execution plane via Worker proxy (ATUR-2) */}
           <Route path="/panes" element={<PanesPage />} />
           <Route path="/panes/:paneId" element={<PaneViewPage />} />
+          {/* Desktop sharing (noVNC) — superuser-only, gated again by the Worker */}
+          <Route path="/screen" element={<ScreenPage />} />
           {/* Platform console: superuser-only, spans every workspace */}
           <Route path="/admin" element={<PlatformPage />} />
           <Route path="/admin/users/:userId" element={<PlatformUserPage />} />

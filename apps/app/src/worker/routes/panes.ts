@@ -92,14 +92,14 @@ async function paneWorkspaceSlug(db: DbClient, env: Env, paneId: string): Promis
 }
 
 // Base URL without a trailing slash so `${base}/panes` never doubles up.
-function bridgeBase(env: Env): string | null {
+export function bridgeBase(env: Env): string | null {
   const raw = env.HERDR_BRIDGE_URL;
   if (!raw) return null;
   return raw.replace(/\/+$/, "");
 }
 
 // Optional shared secret; the bridge validates x-bridge-token when configured.
-function bridgeHeaders(env: Env): Headers {
+export function bridgeHeaders(env: Env): Headers {
   const headers = new Headers();
   if (env.HERDR_BRIDGE_TOKEN) headers.set("x-bridge-token", env.HERDR_BRIDGE_TOKEN);
   return headers;
