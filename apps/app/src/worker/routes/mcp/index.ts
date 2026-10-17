@@ -199,6 +199,8 @@ export const TOOLS = [
           type: "boolean",
           description: "Flag as a portfolio-level decision issue (shows in the decision inbox)",
         },
+        start_date: { type: "string", description: "YYYY-MM-DD (Gantt start)" },
+        target_date: { type: "string", description: "YYYY-MM-DD (due / Gantt end)" },
       },
       required: ["project_id", "workspace", "name"],
     },
@@ -220,6 +222,8 @@ export const TOOLS = [
           type: "boolean",
           description: "Flag/unflag as a portfolio-level decision issue",
         },
+        start_date: { type: ["string", "null"], description: "YYYY-MM-DD (Gantt start); null clears" },
+        target_date: { type: ["string", "null"], description: "YYYY-MM-DD (due / Gantt end); null clears" },
       },
       required: ["project_id", "workspace", "issue_id"],
     },
@@ -1776,6 +1780,8 @@ async function handleToolRaw(
         projectId,
         workspaceId,
         isDecision: params.is_decision ? 1 : 0,
+        startDate: (params.start_date as string) ?? null,
+        targetDate: (params.target_date as string) ?? null,
         createdAt: now,
         updatedAt: now,
       };
@@ -1822,6 +1828,8 @@ async function handleToolRaw(
       if (params.name !== undefined) updates.name = params.name;
       if (params.description_html !== undefined) updates.descriptionHtml = params.description_html;
       if (params.is_decision !== undefined) updates.isDecision = params.is_decision ? 1 : 0;
+      if (params.start_date !== undefined) updates.startDate = params.start_date;
+      if (params.target_date !== undefined) updates.targetDate = params.target_date;
       await db
         .update(schema.issues)
         .set(updates)
