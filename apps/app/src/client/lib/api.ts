@@ -25,6 +25,26 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
   return res.json();
 }
 
+const ISSUE_LIST_PAGE_SIZE = 500;
+
+/** Server-side list filters; names mirror the client IssueQuery contract. */
+export interface IssueListParams {
+  state_key?: string | string[];
+  priority?: string | string[];
+  q?: string;
+  /** Label uuids. */
+  label?: string | string[];
+  /** User uuids, "me" or "none". */
+  assignee?: string | string[];
+  product?: string | string[];
+  due?: "overdue" | "today" | "week" | "none" | "any";
+  /** Caller-local YYYY-MM-DD. */
+  today?: string;
+  done?: "hide" | "show";
+  /** `<field>:<asc|desc>` */
+  sort?: string;
+}
+
 export const api = {
   listWorkspaces: async () => {
     const data = await apiFetch<{ results: Workspace[] }>("/workspaces/");
@@ -49,19 +69,31 @@ export const api = {
     );
     return data.results;
   },
-  listIssues: async (slug: string, projectId: string): Promise<Issue[]> => {
-    const all: Issue[] = [];
-    let offset = 0;
-    const limit = 100;
-    while (true) {
-      const page = await apiFetch<PaginatedResponse<Issue>>(
-        `/workspaces/${slug}/projects/${projectId}/issues/?limit=${limit}&offset=${offset}`,
-      );
-      all.push(...page.results);
-      if (!page.total || page.results.length === 0 || all.length >= page.total) break;
-      offset += limit;
+  // One request for up to 500 issues (lean rows, no description bodies). Params use
+  // the shared IssueQuery names and are filtered/sorted server-side. Any rows past
+  // the first page are fetched in parallel.
+  listIssues: async (
+    slug: string,
+    projectId: string,
+    params: IssueListParams = {},
+  ): Promise<Issue[]> => {
+    const pageSize = ISSUE_LIST_PAGE_SIZE;
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      const text = Array.isArray(value) ? value.join(",") : value;
+      if (text) qs.set(key, text);
     }
-    return all;
+    const base = `/workspaces/${slug}/projects/${projectId}/issues/?${qs}`;
+    const first = await apiFetch<PaginatedResponse<Issue>>(`${base}&limit=${pageSize}&offset=0`);
+    if (!first.total || first.results.length >= first.total) return first.results;
+    const offsets: number[] = [];
+    for (let o = pageSize; o < first.total; o += pageSize) offsets.push(o);
+    const rest = await Promise.all(
+      offsets.map((o) =>
+        apiFetch<PaginatedResponse<Issue>>(`${base}&limit=${pageSize}&offset=${o}`),
+      ),
+    );
+    return first.results.concat(...rest.map((p) => p.results));
   },
   createIssue: (
     slug: string,
@@ -931,7 +963,8 @@ export interface Issue {
   sequence_id: number;
   state_id: string | null;
   priority: string | null;
-  description_html: string | null;
+  /** Absent on list rows (lean); present on the single-issue GET. */
+  description_html?: string | null;
   created_at: string;
   updated_at: string;
   project_id: string;

@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useCallback, type ReactNode } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, api, type Module, type TimeEntry } from "@/lib/api";
 import { resolveApiUrl, authHeaders } from "@/lib/native";
@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState, IssueDetailSkeleton } from "@/components/ui/skeletons";
 import {
   Dialog,
   DialogContent,
@@ -73,7 +74,7 @@ interface Issue {
   assignees: any[];
   labels: any[];
   project: string;
-  project_detail?: { name: string; identifier: string };
+  project_detail?: { id?: string; name: string; identifier: string };
   state?: { id: string; name: string; color: string | null; group: string } | null;
 }
 
@@ -128,6 +129,31 @@ interface IssueActivity {
   created_at: string | null;
 }
 
+// `?include=` makes GET issue return the sub-resources the page needs in one response.
+const ISSUE_INCLUDES =
+  "comments,activities,relations,sub_issues,subscribers,modules,custom_values";
+
+interface IssueCounts {
+  attachments: number;
+  time_seconds: number;
+}
+
+interface IssueBundle extends Issue {
+  included?: {
+    comments: { results: Comment[] };
+    activities: { results: IssueActivity[] };
+    subscribers: { results: unknown[] };
+    relations: { results: IssueRelation[] };
+    sub_issues: { results: SubIssue[] };
+    modules: { results: Module[] };
+    custom_values: unknown[];
+    related_issues: { id: string; name: string; sequence_id: number }[];
+    counts: IssueCounts;
+  };
+}
+
+type IssueWithCounts = Issue & { counts?: IssueCounts };
+
 const FIELD_LABELS: Record<string, string> = {
   state: "State",
   priority: "Priority",
@@ -146,25 +172,6 @@ const PRIORITY_LABELS: Record<string, string> = {
   urgent: "Urgent",
 };
 
-// Tailwind bg classes — kept as a lookup so the select trigger and items stay
-// in sync. Matches the FilterBar priority palette.
-const PRIORITY_DOT: Record<string, string> = {
-  urgent: "bg-red-500",
-  high: "bg-orange-500",
-  medium: "bg-yellow-500",
-  low: "bg-blue-500",
-  none: "bg-gray-400",
-};
-
-// Ops-console state pill palette: state group → surface/foreground token vars.
-// Green = done, amber = in review/started, blue = todo/in play, gray = backlog.
-const STATE_GROUP_PILL: Record<string, { bg: string; fg: string }> = {
-  backlog: { bg: "var(--surface-card-hover)", fg: "var(--muted-foreground)" },
-  unstarted: { bg: "var(--state-blue-soft)", fg: "var(--state-blue)" },
-  started: { bg: "var(--state-amber-soft)", fg: "var(--state-amber)" },
-  completed: { bg: "var(--state-green-soft)", fg: "var(--state-green)" },
-  cancelled: { bg: "var(--surface-card-hover)", fg: "var(--muted-foreground)" },
-};
 
 // Evidence-first activity: a comment carries proof when it embeds images
 // (pasted/dropped/attached shots) or is written up as evidence — those get
@@ -302,9 +309,40 @@ export default function IssueDetail() {
     localStorage.setItem(SPLIT_KEY, "45");
   }, []);
 
+  // One request returns the issue plus every sub-resource the page shows; seed each
+  // standalone query's cache so those hooks render instantly instead of refetching.
+  // They stay disabled until `issue` exists, and staleTime keeps them from refetching.
   const { data: issue, isLoading } = useQuery({
     queryKey: ["issue", slug, projectId, issueId],
-    queryFn: () => apiFetch<Issue>(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/`),
+    queryFn: async (): Promise<IssueWithCounts> => {
+      const { included, ...row } = await apiFetch<IssueBundle>(
+        `/workspaces/${slug}/projects/${projectId}/issues/${issueId}/?include=${ISSUE_INCLUDES}`,
+      );
+      if (!included) return row;
+      const key = [slug, projectId, issueId];
+      qc.setQueryData(["comments", ...key], included.comments.results);
+      qc.setQueryData(["activities", ...key], included.activities);
+      qc.setQueryData(["subscribers", ...key], included.subscribers);
+      qc.setQueryData(["relations", ...key], included.relations.results);
+      qc.setQueryData(["sub-issues", ...key], included.sub_issues.results);
+      qc.setQueryData(["issue-modules", ...key], included.modules.results);
+      qc.setQueryData(["custom-values", slug, projectId, Number(issueId)], included.custom_values);
+      const byId = new Map(included.related_issues.map((r) => [r.id, r]));
+      const relatedIds = included.relations.results.map((r) => r.related_issue_id);
+      if (relatedIds.length > 0) {
+        qc.setQueryData(
+          ["related-issues", slug, projectId, relatedIds.join(",")],
+          relatedIds.flatMap((id) => byId.get(id) ?? []),
+        );
+      }
+      if (row.parent_id) {
+        qc.setQueryData(
+          ["parent-issue", slug, projectId, row.parent_id],
+          byId.get(row.parent_id) ?? null,
+        );
+      }
+      return { ...row, counts: included.counts };
+    },
     enabled: !!slug && !!projectId && !!issueId,
   });
 
@@ -316,7 +354,7 @@ export default function IssueDetail() {
       )
         .then((d) => d.results)
         .catch(() => []),
-    enabled: !!slug && !!projectId && !!issueId,
+    enabled: !!slug && !!projectId && !!issueId && !!issue,
   });
 
   const sortedComments = useMemo(() => {
@@ -345,7 +383,7 @@ export default function IssueDetail() {
       apiFetch<{ results: IssueActivity[]; total: number }>(
         `/workspaces/${slug}/projects/${projectId}/issues/${issueId}/activities/`,
       ).catch(() => ({ results: [], total: 0 })),
-    enabled: !!slug && !!projectId && !!issueId,
+    enabled: !!slug && !!projectId && !!issueId && !!issue,
   });
   const activities = activitiesData?.results ?? [];
 
@@ -416,7 +454,7 @@ export default function IssueDetail() {
   const { data: subscribersData } = useQuery({
     queryKey: ["subscribers", slug, projectId, issueId],
     queryFn: () => api.listSubscribers(slug!, projectId!, issueId!).catch(() => ({ results: [] })),
-    enabled: !!slug && !!projectId && !!issueId,
+    enabled: !!slug && !!projectId && !!issueId && !!issue,
   });
   const subscribed = (subscribersData?.results ?? []).some((s) => s.user?.id === currentUser?.id);
   const followerCount = (subscribersData?.results ?? []).length;
@@ -544,7 +582,7 @@ export default function IssueDetail() {
       )
         .then((d) => d.results)
         .catch(() => []),
-    enabled: !!slug && !!projectId && !!issueId,
+    enabled: !!slug && !!projectId && !!issueId && !!issue,
   });
 
   const { data: relationSearchResults = [], isLoading: relationSearchLoading } = useQuery({
@@ -620,7 +658,7 @@ export default function IssueDetail() {
       )
         .then((d) => d.results)
         .catch(() => []),
-    enabled: !!slug && !!projectId && !!issueId,
+    enabled: !!slug && !!projectId && !!issueId && !!issue,
   });
 
   const [newSubIssue, setNewSubIssue] = useState("");
@@ -640,7 +678,11 @@ export default function IssueDetail() {
   });
 
   // --- Attachments ---
-  const { data: attachments = [], isLoading: attachmentsLoading } = useQuery({
+  const {
+    data: attachments = [],
+    isLoading: attachmentsLoading,
+    isFetched: attachmentsFetched,
+  } = useQuery({
     queryKey: ["attachments", slug, projectId, issueId],
     queryFn: () =>
       apiFetch<{
@@ -654,7 +696,7 @@ export default function IssueDetail() {
       }>(`/workspaces/${slug}/projects/${projectId}/issues/${issueId}/attachments/`).then(
         (d) => d.results,
       ),
-    enabled: !!slug && !!projectId && !!issueId,
+    enabled: !!slug && !!projectId && !!issueId && activeTab === "attachments",
   });
 
   const uploadMutation = useMutation({
@@ -704,16 +746,22 @@ export default function IssueDetail() {
   const [timeMinutes, setTimeMinutes] = useState("");
   const [timeDesc, setTimeDesc] = useState("");
 
-  const { data: timeEntries = [], isLoading: timeEntriesLoading } = useQuery({
+  const {
+    data: timeEntries = [],
+    isLoading: timeEntriesLoading,
+    isFetched: timeEntriesFetched,
+  } = useQuery({
     queryKey: ["time-entries", slug, projectId, issueId],
     queryFn: () =>
       apiFetch<{ results: TimeEntry[] }>(
         `/workspaces/${slug}/projects/${projectId}/issues/${issueId}/time-entries/`,
       ).then((d) => d.results),
-    enabled: !!slug && !!projectId && !!issueId,
+    enabled: !!slug && !!projectId && !!issueId && activeTab === "time",
   });
 
-  const totalTimeSeconds = timeEntries.reduce((sum, e) => sum + e.duration_seconds, 0);
+  const totalTimeSeconds = timeEntriesFetched
+    ? timeEntries.reduce((sum, e) => sum + e.duration_seconds, 0)
+    : (issue?.counts?.time_seconds ?? 0);
 
   // Issue-scoped agent KPI: token totals + USD cost for this issue's agent
   const { data: agentUsage } = useQuery({
@@ -728,7 +776,7 @@ export default function IssueDetail() {
         }[];
         totals: { total_tokens: number; cost_usd: number | null };
       }>(`/workspaces/${slug}/timesheet/agent-usage/?issue_id=${issue?.id}`).then((d) => d),
-    enabled: !!slug && !!issue?.id,
+    enabled: !!slug && !!issue?.id && activeTab === "time",
   });
   const agentTokens = agentUsage?.totals;
 
@@ -786,7 +834,7 @@ export default function IssueDetail() {
   const { data: issueModules = [], isLoading: issueModulesLoading } = useQuery({
     queryKey: ["issue-modules", slug, projectId, issueId],
     queryFn: () => api.listIssueModules(slug!, projectId!, Number(issueId!)).catch(() => []),
-    enabled: !!slug && !!projectId && !!issueId,
+    enabled: !!slug && !!projectId && !!issueId && !!issue,
   });
 
   const { data: projectModules = [] } = useQuery({
@@ -822,24 +870,25 @@ export default function IssueDetail() {
   // State pill: the state's group picks the color family; the dot keeps the
   // state's own color when the project defines one.
   const currentState = issue?.state ?? states.find((s) => s.id === issue?.state_id) ?? null;
-  const fallbackPill = { bg: "var(--surface-card-hover)", fg: "var(--muted-foreground)" };
-  const statePill = (currentState?.group && STATE_GROUP_PILL[currentState.group]) || fallbackPill;
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-pulse text-muted-foreground">Loading issue...</div>
-      </div>
-    );
-  }
+  if (isLoading) return <IssueDetailSkeleton />;
 
   if (!issue) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Issue not found</p>
-      </div>
+      <EmptyState
+        className="m-6"
+        title="Issue not found"
+        description="It may have been deleted, or the link is wrong."
+        action={
+          <Button variant="outline" size="sm" onClick={() => navigate(`/${slug}/projects/${projectId}`)}>
+            Back to project
+          </Button>
+        }
+      />
     );
   }
+
+  const attachmentCount = attachmentsFetched ? attachments.length : (issue.counts?.attachments ?? 0);
 
   return (
     <div className="flex flex-col h-[calc(100dvh-7rem)] md:h-[calc(100dvh-3.5rem)] -m-4 md:-m-6 lg:-m-8">
@@ -848,16 +897,19 @@ export default function IssueDetail() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         {/* Breadcrumb: project › issue key (ops-console topbar, mono key) */}
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[13.5px] text-muted-foreground truncate">
+        <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5">
+          <Link
+            to={`/${slug}/projects/${projectId}`}
+            className="truncate rounded text-[0.8125rem] text-muted-foreground hover:text-foreground"
+          >
             {issue.project_detail?.name || "Project"}
-          </span>
+          </Link>
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="font-ops-mono text-[13.5px] font-bold whitespace-nowrap">
+          <span className="font-ops-mono text-[0.8125rem] font-bold whitespace-nowrap">
             {issue.project_detail?.identifier || "PROJ"}-
             {String(issue.sequence_id).padStart(4, "0")}
           </span>
-        </div>
+        </nav>
         <div className="ml-auto flex items-center gap-1">
           <Button
             variant="ghost"
@@ -1136,7 +1188,7 @@ export default function IssueDetail() {
                       <div key={rel.id} className="flex items-center gap-2 p-2 border rounded-md">
                         <Badge
                           variant="secondary"
-                          className={`text-[10px] shrink-0 ${relInfo.color}`}
+                          className={`text-xs shrink-0 ${relInfo.color}`}
                         >
                           {relInfo.label}
                         </Badge>
@@ -1220,7 +1272,7 @@ export default function IssueDetail() {
                       </span>
                       <span className="text-sm truncate flex-1">{si.name}</span>
                       {si.priority && si.priority !== "none" && (
-                        <Badge variant="outline" className="text-[10px] shrink-0">
+                        <Badge variant="outline" className="text-xs shrink-0">
                           {si.priority}
                         </Badge>
                       )}
@@ -1256,11 +1308,28 @@ export default function IssueDetail() {
             </div>
           </div>
 
-          {/* Properties */}
-          <div className="mt-auto border-t px-4 md:px-5 lg:px-6 py-4 md:py-5">
-            {/* Properties card (ops-console right-rail styling) */}
-            <div className="rounded-[12px] border border-border bg-[var(--surface-elevated)] p-4 md:p-5">
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-5">
+        </div>
+
+        {/* Drag handle between detail and comments panes (desktop only) */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize detail and comments panes"
+          title="Drag to resize · double-click to reset"
+          className="hidden md:block w-1.5 shrink-0 cursor-col-resize touch-none bg-border/40 hover:bg-primary/60 active:bg-primary transition-colors"
+          onPointerDown={onSplitPointerDown}
+          onPointerMove={onSplitPointerMove}
+          onPointerUp={onSplitPointerUp}
+          onPointerCancel={onSplitPointerUp}
+          onDoubleClick={resetSplit}
+        />
+
+        {/* Comments / Activity / Attachments / Time */}
+        <div className="hidden md:flex flex-col shrink-0" style={{ width: `${rightPct}%` }}>
+          {/* Properties: sticky rail above the tabs so state/dates stay in view */}
+          <div className="shrink-0 max-h-[50%] overflow-y-auto border-b bg-[var(--surface-card)] px-4 py-3">
+            <div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 <div>
                   <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 block">
                     Follow
@@ -1277,7 +1346,7 @@ export default function IssueDetail() {
                     <Bell className="h-3 w-3" />
                     {subscribed ? "Following" : "Follow"}
                     {followerCount > 0 && (
-                      <span className="ml-auto text-muted-foreground text-[10px]">
+                      <span className="ml-auto text-muted-foreground text-xs">
                         {followerCount}
                       </span>
                     )}
@@ -1300,7 +1369,7 @@ export default function IssueDetail() {
                                   alt={a.display_name || a.email || "User"}
                                 />
                               ) : null}
-                              <AvatarFallback className="text-[9px]">
+                              <AvatarFallback className="text-xs">
                                 {(a.display_name || a.email || a.username || "?")
                                   .charAt(0)
                                   .toUpperCase()}
@@ -1358,19 +1427,16 @@ export default function IssueDetail() {
                     onValueChange={(v) => updateMutation.mutate({ state_id: v })}
                   >
                     <SelectTrigger
-                      className="h-auto w-fit gap-1.5 rounded-full border-0 px-2.5 py-1 font-ops-mono text-[12px] font-bold [&>svg]:h-3 [&>svg]:w-3 [&>svg]:opacity-70"
-                      style={{ backgroundColor: statePill.bg, color: statePill.fg }}
+                      className="state-badge h-6 w-fit cursor-pointer gap-1.5 border-0 shadow-none [&>svg]:h-3 [&>svg]:w-3 [&>svg]:opacity-70"
+                      data-state-group={currentState?.group}
+                      style={
+                        currentState?.color
+                          ? ({ "--badge-c": currentState.color } as React.CSSProperties)
+                          : undefined
+                      }
                     >
                       {currentState ? (
-                        <span className="flex items-center gap-1.5">
-                          <span
-                            className="ops-dot"
-                            style={
-                              currentState.color ? { background: currentState.color } : undefined
-                            }
-                          />
-                          {currentState.name}
-                        </span>
+                        currentState.name
                       ) : (
                         <span className="font-normal">Set state</span>
                       )}
@@ -1381,7 +1447,7 @@ export default function IssueDetail() {
                           <span className="flex items-center gap-2">
                             <span
                               className="h-2 w-2 rounded-full"
-                              style={{ backgroundColor: s.color || "#9ca3af" }}
+                              style={{ backgroundColor: s.color || "var(--state-backlog)" }}
                             />
                             {s.name}
                           </span>
@@ -1406,7 +1472,7 @@ export default function IssueDetail() {
                       {["none", "low", "medium", "high", "urgent"].map((p) => (
                         <SelectItem key={p} value={p}>
                           <span className="flex items-center gap-2 capitalize">
-                            <span className={`h-2 w-2 rounded-full ${PRIORITY_DOT[p]}`} />
+                            <span className="priority-dot" data-priority={p} />
                             {PRIORITY_LABELS[p]}
                           </span>
                         </SelectItem>
@@ -1535,7 +1601,7 @@ export default function IssueDetail() {
                 )}
               </div>
               <Separator className="my-4" />
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-5">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 <div>
                   <label className="font-ops-mono text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                     <Clock className="h-3 w-3" /> Created
@@ -1556,24 +1622,6 @@ export default function IssueDetail() {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Drag handle between detail and comments panes (desktop only) */}
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize detail and comments panes"
-          title="Drag to resize · double-click to reset"
-          className="hidden md:block w-1.5 shrink-0 cursor-col-resize touch-none bg-border/40 hover:bg-primary/60 active:bg-primary transition-colors"
-          onPointerDown={onSplitPointerDown}
-          onPointerMove={onSplitPointerMove}
-          onPointerUp={onSplitPointerUp}
-          onPointerCancel={onSplitPointerUp}
-          onDoubleClick={resetSplit}
-        />
-
-        {/* Comments / Activity / Attachments / Time */}
-        <div className="hidden md:flex flex-col shrink-0" style={{ width: `${rightPct}%` }}>
           <div className="flex gap-1 border-b px-3 pt-1 overflow-x-auto shrink-0">
             <button
               className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
@@ -1606,7 +1654,7 @@ export default function IssueDetail() {
               onClick={() => setActiveTab("attachments")}
             >
               <Paperclip className="h-3.5 w-3.5 inline mr-1" />
-              Attachments ({attachments.length})
+              Attachments ({attachmentCount})
             </button>
             <button
               className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
@@ -1813,7 +1861,7 @@ export default function IssueDetail() {
               <>
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm text-muted-foreground">
-                    {attachments.length} file{attachments.length !== 1 ? "s" : ""}
+                    {attachmentCount} file{attachmentCount !== 1 ? "s" : ""}
                   </span>
                   <label className="cursor-pointer">
                     <input
@@ -1981,7 +2029,7 @@ export default function IssueDetail() {
                     {Math.floor((totalTimeSeconds % 3600) / 60)}m
                   </span>
                   {agentTokens && agentTokens.total_tokens > 0 && (
-                    <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-ops-mono text-[11px] text-muted-foreground">
+                    <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-ops-mono text-xs text-muted-foreground">
                       agent: {(agentTokens.total_tokens / 1000).toFixed(1)}k tokens
                       {agentTokens.cost_usd != null &&
                         ` · $${agentTokens.cost_usd < 0.01 && agentTokens.cost_usd > 0 ? agentTokens.cost_usd.toFixed(4) : agentTokens.cost_usd.toFixed(2)}`}
@@ -2008,7 +2056,7 @@ export default function IssueDetail() {
                             <p className="font-ops-mono text-sm font-medium">
                               {hrs}h {mins}m
                               {entry.source === "agent" && (
-                                <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-ops-mono text-[10px] font-normal text-muted-foreground">
+                                <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-ops-mono text-xs font-normal text-muted-foreground">
                                   {entry.agent_name ?? "agent"}
                                   {entry.model ? ` · ${entry.model}` : ""}
                                   {(entry.input_tokens != null || entry.output_tokens != null) &&

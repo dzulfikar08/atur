@@ -35,14 +35,6 @@ import { cn } from "@/lib/utils";
 import { hapticMedium } from "@/lib/haptics";
 import { useAuthStore } from "@/stores/auth";
 
-const STATE_COLORS: Record<string, string> = {
-  backlog: "bg-gray-100 text-gray-700",
-  unstarted: "bg-blue-100 text-blue-700",
-  started: "bg-yellow-100 text-yellow-700",
-  completed: "bg-green-100 text-green-700",
-  cancelled: "bg-red-100 text-red-700",
-};
-
 interface Issue {
   id: string;
   name: string;
@@ -79,6 +71,7 @@ interface State {
   id: string;
   name: string;
   group: string;
+  color?: string | null;
 }
 
 interface IssueRelation {
@@ -417,12 +410,21 @@ export default function MobileIssueDetail() {
           </button>
           {/* Tap to change state */}
           <button onClick={() => setStateSheetOpen(true)}>
-            <Badge className={cn("text-[10px]", STATE_COLORS[group])} variant="secondary">
+            <span
+              className="state-badge"
+              data-state-group={group}
+              style={
+                currentState?.color
+                  ? ({ "--badge-c": currentState.color } as React.CSSProperties)
+                  : undefined
+              }
+            >
               {currentState?.name || "Set State"}
-            </Badge>
+            </span>
           </button>
           <button onClick={() => setPrioritySheetOpen(true)}>
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-xs">
+              <span className="priority-dot mr-1.5" data-priority={issue.priority || "none"} />
               {issue.priority || "none"}
             </Badge>
           </button>
@@ -473,13 +475,13 @@ export default function MobileIssueDetail() {
                 {(issue.assignees ?? []).slice(0, 3).map((a) => (
                   <span
                     key={a.id}
-                    className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] font-medium text-muted-foreground"
+                    className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-xs font-medium text-muted-foreground"
                   >
                     {(a.display_name || a.email || a.username || "?").charAt(0).toUpperCase()}
                   </span>
                 ))}
                 {(issue.assignees ?? []).length > 3 && (
-                  <span className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] text-muted-foreground">
+                  <span className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-xs text-muted-foreground">
                     +{(issue.assignees ?? []).length - 3}
                   </span>
                 )}
@@ -507,7 +509,7 @@ export default function MobileIssueDetail() {
             <Bell className="h-3 w-3" />
             {subscribed ? "Following" : "Follow"}
             {followerCount > 0 && (
-              <span className="text-muted-foreground text-[10px]">{followerCount}</span>
+              <span className="text-muted-foreground text-xs">{followerCount}</span>
             )}
           </Button>
         </div>
@@ -524,7 +526,7 @@ export default function MobileIssueDetail() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 text-[10px] px-2"
+              className="h-6 text-xs px-2"
               onClick={() => setRelationSheetOpen(true)}
             >
               <Plus className="h-3 w-3 mr-0.5" /> Add
@@ -542,7 +544,7 @@ export default function MobileIssueDetail() {
                 const related = relatedIssueMap.get(rel.related_issue_id);
                 return (
                   <div key={rel.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
-                    <Badge className={cn("text-[9px] shrink-0", relInfo.color)} variant="secondary">
+                    <Badge className={cn("text-xs shrink-0", relInfo.color)} variant="secondary">
                       {relInfo.label}
                     </Badge>
                     <span className="text-xs flex-1 truncate">
@@ -573,7 +575,7 @@ export default function MobileIssueDetail() {
               <MessageSquare className="h-3 w-3" /> Comments ({comments.length})
             </h3>
             <button
-              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground rounded px-1 py-0.5"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground rounded px-1 py-0.5"
               onClick={() => setCommentSort(commentSort === "newest" ? "oldest" : "newest")}
             >
               {commentSort === "newest" ? "Newest first" : "Earliest first"}
@@ -591,7 +593,7 @@ export default function MobileIssueDetail() {
                       alt={c.actor_detail?.display_name || "User"}
                     />
                   ) : null}
-                  <AvatarFallback className="text-[10px]">
+                  <AvatarFallback className="text-xs">
                     {c.actor_detail?.display_name?.charAt(0) || "U"}
                   </AvatarFallback>
                 </Avatar>
@@ -600,7 +602,7 @@ export default function MobileIssueDetail() {
                     <span className="text-xs font-medium">
                       {c.actor_detail?.display_name || "User"}
                     </span>
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
                     </span>
                     {isMine && editingCommentId !== c.id && (
@@ -713,9 +715,13 @@ export default function MobileIssueDetail() {
                 setStateSheetOpen(false);
               }}
             >
-              <Badge className={cn("text-[10px]", STATE_COLORS[s.group])} variant="secondary">
+              <span
+                className="state-badge"
+                data-state-group={s.group}
+                style={s.color ? ({ "--badge-c": s.color } as React.CSSProperties) : undefined}
+              >
                 {s.name}
-              </Badge>
+              </span>
               {s.id === issue.state_id && <span className="text-xs ml-auto">Current</span>}
             </button>
           ))}
@@ -772,7 +778,7 @@ export default function MobileIssueDetail() {
                   toggleAssignee(m.memberId);
                 }}
               >
-                <span className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
+                <span className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium shrink-0">
                   {(m.displayName || m.username || m.email || "?").charAt(0).toUpperCase()}
                 </span>
                 <span className="flex-1 truncate">{m.displayName || m.username || m.email}</span>

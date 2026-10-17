@@ -238,7 +238,8 @@
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
-  color: var(--badge-c);
+  /* Blend toward the foreground so any state colour keeps readable text contrast. */
+  color: color-mix(in oklab, var(--badge-c) 72%, var(--foreground));
   background: color-mix(in oklab, var(--badge-c) var(--badge-mix), transparent);
 }
 .state-badge[data-state-group="backlog"] { --badge-c: var(--state-backlog); }
@@ -253,7 +254,7 @@
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: currentColor;
+  background: var(--badge-c);
 }
 .priority-dot {
   --badge-c: var(--priority-none);
@@ -269,6 +270,27 @@
 .priority-dot[data-priority="medium"] { --badge-c: var(--priority-medium); }
 .priority-dot[data-priority="low"] { --badge-c: var(--priority-low); }
 .priority-dot[data-priority="none"] { --badge-c: var(--priority-none); }
+.priority-text[data-priority="urgent"] { color: var(--priority-urgent); }
+.priority-text[data-priority="high"] { color: var(--priority-high); }
+.priority-text[data-priority="medium"] { color: var(--priority-medium); }
+.priority-text[data-priority="low"] { color: var(--priority-low); }
+.priority-text[data-priority="none"] { color: var(--muted-foreground); }
+.state-dot {
+  --badge-c: var(--state-backlog);
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--badge-c);
+  flex-shrink: 0;
+}
+.state-dot[data-state-group="unstarted"] { --badge-c: var(--state-unstarted); }
+.state-dot[data-state-group="started"] { --badge-c: var(--state-started); }
+.state-dot[data-state-group="review"] { --badge-c: var(--state-review); }
+.state-dot[data-state-group="triage"],
+.state-dot[data-state-group="needs-you"] { --badge-c: var(--state-needs-you); }
+.state-dot[data-state-group="completed"] { --badge-c: var(--state-completed); }
+.state-dot[data-state-group="cancelled"] { --badge-c: var(--state-cancelled); }
 
 @layer base {
   * {

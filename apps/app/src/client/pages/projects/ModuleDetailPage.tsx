@@ -28,23 +28,13 @@ interface StateOption {
   sequence?: number;
 }
 
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  planned: { bg: "bg-blue-50 dark:bg-blue-950", text: "text-blue-700 dark:text-blue-300" },
-  "in-progress": {
-    bg: "bg-yellow-50 dark:bg-yellow-950",
-    text: "text-yellow-700 dark:text-yellow-300",
-  },
-  completed: { bg: "bg-green-50 dark:bg-green-950", text: "text-green-700 dark:text-green-300" },
-  cancelled: { bg: "bg-red-50 dark:bg-red-950", text: "text-red-700 dark:text-red-300" },
-  paused: { bg: "bg-gray-50 dark:bg-gray-950", text: "text-gray-700 dark:text-gray-300" },
-};
-
-const PRIORITY_COLORS: Record<string, string> = {
-  urgent: "text-red-600",
-  high: "text-orange-600",
-  medium: "text-yellow-600",
-  low: "text-blue-600",
-  none: "text-muted-foreground",
+// Module status → state-group token (same palette as issue states).
+const MODULE_STATUS_GROUP: Record<string, string> = {
+  planned: "unstarted",
+  "in-progress": "started",
+  completed: "completed",
+  cancelled: "cancelled",
+  paused: "backlog",
 };
 
 export default function ModuleDetailPage() {
@@ -225,7 +215,6 @@ export default function ModuleDetailPage() {
     );
   }
 
-  const sc = STATUS_COLORS[mod.status] || STATUS_COLORS["planned"];
   const moduleIssueIds = new Set(moduleIssues.map((i) => i.id));
 
   const issueUrl = (issue: Issue) => `/${slug}/projects/${projectId}/issues/${issue.sequence_id}`;
@@ -268,7 +257,7 @@ export default function ModuleDetailPage() {
               </span>
               <span className="text-sm font-medium truncate">{issue.name}</span>
               {row.childCount > 0 && (
-                <Badge variant="outline" className="ml-2 text-[10px] gap-0.5 shrink-0">
+                <Badge variant="outline" className="ml-2 text-xs gap-0.5 shrink-0">
                   <GitBranch className="h-2.5 w-2.5" />
                   {row.childCount}
                 </Badge>
@@ -301,7 +290,8 @@ export default function ModuleDetailPage() {
           <td className="p-2">
             {issue.priority && issue.priority !== "none" && (
               <span
-                className={`text-xs font-medium ${PRIORITY_COLORS[issue.priority] || PRIORITY_COLORS.none}`}
+                className="priority-text text-xs font-medium"
+                data-priority={issue.priority}
               >
                 {issue.priority}
               </span>
@@ -313,13 +303,13 @@ export default function ModuleDetailPage() {
                 <span
                   key={a.id}
                   title={a.display_name || a.username || a.email || a.id}
-                  className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px] font-medium"
+                  className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-xs font-medium"
                 >
                   {(a.display_name || a.username || a.email || "?").charAt(0).toUpperCase()}
                 </span>
               ))}
               {(issue.assignees ?? []).length > 3 && (
-                <span className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-[9px]">
+                <span className="h-5 w-5 rounded-full bg-muted border border-background flex items-center justify-center text-xs">
                   +{issue.assignees!.length - 3}
                 </span>
               )}
@@ -401,7 +391,9 @@ export default function ModuleDetailPage() {
         </Button>
         <Package className="h-5 w-5 text-muted-foreground" />
         <h1 className="text-xl font-bold">{mod.name}</h1>
-        <Badge className={`${sc?.bg ?? ""} ${sc?.text ?? ""}`}>{mod.status}</Badge>
+        <span className="state-badge" data-state-group={MODULE_STATUS_GROUP[mod.status] ?? "backlog"}>
+          {mod.status}
+        </span>
       </div>
 
       {mod.description && <p className="text-sm text-muted-foreground mb-6">{mod.description}</p>}
