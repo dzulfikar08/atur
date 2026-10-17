@@ -95,26 +95,6 @@ function eqParam(cond: unknown, columnName: string): unknown {
 const MINE = "ws-mine";
 const FOREIGN = "ws-foreign";
 
-// Flatten a drizzle condition into its SQL text (StringChunk template pieces
-// joined). The cond tree is circular (Column -> table -> columns), so
-// JSON.stringify is out; this walks only the chunk arrays we care about.
-function sqlText(cond: unknown): string {
-  const parts: string[] = [];
-  const walk = (node: unknown): void => {
-    if (!node || typeof node !== "object") return;
-    const n = node as any;
-    if (Array.isArray(n.queryChunks)) {
-      for (const chunk of n.queryChunks) walk(chunk);
-      return;
-    }
-    const v = n.value;
-    if (typeof v === "string") parts.push(v);
-    else if (Array.isArray(v)) parts.push(v.join(""));
-  };
-  walk(cond);
-  return parts.join(" ");
-}
-
 // projectsService.update select order: workspaces (findBySlug), projects
 // (findById), then assertProjectIdsInWorkspace's selects.
 describe("DEV-21 project config store-side binding", () => {
@@ -181,16 +161,25 @@ describe("DEV-21 label/assignee enrichment belt-and-braces", () => {
     expect(out.labels).toEqual([]);
   });
 
-  it("enrichIssues assignee query carries the workspace-members EXISTS + issues join", async () => {
-    // The harness can't evaluate SQL, so pin the query SHAPE: the captured
-    // condition must embed the correlated workspace_members EXISTS.
-    const db = mockDb([[], []]);
-    await issuesService.enrichIssues(db.db, [
-      { id: "i1", stateId: null, workspaceId: MINE } as any,
+  it("enrichIssues drops an assignee whose active membership is in another workspace", async () => {
+    // The assignee query joins workspace_members (active, non-deleted) and
+    // returns the member row's workspace; only the OWNING issue's workspace
+    // renders. Select order: assigneeRows, labelRows, moduleRows.
+    const user = { issueId: "i1", id: "u1", email: "a@x", username: "a", displayName: "A", avatar: null };
+    const db = mockDb([
+      [
+        { ...user, workspaceId: MINE },
+        { ...user, id: "u2", workspaceId: FOREIGN },
+      ],
+      [],
+      [],
     ]);
-    const text = sqlText(db.selects[0].cond);
-    expect(text).toContain("workspace_members");
-    expect(text).toContain("workspace_id");
+    const [out] = await issuesService.enrichIssues(db.db, [
+      { id: "i1", stateId: null, workspaceId: MINE },
+    ]);
+    expect(out.assignees.map((a) => a.id)).toEqual(["u1"]);
+    // The query reads issue_assignees (membership comes from the joined member row).
+    expect(db.selects[0].table).toBe("issue_assignees");
   });
 
   it("enrichIssues attaches module ids from live module links", async () => {

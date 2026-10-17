@@ -1,10 +1,25 @@
-import { eq, and, like, desc, sql, inArray, isNull } from "drizzle-orm";
+import {
+  eq,
+  and,
+  or,
+  like,
+  desc,
+  asc,
+  sql,
+  inArray,
+  notInArray,
+  isNull,
+  isNotNull,
+  getTableColumns,
+  type SQL,
+} from "drizzle-orm";
 import type { DbClient } from "../db/index";
 import {
   issues,
   issueAssignees,
   issueLabels,
   labels,
+  states,
   users,
   issueSequences,
   issueSequenceCounters,
@@ -52,33 +67,175 @@ export async function resolveIssue(db: DbClient, projectId: string, identifier: 
   return row ?? null;
 }
 
-export async function listByProject(
-  db: DbClient,
-  projectId: string,
-  opts: {
-    offset: number;
-    limit: number;
-    state?: string;
-    priority?: string;
-    search?: string;
-    labels?: string[];
-    assignee?: string;
-  },
-) {
-  const conditions: ReturnType<typeof eq>[] = [
-    eq(issues.projectId, projectId),
-    isNull(issues.deletedAt),
-  ];
-  if (opts.state) conditions.push(eq(issues.stateId, opts.state));
-  if (opts.priority) conditions.push(eq(issues.priority, opts.priority));
-  if (opts.search) conditions.push(like(issues.name, `%${opts.search}%`));
+export type IssueListOpts = {
+  offset: number;
+  limit: number;
+  /** Legacy single state uuid (MCP back-compat). */
+  state?: string;
+  /** State keys (todo, in_progress, …) resolved within the project. */
+  stateKeys?: string[];
+  /** Priorities (urgent|high|medium|low|none). */
+  priorities?: string[];
+  search?: string;
+  /** Label uuids. */
+  labels?: string[];
+  /** User uuids, plus "none" for unassigned. "me" is resolved by the caller. */
+  assignees?: string[];
+  /** Product names derived from the name prefix ("[X] …" or "X: …"). */
+  products?: string[];
+  due?: "overdue" | "today" | "week" | "none" | "any";
+  /** Caller-local YYYY-MM-DD, defaults to the UTC date. */
+  today?: string;
+  /** Hide completed + cancelled state groups. */
+  hideDone?: boolean;
+  sort?: string;
+  /** Include description_* columns (default: lean rows). */
+  full?: boolean;
+};
 
-  if (opts.assignee) {
-    const assigneeIssueIds = db
+// Lean projection: list rows never need the description bodies (HTML/JSON/
+// stripped/binary) nor bookkeeping columns the client types don't read.
+const {
+  descriptionHtml: _html,
+  descriptionJson: _json,
+  descriptionStripped: _stripped,
+  descriptionBinary: _binary,
+  sortOrder: _sortOrder,
+  archivedAt: _archivedAt,
+  deletedAt: _deletedAt,
+  typeId: _typeId,
+  estimatePointId: _estimatePointId,
+  externalId: _externalId,
+  createdById: _createdById,
+  ...leanColumns
+} = getTableColumns(issues);
+export const LEAN_ISSUE_COLUMNS = leanColumns;
+
+const SORT_COLUMNS = {
+  updated_at: issues.updatedAt,
+  created_at: issues.createdAt,
+  sequence_id: issues.sequenceId,
+  target_date: issues.targetDate,
+  start_date: issues.startDate,
+  name: issues.name,
+} as const;
+
+const PRIORITY_RANK = sql`CASE ${issues.priority} WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END`;
+
+// Workflow order: backlog, unstarted, started, completed, cancelled, then the
+// state's own sequence, so equal `65535` sequences stay deterministic.
+const STATE_GROUP_RANK = sql`CASE ${states.groupName} WHEN 'backlog' THEN 0 WHEN 'unstarted' THEN 1 WHEN 'started' THEN 2 WHEN 'completed' THEN 3 WHEN 'cancelled' THEN 4 ELSE 5 END`;
+
+function orderFor(sort: string | undefined) {
+  const [field, dirRaw] = (sort ?? "sequence_id:desc").split(":");
+  const dir = dirRaw === "asc" ? asc : desc;
+  if (field === "priority") return [dir(PRIORITY_RANK), desc(issues.sequenceId)];
+  if (field === "state") {
+    return [
+      dir(sql`(SELECT ${STATE_GROUP_RANK} FROM ${states} WHERE ${states.id} = ${issues.stateId})`),
+      dir(sql`(SELECT ${states.sequence} FROM ${states} WHERE ${states.id} = ${issues.stateId})`),
+      desc(issues.sequenceId),
+    ];
+  }
+  const col = SORT_COLUMNS[field as keyof typeof SORT_COLUMNS] ?? issues.sequenceId;
+  // Dated sorts keep undated issues last in both directions.
+  return field === "target_date" || field === "start_date"
+    ? [sql`${col} IS NULL`, dir(col), desc(issues.sequenceId)]
+    : [dir(col), desc(issues.sequenceId)];
+}
+
+/** `^\[([^\]]+)\]` or `^([^:\s]{1,24}):` prefix match on the issue name (LIKE is case-insensitive). */
+function productCondition(products: string[]) {
+  const escape = (s: string) => s.replace(/[\\%_]/g, "\\$&");
+  return or(
+    ...products.flatMap((p) => [
+      sql`${issues.name} LIKE ${`[${escape(p)}]%`} ESCAPE '\\'`,
+      sql`${issues.name} LIKE ${`${escape(p)}:%`} ESCAPE '\\'`,
+    ]),
+  )!;
+}
+
+function dueCondition(due: NonNullable<IssueListOpts["due"]>, todayRaw: string | undefined) {
+  const today =
+    todayRaw && /^\d{4}-\d{2}-\d{2}$/.test(todayRaw)
+      ? todayRaw
+      : new Date().toISOString().slice(0, 10);
+  const end = new Date(`${today}T00:00:00Z`);
+  end.setUTCDate(end.getUTCDate() + 7);
+  const weekEnd = end.toISOString().slice(0, 10);
+  const day = sql`substr(${issues.targetDate}, 1, 10)`;
+  switch (due) {
+    case "overdue":
+      return and(isNotNull(issues.targetDate), sql`${day} < ${today}`, openStateCondition());
+    case "today":
+      return sql`${day} = ${today}`;
+    case "week":
+      return and(sql`${day} >= ${today}`, sql`${day} <= ${weekEnd}`);
+    case "none":
+      return isNull(issues.targetDate);
+    default:
+      return undefined;
+  }
+}
+
+/** Not in a completed or cancelled state group (a stateless issue counts as open). */
+function openStateCondition() {
+  return or(
+    isNull(issues.stateId),
+    notInArray(
+      issues.stateId,
+      sql`(SELECT ${states.id} FROM ${states} WHERE ${states.groupName} IN ('completed', 'cancelled'))`,
+    ),
+  )!;
+}
+
+export async function listByProject(db: DbClient, projectId: string, opts: IssueListOpts) {
+  const conditions: (SQL | undefined)[] = [eq(issues.projectId, projectId), isNull(issues.deletedAt)];
+  if (opts.state) conditions.push(eq(issues.stateId, opts.state));
+  if (opts.stateKeys?.length) {
+    conditions.push(
+      inArray(
+        issues.stateId,
+        db
+          .select({ id: states.id })
+          .from(states)
+          .where(
+            and(
+              eq(states.projectId, projectId),
+              inArray(states.key, opts.stateKeys),
+              isNull(states.deletedAt),
+            ),
+          ),
+      ),
+    );
+  }
+  if (opts.priorities?.length) conditions.push(inArray(issues.priority, opts.priorities));
+  if (opts.search) conditions.push(like(issues.name, `%${opts.search}%`));
+  if (opts.hideDone) conditions.push(openStateCondition());
+  if (opts.products?.length) conditions.push(productCondition(opts.products));
+  if (opts.due) conditions.push(dueCondition(opts.due, opts.today));
+
+  if (opts.assignees?.length) {
+    const wantsNone = opts.assignees.includes("none");
+    const ids = opts.assignees.filter((a) => a !== "none");
+    const live = db
       .select({ issueId: issueAssignees.issueId })
       .from(issueAssignees)
-      .where(and(eq(issueAssignees.assigneeId, opts.assignee), isNull(issueAssignees.deletedAt)));
-    conditions.push(inArray(issues.id, assigneeIssueIds));
+      .where(isNull(issueAssignees.deletedAt));
+    const parts: (SQL | undefined)[] = [];
+    if (ids.length) {
+      parts.push(
+        inArray(
+          issues.id,
+          db
+            .select({ issueId: issueAssignees.issueId })
+            .from(issueAssignees)
+            .where(and(inArray(issueAssignees.assigneeId, ids), isNull(issueAssignees.deletedAt))),
+        ),
+      );
+    }
+    if (wantsNone) parts.push(notInArray(issues.id, live));
+    conditions.push(or(...parts));
   }
 
   if (opts.labels && opts.labels.length > 0) {
@@ -91,25 +248,23 @@ export async function listByProject(
 
   const where = and(...conditions);
 
-  const [countRow] = await db
-    .select({ total: sql<number>`count(*)` })
-    .from(issues)
-    .where(where);
-
-  const rows = await db
-    .select()
-    .from(issues)
-    .where(where)
-    .orderBy(desc(issues.sequenceId))
-    .offset(opts.offset)
-    .limit(opts.limit);
+  // Count and page are independent: one round trip each, in parallel.
+  const [[countRow], rows] = await Promise.all([
+    db.select({ total: sql<number>`count(*)` }).from(issues).where(where),
+    (opts.full ? db.select() : db.select(LEAN_ISSUE_COLUMNS))
+      .from(issues)
+      .where(where)
+      .orderBy(...orderFor(opts.sort))
+      .offset(opts.offset)
+      .limit(opts.limit),
+  ]);
 
   return { data: rows, total: countRow.total };
 }
 
 export async function listByParent(db: DbClient, parentId: string) {
   const rows = await db
-    .select()
+    .select(LEAN_ISSUE_COLUMNS)
     .from(issues)
     .where(and(eq(issues.parentId, parentId), isNull(issues.deletedAt)))
     .orderBy(desc(issues.sequenceId));
@@ -288,6 +443,7 @@ export async function listAssignees(db: DbClient, issueId: string, workspaceId?:
       username: users.username,
       displayName: users.displayName,
       avatar: users.avatar,
+      isBot: users.isBot,
     })
     .from(issueAssignees)
     .innerJoin(users, eq(issueAssignees.assigneeId, users.id))
