@@ -19,16 +19,19 @@ vi.mock("../../services/assets", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   getAsset: vi.fn(),
 }));
+vi.mock("../../services/feedback_attachments", () => ({ authorizeFeedbackAsset: vi.fn() }));
 
 import { assetRoutes } from "../../routes/assets";
 import { extractToken, resolveRequestUser } from "../../middleware/auth";
 import { getAsset } from "../../services/assets";
 import * as customersRepo from "../../repositories/customers";
+import { authorizeFeedbackAsset } from "../../services/feedback_attachments";
 
 const tokenMock = vi.mocked(extractToken);
 const resolveMock = vi.mocked(resolveRequestUser);
 const getAssetMock = vi.mocked(getAsset);
 const findCustomerMock = vi.mocked(customersRepo.findById);
+const feedbackAccessMock = vi.mocked(authorizeFeedbackAsset);
 
 function testApp() {
   const app = new Hono<{ Bindings: Env }>();
@@ -45,6 +48,7 @@ beforeEach(() => {
   tokenMock.mockReturnValue("session-token");
   resolveMock.mockResolvedValue({ id: "user-1" } as never);
   findCustomerMock.mockResolvedValue(null as never);
+  feedbackAccessMock.mockResolvedValue(null);
   getAssetMock.mockResolvedValue({
     asset: { createdById: "user-1" },
     contentType: "image/png",
@@ -135,5 +139,25 @@ describe("asset GET /:id response headers", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("application/octet-stream");
     expect(res.headers.get("Content-Disposition")).toBe("attachment");
+  });
+});
+
+// Widget/native uploads are owned by the feedback bot, so the generic owner
+// rules can't authorize them: they get a dedicated rule (workspace members, or
+// the customer who filed the issue). A denial must stop before R2 is read.
+describe("asset GET /:id feedback attachments", () => {
+  it("403s without touching storage when the feedback rule denies access", async () => {
+    feedbackAccessMock.mockResolvedValue(false);
+    const res = await testApp().fetch(request("fb1"), { DB: {}, R2: {} } as unknown as Env);
+    expect(res.status).toBe(403);
+    expect(getAssetMock).not.toHaveBeenCalled();
+  });
+
+  it("serves when allowed, skipping the generic owner rules", async () => {
+    feedbackAccessMock.mockResolvedValue(true);
+    findCustomerMock.mockResolvedValue({ id: "c-owner", workspaceId: "ws-x" } as never);
+    const res = await testApp().fetch(request("fb2"), { DB: {}, R2: {} } as unknown as Env);
+    expect(res.status).toBe(200);
+    expect(findCustomerMock).not.toHaveBeenCalled();
   });
 });

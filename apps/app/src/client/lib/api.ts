@@ -428,6 +428,24 @@ export const api = {
     apiFetch<{ ok: boolean }>(`/workspaces/${slug}/projects/${projectId}/feedback-board/`, {
       method: "DELETE",
     }),
+  rotateFeedbackSecret: (
+    slug: string,
+    projectId: string,
+    which: "identify-secret" | "ingest-key",
+  ) =>
+    apiFetch<FeedbackBoardConfig>(
+      `/workspaces/${slug}/projects/${projectId}/feedback-board/${which}`,
+      { method: "POST" },
+    ),
+  revokeFeedbackSecret: (
+    slug: string,
+    projectId: string,
+    which: "identify-secret" | "ingest-key",
+  ) =>
+    apiFetch<FeedbackBoardConfig>(
+      `/workspaces/${slug}/projects/${projectId}/feedback-board/${which}`,
+      { method: "DELETE" },
+    ),
   // CRM contacts (leads + customers)
   // Fetches ALL pages — the deal-form customer combobox must see every
   // contact, not just the first server page (server default 50, cap 100).
@@ -1234,6 +1252,8 @@ export interface FeedbackBoardConfig {
   submit_label_id?: string | null;
   brand_color?: string;
   position?: "bottom-right" | "bottom-left" | "top-right" | "top-left";
+  identify_secret?: string | null;
+  ingest_key?: string | null;
 }
 
 export interface Contact {

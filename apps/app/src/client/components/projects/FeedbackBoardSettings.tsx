@@ -54,6 +54,40 @@ export default function FeedbackBoardSettings({
     onError: () => toast.error("Failed to save feedback board"),
   });
 
+  // Create/rotate or revoke a board secret; the card re-renders from the refetch.
+  const secretMutation = (fn: () => Promise<FeedbackBoardConfig>, done: string) => ({
+    mutationFn: fn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["feedback-board-admin", slug, projectId] });
+      toast.success(done);
+    },
+    onError: () => toast.error("Request failed"),
+  });
+  const rotateIdentify = useMutation(
+    secretMutation(
+      () => api.rotateFeedbackSecret(slug, projectId, "identify-secret"),
+      "Identify secret updated",
+    ),
+  );
+  const revokeIdentify = useMutation(
+    secretMutation(
+      () => api.revokeFeedbackSecret(slug, projectId, "identify-secret"),
+      "Identify secret removed",
+    ),
+  );
+  const rotateIngest = useMutation(
+    secretMutation(
+      () => api.rotateFeedbackSecret(slug, projectId, "ingest-key"),
+      "Ingest key updated",
+    ),
+  );
+  const revokeIngest = useMutation(
+    secretMutation(
+      () => api.revokeFeedbackSecret(slug, projectId, "ingest-key"),
+      "Ingest key revoked",
+    ),
+  );
+
   const disable = useMutation({
     mutationFn: () => api.deleteFeedbackBoard(slug, projectId),
     onSuccess: () => {
@@ -95,6 +129,8 @@ export default function FeedbackBoardSettings({
       </Card>
     );
   }
+
+  const portalHref = `${origin}/portal/${slug}`;
 
   return (
     <div className="space-y-4">
@@ -257,27 +293,11 @@ export default function FeedbackBoardSettings({
         <CardHeader>
           <CardTitle>Embed on your website</CardTitle>
           <CardDescription>
-            Paste this snippet before the closing <code>&lt;/body&gt;</code> tag. The bubble opens
-            the full board.
+            Paste this snippet before the closing <code>&lt;/body&gt;</code> tag. The bubble opens a
+            panel to share an idea, report a bug (with a screenshot) or get help.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <ol className="ml-4 list-decimal space-y-1 text-sm text-muted-foreground">
-            <li>Copy the snippet below.</li>
-            <li>
-              Paste it in your site HTML, just before <code>&lt;/body&gt;</code>.
-            </li>
-            <li>The feedback bubble appears in the corner — click it to open the board.</li>
-          </ol>
-          <p className="text-xs text-muted-foreground">
-            Move the bubble with <code>data-atur-position</code> (&ldquo;bottom-left&rdquo;,
-            &ldquo;top-right&rdquo;, &ldquo;top-left&rdquo;). Preview it first: open{" "}
-            <code>examples/feedback-widget-demo.html</code> in this repo, paste your token, and
-            click <strong>Load widget</strong>.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Prefer a plain link? Share <strong>Open board</strong> below — no embed needed.
-          </p>
           <pre className="overflow-x-auto rounded-md border border-border bg-muted/50 p-3 text-xs">
             <code>{snippet}</code>
           </pre>
@@ -296,9 +316,152 @@ export default function FeedbackBoardSettings({
               Public token: <code>{form.public_token}</code>
             </span>
           </div>
+          <ul className="ml-4 list-disc space-y-1 text-xs text-muted-foreground">
+            <li>
+              <code>data-app-version</code> adds your release to every report;{" "}
+              <code>data-atur-position</code> moves the bubble (&ldquo;bottom-left&rdquo;,
+              &ldquo;top-right&rdquo;, &ldquo;top-left&rdquo;).
+            </li>
+            <li>
+              Reports include the page URL, browser, viewport and the last 20 console errors and
+              failed requests. Add <code>data-atur-context=&quot;off&quot;</code> to switch that
+              off.
+            </li>
+            <li>
+              Reports from the widget and the Atur app land in this project; bug reports and
+              questions become support tickets the reporter can follow in the portal.
+            </li>
+          </ul>
+          {portalHref && (
+            <p className="text-xs text-muted-foreground">
+              Customer portal (ideas, support, changelog):{" "}
+              <a className="underline" href={portalHref} target="_blank" rel="noreferrer">
+                {portalHref}
+              </a>
+            </p>
+          )}
         </CardContent>
       </Card>
+
+      <SecretCard
+        title="Identify users"
+        description="Tell Atur who is reporting so you see their name and email — and so they can follow their tickets in the portal. Without a secret, any typed email is accepted unverified."
+        secret={form.identify_secret}
+        secretLabel="Identify secret"
+        pending={rotateIdentify.isPending || revokeIdentify.isPending}
+        onRotate={() => rotateIdentify.mutate()}
+        onRevoke={() => revokeIdentify.mutate()}
+        confirmRotate="Rotate the identify secret? Signatures made with the old secret stop verifying immediately."
+        confirmRevoke="Remove the identify secret? Emails will be accepted unverified again."
+        usage={`// Server side: sign the user id with the identify secret
+const signature = crypto.createHmac("sha256", IDENTIFY_SECRET).update(user.id).digest("hex");
+
+// Browser, after the widget script
+Atur.identify({ id: user.id, email: user.email, name: user.name, signature });`}
+      />
+
+      <SecretCard
+        title="Log ingest"
+        description="Send server errors and log lines from your backend or error logger. Identical errors group into one issue with an occurrence counter, first/last seen and the latest logs."
+        secret={form.ingest_key}
+        secretLabel="Ingest key"
+        pending={rotateIngest.isPending || revokeIngest.isPending}
+        onRotate={() => rotateIngest.mutate()}
+        onRevoke={() => revokeIngest.mutate()}
+        confirmRotate="Rotate the ingest key? Loggers using the old key will get 404 until updated."
+        confirmRevoke="Revoke the ingest key? Ingest stops until you create a new one."
+        usage={
+          form.ingest_key
+            ? `curl -X POST ${origin}/api/ingest/${form.ingest_key} \\
+  -H 'content-type: application/json' \\
+  -d '{"message":"Payment failed","level":"error","service":"api","stack":"Error: ...\\n    at pay (pay.js:10:3)","logs":["charge started","gateway timeout"]}'`
+            : undefined
+        }
+      />
     </div>
+  );
+}
+
+function SecretCard({
+  title,
+  description,
+  secret,
+  secretLabel,
+  pending,
+  onRotate,
+  onRevoke,
+  confirmRotate,
+  confirmRevoke,
+  usage,
+}: {
+  title: string;
+  description: string;
+  secret?: string | null;
+  secretLabel: string;
+  pending: boolean;
+  onRotate: () => void;
+  onRevoke: () => void;
+  confirmRotate: string;
+  confirmRevoke: string;
+  usage?: string;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {secret ? (
+          <>
+            <div className="flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate rounded-md border border-border bg-muted/50 px-3 py-2 text-xs">
+                {secret}
+              </code>
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label={`Copy ${secretLabel.toLowerCase()}`}
+                onClick={() => {
+                  navigator.clipboard?.writeText(secret);
+                  toast.success(`${secretLabel} copied`);
+                }}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+            {usage && (
+              <pre className="overflow-x-auto rounded-md border border-border bg-muted/50 p-3 text-xs">
+                <code>{usage}</code>
+              </pre>
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pending}
+                onClick={() => confirm(confirmRotate) && onRotate()}
+              >
+                Rotate
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive"
+                disabled={pending}
+                onClick={() => confirm(confirmRevoke) && onRevoke()}
+              >
+                Remove
+              </Button>
+            </div>
+          </>
+        ) : (
+          <Button size="sm" disabled={pending} onClick={onRotate}>
+            {pending ? "Creating…" : `Create ${secretLabel.toLowerCase()}`}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -42,6 +42,7 @@ import { contactsRoutes } from "./routes/contacts";
 import { companiesRoutes } from "./routes/companies";
 import { dealsRoutes } from "./routes/deals";
 import { feedbackRoutes } from "./routes/feedback";
+import { ingestRoutes } from "./routes/ingest";
 import { feedbackAdminRoutes } from "./routes/feedback_admin";
 import { widgetRoutes } from "./routes/widget";
 import { paneRoutes } from "./routes/panes";
@@ -67,6 +68,12 @@ export function createApp(): Hono<{ Bindings: Env }> {
   // global /api/* gate below — otherwise authMiddleware 401s portal customers
   // before the handler can see their cookie and their ticket images break.
   app.route("/api/assets", assetRoutes);
+
+  // Public token-keyed endpoints for the widget, native app and log shippers.
+  // Same reasoning as assets: they must mount BEFORE the /api/* session gate
+  // because the board token / ingest key in the path is their credential.
+  app.route("/api/feedback/:token", feedbackRoutes);
+  app.route("/api/ingest/:ingestKey", ingestRoutes);
 
   // Every /api/* route requires an authenticated session (cookie or bearer).
   // /auth/* (login/register) and /health are mounted outside /api and stay public.

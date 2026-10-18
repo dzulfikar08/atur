@@ -1082,11 +1082,17 @@ export const feedbackBoards = sqliteTable(
     submitLabelId: text("submit_label_id"),
     brandColor: text("brand_color").notNull().default("#6366f1"),
     position: text("position").notNull().default("bottom-right"),
+    // HMAC-SHA256 key for Atur.identify() signatures (hex(HMAC(secret, id))).
+    // NULL = identify not enforced; email from the widget is accepted as typed.
+    identifySecret: text("identify_secret"),
+    // Bearer secret in POST /api/ingest/:key. NULL = log ingest disabled.
+    ingestKey: text("ingest_key"),
     createdAt: text("created_at"),
     updatedAt: text("updated_at"),
   },
   (table) => [
     uniqueIndex("uq_feedback_boards_token").on(table.publicToken),
+    uniqueIndex("uq_feedback_boards_ingest_key").on(table.ingestKey),
     index("idx_feedback_boards_project").on(table.projectId),
   ],
 );
@@ -1109,15 +1115,77 @@ export const feedbackVotes = sqliteTable(
 );
 
 // Public-origin author metadata, kept off the issues row itself.
-export const feedbackMeta = sqliteTable("feedback_meta", {
-  issueId: text("issue_id")
-    .primaryKey()
-    .references(() => issues.id, { onDelete: "cascade" }),
-  authorEmail: text("author_email"),
-  authorName: text("author_name"),
-  source: text("source"),
-  createdAt: text("created_at"),
-});
+export const feedbackMeta = sqliteTable(
+  "feedback_meta",
+  {
+    issueId: text("issue_id")
+      .primaryKey()
+      .references(() => issues.id, { onDelete: "cascade" }),
+    authorEmail: text("author_email"),
+    authorName: text("author_name"),
+    source: text("source"),
+    // idea | bug | question. Ideas live on the public board; the rest are tickets.
+    kind: text("kind").notNull().default("idea"),
+    // Structured auto-context captured by the widget/native app (JSON).
+    contextJson: text("context_json"),
+    // Host-app user id from Atur.identify().
+    externalUserId: text("external_user_id"),
+    // 1 when the identify signature checked out against the board secret.
+    identityVerified: integer("identity_verified").notNull().default(0),
+    // 1 when author_email may be matched to a portal login: the board has no
+    // identify secret, or the signature verified. 0 = shown as unverified only.
+    emailTrusted: integer("email_trusted").notNull().default(1),
+    createdAt: text("created_at"),
+  },
+  (table) => [index("idx_feedback_meta_email").on(table.authorEmail)],
+);
+
+// Files uploaded through the public attachments endpoint. issue_id stays NULL
+// until a submission claims the file; unclaimed rows older than 24h are
+// garbage-collected (services/feedback_attachments.ts).
+export const feedbackAttachments = sqliteTable(
+  "feedback_attachments",
+  {
+    assetId: text("asset_id")
+      .primaryKey()
+      .references(() => fileAssets.id, { onDelete: "cascade" }),
+    boardId: text("board_id")
+      .notNull()
+      .references(() => feedbackBoards.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").notNull(),
+    issueId: text("issue_id").references(() => issues.id, { onDelete: "cascade" }),
+    filename: text("filename").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_feedback_attachments_issue").on(table.issueId),
+    index("idx_feedback_attachments_unclaimed").on(table.issueId, table.createdAt),
+  ],
+);
+
+// One row per fingerprint per project: log-ingest occurrences collapse into the
+// issue referenced here (POST /api/ingest/:key).
+export const ingestGroups = sqliteTable(
+  "ingest_groups",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    issueId: text("issue_id")
+      .notNull()
+      .references(() => issues.id, { onDelete: "cascade" }),
+    fingerprint: text("fingerprint").notNull(),
+    occurrences: integer("occurrences").notNull().default(1),
+    level: text("level").notNull().default("error"),
+    firstSeenAt: text("first_seen_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_ingest_groups_fingerprint").on(table.projectId, table.fingerprint),
+    index("idx_ingest_groups_issue").on(table.issueId),
+  ],
+);
 
 // ── CRM deals pipeline ──
 // A deal IS an issue (issue_id 1:1): the pipeline is the issue's project, the

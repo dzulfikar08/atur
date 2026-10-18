@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet, UnistylesRuntime, useUnistyles } from "react-native-unistyles";
 
+import { useReportSheet } from "@/components/report-sheet";
 import {
   Avatar,
   Button,
@@ -40,6 +41,7 @@ export default function Profile() {
   const { theme } = useUnistyles();
   const { slug: currentSlug } = useCurrentWorkspace();
   const [themePref, setThemePref] = useState<ThemePref>("system");
+  const report = useReportSheet();
 
   useEffect(() => {
     void loadThemePref().then((pref) => setThemePref(pref ?? "system"));
@@ -121,6 +123,18 @@ export default function Profile() {
           />
         ))}
       </View>
+
+      <SectionTitle title="Help" />
+      <ListGroup>
+        <ListRow
+          icon="chatbubble-ellipses-outline"
+          title="Send feedback / report a bug"
+          subtitle="Share an idea, a problem or a question"
+          chevron
+          onPress={() => void report.open()}
+        />
+      </ListGroup>
+      {report.sheet}
 
       <SectionTitle title="About" />
       <ListGroup>

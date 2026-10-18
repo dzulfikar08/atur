@@ -1,11 +1,23 @@
 import { z } from "zod";
 import { v4 as uuid } from "uuid";
 import { HTTPException } from "hono/http-exception";
-import { and, eq, isNull, inArray } from "drizzle-orm";
+import { and, eq, isNull, inArray, sql } from "drizzle-orm";
 import type { DbClient } from "../db/index";
 import * as schema from "../db/schema";
 import * as feedbackRepo from "../repositories/feedback";
 import * as labelsRepo from "../repositories/labels";
+import * as customersRepo from "../repositories/customers";
+import * as activitiesRepo from "../repositories/activities";
+import * as crmActivitiesService from "./crm_activities";
+import * as attachmentsService from "./feedback_attachments";
+import {
+  contextSchema,
+  sanitizeContext,
+  renderContextHtml,
+  escapeHtml,
+  type FeedbackContext,
+} from "../lib/feedbackContext";
+import { verifyIdentitySignature, newIdentifySecret, newIngestKey } from "../lib/identify";
 
 // Fixed id of the seeded feedback-bot user (see migration). All public comments
 // are authored by it since issue_comments.actor_id is NOT NULL FK -> users.
@@ -23,7 +35,19 @@ export const createItemSchema = z.object({
   description: z.string().max(4000).optional(),
   email: z.string().email().max(255).optional(),
   name: z.string().max(120).optional(),
-  source: z.enum(["portal", "widget"]).optional().default("portal"),
+  kind: z.enum(["idea", "bug", "question"]).optional().default("idea"),
+  source: z.enum(["portal", "widget", "native", "api"]).optional().default("portal"),
+  context: contextSchema.optional(),
+  attachment_ids: z.array(z.string().uuid()).max(5).optional(),
+  external_user: z
+    .object({
+      id: z.string().min(1).max(255),
+      // Host-app supplied: a malformed address must not reject the whole report.
+      email: z.string().max(255).optional(),
+      name: z.string().max(120).optional(),
+      signature: z.string().max(128).optional(),
+    })
+    .optional(),
 });
 
 export const voteSchema = z.object({
@@ -54,20 +78,14 @@ export const upsertBoardSchema = z.object({
 
 // ── Helpers ──
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 // Public input is plain text. Store an escaped HTML copy for the team's internal
 // issue view, and the plain text for the public portal (rendered as React text,
 // so no XSS surface / no dangerouslySetInnerHTML anywhere).
-function toHtml(paragraph: string): string {
-  return `<p>${escapeHtml(paragraph)}</p>`;
+function toHtml(text: string): string {
+  return text
+    .split(/\n{2,}/)
+    .map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
+    .join("");
 }
 
 export async function voterHashFor(
@@ -89,6 +107,9 @@ export type PublicBoardConfig = {
   require_email: boolean;
   allow_comments: boolean;
   brand_color: string;
+  position: string;
+  workspace_slug: string | null;
+  workspace_name: string | null;
 };
 
 export type FeedbackItem = {
@@ -107,6 +128,13 @@ export type FeedbackItem = {
 async function resolveBoard(db: DbClient, token: string) {
   const board = await feedbackRepo.findBoardByToken(db, token);
   if (!board) throw new HTTPException(404, { message: "Feedback board not found" });
+  return board;
+}
+
+// Attachment uploads are part of submitting, so they follow allow_submit.
+export async function findBoardForUpload(db: DbClient, token: string) {
+  const board = await resolveBoard(db, token);
+  if (!board.allowSubmit) throw new HTTPException(403, { message: "Submissions are disabled" });
   return board;
 }
 
@@ -174,13 +202,16 @@ async function enrichItems(
 
 // ── Public API ──
 
-export async function getBoard(db: DbClient, token: string, voterHash: string) {
-  const board = await resolveBoard(db, token);
-  const rows = await feedbackRepo.listFeedbackIssues(db, board.projectId);
-  const items = await enrichItems(db, rows, voterHash, board.workspaceId);
-  items.sort((a, b) => b.votes - a.votes || b.sequence_id - a.sequence_id);
-
-  const boardConfig: PublicBoardConfig = {
+async function toPublicConfig(
+  db: DbClient,
+  board: typeof schema.feedbackBoards.$inferSelect,
+): Promise<PublicBoardConfig> {
+  const [workspace] = await db
+    .select({ slug: schema.workspaces.slug, name: schema.workspaces.name })
+    .from(schema.workspaces)
+    .where(and(eq(schema.workspaces.id, board.workspaceId), isNull(schema.workspaces.deletedAt)))
+    .limit(1);
+  return {
     title: board.title,
     description: board.description,
     allow_submit: !!board.allowSubmit,
@@ -188,8 +219,22 @@ export async function getBoard(db: DbClient, token: string, voterHash: string) {
     require_email: !!board.requireEmail,
     allow_comments: !!board.allowComments,
     brand_color: board.brandColor,
+    position: board.position,
+    workspace_slug: workspace?.slug ?? null,
+    workspace_name: workspace?.name ?? null,
   };
-  return { board: boardConfig, items };
+}
+
+export async function getBoardConfig(db: DbClient, token: string) {
+  return toPublicConfig(db, await resolveBoard(db, token));
+}
+
+export async function getBoard(db: DbClient, token: string, voterHash: string) {
+  const board = await resolveBoard(db, token);
+  const rows = await feedbackRepo.listFeedbackIssues(db, board.projectId);
+  const items = await enrichItems(db, rows, voterHash, board.workspaceId);
+  items.sort((a, b) => b.votes - a.votes || b.sequence_id - a.sequence_id);
+  return { board: await toPublicConfig(db, board), items };
 }
 
 export async function getItem(db: DbClient, token: string, issueId: string, voterHash: string) {
@@ -197,29 +242,117 @@ export async function getItem(db: DbClient, token: string, issueId: string, vote
   const issue = await feedbackRepo.findFeedbackIssue(db, board.projectId, issueId);
   if (!issue) throw new HTTPException(404, { message: "Feedback item not found" });
 
-  const [items, comments, meta] = await Promise.all([
+  const [items, comments] = await Promise.all([
     enrichItems(db, [issue], voterHash, board.workspaceId),
     feedbackRepo.listExternalComments(db, issue.id),
-    feedbackRepo.getFeedbackMeta(db, issue.id),
   ]);
-  return {
-    ...items[0],
-    author_email: meta?.authorEmail ?? null,
-    comments,
-  };
+  return { ...items[0], comments };
 }
+
+// Resolve who the reporter is and whether their email can be trusted.
+//  - external_user with a valid HMAC signature → verified, email trusted.
+//  - board has an identify secret but the signature is missing/invalid → email is
+//    kept for the team (flagged unverified) but NOT matched to a portal login.
+//  - no identify secret configured → nothing to verify against; the typed email
+//    is accepted as before (unverified, portal-matchable via its own OTP).
+async function resolveReporter(
+  board: { identifySecret: string | null },
+  data: z.infer<typeof createItemSchema>,
+) {
+  const isEmail = (v: string | undefined) =>
+    v ? z.string().email().safeParse(v.trim()).success : false;
+  const ext = data.external_user;
+  const extEmail = isEmail(ext?.email) ? ext!.email!.trim().toLowerCase() : undefined;
+  const email = extEmail ?? (data.email ? data.email.trim().toLowerCase() : undefined);
+  const name = ext?.name ?? data.name;
+
+  const verified =
+    !!ext && !!board.identifySecret
+      ? await verifyIdentitySignature(board.identifySecret, ext.id, ext.signature)
+      : false;
+  const emailTrusted = !board.identifySecret || verified;
+  return { email, name, verified, emailTrusted, externalUserId: ext?.id ?? null };
+}
+
+function reportHtml(p: {
+  description?: string;
+  kind: string;
+  source: string;
+  email?: string;
+  name?: string;
+  verified: boolean;
+  attachments: attachmentsService.ClaimedAttachment[];
+  context?: FeedbackContext;
+}): string {
+  const parts: string[] = [];
+  if (p.email || p.name) {
+    const label = [
+      p.name ? escapeHtml(p.name) : "",
+      p.email ? `&lt;${escapeHtml(p.email)}&gt;` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    parts.push(
+      `<p><strong>Reporter:</strong> ${label} <em>(${p.verified ? "verified" : "unverified"} identity)</em></p>`,
+    );
+  }
+  if (p.kind !== "idea" || p.source !== "portal") {
+    parts.push(
+      `<p><strong>Type:</strong> ${escapeHtml(p.kind)} · <strong>Source:</strong> ${escapeHtml(p.source)}</p>`,
+    );
+  }
+  if (p.attachments.length) {
+    const items = p.attachments.map((a) => {
+      const href = `/api/assets/${a.id}`;
+      return a.mime.startsWith("image/")
+        ? `<p><img src="${href}" alt="${escapeHtml(a.filename)}"></p>`
+        : `<p><a href="${href}">${escapeHtml(a.filename)}</a></p>`;
+    });
+    parts.push(`<h4>Attachments</h4>${items.join("")}`);
+  }
+  if (p.context) parts.push(renderContextHtml(p.context));
+  return (p.description ? toHtml(p.description) : "") + parts.join("");
+}
+
+export type CreatedItem = { id: string; sequence_id: number; url: string };
 
 export async function createItem(
   db: DbClient,
   token: string,
   data: z.infer<typeof createItemSchema>,
-) {
+  origin: string,
+): Promise<CreatedItem> {
   const board = await resolveBoard(db, token);
   if (!board.allowSubmit) throw new HTTPException(403, { message: "Submissions are disabled" });
-  if (board.requireEmail && !data.email) {
+  const reporter = await resolveReporter(board, data);
+  if (board.requireEmail && !reporter.email) {
     throw new HTTPException(400, { message: "Email is required" });
   }
   const { stateId: boardStateId, labelId: boardLabelId } = await sanitizeBoardConfig(db, board);
+  const attachments = await attachmentsService.resolveUnclaimed(
+    db,
+    board.id,
+    data.attachment_ids ?? [],
+  );
+  const context = data.context ? sanitizeContext(data.context) : undefined;
+  const isTicket = data.kind !== "idea";
+
+  // Tickets of a trusted email belong to that person's portal account.
+  const customer =
+    isTicket && reporter.email && reporter.emailTrusted
+      ? await findOrCreateCustomer(db, board.workspaceId, reporter.email, reporter.name)
+      : null;
+
+  const html = reportHtml({
+    description: data.description,
+    kind: data.kind,
+    source: data.source,
+    email: reporter.email,
+    name: reporter.name,
+    verified: reporter.verified,
+    attachments,
+    context,
+  });
 
   const id = uuid();
   // sequenceId allocated atomically inside createFeedbackIssue (per-project
@@ -229,19 +362,85 @@ export async function createItem(
     name: data.title,
     projectId: board.projectId,
     workspaceId: board.workspaceId,
-    descriptionHtml: data.description ? toHtml(data.description) : null,
+    descriptionHtml: html || null,
     descriptionStripped: data.description ?? null,
     stateId: boardStateId,
     submitLabelId: boardLabelId,
+    externalSource: isTicket ? "portal" : "feedback",
+    createdById: customer?.userId ?? null,
   });
   await feedbackRepo.insertFeedbackMeta(db, {
     issueId: id,
-    authorEmail: data.email ?? null,
-    authorName: data.name ?? null,
+    authorEmail: reporter.email ?? null,
+    authorName: reporter.name ?? null,
     source: data.source,
+    kind: data.kind,
+    contextJson: context ? JSON.stringify(context) : null,
+    externalUserId: reporter.externalUserId,
+    identityVerified: reporter.verified,
+    emailTrusted: reporter.emailTrusted,
   });
+  await attachmentsService.claimAttachments(
+    db,
+    id,
+    attachments.map((a) => a.id),
+  );
 
-  return { id, sequence_id: sequenceId };
+  if (customer) {
+    await db.insert(schema.supportTickets).values({
+      id: uuid(),
+      issueId: id,
+      customerId: customer.id,
+      workspaceId: board.workspaceId,
+      createdAt: new Date().toISOString(),
+    });
+    if (customer.userId) {
+      await activitiesRepo.create(db, { verb: "created", issueId: id, actorId: customer.userId });
+    }
+    await crmActivitiesService.recordActivity(db, board.workspaceId, {
+      customerId: customer.id,
+      type: "NOTE",
+      subject: `${data.kind === "bug" ? "Bug report" : "Question"} via ${data.source}`,
+      body: data.title,
+      createdBy: customer.userId,
+    });
+  }
+
+  const [workspace] = await db
+    .select({ slug: schema.workspaces.slug })
+    .from(schema.workspaces)
+    .where(eq(schema.workspaces.id, board.workspaceId))
+    .limit(1);
+  const portal = `${origin}/portal/${workspace?.slug ?? ""}`;
+  const url = isTicket
+    ? `${portal}/tickets/${sequenceId}?project=${board.projectId}`
+    : `${portal}/ideas?board=${encodeURIComponent(board.publicToken)}&item=${id}`;
+  return { id, sequence_id: sequenceId, url };
+}
+
+// Case-insensitive customer lookup so a widget email matches the row the portal
+// OTP flow created for the same person, whatever casing either side used.
+export async function findOrCreateCustomer(
+  db: DbClient,
+  workspaceId: string,
+  email: string,
+  name?: string | null,
+) {
+  const [existing] = await db
+    .select({ id: schema.customers.id })
+    .from(schema.customers)
+    .where(
+      and(
+        eq(schema.customers.workspaceId, workspaceId),
+        sql`lower(${schema.customers.email}) = ${email.toLowerCase()}`,
+      ),
+    )
+    .limit(1);
+  if (existing) {
+    const row = await customersRepo.getContact(db, workspaceId, existing.id);
+    if (row) return row;
+  }
+  return customersRepo.ensure(db, workspaceId, { email: email.toLowerCase(), name });
 }
 
 // Toggle a vote for the given pre-computed voter hash. `email` is only used to
@@ -504,6 +703,32 @@ export async function deleteAdminConfig(
   return { ok: true };
 }
 
+// Create/rotate (action "rotate") or revoke (action "revoke") a board secret.
+// Rotating the identify secret invalidates signatures minted with the old one;
+// revoking it turns identify enforcement off (typed emails count as unverified
+// again). Revoking the ingest key makes POST /api/ingest/:key 404.
+export async function setBoardSecret(
+  db: DbClient,
+  slug: string,
+  projectId: string,
+  userId: string,
+  which: "identify_secret" | "ingest_key",
+  action: "rotate" | "revoke",
+) {
+  const { workspace, project } = await resolveProject(db, slug, projectId);
+  await assertWorkspaceMember(db, workspace.id, userId);
+  const existing = await feedbackRepo.findBoardByProject(db, project.id);
+  if (!existing) throw new HTTPException(404, { message: "Feedback board not enabled" });
+  const value =
+    action === "revoke" ? null : which === "identify_secret" ? newIdentifySecret() : newIngestKey();
+  const board = await feedbackRepo.updateBoard(
+    db,
+    existing.id,
+    which === "identify_secret" ? { identifySecret: value } : { ingestKey: value },
+  );
+  return toAdminBoard(board!);
+}
+
 // ── Admin helpers ──
 
 async function ensureFeedbackLabel(db: DbClient, projectId: string, workspaceId: string) {
@@ -543,5 +768,9 @@ function toAdminBoard(b: BoardRow) {
     submit_label_id: b.submitLabelId,
     brand_color: b.brandColor,
     position: b.position,
+    // Admin-only (this payload is gated by workspace membership): the HMAC key
+    // for Atur.identify() and the bearer key for POST /api/ingest/:key.
+    identify_secret: b.identifySecret,
+    ingest_key: b.ingestKey,
   };
 }

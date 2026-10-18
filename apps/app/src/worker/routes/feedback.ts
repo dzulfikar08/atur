@@ -3,8 +3,11 @@ import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { rateLimit } from "../lib/rateLimit";
 import * as feedback from "../services/feedback";
+import * as attachments from "../services/feedback_attachments";
+import { parseOr400, publicJsonError } from "../lib/validate";
 
 export const feedbackRoutes = new Hono<{ Bindings: Env }>({ strict: false });
+feedbackRoutes.onError(publicJsonError);
 
 // Public, token-keyed, no session. Board identity comes from the path token.
 // Voter identity for dedup + "voted" state is derived from email (if provided)
@@ -29,6 +32,10 @@ async function voter(c: Context<{ Bindings: Env }>) {
 }
 
 feedbackRoutes
+  // Board settings only (no items): what the widget needs to boot.
+  .get("/config", async (c) => {
+    return c.json(await feedback.getBoardConfig(getDb(c.env.DB), c.req.param("token")!));
+  })
   .get("/", async (c) => {
     const db = getDb(c.env.DB);
     const token = c.req.param("token")!;
@@ -41,8 +48,30 @@ feedbackRoutes
     const token = c.req.param("token")!;
     const ok = await rateLimit(c.env, `fb:${token}:${clientIp(c)}:submit`, 10, 60);
     if (!ok) return c.json({ message: "Too many submissions. Try again shortly." }, 429);
-    const body = feedback.createItemSchema.parse(await c.req.json());
-    const result = await feedback.createItem(db, token, body);
+    const body = parseOr400(feedback.createItemSchema, await c.req.json().catch(() => undefined));
+    const result = await feedback.createItem(db, token, body, new URL(c.req.url).origin);
+    return c.json(result, 201);
+  })
+
+  .post("/attachments", async (c) => {
+    const db = getDb(c.env.DB);
+    const token = c.req.param("token")!;
+    const ok = await rateLimit(c.env, `fb:${token}:${clientIp(c)}:upload`, 15, 60);
+    if (!ok) return c.json({ message: "Too many uploads. Try again shortly." }, 429);
+    const board = await feedback.findBoardForUpload(db, token);
+    const form = await c.req.formData().catch(() => null);
+    const file = form?.get("file");
+    if (!file || typeof file === "string") {
+      return c.json({ message: "Multipart field 'file' is required" }, 400);
+    }
+    const result = await attachments.uploadAttachment(
+      db,
+      c.env,
+      board,
+      file,
+      new URL(c.req.url).origin,
+      feedback.FEEDBACK_BOT_USER_ID,
+    );
     return c.json(result, 201);
   })
 

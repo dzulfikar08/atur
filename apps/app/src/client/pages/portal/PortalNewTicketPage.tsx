@@ -35,7 +35,7 @@ export default function PortalNewTicketPage() {
       portalApi.createTicket(slug!, data),
     onSuccess: (issue) => {
       // Refresh the list so the new ticket appears when the customer returns.
-      qc.invalidateQueries({ queryKey: ["portal-tickets", slug] });
+      qc.invalidateQueries({ queryKey: ["portal-mine", slug] });
       toast.success("Ticket created");
       navigate(`/portal/${slug}/tickets/${issue.sequence_id}`, { replace: true });
     },
@@ -54,7 +54,7 @@ export default function PortalNewTicketPage() {
 
   return (
     <div className="space-y-4">
-      <Button variant="ghost" size="sm" onClick={() => navigate(`/portal/${slug}`)}>
+      <Button variant="ghost" size="sm" onClick={() => navigate(`/portal/${slug}/tickets`)}>
         <ArrowLeft className="mr-1 h-4 w-4" />
         Back
       </Button>
@@ -104,7 +104,7 @@ export default function PortalNewTicketPage() {
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => navigate(`/portal/${slug}`)}>
+            <Button variant="outline" onClick={() => navigate(`/portal/${slug}/tickets`)}>
               Cancel
             </Button>
             <Button onClick={submit} disabled={!name.trim() || createMutation.isPending}>

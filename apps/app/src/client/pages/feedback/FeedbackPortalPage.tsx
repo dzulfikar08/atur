@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { Navigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { feedbackApi, FeedbackApiError, type FeedbackItem } from "@/lib/feedbackApi";
@@ -80,17 +80,27 @@ function timeAgo(iso: string | null): string {
   return new Date(iso).toLocaleDateString();
 }
 
-export default function FeedbackPortalPage() {
-  const { token } = useParams<{ token: string }>();
-  const [search] = useSearchParams();
-  const embed = search.get("embed") === "1";
+// The board UI used by the portal's Ideas tab (and by the legacy ?embed=1
+// iframe). `defaultEmail` prefills voter/author identity for signed-in portal
+// customers; `initialItemId` deep-links an idea (portal ?item=).
+export function FeedbackBoardView({
+  token,
+  embed = false,
+  initialItemId = null,
+  defaultEmail = "",
+}: {
+  token: string;
+  embed?: boolean;
+  initialItemId?: string | null;
+  defaultEmail?: string;
+}) {
   const qc = useQueryClient();
 
-  const [email, setEmail] = useState<string>(() =>
-    token ? (localStorage.getItem(EMAIL_KEY(token)) ?? "") : "",
+  const [email, setEmail] = useState<string>(
+    () => localStorage.getItem(EMAIL_KEY(token)) ?? defaultEmail,
   );
   const [submitOpen, setSubmitOpen] = useState(false);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(initialItemId);
 
   const boardKey = ["feedback-board", token, email] as const;
 
@@ -135,7 +145,6 @@ export default function FeedbackPortalPage() {
     },
   });
 
-  if (!token) return <Centered>Invalid board link.</Centered>;
   if (boardQ.isLoading) {
     return (
       <Centered>
@@ -169,20 +178,19 @@ export default function FeedbackPortalPage() {
       className={
         embed
           ? "flex h-[100dvh] flex-col bg-background text-foreground"
-          : "min-h-[100dvh] bg-background text-foreground"
+          : "bg-background text-foreground"
       }
     >
       <header
         className={embed ? "shrink-0 border-b border-border px-4 py-3" : "border-b border-border"}
-        style={embed ? undefined : undefined}
       >
-        <div className={embed ? undefined : "mx-auto max-w-2xl px-5 py-10"}>
+        <div className={embed ? undefined : "py-4"}>
           <div className="flex items-center gap-2">
             <span
               className="inline-block h-2.5 w-2.5 rounded-full"
               style={{ background: board.brand_color }}
             />
-            <h1 className={embed ? "text-base font-semibold" : "text-2xl font-bold tracking-tight"}>
+            <h1 className={embed ? "text-base font-semibold" : "text-xl font-bold tracking-tight"}>
               {board.title}
             </h1>
           </div>
@@ -190,20 +198,14 @@ export default function FeedbackPortalPage() {
             <p className="mt-2 text-sm text-muted-foreground">{board.description}</p>
           )}
           {!embed && (
-            <p className="mt-3 text-xs text-muted-foreground">
+            <p className="mt-2 text-xs text-muted-foreground">
               Suggest an idea, vote on what matters, and track our progress.
             </p>
           )}
         </div>
       </header>
 
-      <div
-        className={
-          embed
-            ? "min-h-0 flex-1 overflow-y-auto px-4 py-3"
-            : "mx-auto w-full max-w-2xl flex-1 px-5 py-6"
-        }
-      >
+      <div className={embed ? "min-h-0 flex-1 overflow-y-auto px-4 py-3" : "w-full flex-1 py-4"}>
         <div className="mb-3 flex items-center justify-between">
           <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             {items.length} {items.length === 1 ? "idea" : "ideas"}
@@ -303,11 +305,48 @@ export default function FeedbackPortalPage() {
   );
 }
 
+// /feedback/:token is kept for old links: it sends visitors to the Ideas tab of
+// the unified portal for the board's workspace. The ?embed=1 iframe variant
+// (widgets embedded before the portal merge) still renders the board in place.
+export default function FeedbackPortalPage() {
+  const { token } = useParams<{ token: string }>();
+  const [search] = useSearchParams();
+  const embed = search.get("embed") === "1";
+
+  const configQ = useQuery({
+    queryKey: ["feedback-config", token],
+    queryFn: () => feedbackApi.getConfig(token!),
+    enabled: !!token && !embed,
+    retry: false,
+  });
+
+  if (!token) return <Centered>Invalid board link.</Centered>;
+  if (embed) return <FeedbackBoardView token={token} embed />;
+  if (configQ.isLoading) {
+    return (
+      <Centered>
+        <Spinner /> Loading…
+      </Centered>
+    );
+  }
+  const slug = configQ.data?.workspace_slug;
+  if (slug) {
+    return <Navigate to={`/portal/${slug}/ideas?board=${encodeURIComponent(token)}`} replace />;
+  }
+  return (
+    <Centered>
+      <p className="text-muted-foreground">
+        This feedback board was not found or has been disabled.
+      </p>
+    </Centered>
+  );
+}
+
 // ── Sub-components ──
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background p-6 text-center text-sm text-foreground">
+    <div className="flex min-h-[40dvh] items-center justify-center bg-background p-6 text-center text-sm text-foreground">
       {children}
     </div>
   );
@@ -362,7 +401,7 @@ function EmailGate({
 }) {
   const [value, setValue] = useState("");
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background p-6">
+    <div className="flex min-h-[50dvh] items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm rounded-xl border border-border bg-card p-6">
         <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: brand }} />
         <h1 className="mt-2 text-lg font-semibold">{title}</h1>

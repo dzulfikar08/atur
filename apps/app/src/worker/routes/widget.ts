@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "../lib/env";
-import { WIDGET_JS } from "../widget/widget.js";
+import WIDGET_JS from "../widget/widget.src.js?raw";
 
 // Serves the embeddable widget at /widget.js. Customers include:
 //   <script src="https://app.diatur.com/widget.js" data-atur-token="pk_fb_..." async></script>
