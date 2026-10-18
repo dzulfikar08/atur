@@ -80,10 +80,10 @@ labels, comments), new issue, search, inbox, profile.
   For local dev, `EXPO_PUBLIC_SERVER_URL=http://localhost:5173 bun run web` in
   `apps/native` previews it in the browser against `bun run dev:app`.
 - **Device**: `cd apps/native && bunx expo run:android` (dev client).
-- **Release APK**: `scripts/build-native-apk.sh` → `apps/native/dist/atur-release.apk`
-  (arm64; `ARCHS=x86_64` for an emulator build). The signing key is generated
-  once into `apps/native/keystore/` (gitignored) — back it up; updates must be
-  signed with the same key.
+- **Release**: Atur ships through Google Play and the App Store only (no sideload
+  APK). `scripts/build-native-aab.sh` builds the Play AAB; CI does it in
+  `release-android.yml` (see `docs/native-release.md`). v1.0.x sideload users must
+  uninstall and install from Play: the signing key can differ under Play App Signing.
 
 ## Domains
 

@@ -7,7 +7,6 @@ import { authMiddleware } from "./middleware/auth";
 import { adminRoutes } from "./routes/admin";
 import { healthRoutes } from "./routes/health";
 import { authRoutes } from "./routes/auth";
-import { downloadRoutes } from "./routes/downloads";
 import { workspaceRoutes } from "./routes/workspaces";
 import { projectRoutes } from "./routes/projects";
 import { issueRoutes } from "./routes/issues";
@@ -86,8 +85,6 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/widget.js", widgetRoutes);
   // Public feedback board API — token-keyed, no session.
   app.route("/public/feedback/:token", feedbackRoutes);
-  // Android release APK (R2), linked from the profile page.
-  app.route("/public/downloads", downloadRoutes);
 
   // Polar webhook receiver — per-workspace URL (/webhooks/polar/:slug), each
   // workspace verifies with its own secret from polar_settings. Public.

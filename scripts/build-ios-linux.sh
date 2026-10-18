@@ -62,8 +62,6 @@ export XCODE_VERSION=${XCODE_VERSION:-27.0} XCODE_BUILD=${XCODE_BUILD:-27A266a}
 # Release JS env. The API baked into the bundle; set in the process so it beats
 # any apps/native/.env used for local dev.
 export NODE_ENV=production
-# iOS has no APK updater; the flag only has to match app.config.ts.
-export ATUR_DISTRIBUTION=site
 export EXPO_PUBLIC_SERVER_URL="${EXPO_PUBLIC_SERVER_URL:-https://app.diatur.com}"
 
 SDK=$(ls -d "$DARWIN"/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS[0-9]*.sdk | tail -n1)
@@ -89,10 +87,10 @@ MACROS=$SHARED/macros-$MACROS_VERSION
 MACRO_TOOL=$MACROS/.build/release/ExpoModulesMacros
 
 if step 1 "Expo prebuild"; then
-  # app.json, app.config.ts, package.json and tsconfig.json are copies: prebuild may rewrite them.
+  # app.json, package.json and tsconfig.json are copies: prebuild may rewrite them.
   rm -rf "$PROJ"
   mkdir -p "$PROJ"
-  cp "$NATIVE/app.json" "$NATIVE/app.config.ts" "$NATIVE/package.json" "$NATIVE/tsconfig.json" "$PROJ/"
+  cp "$NATIVE/app.json" "$NATIVE/package.json" "$NATIVE/tsconfig.json" "$PROJ/"
   for entry in assets node_modules; do ln -s "$NATIVE/$entry" "$PROJ/$entry"; done
   (cd "$PROJ" && bunx expo prebuild -p ios --no-install 2>&1 | tail -1)
 fi

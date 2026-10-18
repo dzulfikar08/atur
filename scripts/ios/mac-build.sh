@@ -61,11 +61,10 @@ step "1. bun install --frozen-lockfile"
 bun install --frozen-lockfile 2>&1 | tail -n 3
 lap
 
-# Release JS env, as scripts/build-native-apk.sh and scripts/build-ios-linux.sh: beats apps/native/.env (local dev,
+# Release JS env, as scripts/build-native-aab.sh and scripts/build-ios-linux.sh: beats apps/native/.env (local dev,
 # not in git, so not on the Mac either).
 export NODE_ENV=production
 export EXPO_PUBLIC_SERVER_URL="${EXPO_PUBLIC_SERVER_URL:-https://app.diatur.com}"
-export ATUR_DISTRIBUTION=site
 
 step "2. expo prebuild --platform ios --clean"
 (cd "$JS_DIR" && bunx expo prebuild --platform ios --clean --no-install 2>&1 | tail -n 1)

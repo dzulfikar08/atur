@@ -1,35 +1,25 @@
 #!/usr/bin/env bash
-# Android release builds for apps/native, signed with the local release keystore,
-# R8 + resource shrinking.
+# Android release build for apps/native: the Play AAB, signed with the local release
+# keystore, R8 + resource shrinking.
 #
-#   scripts/build-native-apk.sh            site APK  -> apps/native/dist/atur-release.apk (arm64-v8a)
-#   scripts/build-native-apk.sh --publish  ...and upload it to R2 (atur-assets/downloads/atur-latest.apk),
-#                                          which app.diatur.com serves at /public/downloads/android
-#   scripts/build-native-apk.sh --play     Play AAB  -> apps/native/dist/atur-play-<versionCode>.aab
-#                                          (arm64-v8a + armeabi-v7a, ATUR_DISTRIBUTION=play)
-#   --clean forces a fresh prebuild. ARCHS=x86_64 builds an emulator-testable APK.
+#   scripts/build-native-aab.sh            -> apps/native/dist/atur-play-<versionCode>.aab
+#                                          (arm64-v8a + armeabi-v7a)
+#   --clean forces a fresh prebuild. Upload with scripts/play-upload.py.
 #
 # The keystore lives OUTSIDE android/ (prebuild wipes android/) and is
-# gitignored. Back it up: updates must be signed with the same key. For the
-# Play AAB it is the upload key (docs/play-store.md).
+# gitignored. Back it up: it is the Play upload key (docs/play-store.md).
 #
 # versionCode = minutes since 2024-01-01 UTC (strictly increases per build, stays
-# far below Play's 2100000000 cap and above the 3 the first sideload APK shipped).
+# far below Play's 2100000000 cap).
 # Guide: docs/native-release.md.
 set -euo pipefail
-PUBLISH=0 PLAY=0 CLEAN=0
+CLEAN=0
 for arg in "$@"; do
   case "$arg" in
-    --publish) PUBLISH=1 ;;
-    --play) PLAY=1 ;;
     --clean) CLEAN=1 ;;
     *) echo "unknown option: $arg" >&2; exit 1 ;;
   esac
 done
-if [ "$PLAY" = 1 ] && [ "$PUBLISH" = 1 ]; then
-  echo "--publish uploads the site APK; a Play AAB goes through scripts/play-upload.py" >&2
-  exit 1
-fi
 cd "$(dirname "$0")/.."
 # Absolute repo root: later steps run from apps/native/android.
 ROOT="$(pwd)"
@@ -49,13 +39,7 @@ if [ -z "${GRADLE_USER_HOME:-}" ] && [ -L "$HOME/.gradle" ] && [ ! -d "$HOME/.gr
   exit 1
 fi
 
-if [ "$PLAY" = 1 ]; then
-  export ATUR_DISTRIBUTION=play
-  export ARCHS="${ARCHS:-arm64-v8a,armeabi-v7a}"
-else
-  export ATUR_DISTRIBUTION=site
-  export ARCHS="${ARCHS:-arm64-v8a}"
-fi
+export ARCHS="${ARCHS:-arm64-v8a,armeabi-v7a}"
 export VERSION_CODE="$(( ($(date -u +%s) - 1704067200) / 60 ))"
 
 # The API baked into the bundle. Set in the process so it beats any
@@ -83,12 +67,11 @@ fi
 
 # 2. Prebuild, only when native inputs changed (wiping android/ also wipes the
 #    CMake caches and recompiles all native code). Inputs: app config, deps,
-#    assets prebuild copies (icons, splash) and the distribution flag.
+#    assets prebuild copies (icons, splash).
 cd "$NATIVE"
 STAMP=android/.prebuild-hash
 PREBUILD_HASH="$(
-  { sha256sum app.json app.config.ts package.json "$ROOT/bun.lock"
-    echo "distribution=$ATUR_DISTRIBUTION"
+  { sha256sum app.json package.json "$ROOT/bun.lock"
     find assets -type f -print0 | sort -z | xargs -0 sha256sum
   } | sha256sum | cut -d' ' -f1
 )"
@@ -160,15 +143,9 @@ PY
 
 # 4. Build.
 cd android
-if [ "$PLAY" = 1 ]; then
-  ./gradlew bundleRelease
-  ARTIFACT=app/build/outputs/bundle/release/app-release.aab
-  JS_BUNDLE=base/assets/index.android.bundle
-else
-  ./gradlew assembleRelease --no-daemon
-  ARTIFACT=app/build/outputs/apk/release/app-release.apk
-  JS_BUNDLE=assets/index.android.bundle
-fi
+./gradlew bundleRelease
+ARTIFACT=app/build/outputs/bundle/release/app-release.aab
+JS_BUNDLE=base/assets/index.android.bundle
 
 # 5. Bundle sanity: the inlined server URL must be the intended API. Capture
 # first: `grep -q` exiting early would SIGPIPE the pipeline under pipefail.
@@ -179,16 +156,11 @@ if ! grep -qF "$EXPO_PUBLIC_SERVER_URL" <<<"$BUNDLE_STRINGS"; then
 fi
 
 # 6. Manifest guard: permissions Play rejects or the app never uses must not be
-#    in the merged manifest. Play: bundletool; site: aapt2 from the build-tools.
+#    in the merged manifest (bundletool).
 FORBIDDEN='REQUEST_INSTALL_PACKAGES|SYSTEM_ALERT_WINDOW|QUERY_ALL_PACKAGES|MANAGE_EXTERNAL_STORAGE'
-if [ "$PLAY" = 1 ]; then
-  BUNDLETOOL="${BUNDLETOOL:-$HOME/.cache/bundletool/bundletool.jar}"
-  PERMS=$(java -jar "$BUNDLETOOL" dump manifest --bundle "$ARTIFACT" |
-    sed -n 's/.*<uses-permission[^>]*android:name="\([^"]*\)".*/\1/p' | sort -u)
-else
-  AAPT2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -n1)
-  PERMS=$("$AAPT2" dump permissions "$ARTIFACT" | sed -n "s/^uses-permission: name='\([^']*\)'.*/\1/p" | sort -u)
-fi
+BUNDLETOOL="${BUNDLETOOL:-$HOME/.cache/bundletool/bundletool.jar}"
+PERMS=$(java -jar "$BUNDLETOOL" dump manifest --bundle "$ARTIFACT" |
+  sed -n 's/.*<uses-permission[^>]*android:name="\([^"]*\)".*/\1/p' | sort -u)
 echo "merged manifest permissions:"
 sed 's/^/  /' <<<"$PERMS"
 if grep -qE "$FORBIDDEN" <<<"$PERMS"; then
@@ -197,24 +169,8 @@ if grep -qE "$FORBIDDEN" <<<"$PERMS"; then
 fi
 
 mkdir -p ../dist
-if [ "$PLAY" = 1 ]; then
-  OUT="$ROOT/$NATIVE/dist/atur-play-$VERSION_CODE.aab"
-  cp "$ARTIFACT" "$OUT"
-  ls -la "$OUT"
-  echo "versionCode=$VERSION_CODE"
-  echo RELEASE-AAB-DONE
-else
-  OUT="$ROOT/$NATIVE/dist/atur-release.apk"
-  cp "$ARTIFACT" "$OUT"
-  ls -la "$OUT"
-  echo "versionCode=$VERSION_CODE"
-  echo RELEASE-APK-DONE
-fi
-
-if [ "$PUBLISH" = 1 ]; then
-  cd "$ROOT/apps/app"
-  bunx wrangler r2 object put atur-assets/downloads/atur-latest.apk --remote \
-    --file "$OUT" \
-    --content-type application/vnd.android.package-archive
-  echo "published: https://app.diatur.com/public/downloads/android"
-fi
+OUT="$ROOT/$NATIVE/dist/atur-play-$VERSION_CODE.aab"
+cp "$ARTIFACT" "$OUT"
+ls -la "$OUT"
+echo "versionCode=$VERSION_CODE"
+echo RELEASE-AAB-DONE

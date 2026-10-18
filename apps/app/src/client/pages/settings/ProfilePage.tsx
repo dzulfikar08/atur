@@ -367,18 +367,25 @@ export default function ProfilePage() {
         <Card>
           <CardHeader>
             <CardTitle>Mobile app</CardTitle>
-            <CardDescription>Atur for Android</CardDescription>
+            <CardDescription>Atur for Android and iPhone</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button asChild>
-              <a href={`${apiOrigin}/public/downloads/android`} download>
-                Download for Android
-              </a>
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              An APK file. Android may ask you to allow installs from this source. Already
-              installed? Download again to update.
-            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild>
+                <a
+                  href="https://play.google.com/store/apps/details?id=com.diatur.app"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Get it on Google Play
+                </a>
+              </Button>
+              <Button asChild variant="outline">
+                <a href="https://apps.apple.com/app/id6824116330" target="_blank" rel="noreferrer">
+                  Download on the App Store
+                </a>
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

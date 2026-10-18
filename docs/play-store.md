@@ -8,14 +8,12 @@ Package `com.diatur.app`, native app `apps/native`. Everything below is for the 
 
 | Item             | Where                                                                                                                                                                                  |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Play build flag  | `ATUR_DISTRIBUTION=play`, read by `apps/native/app.config.ts`, exposed as `extra.distribution`, helper `apps/native/lib/distribution.ts` -> `IS_PLAY_BUILD`                            |
-| Build the bundle | `scripts/build-native-apk.sh --play` writes `apps/native/dist/atur-play-<versionCode>.aab` (gitignored): arm64-v8a + armeabi-v7a, R8 + resource shrinking, bundletool permission guard |
+| Build the bundle | `scripts/build-native-aab.sh` writes `apps/native/dist/atur-play-<versionCode>.aab` (gitignored): arm64-v8a + armeabi-v7a, R8 + resource shrinking, bundletool permission guard        |
 | Upload           | `scripts/play-upload.py [--track internal\|alpha\|beta] [--status draft\|completed]` (service account, Android Publisher API)                                                          |
 | versionCode      | minutes since 2024-01-01 UTC, computed per build. Play caps it at 2100000000.                                                                                                          |
 | Signing          | `apps/native/keystore/atur-release.jks`, password in the gitignored `keystore.properties` next to it. Signs the AAB as the Play upload key (section 2). Back both up outside the repo. |
-| Site APK         | Still built by `scripts/build-native-apk.sh` (no flag), keeps Profile's "Download latest Android app" row. Same keystore, same versionCode scheme.                                     |
 
-What the Play build changes compared with the site build: Profile's "Download latest Android app" row (`app/(tabs)/profile.tsx`) is hidden, because Play forbids apps that distribute their own updates. Nothing else differs; the manifest is the same, since the app never installs packages itself (the row opens the download URL in the system browser), so `REQUEST_INSTALL_PACKAGES` was never declared.
+Atur is distributed only through Google Play and the App Store: no sideload APK, no in-app updater, no download route on the worker. The Profile screen has no install or update row. **v1.0.x sideload users must uninstall and install from Play**: with Play App Signing the installed key can differ (Google-generated app signing key), so Android refuses to update the old APK in place.
 
 Release keystore fingerprints (public; compare with the Play Console upload-key screen after the first upload):
 
@@ -221,15 +219,15 @@ Data deletion section of the form: "Can users request that data is deleted?" -> 
 
 ## 8. Permissions kept in the Play manifest
 
-Source: `bundletool dump manifest` of the Play AAB, printed by `scripts/build-native-apk.sh --play` on every build and guarded against `REQUEST_INSTALL_PACKAGES`, `SYSTEM_ALERT_WINDOW`, `QUERY_ALL_PACKAGES`, `MANAGE_EXTERNAL_STORAGE`.
+Source: `bundletool dump manifest` of the Play AAB, printed by `scripts/build-native-aab.sh` on every build and guarded against `REQUEST_INSTALL_PACKAGES`, `SYSTEM_ALERT_WINDOW`, `QUERY_ALL_PACKAGES`, `MANAGE_EXTERNAL_STORAGE`.
 
 @@PERMISSIONS@@
 
 ## 9. Update and release routine
 
 1. Bump `expo.version` in `apps/native/app.json` for a user-visible release. versionCode is computed.
-2. `scripts/build-native-apk.sh --play`, then `scripts/play-upload.py --track <track>`; add release notes in the Console (or `--notes`).
-3. Testers and users get the update from the Play Store. The app does not self-update from Play (no in-app update API is wired; the site APK row is hidden).
+2. `scripts/build-native-aab.sh`, then `scripts/play-upload.py --track <track>`; add release notes in the Console (or `--notes`).
+3. Testers and users get the update from the Play Store. The app does not self-update from Play (no in-app update API is wired).
 4. Promote the same AAB between tracks rather than rebuilding.
 
 ## 10. Known gaps and decisions for the owner

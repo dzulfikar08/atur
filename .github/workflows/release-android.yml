@@ -1,5 +1,5 @@
-# Android release build for Atur on GitHub Actions: the Play AAB (apps/native/dist/atur-play-<versionCode>.aab) and/or
-# the sideload site APK (apps/native/dist/atur-release.apk), both from scripts/build-native-apk.sh.
+# Android release build for Atur on GitHub Actions: the Play AAB (apps/native/dist/atur-play-<versionCode>.aab),
+# built by scripts/build-native-aab.sh.
 #
 # Manual only (Actions tab -> "Release Android" -> Run workflow). Nothing runs on push or pull request. The job is
 # bound to the `release` environment, which holds the signing secrets and is limited to
@@ -11,11 +11,6 @@ name: Release Android
 on:
   workflow_dispatch:
     inputs:
-      target:
-        description: "What to build"
-        type: choice
-        options: [play-aab, site-apk, both]
-        default: play-aab
       play_track:
         description: "Upload the AAB to this Play track (none = artifact only)"
         type: choice
@@ -26,10 +21,6 @@ on:
         type: choice
         options: [draft, completed]
         default: draft
-      publish_site_apk:
-        description: "Upload the site APK to R2 (atur-assets/downloads/atur-latest.apk); needs CLOUDFLARE_API_TOKEN"
-        type: boolean
-        default: false
   # To also build on version tags, uncomment. The `release` environment approval still applies.
   # push:
   #   tags: ["v*"]
@@ -47,28 +38,17 @@ jobs:
     timeout-minutes: 150
     environment: release
     env:
-      TARGET: ${{ inputs.target || 'play-aab' }}
       PLAY_TRACK: ${{ inputs.play_track || 'none' }}
       PLAY_STATUS: ${{ inputs.play_status || 'draft' }}
-      PUBLISH_SITE_APK: ${{ inputs.publish_site_apk && '1' || '0' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Validate inputs
-        run: |
-          if [ "$PLAY_TRACK" != none ] && [ "$TARGET" = site-apk ]; then
-            echo "play_track needs target play-aab or both" >&2; exit 1
-          fi
-          if [ "$PUBLISH_SITE_APK" = 1 ] && [ "$TARGET" = play-aab ]; then
-            echo "publish_site_apk needs target site-apk or both" >&2; exit 1
-          fi
-
       - name: Free disk space
         run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/node_modules/.cache "$AGENT_TOOLSDIRECTORY/CodeQL"
 
-      # JAVA_HOME from setup-java and ANDROID_HOME from the runner image are what build-native-apk.sh reads.
+      # JAVA_HOME from setup-java and ANDROID_HOME from the runner image are what build-native-aab.sh reads.
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
@@ -126,22 +106,18 @@ jobs:
 
       # The script's manifest guard needs bundletool for the AAB (default path ~/.cache/bundletool/bundletool.jar).
       - name: Install bundletool
-        if: env.TARGET != 'site-apk'
         run: |
           mkdir -p ~/.cache/bundletool
           curl -fsSL -o ~/.cache/bundletool/bundletool.jar https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar
 
-      # Play AAB first, then the site APK: each run re-runs prebuild because the distribution flag is part of its hash.
       - name: Build Play AAB
-        if: env.TARGET != 'site-apk'
         run: |
-          scripts/build-native-apk.sh --play
+          scripts/build-native-aab.sh
           mkdir -p apps/native/dist
           cp apps/native/android/app/build/outputs/mapping/release/mapping.txt apps/native/dist/mapping-play.txt
 
       # Play-only manifest rules on top of the script's guard (docs/play-store.md): no SMS/call log/contacts, no ad ID.
       - name: Guard Play manifest permissions
-        if: env.TARGET != 'site-apk'
         run: |
           manifest="$(java -jar ~/.cache/bundletool/bundletool.jar dump manifest --bundle apps/native/dist/atur-play-*.aab)"
           if grep -E 'android.permission.(REQUEST_INSTALL_PACKAGES|SYSTEM_ALERT_WINDOW|QUERY_ALL_PACKAGES|MANAGE_EXTERNAL_STORAGE|SEND_SMS|READ_SMS|RECEIVE_SMS|READ_CALL_LOG|READ_CONTACTS)"|gms.permission.AD_ID"' <<<"$manifest"; then
@@ -151,29 +127,9 @@ jobs:
           echo "Permissions in the Play AAB:"
           grep -o 'android:name="[^"]*"' <<<"$(grep -E '<uses-permission' <<<"$manifest")" | cut -d'"' -f2 | sort
 
-      # CLOUDFLARE_API_TOKEN is only exposed to the publish step; without it the publish is skipped.
-      - name: Build site APK
-        if: env.TARGET != 'play-aab'
-        run: scripts/build-native-apk.sh
-
-      - name: Publish site APK to R2
-        if: env.TARGET != 'play-aab' && env.PUBLISH_SITE_APK == '1'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "CLOUDFLARE_API_TOKEN is not set in environment release: site APK not published" | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          cd apps/app
-          bunx wrangler r2 object put atur-assets/downloads/atur-latest.apk --remote \
-            --file "$GITHUB_WORKSPACE/apps/native/dist/atur-release.apk" \
-            --content-type application/vnd.android.package-archive
-          echo "published: https://app.diatur.com/public/downloads/android" | tee -a "$GITHUB_STEP_SUMMARY"
-
       - name: Checksums
         run: |
-          for f in apps/native/dist/*.aab apps/native/dist/*.apk apps/native/dist/mapping-play.txt; do
+          for f in apps/native/dist/*.aab apps/native/dist/mapping-play.txt; do
             [ -f "$f" ] || continue
             ls -la "$f"; sha256sum "$f" | tee -a "$GITHUB_STEP_SUMMARY"
           done
@@ -184,7 +140,6 @@ jobs:
           name: atur-android-${{ github.run_number }}
           path: |
             apps/native/dist/*.aab
-            apps/native/dist/*.apk
             apps/native/dist/mapping-play.txt
           if-no-files-found: error
           retention-days: 30

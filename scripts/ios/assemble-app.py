@@ -163,14 +163,13 @@ shutil.rmtree(metro_tmp, ignore_errors=True)
 # lib/config.ts holds the API host and every screen imports it: a bundle without it has no app code in it.
 if b"app.diatur.com" not in plain.read_bytes():
     sys.exit(f"{plain} holds no app code (Metro bundled without the routes); not packaging it")
-# `Constants.expoConfig` reads this embedded app.config at run time (`extra.distribution`): one left over from an
+# `Constants.expoConfig` reads this embedded app.config at run time (`extra`): one left over from an
 # earlier build would ship that build's config.
 embedded_extra = json.loads((app / "EXConstants.bundle" / "app.config").read_text()).get("extra", {})
-wanted_extra = {"distribution": os.environ.get("ATUR_DISTRIBUTION", "site"),
-                **json.loads((NATIVE / "app.json").read_text())["expo"].get("extra", {})}
+wanted_extra = json.loads((NATIVE / "app.json").read_text())["expo"].get("extra", {})
 stale = sorted(key for key, value in wanted_extra.items() if embedded_extra.get(key) != value)
 if stale:
-    sys.exit(f"EXConstants.bundle/app.config is out of date with app.json / app.config.ts (extra: {', '.join(stale)}); not packaging it")
+    sys.exit(f"EXConstants.bundle/app.config is out of date with app.json (extra: {', '.join(stale)}); not packaging it")
 hermesc = subprocess.run(["node", "-p", "require('path').dirname(require.resolve('hermes-compiler/package.json',"
                           " {paths: [require.resolve('react-native/package.json')]}))"],
                          cwd=NATIVE, check=True, capture_output=True, text=True).stdout.strip()

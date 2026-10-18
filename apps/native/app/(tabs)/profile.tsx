@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
-import { Linking, Platform, View } from "react-native";
+import { View } from "react-native";
 import { StyleSheet, UnistylesRuntime, useUnistyles } from "react-native-unistyles";
 
 import {
@@ -24,7 +24,6 @@ import {
 import { DELETE_ACCOUNT_INFO_URL, DELETE_CONFIRMATION, deleteAccount } from "@/lib/account";
 import { api } from "@/lib/api";
 import { SERVER_URL } from "@/lib/config";
-import { IS_PLAY_BUILD } from "@/lib/distribution";
 import { displayName } from "@/lib/format";
 import { endSession } from "@/lib/session";
 import { loadThemePref, saveThemePref, type ThemePref } from "@/lib/theme-pref";
@@ -132,18 +131,6 @@ export default function Profile() {
           chevron
           onPress={() => void WebBrowser.openBrowserAsync(SERVER_URL)}
         />
-        {Platform.OS === "android" && !IS_PLAY_BUILD ? (
-          <ListRow
-            icon="download-outline"
-            title="Download latest Android app"
-            subtitle="Install over this one to update — you stay signed in"
-            chevron
-            // System browser, not a Custom Tab: it hands the APK to the
-            // download manager / package installer. The link is public, so
-            // no web sign-in (which would end this app's session) is needed.
-            onPress={() => void Linking.openURL(`${SERVER_URL}/public/downloads/android`)}
-          />
-        ) : null}
         <ListRow
           icon="information-circle-outline"
           title="Version"
