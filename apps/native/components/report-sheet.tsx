@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Image, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
+import { MicButton } from "@/components/mic-button";
 import { Button, Chip, ErrorNote, Input, Sheet, Text } from "@/components/ui";
 import { api } from "@/lib/api";
 import {
@@ -134,6 +135,7 @@ function ReportSheet({
           />
           <Input
             label="Details"
+            labelRight={<MicButton value={description} onChangeText={setDescription} />}
             value={description}
             onChangeText={setDescription}
             placeholder={

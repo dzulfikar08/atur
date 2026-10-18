@@ -40,7 +40,7 @@ export interface PaneAttachHandlers {
 
 /**
  * bridge → app: hello · keyboard · snapshot · diff · pong · error · exit
- * app → bridge: input {data} · claim · ping
+ * app → bridge: input {data} · paste {text, submit} · claim · ping
  * A bridge `exit` means the pane died; reconnecting cannot revive it.
  */
 export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
@@ -55,10 +55,23 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
     setRetryKey((k) => k + 1);
   }, []);
 
-  /** Raw keyboard input; dropped unless the socket is open. */
-  const sendInput = useCallback((data: string) => {
+  /** Raw keyboard input; dropped (returns false) unless the socket is open. */
+  const sendInput = useCallback((data: string): boolean => {
     const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "input", data }));
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    ws.send(JSON.stringify({ type: "input", data }));
+    return true;
+  }, []);
+
+  /**
+   * Literal multi-line text as one paste (newlines are not Enter presses),
+   * optionally submitted with Enter. Needs a bridge that knows `paste`.
+   */
+  const sendPaste = useCallback((text: string, submit: boolean): boolean => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    ws.send(JSON.stringify({ type: "paste", text, submit }));
+    return true;
   }, []);
 
   /** Request (or steal) keyboard ownership; the bridge arbitrates. */
@@ -176,7 +189,7 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
     };
   }, [paneId, retryKey]);
 
-  return { status, sendInput, retry, claimKeyboard };
+  return { status, sendInput, sendPaste, retry, claimKeyboard };
 }
 
 // --- observe: structured transcript ------------------------------------------

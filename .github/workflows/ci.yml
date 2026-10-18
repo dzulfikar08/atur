@@ -16,7 +16,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run fmt:check
-      - run: bun --filter @atur/app typecheck
+      - run: bun run typecheck
       # Fail on high/critical advisories; moderate ones are reported without
       # breaking the build (bun audit exits 0 for moderate).
       # Ignored: no fixed release exists upstream, and the code paths are dev/build tooling only
@@ -29,6 +29,6 @@ jobs:
           bun audit --audit-level=high
           --ignore=GHSA-vfj7-8cjw-p6xm --ignore=GHSA-86w9-cpqp-85rv
           --ignore=GHSA-rfgv-xxqx-mfg5 --ignore=GHSA-w293-vg96-wgc3
-      - run: bun --filter @atur/app test
+      - run: bun run test
       - run: bun --filter @atur/app build
       - run: bun --filter @atur/web build

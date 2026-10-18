@@ -19,7 +19,7 @@
     "deploy:app": "bun --filter @atur/app deploy",
     "deploy:web": "bun --filter @atur/web deploy",
     "typecheck": "bun --filter @atur/app typecheck && bun --filter @atur/bridge typecheck && bun --filter @atur/native typecheck",
-    "test": "bun --filter @atur/app test",
+    "test": "bun --filter @atur/app test && bun --filter @atur/native test && bun --filter @atur/bridge test",
     "lint": "oxlint .",
     "fmt": "oxfmt .",
     "fmt:check": "oxfmt --check ."

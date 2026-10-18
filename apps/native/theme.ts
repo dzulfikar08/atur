@@ -56,6 +56,7 @@ const scale = {
     bold: "Manrope_700Bold",
     heavy: "Manrope_800ExtraBold",
     mono: "JetBrainsMono_500Medium",
+    monoBold: "JetBrainsMono_700Bold",
   },
 } as const;
 

@@ -1,5 +1,5 @@
 import "@/unistyles";
-import { JetBrainsMono_500Medium } from "@expo-google-fonts/jetbrains-mono";
+import { JetBrainsMono_500Medium, JetBrainsMono_700Bold } from "@expo-google-fonts/jetbrains-mono";
 import {
   Manrope_500Medium,
   Manrope_600SemiBold,
@@ -41,6 +41,7 @@ export default function RootLayout() {
     Manrope_700Bold,
     Manrope_800ExtraBold,
     JetBrainsMono_500Medium,
+    JetBrainsMono_700Bold,
   });
   const pathname = usePathname();
 

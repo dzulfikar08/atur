@@ -9,6 +9,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { DateSheet } from "@/components/date-sheet";
+import { MicButton } from "@/components/mic-button";
 import { RichText } from "@/components/rich-text";
 import { IssueDetailSkeleton } from "@/components/skeletons";
 import {
@@ -610,6 +611,7 @@ export default function IssueDetail() {
               style={styles.composerInput}
             />
           </View>
+          <MicButton value={comment} onChangeText={setComment} />
           <IconButton
             icon={addComment.isPending ? "hourglass-outline" : "send"}
             label="Send comment"

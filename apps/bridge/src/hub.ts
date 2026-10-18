@@ -6,6 +6,7 @@
  *                    {type:"snapshot", revision, ansi}
  *                    {type:"pong"} | {type:"error", message} | {type:"exit", reason}
  *   client → bridge: {type:"input", data:"..."}   (xterm.js onData verbatim)
+ *                    {type:"paste", text, submit?}   (literal text; newlines stay newlines; submit = then Enter)
  *                    {type:"ping"}
  */
 import type { ServerWebSocket } from "bun";
@@ -366,6 +367,14 @@ export function translateInput(data: string): InputSegment[] {
       continue;
     }
     const code = data.charCodeAt(i);
+    if (code >= 1 && code <= 26) {
+      // Remaining Ctrl+A..Z (the common ones are in SIMPLE_KEYS above): herdr
+      // takes the same lowercase combo strings.
+      flush();
+      segments.push({ keys: [`ctrl+${String.fromCharCode(96 + code)}`] });
+      i += 1;
+      continue;
+    }
     if (code < 32 || code === 127) {
       // Unknown control byte — drop rather than corrupt the input line.
       flush();
@@ -376,6 +385,16 @@ export function translateInput(data: string): InputSegment[] {
     i += 1;
   }
   flush();
+  return segments;
+}
+
+/**
+ * Composer send: `text` is one literal paste (newlines stay newlines instead of
+ * becoming Enter presses), optionally followed by Enter to submit it.
+ */
+export function pasteSegments(text: string, submit: boolean): InputSegment[] {
+  const segments: InputSegment[] = text === "" ? [] : [{ text }];
+  if (submit) segments.push({ keys: ["enter"] });
   return segments;
 }
 
@@ -476,9 +495,9 @@ export class PaneHub {
   }
 
   async handleMessage(ws: Ws, raw: string): Promise<void> {
-    let msg: { type?: unknown; data?: unknown };
+    let msg: { type?: unknown; data?: unknown; text?: unknown; submit?: unknown };
     try {
-      msg = JSON.parse(raw) as { type?: unknown; data?: unknown };
+      msg = JSON.parse(raw) as typeof msg;
     } catch {
       return;
     }
@@ -492,7 +511,13 @@ export class PaneHub {
       this.watchers.get(client.paneId)?.claim(ws);
       return;
     }
-    if (msg.type === "input" && typeof msg.data === "string") {
+    const segments =
+      msg.type === "input" && typeof msg.data === "string"
+        ? translateInput(msg.data)
+        : msg.type === "paste" && typeof msg.text === "string"
+          ? pasteSegments(msg.text, msg.submit === true)
+          : null;
+    if (segments) {
       const watcher = this.watchers.get(client.paneId);
       if (!watcher?.hasKeyboard(ws)) {
         // Enforced here, not in the UI: a second viewer is read-only even if
@@ -505,7 +530,6 @@ export class PaneHub {
         );
         return;
       }
-      const segments = translateInput(msg.data);
       const prev = this.inputQueues.get(ws) ?? Promise.resolve();
       const next = prev
         .then(async () => {

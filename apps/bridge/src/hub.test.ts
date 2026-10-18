@@ -32,7 +32,7 @@ mock.module("./herdr", () => ({
   },
 }));
 
-import { PaneHub } from "./hub";
+import { PaneHub, translateInput } from "./hub";
 
 interface FakeWs {
   sent: string[];
@@ -133,5 +133,50 @@ describe("keyboard ownership", () => {
     const c = await attach("p1"); // joins while a owns the keyboard
     const hello = frames(c.sent, "hello").at(-1);
     expect(hello?.keyboard).toBe(false);
+  });
+});
+
+describe("input translation", () => {
+  test("Ctrl+A..Z beyond the named keys become ctrl+<letter> presses", () => {
+    expect(translateInput("\x01")).toEqual([{ keys: ["ctrl+a"] }]);
+    expect(translateInput("\x12x\x0c")).toEqual([
+      { keys: ["ctrl+r"] },
+      { text: "x" },
+      { keys: ["ctrl+l"] },
+    ]);
+    // Named keys still win: Tab, Enter, Backspace, Ctrl+C.
+    expect(translateInput("\t\r\x08\x03")).toEqual([
+      { keys: ["tab"] },
+      { keys: ["enter"] },
+      { keys: ["backspace"] },
+      { keys: ["ctrl+c"] },
+    ]);
+  });
+
+  test("paste frame sends one literal text segment, then Enter on submit", async () => {
+    const a = await attach("p1");
+    hub.handleMessage(a, JSON.stringify({ type: "claim" }));
+    rpcCalls.length = 0;
+
+    await hub.handleMessage(
+      a,
+      JSON.stringify({ type: "paste", text: "line one\nline two", submit: true }),
+    );
+    const sent = rpcCalls.filter((c) => c.method === "pane.send_input").map((c) => c.params);
+    expect(sent).toEqual([
+      { pane_id: "p1", text: "line one\nline two" },
+      { pane_id: "p1", keys: ["enter"] },
+    ]);
+  });
+
+  test("paste frame from a non-owner is rejected", async () => {
+    const a = await attach("p1");
+    const b = await attach("p1");
+    hub.handleMessage(a, JSON.stringify({ type: "claim" }));
+    rpcCalls.length = 0;
+
+    await hub.handleMessage(b, JSON.stringify({ type: "paste", text: "nope", submit: true }));
+    expect(rpcCalls.filter((c) => c.method === "pane.send_input")).toEqual([]);
+    expect(String(frames(b.sent, "error").at(-1)?.message)).toMatch(/read-only/);
   });
 });

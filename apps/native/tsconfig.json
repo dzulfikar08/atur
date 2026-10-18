@@ -3,6 +3,8 @@
   "compilerOptions": {
     "strict": true,
     "jsx": "react-jsx",
+    // bun:test in lib/*.test.ts; the app itself imports everything else explicitly.
+    "types": ["bun"],
     "paths": {
       "@/*": ["./*"]
     }

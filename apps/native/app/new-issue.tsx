@@ -6,6 +6,7 @@ import { KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 
+import { MicButton } from "@/components/mic-button";
 import {
   Button,
   ErrorNote,
@@ -113,6 +114,7 @@ export default function NewIssue() {
           />
           <Input
             label="Description"
+            labelRight={<MicButton value={description} onChangeText={setDescription} />}
             value={description}
             onChangeText={setDescription}
             placeholder="Context, steps, acceptance criteria…"
