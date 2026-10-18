@@ -34,6 +34,10 @@
 #   - App Store Connect API key              ASC_KEY_PATH ASC_KEY_ID ASC_ISSUER_ID
 set -euo pipefail
 cd "$(dirname "$0")/.."
+if [ "${ATUR_ALLOW_IOS_LINUX_WITHOUT_UPDATES:-0}" != 1 ]; then
+  echo "build-ios-linux.sh cannot embed the expo-updates resources (app.manifest, runtime in Expo.plist); use scripts/ios/mac-build.sh or the Release iOS workflow (docs/ota.md)." >&2
+  exit 1
+fi
 ROOT=$PWD
 NATIVE=$ROOT/apps/native
 WORK=${ATUR_IOS_WORK:-/run/media/dzul/ioswork/atur-ios}

@@ -11,7 +11,9 @@ Store runbooks: [`play-store.md`](play-store.md), [`app-store.md`](app-store.md)
 
 ## Channels
 
-Atur ships only through Google Play and the App Store. There is no sideload APK, no in-app updater and no `/public/downloads/android` route. **v1.0.x sideload users must uninstall and install from Play**: Play App Signing may re-sign with a Google-generated key, so the old APK cannot be updated in place, and the old build has no way to reach the new one.
+Atur ships only through Google Play and the App Store. There is no sideload APK, no store-bypassing installer and no `/public/downloads/android` route. **v1.0.x sideload users must uninstall and install from Play**: Play App Signing may re-sign with a Google-generated key, so the old APK cannot be updated in place, and the old build has no way to reach the new one.
+
+JS and asset fixes can also reach installed builds over the air through EAS Update: [`ota.md`](ota.md).
 
 ## Version numbers
 
