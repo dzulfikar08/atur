@@ -29,7 +29,7 @@ Build numbers follow the laptop scripts: Android `versionCode` = minutes since 2
 
 ## GitHub setup
 
-- Environment `release` on `dzulfikar08/atur`: deployments only from `main` and `v*` tags. **No required reviewer**: the repo is private on a plan that rejects the required-reviewers rule (HTTP 422 "billing plan"), so runs start without approval. Whoever can dispatch a workflow on `main` can use the secrets; keep write access limited. Add the reviewer (`dzulfikar08`, id 99225357) under Settings -> Environments -> release if the plan changes.
+- Environment `release` on `dzulfikar08/atur`: deployments only from `master` (the default branch) and `v*` tags. **No required reviewer**: the repo is private on a plan that rejects the required-reviewers rule (HTTP 422 "billing plan"), so runs start without approval. Whoever can dispatch a workflow on `master` can use the secrets; keep write access limited. Add the reviewer (`dzulfikar08`, id 99225357) under Settings -> Environments -> release if the plan changes.
 - All secrets are **environment secrets** of `release`, so workflows on other branches cannot read them. Signing files are written to the runner and removed in a final `always()` step; `GITHUB_TOKEN` is `contents: read`; actions are pinned to commit SHAs (same as JoyoRogo).
 - The repo is private, so macOS minutes are billed (10x Linux minutes); an iOS run takes about 20-25 minutes.
 
@@ -75,4 +75,3 @@ TestFlight upload (`upload_testflight`) fails until the owner has created the Ap
 
 - Android: first `bundleRelease` on a runner (R8 heap, bundletool path), and the first Play upload to `com.diatur.app`.
 - iOS: the Xcode scheme/workspace name `Atur` that `expo prebuild` generates from `app.json` (`name`), the archive with automatic signing, and the `Atur.app/Info.plist` path used for the build number.
-- `ci.yml` triggers on pushes to `master`, while the default branch is `main`; push checks never fire (pull requests do).

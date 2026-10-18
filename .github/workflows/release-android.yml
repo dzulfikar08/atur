@@ -2,8 +2,8 @@
 # the sideload site APK (apps/native/dist/atur-release.apk), both from scripts/build-native-apk.sh.
 #
 # Manual only (Actions tab -> "Release Android" -> Run workflow). Nothing runs on push or pull request. The job is
-# bound to the `release` environment, which holds the signing secrets, needs the owner's approval and is limited to
-# main and v* tags. Setup: docs/ci-release.md.
+# bound to the `release` environment, which holds the signing secrets and is limited to
+# master and v* tags. Setup: docs/ci-release.md.
 #
 # Uploads are off by default. The first upload to a new Play app may have to be play_status=draft.
 name: Release Android
