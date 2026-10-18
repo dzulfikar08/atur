@@ -276,11 +276,21 @@ export function IconButton({
   );
 }
 
-export function Input({ label, style, ...props }: TextInputProps & { label?: string }) {
+export function Input({
+  label,
+  labelRight,
+  style,
+  ...props
+}: TextInputProps & { label?: string; labelRight?: React.ReactNode }) {
   const { theme } = useUnistyles();
   return (
     <View style={styles.field}>
-      {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
+      {label || labelRight ? (
+        <View style={styles.fieldHead}>
+          <Text style={styles.fieldLabel}>{label}</Text>
+          {labelRight}
+        </View>
+      ) : null}
       <TextInput
         placeholderTextColor={theme.colors.mutedForeground}
         style={[styles.input, props.multiline && styles.inputMultiline, style]}
@@ -791,6 +801,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   badgeText: { color: "#FFFFFF", fontSize: 10, fontFamily: theme.fonts.bold },
   field: { gap: theme.spacing.xs },
+  fieldHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   fieldLabel: {
     fontSize: theme.fontSize.sm,
     fontFamily: theme.fonts.medium,

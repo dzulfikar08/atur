@@ -130,7 +130,7 @@ USER CONTENT. Workspaces are private: only invited members see a workspace's iss
 
 PURCHASES. The app has no in-app purchases, no subscriptions and no links to buy anything. It is free.
 
-PERMISSIONS. The app asks for none. Network access only. Sign in with Apple and Google sign-in use the system authentication sheets; Google sign-in opens the system browser (ASWebAuthenticationSession) and returns to the app through the atur:// link.
+PERMISSIONS. Microphone and Speech Recognition, both only when the user taps the mic button to dictate into a text field (pane prompt, issue comment, new-issue description, Send feedback). The permission prompts appear on first use, never at launch. Speech is turned into text by the iPhone's speech recognizer; when the device supports on-device recognition the app requires it, so no audio leaves the phone. The app does not record, store or upload audio. Nothing else is requested. Sign in with Apple and Google sign-in use the system authentication sheets; Google sign-in opens the system browser (ASWebAuthenticationSession) and returns to the app through the atur:// link.
 
 ENCRYPTION. ITSAppUsesNonExemptEncryption is false: the app only uses HTTPS and OS-provided cryptography.
 
@@ -152,6 +152,8 @@ Entered and **published** in the App Store Connect web UI on 2026-10-18 (there i
 | Usage data, diagnostics, location, health and fitness, financial info, contacts, photos, audio, browsing/search history, purchases, sensitive info | No        |                    | Not requested by the app. The in-app **Search** sends the query to the server to return results; it is not retained for analytics [INFERENCE: confirm the server does not log search terms; if it does, add Search history, linked, App functionality]. |
 
 Sign in with Apple may hand the app a private relay email and the name; both fall under Name and Email above. Device ID: **No** (no push token, no IDFA).
+
+**Dictation (DEV-43) and the label.** Audio is never sent to Atur's servers and the app never keeps a recording, so **Audio Data is not declared** as collected. The recognised text only becomes data once the user sends it as a comment, issue or feedback, which is already covered by User content. Info.plist strings (set in `apps/native/app.json` through the `expo-speech-recognition` plugin): `NSMicrophoneUsageDescription` = "Atur uses the microphone only while you dictate into a text field. Audio is turned into text on your device and is never recorded or sent to Atur." and `NSSpeechRecognitionUsageDescription` = "Atur uses speech recognition to turn what you say into text in comments, issues and feedback. It runs on your device when your phone supports it." On devices or languages without on-device support the recognizer is Apple's own service, which processes the audio under Apple's terms, not Atur's [INFERENCE: Apple's App Privacy guidance does not count data handled only by a system framework as collected by the developer; confirm in the next review round].
 
 ## 6. Age rating, export compliance, other
 
