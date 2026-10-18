@@ -150,3 +150,7 @@ Atur exposes a built-in MCP server (Streamable HTTP) at
 `https://app.diatur.com/mcp`. It requires an `X-API-Key` (or session token);
 keys are minted in the app UI (Settings → API keys). See `CLAUDE.md` for usage
 and registration commands.
+
+## License
+
+AGPL-3.0-only (see `LICENSE`). Name, logo and the hosted service are covered by `NOTICE`; contributions need `CLA.md`. Use the managed service at https://app.diatur.com, or self-host on your own Cloudflare account or via CloudAgni.

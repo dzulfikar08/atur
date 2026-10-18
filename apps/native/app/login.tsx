@@ -1,13 +1,15 @@
 import "@/unistyles";
 import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import * as AppleAuthentication from "expo-apple-authentication";
+import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { StyleSheet } from "react-native-unistyles";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { LogoMark } from "@/components/logo-mark";
 import { Button, ErrorNote, Input, Text } from "@/components/ui";
 import { api } from "@/lib/api";
+import { isAppleSignInAvailable, signInWithApple } from "@/lib/apple-auth";
 import { signInWithGoogle } from "@/lib/google-auth";
 import { startSession } from "@/lib/session";
 
@@ -37,6 +39,14 @@ export default function Login() {
     onSuccess: (r) => startSession(r.session_token),
   });
   const google = useMutation({ mutationFn: signInWithGoogle });
+  const apple = useMutation({ mutationFn: signInWithApple });
+
+  // iOS only; the button stays hidden until the OS confirms support.
+  const [appleAvailable, setAppleAvailable] = useState(false);
+  useEffect(() => {
+    void isAppleSignInAvailable().then(setAppleAvailable);
+  }, []);
+  const { rt } = useUnistyles();
 
   const switchMode = (next: Mode) => {
     setMode(next);
@@ -48,7 +58,8 @@ export default function Login() {
   };
 
   const emailOk = /\S+@\S+\.\S+/.test(email.trim());
-  const error = passwordLogin.error ?? requestCode.error ?? verifyCode.error ?? google.error;
+  const error =
+    passwordLogin.error ?? requestCode.error ?? verifyCode.error ?? google.error ?? apple.error;
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -151,6 +162,21 @@ export default function Login() {
                 <Text style={styles.dividerLabel}>or</Text>
                 <View style={styles.divider} />
               </View>
+              {appleAvailable ? (
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                  buttonStyle={
+                    rt.themeName === "dark"
+                      ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                      : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                  }
+                  cornerRadius={10}
+                  style={styles.appleButton}
+                  onPress={() => {
+                    if (!apple.isPending) apple.mutate();
+                  }}
+                />
+              ) : null}
               <Button
                 variant="secondary"
                 icon="logo-google"
@@ -188,6 +214,7 @@ const styles = StyleSheet.create((theme) => ({
     lineHeight: 22,
   },
   form: { gap: theme.spacing.md },
+  appleButton: { height: 50, width: "100%" },
   switch: { alignSelf: "center", paddingVertical: theme.spacing.xs },
   switchLabel: {
     fontSize: theme.fontSize.sm,

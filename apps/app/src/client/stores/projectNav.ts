@@ -50,10 +50,7 @@ export const useProjectNavStore = create<ProjectNavState>((set, get) => {
         pinned,
         recent: {
           ...recent,
-          [slug]: [projectId, ...list.filter((id) => id !== projectId)].slice(
-            0,
-            MAX_RECENT,
-          ),
+          [slug]: [projectId, ...list.filter((id) => id !== projectId)].slice(0, MAX_RECENT),
         },
       });
     },

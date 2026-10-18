@@ -23,6 +23,7 @@ worker-configuration.d.ts
 # capacitor native projects (regenerated via `cap add`)
 ios/
 android/
+!scripts/ios/
 
 # Command Code local preferences
 .commandcode/

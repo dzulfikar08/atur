@@ -165,7 +165,14 @@ describe("DEV-21 label/assignee enrichment belt-and-braces", () => {
     // The assignee query joins workspace_members (active, non-deleted) and
     // returns the member row's workspace; only the OWNING issue's workspace
     // renders. Select order: assigneeRows, labelRows, moduleRows.
-    const user = { issueId: "i1", id: "u1", email: "a@x", username: "a", displayName: "A", avatar: null };
+    const user = {
+      issueId: "i1",
+      id: "u1",
+      email: "a@x",
+      username: "a",
+      displayName: "A",
+      avatar: null,
+    };
     const db = mockDb([
       [
         { ...user, workspaceId: MINE },

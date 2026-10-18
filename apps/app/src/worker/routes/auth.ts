@@ -6,6 +6,14 @@ import { getDb } from "../db/index";
 import { authMiddleware, extractToken } from "../middleware/auth";
 import * as authService from "../services/auth";
 import * as usersRepo from "../repositories/users";
+import * as appleAuthService from "../services/appleAuth";
+import {
+  AppleAuthError,
+  appleAudience,
+  appleSiwaConfig,
+  exchangeAppleAuthorizationCode,
+  verifyAppleIdentityToken,
+} from "../lib/appleAuth";
 import { SESSION_TTL_SECONDS } from "../lib/session";
 import { z } from "zod";
 import {
@@ -339,6 +347,59 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       session_token: stored.token,
       user: { id: user.id, email: user.email, username: user.username },
     });
+  })
+  // Native Sign in with Apple. JSON, no cookie, no browser hop: the iOS app gets
+  // an identity token from the OS sheet and posts it with the raw nonce it
+  // hashed into the request. Same { session_token, user } shape as /sign-in.
+  .post("/apple/native", async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "invalid_request", message: "Body must be JSON" }, 400);
+    }
+    const parsed = appleAuthService.appleNativeSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        { error: "invalid_request", message: "identity_token and nonce are required" },
+        400,
+      );
+    }
+    let identity;
+    try {
+      identity = await verifyAppleIdentityToken(parsed.data.identity_token, {
+        audience: appleAudience(c.env),
+        rawNonce: parsed.data.nonce,
+      });
+    } catch (err) {
+      if (!(err instanceof AppleAuthError)) throw err;
+      console.error("apple sign-in rejected:", err.code, err.message);
+      if (err.code === "jwks_unavailable") {
+        return c.json(
+          { error: "apple_unavailable", message: "Could not reach Apple. Try again." },
+          502,
+        );
+      }
+      return c.json({ error: err.code, message: "Apple sign-in failed. Please try again." }, 401);
+    }
+
+    // Best-effort: keep the Apple grant so it can be revoked on account
+    // deletion. A failed exchange never blocks sign-in.
+    let refreshToken: string | null = null;
+    const siwa = appleSiwaConfig(c.env);
+    if (siwa && parsed.data.authorization_code) {
+      try {
+        refreshToken = await exchangeAppleAuthorizationCode(siwa, parsed.data.authorization_code);
+      } catch (err) {
+        console.error("apple authorization code exchange failed:", err);
+      }
+    }
+
+    const result = await appleAuthService.signInWithApple(getDb(c.env.DB), identity, {
+      fullName: parsed.data.full_name,
+      refreshToken,
+    });
+    return c.json({ session_token: result.token, user: result.user });
   })
   .get("/gitlab", (c) => c.json({ url: "" }))
   .get("/gitlab/callback", (c) => c.json({ error: "Not implemented" }, 501))

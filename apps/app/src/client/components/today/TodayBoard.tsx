@@ -28,10 +28,7 @@ import {
   type TodayBucketKey,
 } from "@/hooks/useMyWork";
 
-const BUCKET_META: Record<
-  TodayBucketKey,
-  { label: string; color: string; hint: string }
-> = {
+const BUCKET_META: Record<TodayBucketKey, { label: string; color: string; hint: string }> = {
   overdue: {
     label: "Overdue",
     color: "var(--priority-urgent)",
@@ -67,10 +64,7 @@ const BUCKET_META: Record<
 const PREVIEW_ROWS = 8;
 const PRODUCT_ORDER = ["JoyoRogo", "JoyoFit", "Both", "Threads"];
 
-function dueLabel(
-  target: string | null,
-  today: Date,
-): { text: string; late: boolean } | null {
+function dueLabel(target: string | null, today: Date): { text: string; late: boolean } | null {
   if (!target) return null;
   const date = parseISO(target.slice(0, 10));
   const diff = differenceInCalendarDays(date, today);
@@ -80,36 +74,16 @@ function dueLabel(
   return { text: format(date, diff < 7 ? "EEE" : "MMM d"), late: false };
 }
 
-function StateOptions({
-  issue,
-  onPick,
-}: {
-  issue: AllIssue;
-  onPick: (s: KeyedState) => void;
-}) {
-  const { data: states = [] } = useProjectStates(
-    issue.workspace_slug,
-    issue.project_id,
-  );
+function StateOptions({ issue, onPick }: { issue: AllIssue; onPick: (s: KeyedState) => void }) {
+  const { data: states = [] } = useProjectStates(issue.workspace_slug, issue.project_id);
   if (states.length === 0) {
-    return (
-      <div className="px-2 py-1.5 text-xs text-muted-foreground">
-        Loading states…
-      </div>
-    );
+    return <div className="px-2 py-1.5 text-xs text-muted-foreground">Loading states…</div>;
   }
   return (
     <>
       {states.map((s) => (
-        <DropdownMenuItem
-          key={s.id}
-          onSelect={() => onPick(s)}
-          className="gap-2 text-[13px]"
-        >
-          <span
-            className="size-2 rounded-full"
-            style={{ background: stateColor(s) }}
-          />
+        <DropdownMenuItem key={s.id} onSelect={() => onPick(s)} className="gap-2 text-[13px]">
+          <span className="size-2 rounded-full" style={{ background: stateColor(s) }} />
           <span className="flex-1">{s.name}</span>
           {s.id === issue.state_id && <Check className="size-3.5" />}
         </DropdownMenuItem>
@@ -125,15 +99,9 @@ function IssueRow({ issue, compact }: { issue: AllIssue; compact: boolean }) {
   const { product, title } = splitProduct(issue.name);
   const due = dueLabel(issue.target_date, today);
 
-  const apply = (
-    body: Parameters<typeof patch.mutate>[0]["patch"],
-    message: string,
-  ) => {
+  const apply = (body: Parameters<typeof patch.mutate>[0]["patch"], message: string) => {
     removeFromToday(qc, issue.id);
-    patch.mutate(
-      { issue, patch: body },
-      { onSuccess: () => toast.success(message) },
-    );
+    patch.mutate({ issue, patch: body }, { onSuccess: () => toast.success(message) });
   };
 
   const markDone = async () => {
@@ -187,9 +155,7 @@ function IssueRow({ issue, compact }: { issue: AllIssue; compact: boolean }) {
           className={cn(
             "shrink-0 text-right text-[length:var(--text-meta)] tabular-nums",
             !compact && "w-16",
-            due?.late
-              ? "font-semibold text-[var(--priority-urgent)]"
-              : "text-muted-foreground",
+            due?.late ? "font-semibold text-[var(--priority-urgent)]" : "text-muted-foreground",
           )}
         >
           {due?.text}
@@ -201,9 +167,7 @@ function IssueRow({ issue, compact }: { issue: AllIssue; compact: boolean }) {
             "state-badge shrink-0 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
             !compact && "w-[108px]",
           )}
-          style={
-            { "--badge-c": stateColor(issue.state) } as React.CSSProperties
-          }
+          style={{ "--badge-c": stateColor(issue.state) } as React.CSSProperties}
           aria-label={`Change state (currently ${issue.state?.name ?? "none"})`}
         >
           {issue.state?.name ?? "No state"}
@@ -217,10 +181,7 @@ function IssueRow({ issue, compact }: { issue: AllIssue; compact: boolean }) {
         </DropdownMenuContent>
       </DropdownMenu>
       <div
-        className={cn(
-          "flex shrink-0 items-center gap-0.5 transition-opacity",
-          actionVisibility,
-        )}
+        className={cn("flex shrink-0 items-center gap-0.5 transition-opacity", actionVisibility)}
       >
         <button
           onClick={markDone}
@@ -267,10 +228,7 @@ function Bucket({
         className="flex w-full items-center gap-2 px-3 py-2 text-left"
       >
         <Chevron className="size-3.5 text-muted-foreground" />
-        <span
-          className="size-2 rounded-full"
-          style={{ background: meta.color }}
-        />
+        <span className="size-2 rounded-full" style={{ background: meta.color }} />
         <h2 className="text-sm font-semibold text-foreground">{meta.label}</h2>
         <span
           className="rounded-full px-1.5 text-[length:var(--text-meta)] font-semibold tabular-nums"
@@ -304,13 +262,7 @@ function Bucket({
   );
 }
 
-export default function TodayBoard({
-  slug,
-  compact = false,
-}: {
-  slug: string;
-  compact?: boolean;
-}) {
+export default function TodayBoard({ slug, compact = false }: { slug: string; compact?: boolean }) {
   const { data, isPending, isError } = useToday(slug);
   const [params, setParams] = useSearchParams();
   const product = params.get("product");
@@ -350,17 +302,13 @@ export default function TodayBoard({
     setParams(copy, { replace: true });
   };
 
-  const total = filtered
-    ? BUCKETS.reduce((n, k) => n + filtered[k].length, 0)
-    : 0;
+  const total = filtered ? BUCKETS.reduce((n, k) => n + filtered[k].length, 0) : 0;
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            Today
-          </h1>
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">Today</h1>
           <p className="text-[length:var(--text-meta)] text-muted-foreground">
             {format(new Date(), "EEEE, MMMM d")}
           </p>
@@ -377,9 +325,7 @@ export default function TodayBoard({
                   style={{ background: BUCKET_META[k].color }}
                 />
                 {BUCKET_META[k].label}
-                <b className="font-semibold tabular-nums text-foreground">
-                  {filtered[k].length}
-                </b>
+                <b className="font-semibold tabular-nums text-foreground">{filtered[k].length}</b>
               </span>
             ))}
           </div>
@@ -416,10 +362,7 @@ export default function TodayBoard({
                   : "border-border text-muted-foreground hover:bg-accent",
               )}
             >
-              <span
-                className="size-1.5 rounded-full"
-                style={{ background: productColor(name) }}
-              />
+              <span className="size-1.5 rounded-full" style={{ background: productColor(name) }} />
               {name}
               <span className="tabular-nums opacity-70">{n}</span>
             </button>
@@ -439,9 +382,7 @@ export default function TodayBoard({
         </p>
       ) : total === 0 ? (
         <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center">
-          <p className="text-sm font-medium text-foreground">
-            Nothing scheduled for today
-          </p>
+          <p className="text-sm font-medium text-foreground">Nothing scheduled for today</p>
           <p className="mt-1 text-[length:var(--text-meta)] text-muted-foreground">
             Issues assigned to you with a start or target date show up here.
           </p>
@@ -453,9 +394,7 @@ export default function TodayBoard({
           </Link>
         </div>
       ) : (
-        BUCKETS.map((k) => (
-          <Bucket key={k} bucket={k} issues={filtered![k]} compact={compact} />
-        ))
+        BUCKETS.map((k) => <Bucket key={k} bucket={k} issues={filtered![k]} compact={compact} />)
       )}
     </div>
   );

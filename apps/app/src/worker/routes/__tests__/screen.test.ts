@@ -88,11 +88,9 @@ describe("screen routes", () => {
   });
 
   it("502s status when the bridge is not configured", async () => {
-    const res = await testApp().request(
-      "/api/screen/status",
-      undefined,
-      { DB: {} } as unknown as Env,
-    );
+    const res = await testApp().request("/api/screen/status", undefined, {
+      DB: {},
+    } as unknown as Env);
     expect(res.status).toBe(502);
   });
 

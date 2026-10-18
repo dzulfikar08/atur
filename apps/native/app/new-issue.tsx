@@ -19,6 +19,7 @@ import {
 } from "@/components/ui";
 import { api, type Priority } from "@/lib/api";
 import { textToHtml } from "@/lib/format";
+import { compareStates } from "@/lib/issue-query";
 import { ALL, useCurrentWorkspace } from "@/lib/workspace";
 
 type SheetKind = "project" | "state" | "priority" | null;
@@ -44,7 +45,7 @@ export default function NewIssue() {
     queryFn: () => api.states(slug!, projectId!),
     enabled: Boolean(slug && projectId),
   });
-  const sortedStates = [...(states.data ?? [])].sort((a, b) => a.sequence - b.sequence);
+  const sortedStates = [...(states.data ?? [])].sort(compareStates);
   // Same default as the web create sheet: the backlog state, else the first.
   const state =
     sortedStates.find((s) => s.id === stateId) ??
@@ -62,6 +63,7 @@ export default function NewIssue() {
     onSuccess: (issue) => {
       void qc.invalidateQueries({ queryKey: ["project-issues"] });
       void qc.invalidateQueries({ queryKey: ["my-issues"] });
+      void qc.invalidateQueries({ queryKey: ["today"] });
       router.replace({
         pathname: "/issue/[slug]/[projectId]/[issueId]",
         params: { slug: slug!, projectId: projectId!, issueId: issue.id },
@@ -86,7 +88,7 @@ export default function NewIssue() {
               onPress={() => setSheet("project")}
             />
             <ListRow
-              left={<StateIcon group={state?.group} color={state?.color} size={18} />}
+              left={<StateIcon state={state} size={18} />}
               title={state?.name ?? "—"}
               value="State"
               chevron
@@ -151,7 +153,7 @@ export default function NewIssue() {
           key: s.id,
           label: s.name,
           selected: s.id === state?.id,
-          left: <StateIcon group={s.group} color={s.color} />,
+          left: <StateIcon state={s} />,
         }))}
         onSelect={setStateId}
       />

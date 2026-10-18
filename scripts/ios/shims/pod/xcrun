@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# pod install only: ExpoModulesJSI's stub script runs `xcrun --sdk macosx clang ...`.
+# Drop the SDK selection and run the tool found next to this shim (the clang shim).
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --sdk | -sdk | --toolchain | -toolchain) shift 2 ;;
+    --*) shift ;;
+    *) break ;;
+  esac
+done
+exec "$@"

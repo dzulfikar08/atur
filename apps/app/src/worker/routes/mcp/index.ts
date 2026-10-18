@@ -222,8 +222,14 @@ export const TOOLS = [
           type: "boolean",
           description: "Flag/unflag as a portfolio-level decision issue",
         },
-        start_date: { type: ["string", "null"], description: "YYYY-MM-DD (Gantt start); null clears" },
-        target_date: { type: ["string", "null"], description: "YYYY-MM-DD (due / Gantt end); null clears" },
+        start_date: {
+          type: ["string", "null"],
+          description: "YYYY-MM-DD (Gantt start); null clears",
+        },
+        target_date: {
+          type: ["string", "null"],
+          description: "YYYY-MM-DD (due / Gantt end); null clears",
+        },
       },
       required: ["project_id", "workspace", "issue_id"],
     },

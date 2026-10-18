@@ -11,8 +11,7 @@ import { cn } from "@/lib/utils";
 // Panel shells sit on --surface-elevated with the theme border; state colors
 // always come from the --state-* tokens so light mode stays coherent.
 
-const PANEL =
-  "rounded-[14px] border border-border bg-[var(--surface-elevated)] overflow-hidden";
+const PANEL = "rounded-[14px] border border-border bg-[var(--surface-elevated)] overflow-hidden";
 
 const TONE_DOT = {
   green: "bg-[var(--state-green)]",
@@ -37,12 +36,7 @@ function paneStatus(status: string | null): { tone: Tone; label: string } {
   if (s === "running" || s === "working" || s === "active") {
     return { tone: "green", label: "working" };
   }
-  if (
-    s === "blocked" ||
-    s === "waiting" ||
-    s === "input_required" ||
-    s === "needs_input"
-  ) {
+  if (s === "blocked" || s === "waiting" || s === "input_required" || s === "needs_input") {
     return { tone: "amber", label: "blocked" };
   }
   if (s === "error" || s === "exited" || s === "dead") {
@@ -75,28 +69,16 @@ function AgentRow({ pane }: { pane: PaneListItem }) {
           <span className="max-w-40 shrink-0 truncate text-[13.5px] font-bold text-foreground">
             {name}
           </span>
-          {context && (
-            <span className="truncate text-[13px] text-muted-foreground">
-              {context}
-            </span>
-          )}
+          {context && <span className="truncate text-[13px] text-muted-foreground">{context}</span>}
           {/* PaneListItem carries no timestamp — render the design's unknown-time dash. */}
           <span className="ml-1 shrink-0 font-ops-mono text-[12.5px] text-muted-foreground/70">
             —
           </span>
         </div>
         <div className="mt-[3px] flex items-center gap-1.5">
+          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", TONE_DOT[status.tone])} />
           <span
-            className={cn(
-              "h-1.5 w-1.5 shrink-0 rounded-full",
-              TONE_DOT[status.tone],
-            )}
-          />
-          <span
-            className={cn(
-              "truncate font-ops-mono text-xs font-semibold",
-              TONE_TEXT[status.tone],
-            )}
+            className={cn("truncate font-ops-mono text-xs font-semibold", TONE_TEXT[status.tone])}
           >
             {status.label} · {pane.workspace_label}
           </span>
@@ -129,24 +111,15 @@ function AgentsPanel() {
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-2.5 px-5 py-3.5 text-left"
       >
-        <h2 className="text-sm font-semibold text-foreground">
-          Agents on shift
-        </h2>
+        <h2 className="text-sm font-semibold text-foreground">Agents on shift</h2>
         <span className="flex items-center gap-1.5 font-ops-mono text-[length:var(--text-meta)] text-muted-foreground">
           {panes.length} live {panes.length === 1 ? "pane" : "panes"}
-          {open ? (
-            <ChevronDown className="size-3.5" />
-          ) : (
-            <ChevronRight className="size-3.5" />
-          )}
+          {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         </span>
       </button>
       {!open ? null : panesQuery.isPending ? (
         Array.from({ length: 3 }).map((_, i) => (
-          <div
-            key={i}
-            className="border-t border-border px-5 py-[15px] first:border-t-0"
-          >
+          <div key={i} className="border-t border-border px-5 py-[15px] first:border-t-0">
             <Skeleton className="h-[34px] w-full" />
           </div>
         ))
@@ -170,8 +143,7 @@ function ThisWeekCard({ slug, isAll }: { slug: string; isAll: boolean }) {
 
   const trendQuery = useQuery({
     queryKey: ["dashboard-completion-trend", slug],
-    queryFn: () =>
-      isAll ? api.allCompletionTrend() : api.completionTrend(slug),
+    queryFn: () => (isAll ? api.allCompletionTrend() : api.completionTrend(slug)),
   });
   // Agent usage and the timesheet are workspace-scoped endpoints — no
   // cross-workspace equivalent exists, so those rows are simply absent in
@@ -190,10 +162,7 @@ function ThisWeekCard({ slug, isAll }: { slug: string; isAll: boolean }) {
   const closedThisWeek = (trendQuery.data ?? [])
     .filter((p) => p.date >= weekFrom)
     .reduce((n, p) => n + p.completed, 0);
-  const agentRuns = (agentUsageQuery.data?.results ?? []).reduce(
-    (n, r) => n + r.entry_count,
-    0,
-  );
+  const agentRuns = (agentUsageQuery.data?.results ?? []).reduce((n, r) => n + r.entry_count, 0);
 
   const rows: { label: string; value: string }[] = [];
   if (trendQuery.data) {
@@ -212,18 +181,12 @@ function ThisWeekCard({ slug, isAll }: { slug: string; isAll: boolean }) {
 
   return (
     <section className="flex flex-col gap-3 rounded-[14px] border border-border bg-[var(--surface-elevated)] p-[18px]">
-      <h2 className="text-[13.5px] font-bold text-muted-foreground">
-        This week
-      </h2>
+      <h2 className="text-[13.5px] font-bold text-muted-foreground">This week</h2>
       {rows.map((row) => (
         <div key={row.label} className="flex items-center">
-          <span className="text-[13px] text-muted-foreground/70">
-            {row.label}
-          </span>
+          <span className="text-[13px] text-muted-foreground/70">{row.label}</span>
           <span className="min-w-2 flex-1" />
-          <span className="font-ops-mono text-[13.5px] font-bold text-foreground">
-            {row.value}
-          </span>
+          <span className="font-ops-mono text-[13.5px] font-bold text-foreground">{row.value}</span>
         </div>
       ))}
     </section>

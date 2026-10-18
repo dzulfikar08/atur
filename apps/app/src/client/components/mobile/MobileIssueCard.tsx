@@ -103,9 +103,7 @@ export default function MobileIssueCard({
             )}
 
             {issue.project_name && (
-              <span className="text-xs text-muted-foreground truncate">
-                {issue.project_name}
-              </span>
+              <span className="text-xs text-muted-foreground truncate">{issue.project_name}</span>
             )}
             {issue.workspace_name && (
               <span className="text-xs text-muted-foreground/70 truncate">
@@ -127,9 +125,7 @@ export default function MobileIssueCard({
                 </Badge>
               ))}
               {issue.labels.length > 2 && (
-                <span className="text-xs text-muted-foreground">
-                  +{issue.labels.length - 2}
-                </span>
+                <span className="text-xs text-muted-foreground">+{issue.labels.length - 2}</span>
               )}
             </div>
           )}

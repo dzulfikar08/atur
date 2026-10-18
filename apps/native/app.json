@@ -2,14 +2,20 @@
   "expo": {
     "name": "Atur",
     "slug": "atur",
-    "version": "1.0.2",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "atur",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.diatur.app"
+      "supportsTablet": false,
+      "bundleIdentifier": "com.diatur.app",
+      "buildNumber": "1",
+      "appleTeamId": "F6Q6UFUK69",
+      "usesAppleSignIn": true,
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -20,7 +26,8 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.diatur.app",
-      "versionCode": 3
+      "versionCode": 3,
+      "blockedPermissions": ["android.permission.SYSTEM_ALERT_WINDOW"]
     },
     "web": {
       "output": "single",
@@ -28,8 +35,14 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
       "expo-web-browser",
+      "expo-apple-authentication",
       [
         "expo-splash-screen",
         {

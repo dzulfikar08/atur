@@ -14,6 +14,16 @@ export type Env = {
   // back with error=oauth_disabled instead of starting the flow.
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  // Sign in with Apple (native iOS). Identity tokens are verified against
+  // Apple's public JWKS, so nothing is required: the audience defaults to the
+  // bundle id com.diatur.app (override with APPLE_BUNDLE_ID). The three
+  // APPLE_SIWA_* secrets (team id, Sign in with Apple key id, .p8 contents)
+  // are optional: when all are set, the app's authorization code is redeemed
+  // at sign-in and the grant is revoked at Apple on account deletion.
+  APPLE_BUNDLE_ID?: string;
+  APPLE_TEAM_ID?: string;
+  APPLE_SIWA_KEY_ID?: string;
+  APPLE_SIWA_PRIVATE_KEY?: string;
   // Herdr execution-plane bridge (ATUR-2): the local dev daemon on the dev box
   // (127.0.0.1:7601) or a https:// tunnel hostname in prod. Set via
   // `wrangler secret put` in prod and .dev.vars locally. Absent → /api/panes

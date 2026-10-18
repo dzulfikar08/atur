@@ -9,17 +9,22 @@ import { StyleSheet, UnistylesRuntime, useUnistyles } from "react-native-unistyl
 
 import {
   Avatar,
+  Button,
   Chip,
   ErrorNote,
+  Input,
   ListGroup,
   ListRow,
   PageHeader,
   Screen,
   SectionTitle,
+  Sheet,
   Text,
 } from "@/components/ui";
+import { DELETE_ACCOUNT_INFO_URL, DELETE_CONFIRMATION, deleteAccount } from "@/lib/account";
 import { api } from "@/lib/api";
 import { SERVER_URL } from "@/lib/config";
+import { IS_PLAY_BUILD } from "@/lib/distribution";
 import { displayName } from "@/lib/format";
 import { endSession } from "@/lib/session";
 import { loadThemePref, saveThemePref, type ThemePref } from "@/lib/theme-pref";
@@ -58,6 +63,19 @@ export default function Profile() {
     mutationFn: () => api.signOut().catch(() => undefined),
     onSettled: () => endSession(),
   });
+
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const deleteAccountMutation = useMutation({
+    // On success deleteAccount() ends the session and the root layout swaps to
+    // the login screen, so there is nothing to close or navigate here.
+    mutationFn: deleteAccount,
+  });
+  const closeDelete = () => {
+    setDeleteOpen(false);
+    setConfirmText("");
+    deleteAccountMutation.reset();
+  };
 
   const name = me.data ? displayName(me.data) : "";
 
@@ -114,7 +132,7 @@ export default function Profile() {
           chevron
           onPress={() => void WebBrowser.openBrowserAsync(SERVER_URL)}
         />
-        {Platform.OS === "android" ? (
+        {Platform.OS === "android" && !IS_PLAY_BUILD ? (
           <ListRow
             icon="download-outline"
             title="Download latest Android app"
@@ -141,6 +159,48 @@ export default function Profile() {
           onPress={() => signOut.mutate()}
         />
       </ListGroup>
+
+      <ListGroup>
+        <ListRow
+          icon="trash-outline"
+          title="Delete account"
+          subtitle="Permanently erase your account and data"
+          destructive
+          onPress={() => setDeleteOpen(true)}
+        />
+      </ListGroup>
+
+      <Sheet visible={deleteOpen} title="Delete account" onClose={closeDelete}>
+        <View style={styles.deleteForm}>
+          <Text style={styles.deleteBody}>
+            This permanently deletes your Atur account and signs you out everywhere. Your profile,
+            sign-in methods and API keys are erased. Workspaces you own pass to another member, or
+            are deleted if you are the only one in them. This can't be undone.
+          </Text>
+          <Input
+            label={`Type ${DELETE_CONFIRMATION} to confirm`}
+            value={confirmText}
+            onChangeText={setConfirmText}
+            placeholder={DELETE_CONFIRMATION}
+            autoCapitalize="characters"
+            autoCorrect={false}
+          />
+          <ErrorNote error={deleteAccountMutation.error} />
+          <Button
+            variant="destructive"
+            icon="trash-outline"
+            label="Delete my account"
+            loading={deleteAccountMutation.isPending}
+            disabled={confirmText.trim() !== DELETE_CONFIRMATION}
+            onPress={() => deleteAccountMutation.mutate()}
+          />
+          <Button
+            variant="ghost"
+            label="What gets deleted?"
+            onPress={() => void WebBrowser.openBrowserAsync(DELETE_ACCOUNT_INFO_URL)}
+          />
+        </View>
+      </Sheet>
     </Screen>
   );
 }
@@ -156,4 +216,10 @@ const styles = StyleSheet.create((theme) => ({
   name: { fontSize: theme.fontSize.lg, fontFamily: theme.fonts.bold },
   email: { fontSize: theme.fontSize.sm, color: theme.colors.mutedForeground, marginTop: 2 },
   chips: { flexDirection: "row", gap: theme.spacing.sm },
+  deleteBody: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.mutedForeground,
+    lineHeight: 20,
+  },
+  deleteForm: { gap: theme.spacing.md, paddingBottom: theme.spacing.sm },
 }));

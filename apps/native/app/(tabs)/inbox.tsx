@@ -10,11 +10,11 @@ import {
   EmptyState,
   ErrorNote,
   ListGroup,
-  Loading,
   PageHeader,
   Screen,
   Text,
 } from "@/components/ui";
+import { RowListSkeleton } from "@/components/skeletons";
 import { api, type Notification } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
 
@@ -62,7 +62,7 @@ export default function Inbox() {
       />
       <ErrorNote error={list.error ?? markAll.error} />
       {list.isPending ? (
-        <Loading />
+        <RowListSkeleton />
       ) : items.length === 0 ? (
         <EmptyState
           icon="notifications-off-outline"

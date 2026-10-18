@@ -648,6 +648,21 @@ a.chip:hover,
   margin: 16px 0;
 }
 
+.legal .prose h2 {
+  font-size: 22px;
+  margin: 40px 0 8px;
+  scroll-margin-top: 80px;
+}
+
+.legal .prose ul {
+  margin: 12px 0;
+  padding-left: 22px;
+}
+
+.legal .prose li {
+  margin: 8px 0;
+}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .site-nav a:not(.btn) {

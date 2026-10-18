@@ -289,10 +289,7 @@ export default function ModuleDetailPage() {
           </td>
           <td className="p-2">
             {issue.priority && issue.priority !== "none" && (
-              <span
-                className="priority-text text-xs font-medium"
-                data-priority={issue.priority}
-              >
+              <span className="priority-text text-xs font-medium" data-priority={issue.priority}>
                 {issue.priority}
               </span>
             )}
@@ -391,7 +388,10 @@ export default function ModuleDetailPage() {
         </Button>
         <Package className="h-5 w-5 text-muted-foreground" />
         <h1 className="text-xl font-bold">{mod.name}</h1>
-        <span className="state-badge" data-state-group={MODULE_STATUS_GROUP[mod.status] ?? "backlog"}>
+        <span
+          className="state-badge"
+          data-state-group={MODULE_STATUS_GROUP[mod.status] ?? "backlog"}
+        >
           {mod.status}
         </span>
       </div>

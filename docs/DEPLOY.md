@@ -59,6 +59,36 @@ toast). While testing locally, note that `client/lib/dev-auth.ts` auto-stamps a
 dev session cookie — clear cookies first or the OAuth flow appears to be
 skipped.
 
+### Sign in with Apple + account deletion (iOS app)
+
+`POST /auth/apple/native` verifies the identity token the iOS app gets from the
+OS sheet against Apple's public keys (`https://appleid.apple.com/auth/keys`,
+cached 1h): RS256 signature, issuer, audience, expiry and nonce. **No secret and
+no migration is needed** — the audience defaults to the bundle id
+`com.diatur.app` (override with the `APPLE_BUNDLE_ID` var).
+
+`DELETE /api/users/me` (body `{"confirm":"DELETE"}`, session auth only — API keys
+get 403) erases the account: scrubs name/email/avatar, revokes sessions, API keys
+and provider links, removes memberships, hands owned workspaces to the
+earliest-joined admin (else member) or soft-deletes them when the owner was the
+only member. Public instructions live at `https://diatur.com/privacy#delete-account`
+(the Play Console "Data deletion" URL and the App Store privacy-policy URL).
+
+Apple also requires the Sign in with Apple grant to be revoked when the account is
+deleted. That needs a Sign in with Apple key (Apple Developer → Keys → "Sign in
+with Apple", Primary App ID `com.diatur.app`) stored as worker secrets; without
+them sign-in and deletion still work, the grant just isn't revoked at Apple:
+
+```bash
+cd apps/app
+bunx wrangler secret put APPLE_TEAM_ID          # 10-char Team ID
+bunx wrangler secret put APPLE_SIWA_KEY_ID      # Key ID of the .p8
+bunx wrangler secret put APPLE_SIWA_PRIVATE_KEY # contents of AuthKey_XXXX.p8
+```
+
+With these set, the app's one-shot authorization code is redeemed at sign-in and
+the refresh token is kept on the `accounts` row, then revoked at deletion.
+
 ### Polar integration
 
 The Polar integration (payments → CRM import) stores its credentials

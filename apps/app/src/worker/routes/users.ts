@@ -3,12 +3,14 @@ import { eq, and, isNull } from "drizzle-orm";
 import type { Context } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, extractToken } from "../middleware/auth";
 import * as schema from "../db/schema";
 import { v4 as uuid } from "uuid";
 import { nowISO } from "../lib/pagination";
 import { HTTPException } from "hono/http-exception";
 import * as usersRepo from "../repositories/users";
+import * as accountService from "../services/account";
+import { deleteCookie } from "hono/cookie";
 
 async function sha256Hex(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
@@ -178,4 +180,23 @@ export const userRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       .set({ deletedAt: nowISO(), updatedAt: nowISO(), isActive: 0 })
       .where(and(eq(schema.apiKeys.id, id), eq(schema.apiKeys.userId, userId)));
     return c.body(null, 204);
+  })
+  // Account deletion (App Store 5.1.1(v) / Google Play): erases the caller's
+  // account and revokes every credential. Session-only — an API key (or the
+  // MCP agents that hold one) must never be able to erase its owner.
+  .delete("/me", authMiddleware, async (c) => {
+    const token = extractToken(c);
+    if (!token || token.startsWith("pk_live_")) {
+      throw new HTTPException(403, { message: "Account deletion requires a signed-in session" });
+    }
+    const body = await c.req.json().catch(() => null);
+    const parsed = accountService.deleteAccountSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new HTTPException(400, {
+        message: `Send { "confirm": "${accountService.DELETE_CONFIRMATION}" } to delete your account`,
+      });
+    }
+    await accountService.deleteAccount(getDb(c.env.DB), c.get("user").sub, c.env);
+    deleteCookie(c, "plane-session", { path: "/" });
+    return c.json({ ok: true });
   });

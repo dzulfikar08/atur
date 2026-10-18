@@ -9,7 +9,7 @@ import type { IconName } from "@/components/ui";
 import { api } from "@/lib/api";
 
 const TABS: { name: string; label: string; icon: IconName; outline: IconName }[] = [
-  { name: "index", label: "Home", icon: "home", outline: "home-outline" },
+  { name: "index", label: "Today", icon: "today", outline: "today-outline" },
   { name: "projects", label: "Projects", icon: "folder", outline: "folder-outline" },
   { name: "inbox", label: "Inbox", icon: "notifications", outline: "notifications-outline" },
   { name: "profile", label: "Profile", icon: "person-circle", outline: "person-circle-outline" },

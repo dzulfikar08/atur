@@ -41,9 +41,7 @@ function todayDates(raw: string | undefined): {
   weekEnd: string;
 } {
   const today =
-    raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)
-      ? raw
-      : new Date().toISOString().slice(0, 10);
+    raw && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : new Date().toISOString().slice(0, 10);
   const end = new Date(`${today}T00:00:00Z`);
   end.setUTCDate(end.getUTCDate() + 7);
   return { today, weekEnd: end.toISOString().slice(0, 10) };
@@ -57,10 +55,7 @@ async function resolveWorkspaceId(db: Db, ids: string[], slugOrId: string) {
     .where(
       and(
         inArray(schema.workspaces.id, ids),
-        or(
-          eq(schema.workspaces.id, slugOrId),
-          eq(schema.workspaces.slug, slugOrId),
-        ),
+        or(eq(schema.workspaces.id, slugOrId), eq(schema.workspaces.slug, slugOrId)),
       ),
     )
     .limit(1);
@@ -80,10 +75,7 @@ function assignedToMe(db: Db, userId: string) {
       .select({ id: schema.issueAssignees.issueId })
       .from(schema.issueAssignees)
       .where(
-        and(
-          eq(schema.issueAssignees.assigneeId, userId),
-          isNull(schema.issueAssignees.deletedAt),
-        ),
+        and(eq(schema.issueAssignees.assigneeId, userId), isNull(schema.issueAssignees.deletedAt)),
       ),
   );
 }
@@ -126,8 +118,7 @@ const SORT_COLUMNS = {
 
 function orderFor(sort: string | undefined) {
   const [field, dir] = (sort ?? "updated_at:desc").split(":");
-  const col =
-    SORT_COLUMNS[field as keyof typeof SORT_COLUMNS] ?? schema.issues.updatedAt;
+  const col = SORT_COLUMNS[field as keyof typeof SORT_COLUMNS] ?? schema.issues.updatedAt;
   const ordered = dir === "asc" ? asc(col) : desc(col);
   // Dated sorts keep undated issues last in both directions.
   return field === "target_date" || field === "start_date"
@@ -161,20 +152,14 @@ function selectIssueRows(
     })
     .from(schema.issues)
     .innerJoin(schema.projects, eq(schema.projects.id, schema.issues.projectId))
-    .innerJoin(
-      schema.workspaces,
-      eq(schema.workspaces.id, schema.issues.workspaceId),
-    )
+    .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.issues.workspaceId))
     .where(where)
     .orderBy(...order)
     .offset(offset)
     .limit(limit);
 }
 
-async function enrichRows(
-  db: Db,
-  rows: Awaited<ReturnType<typeof selectIssueRows>>,
-) {
+async function enrichRows(db: Db, rows: Awaited<ReturnType<typeof selectIssueRows>>) {
   const enriched = await issuesService.enrichIssues(
     db,
     rows.map((r) => r.issue),
@@ -206,19 +191,14 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const search = c.req.query("q") ?? c.req.query("search");
     const workspace = c.req.query("workspace"); // workspace slug or id
     const project = c.req.query("project"); // project id
-    const stateKeys = (c.req.query("state_key") ?? "")
-      .split(",")
-      .filter(Boolean);
+    const stateKeys = (c.req.query("state_key") ?? "").split(",").filter(Boolean);
     const group = c.req.query("group"); // backlog|started|completed|cancelled
     const assignee = c.req.query("assignee");
     const due = c.req.query("due");
     const { offset, limit } = paginationParams(c);
     const dates = todayDates(c.req.query("today"));
 
-    const conditions = [
-      inArray(schema.issues.workspaceId, ids),
-      isNull(schema.issues.deletedAt),
-    ];
+    const conditions = [inArray(schema.issues.workspaceId, ids), isNull(schema.issues.deletedAt)];
     if (workspace) {
       const wsId = await resolveWorkspaceId(db, ids, workspace);
       // An unknown or foreign workspace matches nothing rather than everything.
@@ -235,12 +215,7 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
           db
             .select({ id: schema.states.id })
             .from(schema.states)
-            .where(
-              and(
-                inArray(schema.states.key, stateKeys),
-                isNull(schema.states.deletedAt),
-              ),
-            ),
+            .where(and(inArray(schema.states.key, stateKeys), isNull(schema.states.deletedAt))),
         ),
       );
     if (group)
@@ -250,12 +225,7 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
           db
             .select({ id: schema.states.id })
             .from(schema.states)
-            .where(
-              and(
-                eq(schema.states.groupName, group),
-                isNull(schema.states.deletedAt),
-              ),
-            ),
+            .where(and(eq(schema.states.groupName, group), isNull(schema.states.deletedAt))),
         ),
       );
     if (priority) conditions.push(eq(schema.issues.priority, priority));
@@ -281,21 +251,8 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       .from(schema.issues)
       .where(where);
 
-    const rows = await selectIssueRows(
-      db,
-      where,
-      orderFor(c.req.query("sort")),
-      offset,
-      limit,
-    );
-    return c.json(
-      paginatedResponse(
-        await enrichRows(db, rows),
-        countRow.total,
-        offset,
-        limit,
-      ),
-    );
+    const rows = await selectIssueRows(db, where, orderFor(c.req.query("sort")), offset, limit);
+    return c.json(paginatedResponse(await enrichRows(db, rows), countRow.total, offset, limit));
   })
 
   // The owner's "what do I do today" buckets. Scope: issues assigned to me, or
@@ -327,10 +284,7 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
 
     const dates = todayDates(c.req.query("today"));
     const workspace = c.req.query("workspace");
-    const scope = [
-      inArray(schema.issues.workspaceId, ids),
-      isNull(schema.issues.deletedAt),
-    ];
+    const scope = [inArray(schema.issues.workspaceId, ids), isNull(schema.issues.deletedAt)];
     if (workspace && workspace !== "all") {
       const wsId = await resolveWorkspaceId(db, ids, workspace);
       if (!wsId) return c.json(empty);
@@ -353,11 +307,7 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
             .from(schema.states)
             .where(
               and(
-                inArray(schema.states.key, [
-                  "needs_you",
-                  "need_review",
-                  "in_progress",
-                ]),
+                inArray(schema.states.key, ["needs_you", "need_review", "in_progress"]),
                 isNull(schema.states.deletedAt),
               ),
             ),
@@ -365,40 +315,22 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       ),
     );
 
-    const rows = await selectIssueRows(
-      db,
-      where,
-      orderFor("target_date:asc"),
-      0,
-      500,
-    );
+    const rows = await selectIssueRows(db, where, orderFor("target_date:asc"), 0, 500);
     const issues = await enrichRows(db, rows);
 
-    const out = structuredClone(empty) as unknown as Record<
-      string,
-      unknown[]
-    > & {
+    const out = structuredClone(empty) as unknown as Record<string, unknown[]> & {
       counts: Record<string, number>;
     };
     for (const issue of issues) {
       const key = issue.state?.key ?? null;
-      const t =
-        typeof issue.targetDate === "string"
-          ? issue.targetDate.slice(0, 10)
-          : null;
-      const s =
-        typeof issue.startDate === "string"
-          ? issue.startDate.slice(0, 10)
-          : null;
+      const t = typeof issue.targetDate === "string" ? issue.targetDate.slice(0, 10) : null;
+      const s = typeof issue.startDate === "string" ? issue.startDate.slice(0, 10) : null;
       let bucket: string | null = null;
       if (t && t < dates.today) bucket = "overdue";
       else if (t === dates.today) bucket = "due_today";
       else if (key === "needs_you") bucket = "needs_you";
       else if (key === "need_review") bucket = "need_review";
-      else if (
-        key === "in_progress" ||
-        (s && s <= dates.today && (!t || t >= dates.today))
-      )
+      else if (key === "in_progress" || (s && s <= dates.today && (!t || t >= dates.today)))
         bucket = "in_progress";
       else if (t && t <= dates.weekEnd) bucket = "due_this_week";
       if (!bucket) continue;
@@ -431,14 +363,8 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       })
       .from(schema.issues)
       .innerJoin(schema.states, eq(schema.states.id, schema.issues.stateId))
-      .innerJoin(
-        schema.projects,
-        eq(schema.projects.id, schema.issues.projectId),
-      )
-      .innerJoin(
-        schema.workspaces,
-        eq(schema.workspaces.id, schema.issues.workspaceId),
-      )
+      .innerJoin(schema.projects, eq(schema.projects.id, schema.issues.projectId))
+      .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.issues.workspaceId))
       .where(
         and(
           inArray(schema.issues.workspaceId, ids),
@@ -483,17 +409,12 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         isPipeline: schema.projects.isPipeline,
       })
       .from(schema.projects)
-      .innerJoin(
-        schema.workspaces,
-        eq(schema.workspaces.id, schema.projects.workspaceId),
-      )
+      .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.projects.workspaceId))
       .where(
         and(
           inArray(schema.projects.workspaceId, ids),
           isNull(schema.projects.deletedAt),
-          ...(c.req.query("is_pipeline") === "1"
-            ? [eq(schema.projects.isPipeline, 1)]
-            : []),
+          ...(c.req.query("is_pipeline") === "1" ? [eq(schema.projects.isPipeline, 1)] : []),
         ),
       )
       .orderBy(desc(schema.projects.updatedAt));
@@ -515,16 +436,8 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         workspaceName: schema.workspaces.name,
       })
       .from(schema.pages)
-      .innerJoin(
-        schema.workspaces,
-        eq(schema.workspaces.id, schema.pages.workspaceId),
-      )
-      .where(
-        and(
-          inArray(schema.pages.workspaceId, ids),
-          isNull(schema.pages.deletedAt),
-        ),
-      )
+      .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.pages.workspaceId))
+      .where(and(inArray(schema.pages.workspaceId, ids), isNull(schema.pages.deletedAt)))
       .orderBy(desc(schema.pages.updatedAt));
 
     const results = rows.map((r) => ({
@@ -585,10 +498,7 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       })
       .from(schema.customers)
       .leftJoin(schema.users, eq(schema.users.id, schema.customers.userId))
-      .innerJoin(
-        schema.workspaces,
-        eq(schema.workspaces.id, schema.customers.workspaceId),
-      )
+      .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.customers.workspaceId))
       .where(where)
       .orderBy(desc(schema.customers.createdAt))
       .offset(offset)
@@ -621,12 +531,7 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         reviewedAt: schema.workspaces.reviewedAt,
       })
       .from(schema.workspaces)
-      .where(
-        and(
-          inArray(schema.workspaces.id, ids),
-          isNull(schema.workspaces.deletedAt),
-        ),
-      );
+      .where(and(inArray(schema.workspaces.id, ids), isNull(schema.workspaces.deletedAt)));
 
     const history = await db
       .select({
@@ -698,14 +603,8 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         stateColor: schema.states.color,
       })
       .from(schema.issues)
-      .innerJoin(
-        schema.projects,
-        eq(schema.projects.id, schema.issues.projectId),
-      )
-      .innerJoin(
-        schema.workspaces,
-        eq(schema.workspaces.id, schema.issues.workspaceId),
-      )
+      .innerJoin(schema.projects, eq(schema.projects.id, schema.issues.projectId))
+      .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.issues.workspaceId))
       .leftJoin(schema.states, eq(schema.states.id, schema.issues.stateId))
       .where(
         and(
@@ -743,14 +642,8 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       });
     }
 
-    const base = and(
-      inArray(schema.issues.workspaceId, ids),
-      isNull(schema.issues.deletedAt),
-    );
-    const [totalRow] = await db
-      .select({ n: count() })
-      .from(schema.issues)
-      .where(base);
+    const base = and(inArray(schema.issues.workspaceId, ids), isNull(schema.issues.deletedAt));
+    const [totalRow] = await db.select({ n: count() }).from(schema.issues).where(base);
     const [openRow] = await db
       .select({ n: count() })
       .from(schema.issues)
@@ -764,11 +657,7 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       .select({ n: count() })
       .from(schema.issues)
       .where(
-        and(
-          base,
-          isOpen(db),
-          lt(dateOnly(schema.issues.targetDate), todayDates(undefined).today),
-        ),
+        and(base, isOpen(db), lt(dateOnly(schema.issues.targetDate), todayDates(undefined).today)),
       );
 
     return c.json({

@@ -89,7 +89,9 @@ export function EmptyState({
     >
       {icon ? <div className="text-muted-foreground">{icon}</div> : null}
       <p className="text-sm font-semibold">{title}</p>
-      {description ? <p className="max-w-sm text-[0.8125rem] text-muted-foreground">{description}</p> : null}
+      {description ? (
+        <p className="max-w-sm text-[0.8125rem] text-muted-foreground">{description}</p>
+      ) : null}
       {action ? <div className="mt-2">{action}</div> : null}
     </div>
   );
