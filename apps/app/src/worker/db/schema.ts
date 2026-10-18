@@ -1455,6 +1455,24 @@ export const paneAudit = sqliteTable(
   (table) => [index("idx_pane_audit_user").on(table.userId, table.attachedAt)],
 );
 
+// One-time WebSocket tickets for clients that cannot set an Authorization
+// header on a WS upgrade (the native app's noVNC WebView). Minted by an
+// authenticated POST /api/ws-tickets, redeemed exactly once on the upgrade.
+// Only the SHA-256 of the ticket is stored; expires_at / used_at are epoch ms.
+export const wsTickets = sqliteTable(
+  "ws_tickets",
+  {
+    hash: text("hash").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    scope: text("scope").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    usedAt: integer("used_at"),
+  },
+  (table) => [index("idx_ws_tickets_expires").on(table.expiresAt)],
+);
+
 // Personal quick notes (braindump). Plain-text content; @mentions of
 // workspaces/projects/issues are parsed from the text at render time
 // (client lib/mentions.ts) — no structured mention columns by design.

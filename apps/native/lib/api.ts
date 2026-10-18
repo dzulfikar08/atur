@@ -22,7 +22,29 @@ export interface Me {
   username: string;
   display_name: string | null;
   avatar: string | null;
+  /** Platform owner flag: gates desktop Screen sharing (the server enforces it too). */
+  is_superuser?: boolean;
   workspaces: Workspace[];
+}
+
+/** One row of GET /api/panes (herdr bridge wire format, proxied verbatim). */
+export interface PaneListItem {
+  pane_id: string;
+  workspace_id: string;
+  workspace_label: string;
+  tab_id: string;
+  cwd: string | null;
+  agent: string | null;
+  agent_status: string | null;
+  title: string | null;
+  revision: number;
+}
+
+/** GET /api/screen/status: desktop sharing side of the bridge. */
+export interface ScreenStatus {
+  available: boolean;
+  running: boolean;
+  viewers: number;
 }
 
 export interface Workspace {
@@ -359,6 +381,14 @@ export const api = {
   signOut: () => request<{ message: string }>("/auth/sign-out", { method: "POST" }),
 
   me: () => request<Me>("/api/users/me"),
+  panes: () => request<{ panes: PaneListItem[] }>("/api/panes").then((r) => r.panes),
+  screenStatus: () => request<ScreenStatus>("/api/screen/status"),
+  /** One-time ticket (≤60s, single use) for the screen WebView's WebSocket. */
+  screenTicket: () =>
+    request<{ ticket: string; expires_at: number }>("/api/ws-tickets", {
+      method: "POST",
+      body: { scope: "screen" },
+    }),
   projects: () => request<{ results: Project[] }>("/api/me/projects").then((r) => r.results),
   /** Every issue visible to me (cross-workspace), walked page by page like the web's listAllIssues. */
   allMyIssues: (workspace?: string) =>
