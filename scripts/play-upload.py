@@ -92,7 +92,7 @@ def main() -> None:
     if aab is None:
         found = sorted((ROOT / "apps/native/dist").glob("atur-play-*.aab"), key=lambda p: p.stat().st_mtime)
         if not found:
-            sys.exit("no apps/native/dist/atur-play-*.aab; build one with scripts/build-native-apk.sh --play")
+            sys.exit("no apps/native/dist/atur-play-*.aab; build one with scripts/build-native-aab.sh")
         aab = found[-1]
     if not zipfile.is_zipfile(aab):
         sys.exit(f"{aab} is not an AAB")

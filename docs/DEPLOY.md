@@ -21,6 +21,10 @@ bun run deploy:app
 This runs typecheck, builds the SPA + worker (vite cloudflare plugin), and
 deploys the `atur-hono` worker to `app.diatur.com`.
 
+The mobile apps are distributed only through Google Play
+(`https://play.google.com/store/apps/details?id=com.diatur.app`) and the App
+Store (`https://apps.apple.com/app/id6824116330`); the worker serves no APK.
+
 ### Secrets
 
 ```bash

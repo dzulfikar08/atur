@@ -1,39 +1,35 @@
 # Atur native app: building and releasing
 
-`apps/native` (Expo SDK 57, package and bundle id `com.diatur.app`) ships three ways. Store builds (Play AAB, App Store IPA, site APK) are produced by GitHub Actions: **[`ci-release.md`](ci-release.md)** is the primary path (`gh workflow run release-android.yml ...`, `gh workflow run release-ios.yml ...`; no heavy build runs on the laptop). The commands below are the same scripts the workflows call; use them only as a fallback.
+`apps/native` (Expo SDK 57, package and bundle id `com.diatur.app`) ships two ways. Store builds (Play AAB, App Store IPA) are produced by GitHub Actions: **[`ci-release.md`](ci-release.md)** is the primary path (`gh workflow run release-android.yml ...`, `gh workflow run release-ios.yml ...`; no heavy build runs on the laptop). The commands below are the same scripts the workflows call; use them only as a fallback.
 
-| Channel                                      | Command                                                            | Output                                         | Where it goes                                                                             |
-| -------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Site APK (sideload, with the in-app updater) | `scripts/build-native-apk.sh [--publish]`                          | `apps/native/dist/atur-release.apk`            | `--publish` uploads it to R2; `https://app.diatur.com/public/downloads/android` serves it |
-| Google Play bundle                           | `scripts/build-native-apk.sh --play` then `scripts/play-upload.py` | `apps/native/dist/atur-play-<versionCode>.aab` | a Play track (`internal`, `alpha`, `beta`)                                                |
-| App Store / TestFlight                       | `scripts/build-ios-linux.sh [--upload]`                            | `$ATUR_IOS_WORK/out/Atur.ipa`                  | App Store Connect                                                                         |
+| Channel                | Command                                                     | Output                                         | Where it goes                              |
+| ---------------------- | ----------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------ |
+| Google Play bundle     | `scripts/build-native-aab.sh` then `scripts/play-upload.py` | `apps/native/dist/atur-play-<versionCode>.aab` | a Play track (`internal`, `alpha`, `beta`) |
+| App Store / TestFlight | `scripts/build-ios-linux.sh [--upload]`                     | `$ATUR_IOS_WORK/out/Atur.ipa`                  | App Store Connect                          |
 
 Store runbooks: [`play-store.md`](play-store.md), [`app-store.md`](app-store.md). Listing copy lives in [`store-listing.json`](store-listing.json) and is length-checked by `scripts/check-store-listing.py`.
 
-## Distribution flag
+## Channels
 
-`apps/native/app.config.ts` wraps `app.json` and exposes `ATUR_DISTRIBUTION` (`site`, default, or `play`) as `extra.distribution`; `apps/native/lib/distribution.ts` turns it into `IS_PLAY_BUILD`. The only behavioural difference: the Play build hides Profile's "Download latest Android app" row (Play forbids apps that distribute their own updates). The app never installs packages itself (the row opens the download in the system browser), so `REQUEST_INSTALL_PACKAGES` is not in either manifest. The iOS build is always `site` (the row is Android-only).
+Atur ships only through Google Play and the App Store. There is no sideload APK, no in-app updater and no `/public/downloads/android` route. **v1.0.x sideload users must uninstall and install from Play**: Play App Signing may re-sign with a Google-generated key, so the old APK cannot be updated in place, and the old build has no way to reach the new one.
 
 ## Version numbers
 
 - **Version name**: `expo.version` in `apps/native/app.json` (currently `1.1.0`). Bump it by hand for a user-visible release; the stores show it.
-- **Android versionCode**: minutes since 2024-01-01 UTC, computed by `build-native-apk.sh` for both the APK and the AAB and patched into `android/app/build.gradle` on every run. It rises with every build, stays below Play's 2100000000 cap for millennia, and is above the `3` of the first sideload APK, so devices that have 1.0.2 (versionCode 3) update to any new build. `app.json`'s `android.versionCode` is only the prebuild template value.
+- **Android versionCode**: minutes since 2024-01-01 UTC, computed by `build-native-aab.sh` and patched into `android/app/build.gradle` on every run. It rises with every build and stays below Play's 2100000000 cap for millennia. `app.json`'s `android.versionCode` is only the prebuild template value.
 - **iOS build number** (`CFBundleVersion`): UTC `YYYYMMDDHHmm`, stamped into the IPA by `asc.py stamp`. `BUILD_NUMBER=<n>` overrides it. App Store Connect needs it to rise per version; the timestamp always does. `app.json`'s `ios.buildNumber` is only the prebuild template value.
 
 ## Android
 
 ```bash
-scripts/build-native-apk.sh                # site APK, arm64-v8a
-scripts/build-native-apk.sh --publish      # ...and upload to R2 (wrangler login required)
-scripts/build-native-apk.sh --play         # AAB, arm64-v8a + armeabi-v7a
-scripts/build-native-apk.sh --play --clean # force a fresh prebuild
-ARCHS=x86_64 scripts/build-native-apk.sh   # emulator-testable APK
+scripts/build-native-aab.sh           # AAB, arm64-v8a + armeabi-v7a
+scripts/build-native-aab.sh --clean   # force a fresh prebuild
 ```
 
-- `android/` is reused between builds when `app.json`, `app.config.ts`, `package.json`, `bun.lock`, `assets/` and the distribution flag are unchanged; otherwise prebuild runs again. A cold build takes about 30 minutes, a warm one a few.
-- The release keystore is `apps/native/keystore/atur-release.jks` with `keystore.properties` next to it (both gitignored; the script generates them once if missing, never overwrites). **Back both up outside the repo.** The site APK is signed with it, and the Play AAB is signed with it as the Play **upload key** (see `play-store.md`, "Play App Signing").
-- The script fails when the merged manifest contains `REQUEST_INSTALL_PACKAGES`, `SYSTEM_ALERT_WINDOW`, `QUERY_ALL_PACKAGES` or `MANAGE_EXTERNAL_STORAGE` (bundletool for the AAB, aapt2 for the APK), and when the JS bundle does not contain the API URL. `EXPO_PUBLIC_SERVER_URL` defaults to `https://app.diatur.com` and beats any `apps/native/.env`.
-- `~/.gradle` is a symlink to the ioswork volume on this machine, which is small and shared: the script stops with a message if that volume is not mounted, and a full build peaked high enough on it to hit "No space left on device" (R8). Use `GRADLE_USER_HOME=$HOME/.cache/atur-gradle scripts/build-native-apk.sh ...` to keep Gradle's caches on /home (a first build then downloads the dependencies again).
+- `android/` is reused between builds when `app.json`, `package.json`, `bun.lock` and `assets/` are unchanged; otherwise prebuild runs again. A cold build takes about 30 minutes, a warm one a few.
+- The release keystore is `apps/native/keystore/atur-release.jks` with `keystore.properties` next to it (both gitignored; the script generates them once if missing, never overwrites). **Back both up outside the repo.** The Play AAB is signed with it as the Play **upload key** (see `play-store.md`, "Play App Signing").
+- The script fails when the merged manifest (bundletool) contains `REQUEST_INSTALL_PACKAGES`, `SYSTEM_ALERT_WINDOW`, `QUERY_ALL_PACKAGES` or `MANAGE_EXTERNAL_STORAGE`, and when the JS bundle does not contain the API URL. `EXPO_PUBLIC_SERVER_URL` defaults to `https://app.diatur.com` and beats any `apps/native/.env`.
+- `~/.gradle` is a symlink to the ioswork volume on this machine, which is small and shared: the script stops with a message if that volume is not mounted, and a full build peaked high enough on it to hit "No space left on device" (R8). Use `GRADLE_USER_HOME=$HOME/.cache/atur-gradle scripts/build-native-aab.sh ...` to keep Gradle's caches on /home (a first build then downloads the dependencies again).
 - `BUNDLETOOL` overrides the bundletool jar (default `~/.cache/bundletool/bundletool.jar`).
 
 ### Uploading to Play
