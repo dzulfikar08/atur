@@ -47,6 +47,8 @@ import { feedbackAdminRoutes } from "./routes/feedback_admin";
 import { widgetRoutes } from "./routes/widget";
 import { paneRoutes } from "./routes/panes";
 import { screenRoutes } from "./routes/screen";
+import { wsTicketRoutes } from "./routes/wsTickets";
+import { isWsTicketUpgrade } from "./lib/wsTicket";
 import { polarWebhookRoutes, polarRoutes } from "./routes/polar";
 import { meRoutes } from "./routes/me";
 // Personal notes — static /notes prefix must win over meRoutes' generic
@@ -77,7 +79,10 @@ export function createApp(): Hono<{ Bindings: Env }> {
 
   // Every /api/* route requires an authenticated session (cookie or bearer).
   // /auth/* (login/register) and /health are mounted outside /api and stay public.
-  app.use("/api/*", authMiddleware);
+  // The one exception: a WS upgrade carrying `?ticket=` (the native screen
+  // WebView, which cannot set headers). wsTicketAuth on that route redeems the
+  // single-use ticket or 401s, so it never reaches the handler unauthenticated.
+  app.use("/api/*", (c, next) => (isWsTicketUpgrade(c) ? next() : authMiddleware(c, next)));
 
   app.route("/health", healthRoutes);
   app.route("/auth", authRoutes);
@@ -149,6 +154,8 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/api/panes", paneRoutes);
   // Desktop sharing (noVNC ↔ bridge wayvnc), superuser-only and audited.
   app.route("/api/screen", screenRoutes);
+  // One-time WebSocket tickets for the native screen WebView.
+  app.route("/api/ws-tickets", wsTicketRoutes);
   // Platform operator (superuser-gated): read-only console + D1 → R2 backup trigger.
   app.route("/api/admin", adminRoutes);
   return app;

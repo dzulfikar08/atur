@@ -12,6 +12,7 @@ const TABS: { name: string; label: string; icon: IconName; outline: IconName }[]
   { name: "index", label: "Today", icon: "today", outline: "today-outline" },
   { name: "projects", label: "Projects", icon: "folder", outline: "folder-outline" },
   { name: "inbox", label: "Inbox", icon: "notifications", outline: "notifications-outline" },
+  { name: "panes", label: "Panes", icon: "terminal", outline: "terminal-outline" },
   { name: "profile", label: "Profile", icon: "person-circle", outline: "person-circle-outline" },
 ];
 

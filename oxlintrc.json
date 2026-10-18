@@ -15,6 +15,7 @@
     "static-app/**",
     "static/**",
     "static-editor/**",
-    ".astro/**"
+    ".astro/**",
+    "**/*.generated.ts"
   ]
 }

@@ -4,6 +4,7 @@ import { HTTPException } from "hono/http-exception";
 import { eq } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import type { Env } from "../lib/env";
+import { wsTicketAuth } from "../lib/wsTicket";
 import { getDb } from "../db/index";
 import * as schema from "../db/schema";
 import { requireSuperuser } from "./admin";
@@ -23,6 +24,9 @@ export const SCREEN_AUDIT_PANE = "screen:desktop";
 
 export const screenRoutes = new Hono<{ Bindings: Env }>({ strict: false });
 
+// The native WebView redeems a one-time ticket instead of a session (see
+// lib/wsTicket.ts); requireSuperuser below still runs on the resulting user.
+screenRoutes.use("/ws", wsTicketAuth("screen"));
 screenRoutes.use("*", requireSuperuser);
 
 // Is the desktop-sharing side reachable and ready, and who's watching.

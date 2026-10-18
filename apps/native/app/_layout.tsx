@@ -106,6 +106,8 @@ export default function RootLayout() {
               />
               <Stack.Screen name="search" options={{ title: "Search" }} />
               <Stack.Screen name="my-issues" options={{ title: "My issues" }} />
+              <Stack.Screen name="pane/[paneId]" options={{ title: "" }} />
+              <Stack.Screen name="screen" options={{ headerShown: false, animation: "fade" }} />
             </Stack.Protected>
             <Stack.Protected guard={!authed}>
               <Stack.Screen name="login" options={{ headerShown: false }} />
