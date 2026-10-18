@@ -42,4 +42,58 @@ feedbackAdminRoutes
         user.sub,
       ),
     );
+  })
+  // Identify secret (HMAC key for Atur.identify) and ingest key (log ingest):
+  // POST creates or rotates, DELETE revokes.
+  .post("/identify-secret", async (c) => {
+    const user = c.get("user");
+    return c.json(
+      await feedback.setBoardSecret(
+        getDb(c.env.DB),
+        c.req.param("slug")!,
+        c.req.param("projectId")!,
+        user.sub,
+        "identify_secret",
+        "rotate",
+      ),
+    );
+  })
+  .delete("/identify-secret", async (c) => {
+    const user = c.get("user");
+    return c.json(
+      await feedback.setBoardSecret(
+        getDb(c.env.DB),
+        c.req.param("slug")!,
+        c.req.param("projectId")!,
+        user.sub,
+        "identify_secret",
+        "revoke",
+      ),
+    );
+  })
+  .post("/ingest-key", async (c) => {
+    const user = c.get("user");
+    return c.json(
+      await feedback.setBoardSecret(
+        getDb(c.env.DB),
+        c.req.param("slug")!,
+        c.req.param("projectId")!,
+        user.sub,
+        "ingest_key",
+        "rotate",
+      ),
+    );
+  })
+  .delete("/ingest-key", async (c) => {
+    const user = c.get("user");
+    return c.json(
+      await feedback.setBoardSecret(
+        getDb(c.env.DB),
+        c.req.param("slug")!,
+        c.req.param("projectId")!,
+        user.sub,
+        "ingest_key",
+        "revoke",
+      ),
+    );
   });

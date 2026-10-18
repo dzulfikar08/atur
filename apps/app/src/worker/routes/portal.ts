@@ -66,6 +66,32 @@ portalRoutes.get("/:slug/auth/me", portalAuthMiddleware, async (c) => {
   return c.json({ customer });
 });
 
+// ── Public landing data (no session) ──
+
+portalRoutes.get("/:slug/overview", async (c) => {
+  const db = getDb(c.env.DB);
+  const workspace = await resolveWorkspace(c);
+  return c.json(await portalService.getOverview(db, workspace));
+});
+
+portalRoutes.get("/:slug/changelog", async (c) => {
+  const db = getDb(c.env.DB);
+  const workspace = await resolveWorkspace(c);
+  return c.json(await portalService.getChangelog(db, workspace.id));
+});
+
+// Everything the signed-in person filed (ideas + tickets), matched by their
+// OTP-verified email.
+portalRoutes.get("/:slug/mine", portalAuthMiddleware, async (c) => {
+  const db = getDb(c.env.DB);
+  const workspace = await resolveWorkspace(c);
+  const customer = c.get("customer");
+  if (customer.workspaceId !== workspace.id) {
+    throw new HTTPException(403, { message: "Wrong workspace" });
+  }
+  return c.json(await portalService.getMine(db, customer));
+});
+
 // ── Tickets (portal-authenticated, workspace-scoped) ──
 
 portalRoutes.get("/:slug/tickets", portalAuthMiddleware, async (c) => {
@@ -100,7 +126,7 @@ portalRoutes.get("/:slug/tickets/:seqId", portalAuthMiddleware, async (c) => {
     throw new HTTPException(403, { message: "Wrong workspace" });
   }
   const seqId = Number(c.req.param("seqId")!);
-  const result = await portalService.getTicket(db, customer, seqId);
+  const result = await portalService.getTicket(db, customer, seqId, c.req.query("project"));
   return c.json(result);
 });
 portalRoutes.patch("/:slug/tickets/:seqId", portalAuthMiddleware, async (c) => {
@@ -112,7 +138,13 @@ portalRoutes.patch("/:slug/tickets/:seqId", portalAuthMiddleware, async (c) => {
   }
   const seqId = Number(c.req.param("seqId")!);
   const body = portalService.updateTicketSchema.parse(await c.req.json());
-  const result = await portalService.updateTicket(db, customer, seqId, body);
+  const result = await portalService.updateTicket(
+    db,
+    customer,
+    seqId,
+    body,
+    c.req.query("project"),
+  );
   return c.json(result);
 });
 
@@ -125,7 +157,13 @@ portalRoutes.post("/:slug/tickets/:seqId/comments", portalAuthMiddleware, async 
   }
   const seqId = Number(c.req.param("seqId")!);
   const body = portalService.addCommentSchema.parse(await c.req.json());
-  const comment = await portalService.addTicketComment(db, customer, seqId, body);
+  const comment = await portalService.addTicketComment(
+    db,
+    customer,
+    seqId,
+    body,
+    c.req.query("project"),
+  );
   return c.json(comment, 201);
 });
 

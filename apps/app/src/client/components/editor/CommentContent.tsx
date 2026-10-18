@@ -67,6 +67,8 @@ export default function CommentContent({ html }: CommentContentProps) {
       "div",
       "sup",
       "sub",
+      "details", // collapsible report-context block (feedback widget / native)
+      "summary",
     ],
     ALLOWED_ATTR: [
       "href",

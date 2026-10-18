@@ -15,6 +15,7 @@ export interface TicketSummary {
   id: string;
   issue_id: string;
   sequence_id: number;
+  project_id: string;
   name: string;
   priority: string | null;
   state_id: string | null;
@@ -85,6 +86,54 @@ async function portalFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+// Sequence ids are per project; tickets filed through the widget live in the
+// feedback board's project, so detail calls carry it.
+function projectQuery(projectId?: string | null): string {
+  return projectId ? `?project=${encodeURIComponent(projectId)}` : "";
+}
+
+export interface PortalBoard {
+  token: string;
+  title: string;
+  description: string | null;
+  brand_color: string;
+  allow_submit: boolean;
+  project_id: string;
+}
+
+export interface PortalOverview {
+  workspace: { name: string; slug: string };
+  boards: PortalBoard[];
+  support_enabled: boolean;
+}
+
+export interface ChangelogEntry {
+  id: string;
+  sequence_id: number;
+  name: string;
+  description: string | null;
+  completed_at: string | null;
+  votes: number;
+  board_title: string | null;
+  board_token: string | null;
+}
+
+export interface MyIdea {
+  id: string;
+  sequence_id: number;
+  name: string;
+  created_at: string | null;
+  state_name: string | null;
+  state_color: string | null;
+  board_token: string | null;
+  board_title: string | null;
+}
+
+export interface PortalMine {
+  ideas: MyIdea[];
+  tickets: TicketSummary[];
+}
+
 export interface RequestOtpResult {
   ok: true;
   dev_code?: string;
@@ -113,15 +162,16 @@ export const portalApi = {
     return data.results;
   },
 
-  getTicket: (slug: string, seqId: number) =>
-    portalFetch<TicketDetail>(`/${slug}/tickets/${seqId}`),
+  getTicket: (slug: string, seqId: number, projectId?: string | null) =>
+    portalFetch<TicketDetail>(`/${slug}/tickets/${seqId}${projectQuery(projectId)}`),
 
   updateTicket: (
     slug: string,
     seqId: number,
     data: { name?: string; description_html?: string; priority?: string },
+    projectId?: string | null,
   ) =>
-    portalFetch<TicketDetail>(`/${slug}/tickets/${seqId}`, {
+    portalFetch<TicketDetail>(`/${slug}/tickets/${seqId}${projectQuery(projectId)}`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
@@ -135,9 +185,16 @@ export const portalApi = {
       body: JSON.stringify(data),
     }),
 
-  addComment: (slug: string, seqId: number, comment_html: string) =>
-    portalFetch<PortalComment>(`/${slug}/tickets/${seqId}/comments`, {
+  addComment: (slug: string, seqId: number, comment_html: string, projectId?: string | null) =>
+    portalFetch<PortalComment>(`/${slug}/tickets/${seqId}/comments${projectQuery(projectId)}`, {
       method: "POST",
       body: JSON.stringify({ comment_html }),
     }),
+
+  getOverview: (slug: string) => portalFetch<PortalOverview>(`/${slug}/overview`),
+
+  getChangelog: (slug: string) =>
+    portalFetch<{ results: ChangelogEntry[] }>(`/${slug}/changelog`).then((r) => r.results),
+
+  getMine: (slug: string) => portalFetch<PortalMine>(`/${slug}/mine`),
 };

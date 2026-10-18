@@ -8,6 +8,7 @@ export interface TicketSummary {
   id: string;
   issueId: string;
   sequenceId: number;
+  projectId: string;
   name: string;
   priority: string | null;
   stateId: string | null;
@@ -55,6 +56,7 @@ export async function listByCustomer(
       id: schema.supportTickets.id,
       issueId: schema.issues.id,
       sequenceId: schema.issues.sequenceId,
+      projectId: schema.issues.projectId,
       name: schema.issues.name,
       priority: schema.issues.priority,
       stateId: schema.issues.stateId,
@@ -76,11 +78,14 @@ export async function listByCustomer(
   return { rows, total: countRow.total };
 }
 
-// Resolve a ticket by its issue's sequence id within the support project,
-// scoped to a customer so cross-customer access is impossible.
+// Resolve a ticket by its issue's sequence id, scoped to a customer so
+// cross-customer access is impossible. Sequence ids are per project, so callers
+// pass the project when the customer may hold tickets in several (widget
+// reports land on the board's project, portal tickets on the support project);
+// null matches any project.
 export async function getByIssueSeqForCustomer(
   db: DbClient,
-  projectId: string,
+  projectId: string | null,
   sequenceId: number,
   customerId: string,
 ): Promise<TicketSummary | null> {
@@ -89,6 +94,7 @@ export async function getByIssueSeqForCustomer(
       id: schema.supportTickets.id,
       issueId: schema.issues.id,
       sequenceId: schema.issues.sequenceId,
+      projectId: schema.issues.projectId,
       name: schema.issues.name,
       priority: schema.issues.priority,
       stateId: schema.issues.stateId,
@@ -105,7 +111,7 @@ export async function getByIssueSeqForCustomer(
     .where(
       and(
         eq(schema.supportTickets.customerId, customerId),
-        eq(schema.issues.projectId, projectId),
+        projectId ? eq(schema.issues.projectId, projectId) : undefined,
         eq(schema.issues.sequenceId, sequenceId),
         isNull(schema.issues.deletedAt),
       ),

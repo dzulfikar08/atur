@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { HTTPException } from "hono/http-exception";
-import { eq, and, desc, isNull } from "drizzle-orm";
+import { eq, and, desc, isNull, isNotNull, inArray, sql } from "drizzle-orm";
 import type { DbClient } from "../db/index";
 import * as schema from "../db/schema";
 import * as issuesService from "./issues";
 import * as issuesRepo from "../repositories/issues";
 import * as commentsRepo from "../repositories/comments";
 import * as customersRepo from "../repositories/customers";
+import * as feedbackRepo from "../repositories/feedback";
 import * as portalSettingsRepo from "../repositories/portalSettings";
 import * as supportTicketsRepo from "../repositories/supportTickets";
 import * as activitiesRepo from "../repositories/activities";
@@ -193,31 +194,39 @@ export async function createTicket(
   return issue;
 }
 
-// Resolve the support project for a workspace, throwing if the portal is off.
-async function requireSupportProject(db: DbClient, workspaceId: string): Promise<string> {
-  const settings = await portalSettingsRepo.get(db, workspaceId);
-  if (!settings?.isEnabled || !settings.supportProjectId) {
-    throw new HTTPException(400, { message: "Support portal is not enabled for this workspace" });
+// A customer's tickets can live in several projects (portal tickets in the
+// support project, widget/native reports in each board's project). Callers pass
+// the project; without one we fall back to the support project, then to any
+// project the customer has a ticket with that sequence id in.
+async function resolveOwnTicket(
+  db: DbClient,
+  customer: PortalCustomer,
+  seqId: number,
+  projectId?: string | null,
+) {
+  let scope = projectId ?? null;
+  if (!scope) {
+    const settings = await portalSettingsRepo.get(db, customer.workspaceId);
+    scope = settings?.isEnabled ? settings.supportProjectId : null;
   }
-  return settings.supportProjectId;
-}
-
-async function resolveOwnTicket(db: DbClient, customer: PortalCustomer, seqId: number) {
-  const projectId = await requireSupportProject(db, customer.workspaceId);
-  const ticket = await supportTicketsRepo.getByIssueSeqForCustomer(
-    db,
-    projectId,
-    seqId,
-    customer.id,
-  );
+  const ticket =
+    (await supportTicketsRepo.getByIssueSeqForCustomer(db, scope, seqId, customer.id)) ??
+    (scope && !projectId
+      ? await supportTicketsRepo.getByIssueSeqForCustomer(db, null, seqId, customer.id)
+      : null);
   if (!ticket) {
     throw new HTTPException(404, { message: "Ticket not found" });
   }
   return ticket;
 }
 
-export async function getTicket(db: DbClient, customer: PortalCustomer, seqId: number) {
-  const ticket = await resolveOwnTicket(db, customer, seqId);
+export async function getTicket(
+  db: DbClient,
+  customer: PortalCustomer,
+  seqId: number,
+  projectId?: string | null,
+) {
+  const ticket = await resolveOwnTicket(db, customer, seqId, projectId);
   const issue = await issuesRepo.findById(db, ticket.issueId);
   // Workspace-scoped (DEV-21 parity with enrich paths): portal customers must
   // not see assignee rows linked from legacy cross-workspace data.
@@ -232,8 +241,9 @@ export async function addTicketComment(
   customer: PortalCustomer,
   seqId: number,
   data: z.infer<typeof addCommentSchema>,
+  projectId?: string | null,
 ) {
-  const ticket = await resolveOwnTicket(db, customer, seqId);
+  const ticket = await resolveOwnTicket(db, customer, seqId, projectId);
   return commentsRepo.create(db, {
     commentHtml: data.comment_html,
     access: "public",
@@ -246,8 +256,9 @@ export async function updateTicket(
   customer: PortalCustomer,
   seqId: number,
   data: z.infer<typeof updateTicketSchema>,
+  projectId?: string | null,
 ) {
-  const ticket = await resolveOwnTicket(db, customer, seqId);
+  const ticket = await resolveOwnTicket(db, customer, seqId, projectId);
   // Customers may refine their own request (title, body, priority). State
   // changes are a support-side action and surface only in the activity trail.
   // Routing through issuesService.update records the field-change activities.
@@ -261,7 +272,142 @@ export async function updateTicket(
     },
     customer.userId,
   );
-  return getTicket(db, customer, seqId);
+  return getTicket(db, customer, seqId, ticket.projectId);
+}
+
+// ── Unified portal (ideas + support + changelog) ──
+
+interface PortalBoardSummary {
+  token: string;
+  title: string;
+  description: string | null;
+  brand_color: string;
+  allow_submit: boolean;
+  project_id: string;
+}
+
+async function workspaceBoards(db: DbClient, workspaceId: string): Promise<PortalBoardSummary[]> {
+  const boards = await feedbackRepo.listBoardsByWorkspace(db, workspaceId);
+  return boards.map((b) => ({
+    token: b.publicToken,
+    title: b.title,
+    description: b.description,
+    brand_color: b.brandColor,
+    allow_submit: !!b.allowSubmit,
+    project_id: b.projectId,
+  }));
+}
+
+// Public landing data for /portal/:slug: the workspace's feedback boards (Ideas
+// tab) and whether the Support tab can create tickets.
+export async function getOverview(
+  db: DbClient,
+  workspace: { id: string; name: string; slug: string },
+) {
+  const [boards, settings] = await Promise.all([
+    workspaceBoards(db, workspace.id),
+    portalSettingsRepo.get(db, workspace.id),
+  ]);
+  return {
+    workspace: { name: workspace.name, slug: workspace.slug },
+    boards,
+    support_enabled: !!settings?.isEnabled && !!settings.supportProjectId,
+  };
+}
+
+// Changelog = feedback items completed on this workspace's boards, newest first.
+export async function getChangelog(db: DbClient, workspaceId: string) {
+  const boards = await workspaceBoards(db, workspaceId);
+  if (boards.length === 0) return { results: [] };
+  const byProject = new Map(boards.map((b) => [b.project_id, b]));
+  const rows = await db
+    .select({
+      id: schema.issues.id,
+      sequenceId: schema.issues.sequenceId,
+      projectId: schema.issues.projectId,
+      name: schema.issues.name,
+      description: schema.issues.descriptionStripped,
+      completedAt: schema.issues.completedAt,
+    })
+    .from(schema.issues)
+    .innerJoin(schema.states, eq(schema.states.id, schema.issues.stateId))
+    .where(
+      and(
+        inArray(schema.issues.projectId, [...byProject.keys()]),
+        eq(schema.issues.externalSource, "feedback"),
+        eq(schema.states.groupName, "completed"),
+        isNull(schema.issues.deletedAt),
+        isNotNull(schema.issues.completedAt),
+      ),
+    )
+    .orderBy(desc(schema.issues.completedAt))
+    .limit(50);
+  const votes = await feedbackRepo.voteCountsForIssues(
+    db,
+    rows.map((r) => r.id),
+  );
+  return {
+    results: rows.map((r) => ({
+      id: r.id,
+      sequence_id: r.sequenceId,
+      name: r.name,
+      description: r.description,
+      completed_at: r.completedAt,
+      votes: votes.get(r.id) ?? 0,
+      board_title: byProject.get(r.projectId)?.title ?? null,
+      board_token: byProject.get(r.projectId)?.token ?? null,
+    })),
+  };
+}
+
+// Everything the signed-in person filed: tickets tied to their customer record
+// plus ideas/reports authored with their (trusted) email, across all boards.
+export async function getMine(db: DbClient, customer: PortalCustomer) {
+  const [tickets, boards] = await Promise.all([
+    supportTicketsRepo.listByCustomer(db, customer.id, { offset: 0, limit: 100 }),
+    workspaceBoards(db, customer.workspaceId),
+  ]);
+  const byProject = new Map(boards.map((b) => [b.project_id, b]));
+  const email = customer.email.trim().toLowerCase();
+  const ideaRows = email
+    ? await db
+        .select({
+          id: schema.issues.id,
+          sequenceId: schema.issues.sequenceId,
+          projectId: schema.issues.projectId,
+          name: schema.issues.name,
+          createdAt: schema.issues.createdAt,
+          stateName: schema.states.name,
+          stateColor: schema.states.color,
+        })
+        .from(schema.feedbackMeta)
+        .innerJoin(schema.issues, eq(schema.issues.id, schema.feedbackMeta.issueId))
+        .leftJoin(schema.states, eq(schema.states.id, schema.issues.stateId))
+        .where(
+          and(
+            eq(schema.issues.workspaceId, customer.workspaceId),
+            eq(schema.issues.externalSource, "feedback"),
+            isNull(schema.issues.deletedAt),
+            sql`lower(${schema.feedbackMeta.authorEmail}) = ${email}`,
+            eq(schema.feedbackMeta.emailTrusted, 1),
+          ),
+        )
+        .orderBy(desc(schema.issues.createdAt))
+        .limit(100)
+    : [];
+  return {
+    ideas: ideaRows.map((r) => ({
+      id: r.id,
+      sequence_id: r.sequenceId,
+      name: r.name,
+      created_at: r.createdAt,
+      state_name: r.stateName,
+      state_color: r.stateColor,
+      board_token: byProject.get(r.projectId)?.token ?? null,
+      board_title: byProject.get(r.projectId)?.title ?? null,
+    })),
+    tickets: tickets.rows,
+  };
 }
 
 // Portal-visible thread: only comments explicitly marked public.

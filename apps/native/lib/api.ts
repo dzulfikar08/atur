@@ -1,4 +1,5 @@
 import { SERVER_URL } from "@/lib/config";
+import { recordFailedRequest } from "@/lib/diagnostics";
 import { endSession, getToken } from "@/lib/session";
 
 // Wire shapes mirror apps/app/src/client/lib/api.ts. The worker snake_cases
@@ -271,6 +272,7 @@ export async function request<T>(
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
     });
   } catch {
+    recordFailedRequest(init.method ?? "GET", path, 0);
     throw new ApiError(0, "Can't reach Atur. Check your connection.");
   }
 
@@ -283,6 +285,7 @@ export async function request<T>(
   }
 
   if (!res.ok) {
+    recordFailedRequest(init.method ?? "GET", path, res.status);
     // A dead token on an authed call means the session is over everywhere.
     if (res.status === 401 && token && path.startsWith("/api/")) void endSession();
     const body = data as { error?: unknown; message?: unknown } | null;

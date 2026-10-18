@@ -34,6 +34,23 @@ export async function findBoardByProject(db: DbClient, projectId: string) {
   return board ?? null;
 }
 
+export async function findBoardByIngestKey(db: DbClient, key: string) {
+  const [board] = await db
+    .select()
+    .from(feedbackBoards)
+    .where(eq(feedbackBoards.ingestKey, key))
+    .limit(1);
+  return board ?? null;
+}
+
+export async function listBoardsByWorkspace(db: DbClient, workspaceId: string) {
+  return db
+    .select()
+    .from(feedbackBoards)
+    .where(eq(feedbackBoards.workspaceId, workspaceId))
+    .orderBy(feedbackBoards.createdAt);
+}
+
 export async function createBoard(
   db: DbClient,
   data: Partial<typeof feedbackBoards.$inferInsert> & {
@@ -116,10 +133,12 @@ export async function findFeedbackIssue(db: DbClient, projectId: string, issueId
   return row ?? null;
 }
 
-// Create a feedback issue directly (repositories/issues.ts create doesn't expose
-// externalSource), then write its sequence + label. Stores BOTH description_html
-// (escaped, for the team's internal view) and description_stripped (plain text
-// the public portal renders safely as React text).
+// Create a feedback-originated issue directly (repositories/issues.ts create
+// doesn't expose externalSource), then write its sequence + label. Stores BOTH
+// description_html (escaped, for the team's internal view) and
+// description_stripped (plain text the public portal renders safely as React
+// text). `externalSource` is "feedback" for public ideas, "portal" for
+// tickets and "ingest" for grouped log errors.
 export async function createFeedbackIssue(
   db: DbClient,
   data: {
@@ -132,6 +151,9 @@ export async function createFeedbackIssue(
     descriptionStripped: string | null;
     stateId: string | null;
     submitLabelId: string | null;
+    externalSource?: string;
+    priority?: string;
+    createdById?: string | null;
   },
 ) {
   const now = nowISO();
@@ -145,12 +167,13 @@ export async function createFeedbackIssue(
     sequenceId,
     projectId: data.projectId,
     workspaceId: data.workspaceId,
-    priority: "none",
+    priority: data.priority ?? "none",
     descriptionHtml: data.descriptionHtml,
     descriptionStripped: data.descriptionStripped,
     stateId: data.stateId,
+    createdById: data.createdById ?? null,
     completedAt: await completedAtForState(db, data.stateId, now),
-    externalSource: "feedback",
+    externalSource: data.externalSource ?? "feedback",
     sortOrder: 65535.0,
     createdAt: now,
     updatedAt: now,
@@ -238,13 +261,28 @@ export async function votedIssueIds(db: DbClient, issueIds: string[], voterHash:
 
 export async function insertFeedbackMeta(
   db: DbClient,
-  data: { issueId: string; authorEmail: string | null; authorName: string | null; source: string },
+  data: {
+    issueId: string;
+    authorEmail: string | null;
+    authorName: string | null;
+    source: string;
+    kind?: string;
+    contextJson?: string | null;
+    externalUserId?: string | null;
+    identityVerified?: boolean;
+    emailTrusted?: boolean;
+  },
 ) {
   await db.insert(feedbackMeta).values({
     issueId: data.issueId,
     authorEmail: data.authorEmail,
     authorName: data.authorName,
     source: data.source,
+    kind: data.kind ?? "idea",
+    contextJson: data.contextJson ?? null,
+    externalUserId: data.externalUserId ?? null,
+    identityVerified: data.identityVerified ? 1 : 0,
+    emailTrusted: data.emailTrusted === false ? 0 : 1,
     createdAt: nowISO(),
   });
 }

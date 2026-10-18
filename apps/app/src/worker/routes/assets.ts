@@ -3,6 +3,7 @@ import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware, extractToken, resolveRequestUser } from "../middleware/auth";
 import * as assetsService from "../services/assets";
+import { authorizeFeedbackAsset } from "../services/feedback_attachments";
 import { HTTPException } from "hono/http-exception";
 import { getCookie } from "hono/cookie";
 import { PORTAL_COOKIE } from "../middleware/portalAuth";
@@ -55,31 +56,53 @@ export const assetRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       throw new HTTPException(401, { message: "Authentication required" });
     }
 
+    // Feedback attachments (widget / native uploads, created by the feedback
+    // bot) have their own rule: workspace members, or the customer who filed the
+    // issue they're attached to. null = not a feedback attachment.
+    const feedbackAccess = await authorizeFeedbackAsset(
+      db,
+      id,
+      customer
+        ? {
+            kind: "customer",
+            customerId: customer.id,
+            workspaceId: customer.workspaceId,
+            email: customer.email,
+          }
+        : {
+            kind: "member",
+            isMember: (workspaceId) => membersRepo.isWorkspaceMember(db, workspaceId, userId!),
+          },
+    );
+    if (feedbackAccess === false) throw new HTTPException(403, { message: "Forbidden" });
+
     const result = await assetsService.getAsset(db, c.env, id);
     const ownerId = result.asset.createdById;
 
-    // Authorize. Assets are either portal-uploaded (owner is a customer) or
-    // internal (owner is a workspace user).
-    const ownerCustomer = await customersRepo.findById(db, ownerId);
-    if (customer) {
-      if (ownerCustomer) {
-        // Another customer's upload: only the owner may view it.
-        if (ownerCustomer.id !== customer.id) {
-          throw new HTTPException(403, { message: "Forbidden" });
+    if (feedbackAccess === null) {
+      // Authorize. Assets are either portal-uploaded (owner is a customer) or
+      // internal (owner is a workspace user).
+      const ownerCustomer = await customersRepo.findById(db, ownerId);
+      if (customer) {
+        if (ownerCustomer) {
+          // Another customer's upload: only the owner may view it.
+          if (ownerCustomer.id !== customer.id) {
+            throw new HTTPException(403, { message: "Forbidden" });
+          }
+        } else {
+          // Internal asset: allow only if its owner is a member of this
+          // customer's workspace (support staff sharing in their ticket).
+          const ok = await membersRepo.isWorkspaceMember(db, customer.workspaceId, ownerId);
+          if (!ok) throw new HTTPException(403, { message: "Forbidden" });
         }
-      } else {
-        // Internal asset: allow only if its owner is a member of this
-        // customer's workspace (support staff sharing in their ticket).
-        const ok = await membersRepo.isWorkspaceMember(db, customer.workspaceId, ownerId);
+      } else if (ownerCustomer) {
+        // Portal asset requested by a main-app user: allow only for members of
+        // the owning customer's workspace.
+        const ok = await membersRepo.isWorkspaceMember(db, ownerCustomer.workspaceId, userId!);
         if (!ok) throw new HTTPException(403, { message: "Forbidden" });
       }
-    } else if (ownerCustomer) {
-      // Portal asset requested by a main-app user: allow only for members of
-      // the owning customer's workspace.
-      const ok = await membersRepo.isWorkspaceMember(db, ownerCustomer.workspaceId, userId!);
-      if (!ok) throw new HTTPException(403, { message: "Forbidden" });
+      // Internal asset requested by a main-app user: allowed.
     }
-    // Internal asset requested by a main-app user: allowed.
 
     // On-the-fly image optimization: when the client asks for a resized or
     // reformatted variant (?w=, ?format=webp), hand the image to Cloudflare's

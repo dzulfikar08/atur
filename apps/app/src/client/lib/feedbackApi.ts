@@ -19,7 +19,16 @@ async function fbFetch<T>(token: string, path: string, options?: RequestInit): P
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new FeedbackApiError(res.status, text || `Request failed: ${res.status}`);
+    let message = text;
+    try {
+      const parsed: unknown = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && "message" in parsed) {
+        message = String(parsed.message);
+      }
+    } catch {
+      // plain-text error body: use as is
+    }
+    throw new FeedbackApiError(res.status, message || `Request failed: ${res.status}`);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -37,6 +46,9 @@ export interface FeedbackBoard {
   require_email: boolean;
   allow_comments: boolean;
   brand_color: string;
+  position: string;
+  workspace_slug: string | null;
+  workspace_name: string | null;
 }
 
 export interface FeedbackItemState {
@@ -66,11 +78,12 @@ export interface FeedbackComment {
 }
 
 export interface FeedbackItemDetail extends FeedbackItem {
-  author_email: string | null;
   comments: FeedbackComment[];
 }
 
 export const feedbackApi = {
+  getConfig: (token: string) => fbFetch<FeedbackBoard>(token, "/config"),
+
   getBoard: (token: string, email?: string) =>
     fbFetch<{ board: FeedbackBoard; items: FeedbackItem[] }>(token, `/${emailQuery(email)}`),
 

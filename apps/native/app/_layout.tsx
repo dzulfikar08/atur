@@ -8,7 +8,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/manrope";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 // expo-router ships its own react-navigation fork; this is its theme context.
 // Deep import: the SDK forbids a direct @react-navigation dependency.
 import { ThemeProvider } from "expo-router/build/react-navigation/core";
@@ -19,6 +19,7 @@ import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { UnistylesRuntime, useUnistyles } from "react-native-unistyles";
 
+import { installDiagnostics, setCurrentRoute } from "@/lib/diagnostics";
 import { loadThemePref } from "@/lib/theme-pref";
 import { queryClient, restoreSession, useSession } from "@/lib/session";
 import { darkTheme } from "@/theme";
@@ -26,6 +27,9 @@ import { darkTheme } from "@/theme";
 void SplashScreen.preventAutoHideAsync().catch(() => {
   // Splash already hidden (web).
 });
+
+// Module scope so errors thrown during startup land in the report context too.
+installDiagnostics();
 
 export default function RootLayout() {
   const { theme } = useUnistyles();
@@ -37,6 +41,11 @@ export default function RootLayout() {
     Manrope_800ExtraBold,
     JetBrainsMono_500Medium,
   });
+  const pathname = usePathname();
+
+  useEffect(() => {
+    setCurrentRoute(pathname);
+  }, [pathname]);
 
   useEffect(() => {
     void restoreSession();

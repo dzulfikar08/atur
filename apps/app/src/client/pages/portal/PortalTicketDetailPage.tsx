@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -74,6 +74,10 @@ export default function PortalTicketDetailPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const seq = Number(seqId);
+  // Widget/native reports live in the feedback board's project, not the support
+  // project: list links carry ?project= so sequence ids resolve unambiguously.
+  const [search] = useSearchParams();
+  const projectId = search.get("project");
   const [reply, setReply] = useState("");
   const [editorKey, setEditorKey] = useState(0);
 
@@ -85,17 +89,17 @@ export default function PortalTicketDetailPage() {
   const [editKey, setEditKey] = useState(0);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["portal-ticket", slug, seq],
-    queryFn: () => portalApi.getTicket(slug!, seq),
+    queryKey: ["portal-ticket", slug, seq, projectId],
+    queryFn: () => portalApi.getTicket(slug!, seq, projectId),
     enabled: !!slug && !!seqId,
   });
 
   const replyMutation = useMutation({
-    mutationFn: (html: string) => portalApi.addComment(slug!, seq, html),
+    mutationFn: (html: string) => portalApi.addComment(slug!, seq, html, projectId),
     onSuccess: () => {
       // Refresh this thread and the list (updated_at changes per reply).
-      qc.invalidateQueries({ queryKey: ["portal-ticket", slug, seq] });
-      qc.invalidateQueries({ queryKey: ["portal-tickets", slug] });
+      qc.invalidateQueries({ queryKey: ["portal-ticket", slug, seq, projectId] });
+      qc.invalidateQueries({ queryKey: ["portal-mine", slug] });
       setReply("");
       setEditorKey((k) => k + 1); // remount editor so it clears
       toast.success("Reply sent");
@@ -105,10 +109,10 @@ export default function PortalTicketDetailPage() {
 
   const updateMutation = useMutation({
     mutationFn: (patch: { name?: string; description_html?: string; priority?: string }) =>
-      portalApi.updateTicket(slug!, seq, patch),
+      portalApi.updateTicket(slug!, seq, patch, projectId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["portal-ticket", slug, seq] });
-      qc.invalidateQueries({ queryKey: ["portal-tickets", slug] });
+      qc.invalidateQueries({ queryKey: ["portal-ticket", slug, seq, projectId] });
+      qc.invalidateQueries({ queryKey: ["portal-mine", slug] });
       setEditing(false);
       toast.success("Ticket updated");
     },
@@ -154,7 +158,7 @@ export default function PortalTicketDetailPage() {
 
   return (
     <div className="space-y-4">
-      <Button variant="ghost" size="sm" onClick={() => navigate(`/portal/${slug}`)}>
+      <Button variant="ghost" size="sm" onClick={() => navigate(`/portal/${slug}/tickets`)}>
         <ArrowLeft className="mr-1 h-4 w-4" />
         All tickets
       </Button>

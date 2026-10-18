@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
@@ -12,6 +12,9 @@ import { usePortalAuthStore } from "@/stores/portalAuth";
 export default function PortalLoginPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Where to land after the OTP: the page that asked for sign-in, else Support.
+  const from = (location.state as { from?: string } | null)?.from;
   const setCustomer = usePortalAuthStore((s) => s.setCustomer);
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
@@ -21,7 +24,7 @@ export default function PortalLoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    document.title = "Sign in — Support Portal";
+    document.title = "Sign in — Portal";
   }, []);
 
   const sendCode = async () => {
@@ -46,7 +49,9 @@ export default function PortalLoginPage() {
     try {
       const { customer } = await portalApi.verifyOtp(slug, email.trim(), code.trim());
       setCustomer(customer);
-      navigate(`/portal/${slug}`, { replace: true });
+      navigate(from && from.startsWith(`/portal/${slug}`) ? from : `/portal/${slug}/tickets`, {
+        replace: true,
+      });
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Invalid or expired code");
     } finally {
@@ -61,8 +66,10 @@ export default function PortalLoginPage() {
           <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background">
             <img src="/logo-128.png" alt="" className="h-6 w-6 rounded" />
           </div>
-          <CardTitle>Support Portal</CardTitle>
-          <CardDescription>{slug ? `Workspace: ${slug}` : "Sign in to continue"}</CardDescription>
+          <CardTitle>Sign in</CardTitle>
+          <CardDescription>
+            One code for your tickets and ideas{slug ? ` in ${slug}` : ""}.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {step === "email" ? (

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
-import { Routes, Route, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import AppShell from "@/components/layout/AppShell";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import CreateWorkspace from "@/components/onboarding/CreateWorkspace";
@@ -47,6 +47,8 @@ const EmailTemplatesPage = lazy(() => import("@/pages/crm/EmailTemplatesPage"));
 const FeedbackPortalPage = lazy(() => import("@/pages/feedback/FeedbackPortalPage"));
 const PortalLoginPage = lazy(() => import("@/pages/portal/PortalLoginPage"));
 const PortalTicketsPage = lazy(() => import("@/pages/portal/PortalTicketsPage"));
+const PortalIdeasPage = lazy(() => import("@/pages/portal/PortalIdeasPage"));
+const PortalChangelogPage = lazy(() => import("@/pages/portal/PortalChangelogPage"));
 const PortalNewTicketPage = lazy(() => import("@/pages/portal/PortalNewTicketPage"));
 const PortalTicketDetailPage = lazy(() => import("@/pages/portal/PortalTicketDetailPage"));
 const PortalRouteGuard = lazy(() => import("@/components/portal/PortalRouteGuard"));
@@ -136,11 +138,15 @@ export default function App() {
         <Route path="/auth/register" element={<RegisterPage />} />
         <Route path="/auth/callback/:provider" element={<OAuthCallbackPage />} />
 
-        {/* Customer support portal (public OTP auth, workspace-scoped) */}
+        {/* Unified portal: Ideas / Support / Changelog under one OTP sign-in.
+            Ideas + Changelog are public; Support (and tickets) need a session. */}
         <Route path="/portal/:slug/login" element={<PortalLoginPage />} />
-        <Route path="/portal/:slug" element={<PortalRouteGuard />}>
-          <Route element={<PortalLayout />}>
-            <Route index element={<PortalTicketsPage />} />
+        <Route path="/portal/:slug" element={<PortalLayout />}>
+          <Route index element={<Navigate to="ideas" replace />} />
+          <Route path="ideas" element={<PortalIdeasPage />} />
+          <Route path="changelog" element={<PortalChangelogPage />} />
+          <Route element={<PortalRouteGuard />}>
+            <Route path="tickets" element={<PortalTicketsPage />} />
             <Route path="tickets/new" element={<PortalNewTicketPage />} />
             <Route path="tickets/:seqId" element={<PortalTicketDetailPage />} />
           </Route>
