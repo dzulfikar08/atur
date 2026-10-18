@@ -190,7 +190,10 @@ function openStateCondition() {
 }
 
 export async function listByProject(db: DbClient, projectId: string, opts: IssueListOpts) {
-  const conditions: (SQL | undefined)[] = [eq(issues.projectId, projectId), isNull(issues.deletedAt)];
+  const conditions: (SQL | undefined)[] = [
+    eq(issues.projectId, projectId),
+    isNull(issues.deletedAt),
+  ];
   if (opts.state) conditions.push(eq(issues.stateId, opts.state));
   if (opts.stateKeys?.length) {
     conditions.push(
@@ -250,7 +253,10 @@ export async function listByProject(db: DbClient, projectId: string, opts: Issue
 
   // Count and page are independent: one round trip each, in parallel.
   const [[countRow], rows] = await Promise.all([
-    db.select({ total: sql<number>`count(*)` }).from(issues).where(where),
+    db
+      .select({ total: sql<number>`count(*)` })
+      .from(issues)
+      .where(where),
     (opts.full ? db.select() : db.select(LEAN_ISSUE_COLUMNS))
       .from(issues)
       .where(where)

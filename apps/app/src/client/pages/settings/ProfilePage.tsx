@@ -7,6 +7,8 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -54,6 +56,8 @@ export default function ProfilePage() {
   const activeSlug = params.slug || currentSlug;
   const [createKeyOpen, setCreateKeyOpen] = useState(false);
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
 
   const { data: user, isLoading } = useQuery({
     queryKey: ["me"],
@@ -134,6 +138,18 @@ export default function ProfilePage() {
   const form = useForm<CreateKeyForm>({
     resolver: zodResolver(createKeySchema),
     defaultValues: { name: "", workspace_id: "" },
+  });
+  const deleteAccountMutation = useMutation({
+    mutationFn: () =>
+      apiFetch("/users/me/", { method: "DELETE", body: JSON.stringify({ confirm: "DELETE" }) }),
+    onSuccess: async () => {
+      setDeleteOpen(false);
+      // The server already revoked the session; this drops the local token and
+      // flips the auth store so the route guard sends the user to /auth/login.
+      await useAuthStore.getState().logout();
+      qc.clear();
+    },
+    onError: () => toast.error("Couldn't delete your account. Try again."),
   });
 
   const createKeyMutation = useMutation({
@@ -613,6 +629,77 @@ export default function ProfilePage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Danger zone */}
+        <Card className="border-destructive/40">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-4 w-4" /> Danger zone
+            </CardTitle>
+            <CardDescription>Permanently delete your Atur account</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Deleting your account removes your profile, sign-in methods and API keys, and signs
+              you out everywhere. This cannot be undone.
+            </p>
+            <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
+              Delete account
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Dialog
+          open={deleteOpen}
+          onOpenChange={(open) => {
+            setDeleteOpen(open);
+            if (!open) setDeleteConfirm("");
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete your account?</DialogTitle>
+              <DialogDescription>
+                This permanently deletes your account and signs you out everywhere.
+              </DialogDescription>
+            </DialogHeader>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+              <li>Your profile, email, sign-in methods and API keys are erased.</li>
+              <li>
+                Workspaces you own pass to their earliest-joined admin (or member). A workspace
+                where you are the only member is deleted.
+              </li>
+              <li>
+                Issues and comments you wrote in shared workspaces stay, shown as "Deleted user".
+              </li>
+            </ul>
+            <div>
+              <label htmlFor="delete-confirm" className="text-sm font-medium mb-1 block">
+                Type <span className="font-mono font-semibold">DELETE</span> to confirm
+              </label>
+              <Input
+                id="delete-confirm"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder="DELETE"
+                autoComplete="off"
+                autoCapitalize="characters"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={deleteConfirm !== "DELETE" || deleteAccountMutation.isPending}
+                onClick={() => deleteAccountMutation.mutate()}
+              >
+                {deleteAccountMutation.isPending ? "Deleting…" : "Delete my account"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

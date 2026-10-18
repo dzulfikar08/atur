@@ -151,27 +151,29 @@ export default function TopBar() {
     ? [{ label: rootSectionLabels[rootSection] ?? rootSection, path: `/${rootSection}` }]
     : [
         { label: slug, path: `/${slug}` },
-        ...pathSegments.map((segment, i) => {
-          // A project UUID segment (the one right after "projects") is unreadable —
-          // show the project's identifier (or name) instead.
-          let label = routeLabels[segment] ?? segment;
-          let path = `/${slug}/${pathSegments.slice(0, i + 1).join("/")}`;
-          if (pathSegments[i - 1] === "projects") {
-            const p = projectById.get(segment);
-            if (p) label = p.identifier || p.name || "Project";
-          }
-          // Inside a project (/projects/:id/issues/:seq) the "issues" crumb has no route
-          // of its own: it is dropped below, and the sequence reads as PROJ-42.
-          const inProject = pathSegments[0] === "projects" && i >= 2;
-          if (inProject && pathSegments[i - 1] === "issues") {
-            const p = projectById.get(pathSegments[1] ?? "");
-            label = `${p?.identifier || "ISSUE"}-${segment}`;
-          } else if (segment === "issues" && !inProject) {
-            // Workspace-level My Issues page.
-            path = `/${slug}/issues`;
-          }
-          return { label, path, hidden: inProject && segment === "issues" };
-        }).filter((crumb) => !crumb.hidden),
+        ...pathSegments
+          .map((segment, i) => {
+            // A project UUID segment (the one right after "projects") is unreadable —
+            // show the project's identifier (or name) instead.
+            let label = routeLabels[segment] ?? segment;
+            let path = `/${slug}/${pathSegments.slice(0, i + 1).join("/")}`;
+            if (pathSegments[i - 1] === "projects") {
+              const p = projectById.get(segment);
+              if (p) label = p.identifier || p.name || "Project";
+            }
+            // Inside a project (/projects/:id/issues/:seq) the "issues" crumb has no route
+            // of its own: it is dropped below, and the sequence reads as PROJ-42.
+            const inProject = pathSegments[0] === "projects" && i >= 2;
+            if (inProject && pathSegments[i - 1] === "issues") {
+              const p = projectById.get(pathSegments[1] ?? "");
+              label = `${p?.identifier || "ISSUE"}-${segment}`;
+            } else if (segment === "issues" && !inProject) {
+              // Workspace-level My Issues page.
+              path = `/${slug}/issues`;
+            }
+            return { label, path, hidden: inProject && segment === "issues" };
+          })
+          .filter((crumb) => !crumb.hidden),
         ...(pathSegments.length === 0 ? [{ label: "Today", path: `/${slug}` }] : []),
       ];
 

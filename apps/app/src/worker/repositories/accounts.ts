@@ -69,3 +69,17 @@ export async function updateTokens(
     .set({ ...data, updatedAt: nowISO() })
     .where(eq(accounts.id, id));
 }
+
+export async function listByUser(db: DbClient, userId: string) {
+  return db
+    .select()
+    .from(accounts)
+    .where(and(eq(accounts.userId, userId), isNull(accounts.deletedAt)));
+}
+
+// Hard delete (account erasure): the stored provider tokens are credentials,
+// and dropping the row frees (provider, providerAccountId) so the same
+// identity can sign up again as a brand-new user.
+export async function deleteByUser(db: DbClient, userId: string) {
+  await db.delete(accounts).where(eq(accounts.userId, userId));
+}

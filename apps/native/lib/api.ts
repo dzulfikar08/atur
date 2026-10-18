@@ -49,6 +49,8 @@ export interface State {
   group: StateGroup;
   sequence: number;
   color?: string | null;
+  /** Canonical workflow key (needs_you, need_review, in_progress, …). */
+  key?: string | null;
 }
 
 export interface Label {
@@ -72,8 +74,16 @@ export interface Issue {
   start_date: string | null;
   target_date: string | null;
   completed_at: string | null;
+  estimate_points?: number | null;
   is_decision?: boolean | number;
-  state?: { id: string; name: string; color?: string | null; group: StateGroup } | null;
+  module_ids?: string[];
+  state?: {
+    id: string;
+    name: string;
+    color?: string | null;
+    group: StateGroup;
+    key?: string | null;
+  } | null;
   labels?: Label[];
   assignees?: UserRef[];
   // Present on cross-workspace /api/me/issues rows.
@@ -140,6 +150,85 @@ export interface Paginated<T> {
   next_offset: number | null;
 }
 
+export type TodayBucketKey =
+  | "overdue"
+  | "due_today"
+  | "needs_you"
+  | "need_review"
+  | "in_progress"
+  | "due_this_week";
+
+/** GET /api/me/today: each open issue lands in exactly one bucket. */
+export type TodayResponse = Record<TodayBucketKey, Issue[]> & {
+  counts: Record<TodayBucketKey | "total", number>;
+};
+
+export interface AnalyticsOverview {
+  total_issues: number;
+  open_issues: number;
+  closed_issues: number;
+  overdue_issues: number;
+}
+
+export interface IssueActivity {
+  id: string;
+  verb: string | null;
+  field: string | null;
+  old_value: string | null;
+  new_value: string | null;
+  actor_id: string | null;
+  actor_name: string | null;
+  actor_email: string | null;
+  created_at: string | null;
+}
+
+export interface IssueRelation {
+  id: string;
+  issue_id: string;
+  related_issue_id: string;
+  relation_type: string;
+}
+
+export interface IssueSubscriber {
+  id: string;
+  subscriber_id: string;
+  user: UserRef | null;
+}
+
+export interface ProjectModule {
+  id: string;
+  name: string;
+  status?: string | null;
+}
+
+/** A saved view the web stored in workspace_members.view_props (per user + project). */
+export interface SavedViewRow {
+  id: string;
+  name: string;
+  /** The web's IssueQuery, verbatim; normalize before use. */
+  query: unknown;
+}
+
+/**
+ * GET .../issues/:id/?include=… — the issue plus its project (breadcrumb) and,
+ * when requested, every sub-resource the detail screen shows, in one request.
+ */
+export interface IssueDetail extends Issue {
+  project_detail: { id: string; name: string; identifier: string };
+  included?: {
+    comments: Paginated<Comment>;
+    activities: { results: IssueActivity[] };
+    relations: { results: IssueRelation[] };
+    sub_issues: { results: Issue[] };
+    subscribers: { results: IssueSubscriber[] };
+    modules: { results: ProjectModule[] };
+    custom_values: unknown[];
+    /** Names for the parent issue and every related issue, in one lookup. */
+    related_issues: { id: string; name: string; sequence_id: number }[];
+    counts: { attachments: number; time_seconds: number };
+  };
+}
+
 export interface IssuePatch {
   name?: string;
   description_html?: string;
@@ -147,7 +236,9 @@ export interface IssuePatch {
   state_id?: string;
   assignee_ids?: string[];
   label_ids?: string[];
+  start_date?: string | null;
   target_date?: string | null;
+  estimate_points?: number | null;
 }
 
 export interface IssueCreate extends IssuePatch {
@@ -163,7 +254,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(
+export async function request<T>(
   path: string,
   init: { method?: string; body?: unknown } = {},
 ): Promise<T> {
@@ -233,6 +324,24 @@ const qs = (params: Record<string, string | number | undefined>) => {
 const issueBase = (slug: string, projectId: string) =>
   `/api/workspaces/${slug}/projects/${projectId}/issues`;
 
+// The server caps a project issue page at 500 and /api/me/issues at 100.
+const ISSUE_PAGE = 500;
+const ME_PAGE = 100;
+
+// Everything the issue detail screen shows, bundled into one GET (see
+// worker/services/issueDetail.ts).
+const ISSUE_INCLUDES = "comments,activities,relations,sub_issues,subscribers,modules,custom_values";
+
+/** First page, then every remaining page in parallel (no waterfall). */
+async function allPages<T>(path: (offset: number) => string): Promise<T[]> {
+  const first = await request<Paginated<T>>(path(0));
+  if (first.next_offset === null) return first.results;
+  const offsets: number[] = [];
+  for (let o = first.next_offset; o < first.total; o += first.limit) offsets.push(o);
+  const rest = await Promise.all(offsets.map((o) => request<Paginated<T>>(path(o))));
+  return first.results.concat(...rest.map((p) => p.results));
+}
+
 type AuthResult = { session_token: string; user: Me };
 
 export const api = {
@@ -248,29 +357,69 @@ export const api = {
 
   me: () => request<Me>("/api/users/me"),
   projects: () => request<{ results: Project[] }>("/api/me/projects").then((r) => r.results),
-  myIssues: (params: {
-    state_key?: string;
-    search?: string;
-    /** Workspace id; omit for every workspace. */
-    workspace?: string;
-    offset?: number;
-    limit?: number;
-  }) => request<Paginated<Issue>>(`/api/me/issues${qs(params)}`),
+  /** Every issue visible to me (cross-workspace), walked page by page like the web's listAllIssues. */
+  allMyIssues: (workspace?: string) =>
+    allPages<Issue>((offset) => `/api/me/issues${qs({ workspace, offset, limit: ME_PAGE })}`),
+  /** Issue search, same call as the web Cmd+K palette (GET /api/me/issues?q=). */
+  searchIssues: (q: string, workspace?: string, limit = 25) =>
+    request<Paginated<Issue>>(
+      `/api/me/issues${qs({ q, limit, sort: "updated_at:desc", workspace })}`,
+    ).then((r) => r.results),
+  /** The Today buckets; `today` is the device's local date (the server buckets by it). */
+  today: (today: string, workspace?: string) =>
+    request<TodayResponse>(`/api/me/today${qs({ today, workspace })}`),
+  analyticsOverview: (slug: string | undefined) =>
+    request<AnalyticsOverview>(
+      slug ? `/api/workspaces/${slug}/analytics/overview` : "/api/me/analytics/overview",
+    ),
   decisions: () => request<{ results: DecisionItem[] }>("/api/me/decisions").then((r) => r.results),
 
-  projectIssues: (
-    slug: string,
-    projectId: string,
-    params: { state?: string; search?: string; offset?: number; limit?: number },
-  ) => request<Paginated<Issue>>(`${issueBase(slug, projectId)}/${qs(params)}`),
+  /** The project's whole issue set (lean rows, 500 per page, remaining pages in parallel). */
+  projectIssues: (slug: string, projectId: string) =>
+    allPages<Issue>(
+      (offset) => `${issueBase(slug, projectId)}/${qs({ offset, limit: ISSUE_PAGE })}`,
+    ),
+  /** One-request detail: the issue plus every sub-resource the screen shows. */
   issue: (slug: string, projectId: string, issueId: string) =>
-    request<Issue>(`${issueBase(slug, projectId)}/${issueId}`),
+    request<IssueDetail>(
+      `${issueBase(slug, projectId)}/${issueId}/${qs({ include: ISSUE_INCLUDES })}`,
+    ),
+  modules: (slug: string, projectId: string) =>
+    request<Paginated<ProjectModule>>(
+      `/api/workspaces/${slug}/projects/${projectId}/modules/?limit=100`,
+    ).then((r) => r.results),
+  addIssueModule: (slug: string, projectId: string, issueId: string, moduleId: string) =>
+    request<{ ok: true }>(`${issueBase(slug, projectId)}/${issueId}/modules`, {
+      method: "POST",
+      body: { module_id: moduleId },
+    }),
+  removeIssueModule: (slug: string, projectId: string, issueId: string, moduleId: string) =>
+    request<null>(`${issueBase(slug, projectId)}/${issueId}/modules/${moduleId}`, {
+      method: "DELETE",
+    }),
+  followIssue: (slug: string, projectId: string, issueId: string) =>
+    request<unknown>(`${issueBase(slug, projectId)}/${issueId}/subscribers/`, { method: "POST" }),
+  unfollowIssue: (slug: string, projectId: string, issueId: string) =>
+    request<unknown>(`${issueBase(slug, projectId)}/${issueId}/subscribers/`, {
+      method: "DELETE",
+    }),
+  views: (slug: string, projectId: string) =>
+    request<{ results: SavedViewRow[] }>(
+      `/api/workspaces/${slug}/projects/${projectId}/views/`,
+    ).then((r) => r.results),
+  saveView: (slug: string, projectId: string, name: string, query: unknown) =>
+    request<SavedViewRow>(`/api/workspaces/${slug}/projects/${projectId}/views/`, {
+      method: "POST",
+      body: { name, query },
+    }),
+  deleteView: (slug: string, projectId: string, viewId: string) =>
+    request<null>(`/api/workspaces/${slug}/projects/${projectId}/views/${viewId}`, {
+      method: "DELETE",
+    }),
   createIssue: (slug: string, projectId: string, body: IssueCreate) =>
     request<Issue>(`${issueBase(slug, projectId)}/`, { method: "POST", body }),
   updateIssue: (slug: string, projectId: string, issueId: string, body: IssuePatch) =>
     request<Issue>(`${issueBase(slug, projectId)}/${issueId}`, { method: "PATCH", body }),
-  comments: (slug: string, projectId: string, issueId: string) =>
-    request<Paginated<Comment>>(`${issueBase(slug, projectId)}/${issueId}/comments/?limit=100`),
   addComment: (slug: string, projectId: string, issueId: string, commentHtml: string) =>
     request<Comment>(`${issueBase(slug, projectId)}/${issueId}/comments/`, {
       method: "POST",

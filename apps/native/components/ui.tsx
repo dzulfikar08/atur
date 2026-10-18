@@ -1,9 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { Fragment, useState, type ComponentProps } from "react";
+import React, { Fragment, useEffect, useRef, useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -18,7 +21,9 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { imageSource, type Priority, type StateGroup } from "@/lib/api";
+import { imageSource, type Priority } from "@/lib/api";
+import { productColor } from "@/lib/product";
+import { stateColor } from "@/theme";
 
 // Atur mobile kit: graphite canvas, white hairline cards, one near-black
 // primary. Color is reserved for meaning (state group, priority, danger).
@@ -289,11 +294,13 @@ export function Chip({
   label,
   selected,
   onPress,
+  onLongPress,
   dot,
 }: {
   label: string;
   selected?: boolean;
   onPress: () => void;
+  onLongPress?: () => void;
   dot?: string;
 }) {
   return (
@@ -301,6 +308,8 @@ export function Chip({
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={350}
       style={({ pressed }) => [
         styles.chip,
         selected && styles.chipSelected,
@@ -338,15 +347,6 @@ export function Fab({
 
 // --- Feedback --------------------------------------------------------------
 
-export function Loading() {
-  const { theme } = useUnistyles();
-  return (
-    <View style={styles.center}>
-      <ActivityIndicator color={theme.colors.mutedForeground} />
-    </View>
-  );
-}
-
 export function EmptyState({
   icon,
   title,
@@ -380,35 +380,133 @@ export function ErrorNote({ error }: { error: unknown }) {
 
 // --- Domain glyphs ---------------------------------------------------------
 
-/** Circle glyph per state group, Plane-style (empty → half → check). */
+/** Circle glyph per state group, Plane-style (empty → half → check), in the shared token colour. */
 export function StateIcon({
-  group,
-  color,
+  state,
   size = 16,
 }: {
-  group?: StateGroup;
-  color?: string | null;
+  state?: { key?: string | null; group?: string | null } | null;
   size?: number;
 }) {
   const { theme } = useUnistyles();
-  const g = group ?? "backlog";
-  const tint = color || theme.colors[g];
+  const group = state?.group ?? "backlog";
   const name: IconName =
-    g === "completed"
+    group === "completed"
       ? "checkmark-circle"
-      : g === "cancelled"
+      : group === "cancelled"
         ? "close-circle"
-        : g === "started"
+        : group === "started"
           ? "contrast"
-          : g === "triage"
+          : group === "triage"
             ? "help-circle-outline"
             : "ellipse-outline";
   return (
     <Ionicons
       name={name}
       size={size}
-      color={tint}
-      style={g === "backlog" ? { opacity: 0.7 } : undefined}
+      color={stateColor(theme.colors, state)}
+      style={group === "backlog" ? { opacity: 0.7 } : undefined}
+    />
+  );
+}
+
+/** Tinted pill with a dot, the web's `.state-badge`. */
+export function StateBadge({
+  state,
+  name,
+  onPress,
+  compact,
+}: {
+  state?: { key?: string | null; group?: string | null } | null;
+  name?: string | null;
+  onPress?: () => void;
+  compact?: boolean;
+}) {
+  const { theme } = useUnistyles();
+  const tint = stateColor(theme.colors, state);
+  const label = name ?? "No state";
+  const body = (
+    <View
+      style={[
+        styles.badgePill,
+        compact && styles.badgePillCompact,
+        { backgroundColor: `${tint}1F` },
+      ]}
+    >
+      <View style={[styles.dot, { backgroundColor: tint }]} />
+      <Text style={[styles.badgePillText, { color: tint }]} numberOfLines={1}>
+        {label}
+      </Text>
+      {onPress ? <Ionicons name="chevron-down" size={11} color={tint} /> : null}
+    </View>
+  );
+  if (!onPress) return body;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Change state (currently ${label})`}
+      onPress={onPress}
+      hitSlop={6}
+      style={({ pressed }) => pressed && styles.pressed}
+    >
+      {body}
+    </Pressable>
+  );
+}
+
+/** Product tag chip (the "JoyoFit: …" title prefix), tinted like the web's `.product-chip`. */
+export function ProductChip({ product }: { product: string }) {
+  const { theme } = useUnistyles();
+  const tint = productColor(theme.colors, product);
+  return (
+    <View style={[styles.badgePill, styles.badgePillCompact, { backgroundColor: `${tint}1F` }]}>
+      <Text style={[styles.badgePillText, { color: tint }]} numberOfLines={1}>
+        {product}
+      </Text>
+    </View>
+  );
+}
+
+/** Pulsing placeholder block. Compose these into screen-shaped skeletons instead of spinners. */
+export function Skeleton({
+  width,
+  height = 14,
+  radius = 6,
+  style,
+}: {
+  width?: number | `${number}%`;
+  height?: number;
+  radius?: number;
+  style?: ViewStyle;
+}) {
+  const pulse = useRef(new Animated.Value(0.45)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: Platform.OS !== "web",
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.45,
+          duration: 800,
+          useNativeDriver: Platform.OS !== "web",
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  return (
+    <Animated.View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[
+        styles.skeleton,
+        { width: width ?? "100%", height, borderRadius: radius, opacity: pulse },
+        style,
+      ]}
     />
   );
 }
@@ -431,7 +529,7 @@ export function PriorityIcon({
   const { theme } = useUnistyles();
   const p = priority ?? "none";
   if (p === "none") {
-    return <Ionicons name="remove-outline" size={size} color={theme.colors.mutedForeground} />;
+    return <Ionicons name="remove-outline" size={size} color={theme.colors.priorityNone} />;
   }
   if (p === "urgent")
     return <Ionicons name="alert-circle" size={size} color={theme.colors.urgent} />;
@@ -495,6 +593,62 @@ export type SheetOption = {
   selected?: boolean;
 };
 
+/**
+ * Bottom sheet shell: dimmed backdrop, handle, title row and a scrollable body.
+ * `done` adds a Done button for sheets that stay open while you pick.
+ */
+export function Sheet({
+  visible,
+  title,
+  onClose,
+  done,
+  tall,
+  headerRight,
+  children,
+}: {
+  visible: boolean;
+  title: string;
+  onClose: () => void;
+  done?: boolean;
+  /** Fill most of the screen (filter sheets); otherwise size to content. */
+  tall?: boolean;
+  headerRight?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <Pressable style={styles.overlay} onPress={onClose} accessibilityLabel="Close" />
+        <View
+          style={[styles.sheet, tall && styles.sheetTall, { paddingBottom: insets.bottom + 12 }]}
+        >
+          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle}>{title}</Text>
+            {headerRight}
+            {done ? (
+              <Pressable accessibilityRole="button" onPress={onClose} hitSlop={8}>
+                <Text style={styles.sheetDone}>Done</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          <ScrollView
+            style={styles.sheetList}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {children}
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 /** Bottom sheet listing options; multi-select keeps it open on tap. */
 export function OptionSheet({
   visible,
@@ -512,43 +666,28 @@ export function OptionSheet({
   multi?: boolean;
 }) {
   const { theme } = useUnistyles();
-  const insets = useSafeAreaInsets();
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose} accessibilityLabel="Close" />
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]}>
-        <View style={styles.sheetHandle} />
-        <View style={styles.sheetHeader}>
-          <Text style={styles.sheetTitle}>{title}</Text>
-          {multi ? (
-            <Pressable accessibilityRole="button" onPress={onClose} hitSlop={8}>
-              <Text style={styles.sheetDone}>Done</Text>
-            </Pressable>
+    <Sheet visible={visible} title={title} onClose={onClose} done={multi}>
+      {options.length === 0 ? <Text style={styles.caption}>Nothing to pick.</Text> : null}
+      {options.map((option) => (
+        <Pressable
+          key={option.key}
+          accessibilityRole="button"
+          accessibilityState={{ selected: option.selected }}
+          onPress={() => {
+            onSelect(option.key);
+            if (!multi) onClose();
+          }}
+          style={({ pressed }) => [styles.sheetRow, pressed && styles.pressed]}
+        >
+          {option.left}
+          <Text style={[styles.flex, styles.rowTitle]}>{option.label}</Text>
+          {option.selected ? (
+            <Ionicons name="checkmark" size={18} color={theme.colors.foreground} />
           ) : null}
-        </View>
-        <ScrollView style={styles.sheetList}>
-          {options.length === 0 ? <Text style={styles.caption}>Nothing to pick.</Text> : null}
-          {options.map((option) => (
-            <Pressable
-              key={option.key}
-              accessibilityRole="button"
-              accessibilityState={{ selected: option.selected }}
-              onPress={() => {
-                onSelect(option.key);
-                if (!multi) onClose();
-              }}
-              style={({ pressed }) => [styles.sheetRow, pressed && styles.pressed]}
-            >
-              {option.left}
-              <Text style={[styles.flex, styles.rowTitle]}>{option.label}</Text>
-              {option.selected ? (
-                <Ionicons name="checkmark" size={18} color={theme.colors.foreground} />
-              ) : null}
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
-    </Modal>
+        </Pressable>
+      ))}
+    </Sheet>
   );
 }
 
@@ -684,6 +823,18 @@ const styles = StyleSheet.create((theme) => ({
   chipLabel: { fontSize: theme.fontSize.sm, fontFamily: theme.fonts.medium },
   chipLabelSelected: { color: theme.colors.primaryForeground },
   dot: { width: 8, height: 8, borderRadius: 4 },
+  badgePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    height: 24,
+    paddingHorizontal: 9,
+    borderRadius: theme.radius.pill,
+  },
+  badgePillCompact: { height: 20, paddingHorizontal: 7 },
+  badgePillText: { fontSize: 12, fontFamily: theme.fonts.medium },
+  skeleton: { backgroundColor: theme.colors.hairline },
   fab: {
     position: "absolute",
     right: theme.spacing.lg,
@@ -700,7 +851,6 @@ const styles = StyleSheet.create((theme) => ({
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
   },
-  center: { flex: 1, minHeight: 160, alignItems: "center", justifyContent: "center" },
   empty: {
     alignItems: "center",
     gap: theme.spacing.sm,
@@ -732,6 +882,7 @@ const styles = StyleSheet.create((theme) => ({
     borderTopRightRadius: theme.radius.xl,
     paddingTop: theme.spacing.sm,
   },
+  sheetTall: { height: "88%", maxHeight: "88%" },
   sheetHandle: {
     alignSelf: "center",
     width: 36,

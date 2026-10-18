@@ -47,7 +47,7 @@ export async function register(db: DbClient, data: z.infer<typeof registerSchema
 
 export async function login(db: DbClient, data: z.infer<typeof loginSchema>) {
   const user = await usersRepo.findByEmail(db, data.email);
-  if (!user || !user.passwordHash) {
+  if (!user || !user.passwordHash || !user.isActive || user.deletedAt) {
     throw new HTTPException(401, { message: "Invalid email or password" });
   }
   const valid = await comparePassword(data.password, user.passwordHash);

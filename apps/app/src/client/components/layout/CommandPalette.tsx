@@ -1,11 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import {
-  issueKey,
-  issueLink,
-  useIssueSearch,
-  useNavProjects,
-} from "@/hooks/useMyWork";
+import { issueKey, issueLink, useIssueSearch, useNavProjects } from "@/hooks/useMyWork";
 import { splitProduct } from "@/lib/product";
 import {
   CommandDialog,
@@ -70,9 +65,7 @@ export default function CommandPalette() {
       <CommandList>
         {/* forceMount items are not counted by cmdk, so Empty would show beside them */}
         {issues.length === 0 && (
-          <CommandEmpty>
-            {isSearching ? "Searching…" : "No results found."}
-          </CommandEmpty>
+          <CommandEmpty>{isSearching ? "Searching…" : "No results found."}</CommandEmpty>
         )}
 
         {/* Issues: matched server-side, so cmdk's own filter must not hide them */}
@@ -86,9 +79,7 @@ export default function CommandPalette() {
                 onSelect={() => run(() => navigate(issueLink(issue)))}
               >
                 <CircleDot className="h-4 w-4" />
-                <span className="flex-1 truncate">
-                  {splitProduct(issue.name).title}
-                </span>
+                <span className="flex-1 truncate">{splitProduct(issue.name).title}</span>
                 <span className="text-xs text-muted-foreground">
                   {issue.state?.name ? `${issue.state.name} · ` : ""}
                   {issueKey(issue)}
@@ -105,20 +96,14 @@ export default function CommandPalette() {
             Today
           </CommandItem>
           {primary && (
-            <CommandItem
-              onSelect={() =>
-                run(() => navigate(`${basePath}/projects/${primary.id}`))
-              }
-            >
+            <CommandItem onSelect={() => run(() => navigate(`${basePath}/projects/${primary.id}`))}>
               <FolderKanban className="h-4 w-4" />
               Go to {primary.name}
             </CommandItem>
           )}
           {primary && (
             <CommandItem
-              onSelect={() =>
-                run(() => navigate(`${basePath}/projects/${primary.id}?new=1`))
-              }
+              onSelect={() => run(() => navigate(`${basePath}/projects/${primary.id}?new=1`))}
             >
               <Plus className="h-4 w-4" />
               New issue
@@ -129,21 +114,15 @@ export default function CommandPalette() {
 
         {/* Navigation */}
         <CommandGroup heading="Navigate">
-          <CommandItem
-            onSelect={() => run(() => navigate(`${basePath}/projects`))}
-          >
+          <CommandItem onSelect={() => run(() => navigate(`${basePath}/projects`))}>
             <FolderKanban className="h-4 w-4" />
             Projects
           </CommandItem>
-          <CommandItem
-            onSelect={() => run(() => navigate(`${basePath}/issues`))}
-          >
+          <CommandItem onSelect={() => run(() => navigate(`${basePath}/issues`))}>
             <CircleDot className="h-4 w-4" />
             My Issues
           </CommandItem>
-          <CommandItem
-            onSelect={() => run(() => navigate(`${basePath}/pages`))}
-          >
+          <CommandItem onSelect={() => run(() => navigate(`${basePath}/pages`))}>
             <FileText className="h-4 w-4" />
             Pages
           </CommandItem>
@@ -152,9 +131,7 @@ export default function CommandPalette() {
             {/* Absolute route — Panes is not slug-scoped. */}
             Panes
           </CommandItem>
-          <CommandItem
-            onSelect={() => run(() => navigate(`${basePath}/settings`))}
-          >
+          <CommandItem onSelect={() => run(() => navigate(`${basePath}/settings`))}>
             <Settings className="h-4 w-4" />
             Workspace Settings
           </CommandItem>
@@ -171,9 +148,7 @@ export default function CommandPalette() {
                 .map((p) => (
                   <CommandItem
                     key={p.id}
-                    onSelect={() =>
-                      run(() => navigate(`${basePath}/projects/${p.id}`))
-                    }
+                    onSelect={() => run(() => navigate(`${basePath}/projects/${p.id}`))}
                   >
                     <FolderKanban className="h-4 w-4" />
                     <span className="flex-1 truncate">Go to {p.name}</span>
@@ -187,15 +162,11 @@ export default function CommandPalette() {
 
         {/* Quick actions */}
         <CommandGroup heading="Actions">
-          <CommandItem
-            onSelect={() => run(() => navigate(`${basePath}/projects`))}
-          >
+          <CommandItem onSelect={() => run(() => navigate(`${basePath}/projects`))}>
             <Plus className="h-4 w-4" />
             Create Project
           </CommandItem>
-          <CommandItem
-            onSelect={() => run(() => navigate(`${basePath}/pages`))}
-          >
+          <CommandItem onSelect={() => run(() => navigate(`${basePath}/pages`))}>
             <Plus className="h-4 w-4" />
             Create Page
           </CommandItem>

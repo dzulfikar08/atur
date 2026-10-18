@@ -10,11 +10,11 @@ import {
   ErrorNote,
   ListGroup,
   ListRow,
-  Loading,
   PageHeader,
   Screen,
   Text,
 } from "@/components/ui";
+import { RowListSkeleton } from "@/components/skeletons";
 import { api } from "@/lib/api";
 import { ALL, useCurrentWorkspace } from "@/lib/workspace";
 
@@ -34,10 +34,19 @@ export default function Projects() {
     >
       <WorkspaceSwitcher />
       <PageHeader title="Projects" />
+      <ListGroup>
+        <ListRow
+          icon="person-outline"
+          title="My issues"
+          subtitle="Assigned to me, across projects"
+          chevron
+          onPress={() => router.push("/my-issues")}
+        />
+      </ListGroup>
       <ErrorNote error={projects.error} />
 
       {projects.isPending || me.isPending ? (
-        <Loading />
+        <RowListSkeleton />
       ) : visible.length === 0 ? (
         <EmptyState icon="folder-open-outline" title="No projects in this workspace" />
       ) : (

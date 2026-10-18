@@ -130,8 +130,7 @@ interface IssueActivity {
 }
 
 // `?include=` makes GET issue return the sub-resources the page needs in one response.
-const ISSUE_INCLUDES =
-  "comments,activities,relations,sub_issues,subscribers,modules,custom_values";
+const ISSUE_INCLUDES = "comments,activities,relations,sub_issues,subscribers,modules,custom_values";
 
 interface IssueCounts {
   attachments: number;
@@ -171,7 +170,6 @@ const PRIORITY_LABELS: Record<string, string> = {
   high: "High",
   urgent: "Urgent",
 };
-
 
 // Evidence-first activity: a comment carries proof when it embeds images
 // (pasted/dropped/attached shots) or is written up as evidence — those get
@@ -880,7 +878,11 @@ export default function IssueDetail() {
         title="Issue not found"
         description="It may have been deleted, or the link is wrong."
         action={
-          <Button variant="outline" size="sm" onClick={() => navigate(`/${slug}/projects/${projectId}`)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/${slug}/projects/${projectId}`)}
+          >
             Back to project
           </Button>
         }
@@ -888,7 +890,9 @@ export default function IssueDetail() {
     );
   }
 
-  const attachmentCount = attachmentsFetched ? attachments.length : (issue.counts?.attachments ?? 0);
+  const attachmentCount = attachmentsFetched
+    ? attachments.length
+    : (issue.counts?.attachments ?? 0);
 
   return (
     <div className="flex flex-col h-[calc(100dvh-7rem)] md:h-[calc(100dvh-3.5rem)] -m-4 md:-m-6 lg:-m-8">
@@ -1186,10 +1190,7 @@ export default function IssueDetail() {
                     const relIssue = relatedIssueMap.get(rel.related_issue_id);
                     return (
                       <div key={rel.id} className="flex items-center gap-2 p-2 border rounded-md">
-                        <Badge
-                          variant="secondary"
-                          className={`text-xs shrink-0 ${relInfo.color}`}
-                        >
+                        <Badge variant="secondary" className={`text-xs shrink-0 ${relInfo.color}`}>
                           {relInfo.label}
                         </Badge>
                         {relIssue ? (
@@ -1307,7 +1308,6 @@ export default function IssueDetail() {
               </form>
             </div>
           </div>
-
         </div>
 
         {/* Drag handle between detail and comments panes (desktop only) */}
@@ -1346,9 +1346,7 @@ export default function IssueDetail() {
                     <Bell className="h-3 w-3" />
                     {subscribed ? "Following" : "Follow"}
                     {followerCount > 0 && (
-                      <span className="ml-auto text-muted-foreground text-xs">
-                        {followerCount}
-                      </span>
+                      <span className="ml-auto text-muted-foreground text-xs">{followerCount}</span>
                     )}
                   </Button>
                 </div>

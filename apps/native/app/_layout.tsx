@@ -95,6 +95,7 @@ export default function RootLayout() {
                 options={{ title: "New issue", presentation: "modal" }}
               />
               <Stack.Screen name="search" options={{ title: "Search" }} />
+              <Stack.Screen name="my-issues" options={{ title: "My issues" }} />
             </Stack.Protected>
             <Stack.Protected guard={!authed}>
               <Stack.Screen name="login" options={{ headerShown: false }} />

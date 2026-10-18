@@ -118,18 +118,18 @@ export async function getDetail(
     attachmentCount,
     timeSeconds,
   ] = await Promise.all([
-      enrichIssue(db, issue),
-      include.has("comments") ? commentsService.list(db, issue.id, 0, 100) : null,
-      include.has("activities") ? listActivities(db, issue.id) : null,
-      include.has("relations") ? listRelations(db, issue.id) : null,
-      include.has("sub_issues") ? listChildren(db, issue.id) : null,
-      include.has("subscribers") ? subscribersService.listByIssue(db, issue.id) : null,
-      include.has("modules") ? listIssueModules(db, issue.id) : null,
-      include.has("custom_values") ? customFieldValuesService.list(db, issue) : null,
-      // Tab badges: the attachment/time tabs load lazily but show their totals.
-      withCounts ? countAttachments(db, issue.id) : null,
-      withCounts ? timeEntriesRepo.totalForIssue(db, issue.id) : null,
-    ]);
+    enrichIssue(db, issue),
+    include.has("comments") ? commentsService.list(db, issue.id, 0, 100) : null,
+    include.has("activities") ? listActivities(db, issue.id) : null,
+    include.has("relations") ? listRelations(db, issue.id) : null,
+    include.has("sub_issues") ? listChildren(db, issue.id) : null,
+    include.has("subscribers") ? subscribersService.listByIssue(db, issue.id) : null,
+    include.has("modules") ? listIssueModules(db, issue.id) : null,
+    include.has("custom_values") ? customFieldValuesService.list(db, issue) : null,
+    // Tab badges: the attachment/time tabs load lazily but show their totals.
+    withCounts ? countAttachments(db, issue.id) : null,
+    withCounts ? timeEntriesRepo.totalForIssue(db, issue.id) : null,
+  ]);
 
   // Names for the parent and related issues, in one lookup.
   const refIds = [

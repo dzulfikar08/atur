@@ -1,10 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  type QueryClient,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useProjectNavStore } from "@/stores/projectNav";
@@ -44,10 +39,7 @@ export function useToday(slug: string | undefined) {
   });
 }
 
-export function useProjectStates(
-  slug: string | undefined,
-  projectId: string | undefined,
-) {
+export function useProjectStates(slug: string | undefined, projectId: string | undefined) {
   return useQuery({
     queryKey: ["states", slug, projectId],
     enabled: !!slug && !!projectId,
@@ -58,10 +50,7 @@ export function useProjectStates(
 
 /** The project's "done" state: canonical key first, then the completed group. */
 export function doneStateOf(states: KeyedState[]): KeyedState | undefined {
-  return (
-    states.find((s) => s.key === "done") ??
-    states.find((s) => s.group === "completed")
-  );
+  return states.find((s) => s.key === "done") ?? states.find((s) => s.group === "completed");
 }
 
 export interface IssuePatch {
@@ -91,11 +80,7 @@ export function useIssuePatch() {
 }
 
 /** Debounced issue search for the command palette. */
-export function useIssueSearch(
-  raw: string,
-  slug: string | undefined,
-  enabled: boolean,
-) {
+export function useIssueSearch(raw: string, slug: string | undefined, enabled: boolean) {
   const [q, setQ] = useState("");
   useEffect(() => {
     const t = setTimeout(() => setQ(raw.trim()), 180);
@@ -123,9 +108,7 @@ export function useIssueSearch(
   };
 }
 
-export function issueKey(
-  issue: Pick<AllIssue, "project_identifier" | "sequence_id">,
-): string {
+export function issueKey(issue: Pick<AllIssue, "project_identifier" | "sequence_id">): string {
   return issue.project_identifier
     ? `${issue.project_identifier}-${issue.sequence_id}`
     : `#${issue.sequence_id}`;
@@ -175,18 +158,14 @@ export function useNavProjects(slug: string | undefined, enabled = true) {
     enabled: !!slug && slug !== "all" && enabled,
     staleTime: 60_000,
   });
-  const pinnedIds =
-    useProjectNavStore((s) => (slug ? s.pinned[slug] : undefined)) ?? NO_IDS;
-  const recentIds =
-    useProjectNavStore((s) => (slug ? s.recent[slug] : undefined)) ?? NO_IDS;
+  const pinnedIds = useProjectNavStore((s) => (slug ? s.pinned[slug] : undefined)) ?? NO_IDS;
+  const recentIds = useProjectNavStore((s) => (slug ? s.recent[slug] : undefined)) ?? NO_IDS;
 
   return useMemo(() => {
     const projects = all.filter((p) => !p.is_pipeline);
     const byId = new Map(projects.map((p) => [p.id, p]));
     const pinned = pinnedIds.flatMap((id) => byId.get(id) ?? []);
-    const recent = recentIds.flatMap((id) =>
-      pinnedIds.includes(id) ? [] : (byId.get(id) ?? []),
-    );
+    const recent = recentIds.flatMap((id) => (pinnedIds.includes(id) ? [] : (byId.get(id) ?? [])));
     const shown = new Set([...pinned, ...recent].map((p) => p.id));
     const rest = projects.filter((p) => !shown.has(p.id));
     return {

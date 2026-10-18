@@ -14,18 +14,11 @@ import { useNavProjects } from "@/hooks/useMyWork";
 function keyboardBusy(target: EventTarget | null): boolean {
   if (target instanceof HTMLElement) {
     const tag = target.tagName;
-    if (
-      tag === "INPUT" ||
-      tag === "TEXTAREA" ||
-      tag === "SELECT" ||
-      target.isContentEditable
-    ) {
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable) {
       return true;
     }
   }
-  return !!document.querySelector(
-    '[role="dialog"], [role="menu"], [role="listbox"]',
-  );
+  return !!document.querySelector('[role="dialog"], [role="menu"], [role="listbox"]');
 }
 
 // Cmd/Ctrl+B toggles the sidebar. Plain keys (no modifiers, not while typing):
@@ -44,21 +37,12 @@ function ShellShortcuts() {
         toggle();
         return;
       }
-      if (
-        e.metaKey ||
-        e.ctrlKey ||
-        e.altKey ||
-        e.repeat ||
-        keyboardBusy(e.target)
-      )
-        return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || keyboardBusy(e.target)) return;
       if (!slug) return;
 
       const awaitingGo = Date.now() - goPrefix.current < 1200;
       goPrefix.current = 0;
-      const projectPath = primary
-        ? `/${slug}/projects/${primary.id}`
-        : `/${slug}/projects`;
+      const projectPath = primary ? `/${slug}/projects/${primary.id}` : `/${slug}/projects`;
 
       if (e.key === "g") {
         goPrefix.current = Date.now();
@@ -70,9 +54,7 @@ function ShellShortcuts() {
         e.preventDefault();
         navigate(`${projectPath}?new=1`);
       } else if (e.key === "/") {
-        const input = document.querySelector<HTMLInputElement>(
-          "input[data-issue-search]",
-        );
+        const input = document.querySelector<HTMLInputElement>("input[data-issue-search]");
         if (input) {
           e.preventDefault();
           input.focus();

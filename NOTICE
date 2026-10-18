@@ -1,0 +1,26 @@
+Atur
+Copyright (C) 2026 Dzulfikar Ats Tsauri / JoyoDigitama
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License version 3 (see LICENSE).
+If you run a modified version as a network service, the AGPL requires you to
+offer its users the corresponding source code.
+
+Hosting
+  The managed service at https://app.diatur.com is the official, paid way to
+  use Atur. Self-hosting on your own Cloudflare account (Workers, D1, R2), or
+  through CloudAgni, is welcome under the AGPL.
+
+Trademarks
+  "Atur", "diatur" and the Atur logo identify the official app and the hosted
+  service. The AGPL covers the code, not the name or logo: a public fork or
+  hosted copy must not present itself as the official Atur. Self-hosting for
+  yourself, your team, or your clients is fine.
+
+Contributions
+  External contributions are accepted under the Contributor License Agreement
+  in CLA.md, so the project can keep offering commercial licences and app-store
+  builds alongside the AGPL.
+
+Third-party code and fonts are used under the licenses listed in each
+package's metadata.

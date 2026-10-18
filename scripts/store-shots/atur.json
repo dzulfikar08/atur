@@ -1,0 +1,31 @@
+{
+  "defaults": {
+    "brand": "Atur",
+    "brandColor": "#F2F2F2",
+    "highlightColor": "#F2F2F2",
+    "crop": { "top": 112, "bottom": 0 }
+  },
+  "slides": [
+    {
+      "out": "../../apps/native/dist/store/slide-01-today.png",
+      "headline": "Your day,\nat a glance",
+      "highlight": "at a glance",
+      "subhead": "What is assigned to you, and what needs a decision.",
+      "screen": "../../apps/native/dist/store/captures/today.png"
+    },
+    {
+      "out": "../../apps/native/dist/store/slide-02-issues.png",
+      "headline": "Triage issues\nfrom anywhere",
+      "highlight": "from anywhere",
+      "subhead": "State, priority and discussion on one screen.",
+      "screen": "../../apps/native/dist/store/captures/issue.png"
+    },
+    {
+      "out": "../../apps/native/dist/store/slide-03-inbox.png",
+      "headline": "Stay in\nthe loop",
+      "highlight": "the loop",
+      "subhead": "Mentions, assignments and updates in one inbox.",
+      "screen": "../../apps/native/dist/store/captures/inbox.png"
+    }
+  ]
+}

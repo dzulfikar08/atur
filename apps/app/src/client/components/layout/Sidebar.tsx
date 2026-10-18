@@ -34,12 +34,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import UserMenu from "@/components/layout/UserMenu";
 import CreateWorkspaceDialog from "@/components/layout/CreateWorkspaceDialog";
 import { WorkspaceMenuItems } from "@/components/layout/WorkspaceSwitcher";
@@ -128,17 +123,9 @@ function NavRow({
       )}
     >
       <Icon
-        className={cn(
-          "size-4 shrink-0",
-          active ? "text-foreground" : "text-muted-foreground",
-        )}
+        className={cn("size-4 shrink-0", active ? "text-foreground" : "text-muted-foreground")}
       />
-      <span
-        className={cn(
-          "min-w-0 flex-1 truncate text-left",
-          collapsed && "hidden",
-        )}
-      >
+      <span className={cn("min-w-0 flex-1 truncate text-left", collapsed && "hidden")}>
         {item.label}
       </span>
       {badge ? (
@@ -198,10 +185,7 @@ export default function Sidebar() {
     if (item.end) return location.pathname === basePath;
     // Absolute items (Panes) live outside the workspace slug scope.
     if (item.absolute)
-      return (
-        location.pathname === item.to ||
-        location.pathname.startsWith(`${item.to}/`)
-      );
+      return location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
     return location.pathname.startsWith(`${basePath}/${item.to}`);
   };
 
@@ -211,9 +195,7 @@ export default function Sidebar() {
   const today = useToday(activeSlug ?? undefined);
   const overdue = today.data?.counts.overdue ?? 0;
 
-  const { pinned, recent, ordered } = useNavProjects(
-    isAll ? undefined : (activeSlug ?? undefined),
-  );
+  const { pinned, recent, ordered } = useNavProjects(isAll ? undefined : (activeSlug ?? undefined));
   const trackVisit = useProjectNavStore((st) => st.trackVisit);
   const togglePin = useProjectNavStore((st) => st.togglePin);
   const pinnedIds = new Set(pinned.map((p) => p.id));
@@ -222,12 +204,9 @@ export default function Sidebar() {
   ).slice(0, MAX_PROJECT_ROWS);
 
   // Remember the project being viewed so it floats into the Projects section.
-  const visitedProjectId = new RegExp(`^/${slug}/projects/([^/]+)`).exec(
-    location.pathname,
-  )?.[1];
+  const visitedProjectId = new RegExp(`^/${slug}/projects/([^/]+)`).exec(location.pathname)?.[1];
   useEffect(() => {
-    if (slug && slug !== "all" && visitedProjectId)
-      trackVisit(slug, visitedProjectId);
+    if (slug && slug !== "all" && visitedProjectId) trackVisit(slug, visitedProjectId);
   }, [slug, visitedProjectId, trackVisit]);
 
   const go = (to: string, absolute?: boolean) =>
@@ -243,10 +222,7 @@ export default function Sidebar() {
 
   const currentName = isAll
     ? "All Workspaces"
-    : (workspaces.find((w) => w.slug === activeSlug)?.name ??
-      currentSlug ??
-      slug ??
-      "Workspace");
+    : (workspaces.find((w) => w.slug === activeSlug)?.name ?? currentSlug ?? slug ?? "Workspace");
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -339,19 +315,12 @@ export default function Sidebar() {
                 >
                   {currentName}
                 </span>
-                <span
-                  className={cn(
-                    "shrink-0 text-muted-foreground",
-                    collapsed && "hidden",
-                  )}
-                >
+                <span className={cn("shrink-0 text-muted-foreground", collapsed && "hidden")}>
                   <ChevronDown size={14} />
                 </span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
-                <WorkspaceMenuItems
-                  onCreateWorkspace={() => setCreateOpen(true)}
-                />
+                <WorkspaceMenuItems onCreateWorkspace={() => setCreateOpen(true)} />
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -375,16 +344,12 @@ export default function Sidebar() {
                 Projects
               </SectionLabel>
               {sidebarProjects.map((project) => {
-                const active = location.pathname.startsWith(
-                  `${basePath}/projects/${project.id}`,
-                );
+                const active = location.pathname.startsWith(`${basePath}/projects/${project.id}`);
                 const isPinned = pinnedIds.has(project.id);
                 const row = (
                   <div className="group relative flex">
                     <button
-                      onClick={() =>
-                        navigate(`${basePath}/projects/${project.id}`)
-                      }
+                      onClick={() => navigate(`${basePath}/projects/${project.id}`)}
                       aria-current={active ? "page" : undefined}
                       className={cn(
                         "flex h-7 w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/60",
@@ -400,38 +365,24 @@ export default function Sidebar() {
                           active ? "text-foreground" : "text-muted-foreground",
                         )}
                       />
-                      <span
-                        className={cn(
-                          "min-w-0 truncate",
-                          collapsed && "hidden",
-                        )}
-                      >
+                      <span className={cn("min-w-0 truncate", collapsed && "hidden")}>
                         {project.name}
                       </span>
                     </button>
                     {!collapsed && (
                       <button
-                        onClick={() =>
-                          togglePin(slug ?? activeSlug ?? "", project.id)
-                        }
-                        aria-label={
-                          isPinned
-                            ? `Unpin ${project.name}`
-                            : `Pin ${project.name}`
-                        }
+                        onClick={() => togglePin(slug ?? activeSlug ?? "", project.id)}
+                        aria-label={isPinned ? `Unpin ${project.name}` : `Pin ${project.name}`}
                         aria-pressed={isPinned}
                         className={cn(
                           "absolute right-1 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground outline-none transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/60",
-                          isPinned
-                            ? "opacity-100"
-                            : "opacity-0 group-hover:opacity-100",
+                          isPinned ? "opacity-100" : "opacity-0 group-hover:opacity-100",
                         )}
                       >
                         <Star
                           className={cn(
                             "size-3.5",
-                            isPinned &&
-                              "fill-current text-[var(--state-amber)]",
+                            isPinned && "fill-current text-[var(--state-amber)]",
                           )}
                         />
                       </button>
@@ -483,11 +434,7 @@ export default function Sidebar() {
                 className="mb-1 mt-4 flex w-full items-center gap-1 px-2.5 text-left text-[length:var(--text-meta)] font-medium uppercase tracking-wide text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
               >
                 Manage
-                {showManage ? (
-                  <ChevronDown size={12} />
-                ) : (
-                  <ChevronRight size={12} />
-                )}
+                {showManage ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
               </button>
             )}
             {(showManage || collapsed) &&
@@ -523,21 +470,11 @@ export default function Sidebar() {
               >
                 <Avatar className="size-7 shrink-0">
                   {user?.avatar ? (
-                    <AvatarImage
-                      src={user.avatar}
-                      alt={user.display_name ?? "User"}
-                    />
+                    <AvatarImage src={user.avatar} alt={user.display_name ?? "User"} />
                   ) : null}
-                  <AvatarFallback className="text-[10px]">
-                    {initials}
-                  </AvatarFallback>
+                  <AvatarFallback className="text-[10px]">{initials}</AvatarFallback>
                 </Avatar>
-                <span
-                  className={cn(
-                    "min-w-0 flex-1 text-left",
-                    collapsed && "hidden",
-                  )}
-                >
+                <span className={cn("min-w-0 flex-1 text-left", collapsed && "hidden")}>
                   <span className="block truncate text-[13px] font-medium leading-tight">
                     {user?.display_name ?? "User"}
                   </span>
@@ -553,9 +490,7 @@ export default function Sidebar() {
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
           >
-            <span
-              className={cn("transition-transform", !collapsed && "rotate-180")}
-            >
+            <span className={cn("transition-transform", !collapsed && "rotate-180")}>
               <ChevronRight size={14} />
             </span>
           </button>
