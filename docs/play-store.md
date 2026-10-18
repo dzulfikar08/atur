@@ -230,6 +230,22 @@ Source: `bundletool dump manifest` of the Play AAB, printed by `scripts/build-na
 3. Testers and users get the update from the Play Store. The app does not self-update from Play (no in-app update API is wired).
 4. Promote the same AAB between tracks rather than rebuilding.
 
+## 9b. What is actually entered in the Console (2026-10-18)
+
+Account: JoyoDigitama, **personal** account (Home header), so the **12 testers x 14 days closed test is required** before production (Dashboard -> Production: "0 testers currently opted-in").
+
+- Listings en-US (default) and id via the Android Publisher API from `docs/store-listing.json` (title, short, full), plus icon 512, feature graphic 1024x500 and 8 phone screenshots per language (order 01-today, 04-project-issues, 06-issue, 05-filters, 08-inbox, 07-search, 02-today-list, 09-today-dark; Expo-web renders, not device captures). Details: contact email dzulfikar@joyorogo.com, phone +6285156160345, website https://diatur.com. The service account needed "Edit store listing" style app permissions in Users and permissions (it only had read-level access to Atur until granted in the UI; edit commits returned 403 before).
+- Store settings: App, category **Productivity**, contact details as above. No tags.
+- Privacy policy: https://diatur.com/privacy.
+- Ads: **No**. Advertising ID: **No**. Government: **No**. Financial features: none ("doesn't provide any financial features"). Health: none.
+- App access: restricted, review account (`review@diatur.com`; password only in `~/.config/atur/review-login.txt`), instruction: open the app, enter email and password on the sign-in screen, tap Sign in; the account belongs to a demo workspace.
+- Content rating (IARC): category All Other App Types; user content sharing **Yes** (UGC is the primary content; interactions can be limited to invited friends: Yes); no nudity/violence sharing, no block/report/moderation features in the app (verified: none in code), no location sharing, digital purchases, browser, news. Result: 12+/Teen equivalents.
+- Target audience: **18 and over** only.
+- Data safety: collects Name, Email address, User IDs (required; app functionality, account management) and Other in-app messages + Other user-generated content (optional; app functionality); shared with no third parties; encrypted in transit Yes; account creation methods "Username, password and other authentication" and OAuth; delete-account URL https://diatur.com/privacy#delete-account; partial deletion question left unanswered.
+- Testers: internal testing uses email list `atur-owner` (dzulfikar.at@gmail.com).
+- The repo AGPL line stays out of the listing until the repository is public.
+- Tracks (versionCode 1470399, from run 39090775168): internal = completed (rolled out, tester list `atur-owner`); closed testing Alpha = release 1.1.0 full rollout, 178 countries, testers = email list `atur-owner`, feedback email dzulfikar@joyorogo.com. All 16 console changes were sent for review on 2026-10-18 ("Changes in review"). The closed-test opt-in URL appears under Closed testing -> Testers once Alpha is live; 12 testers must opt in for 14 days, then "Apply for production" on the Dashboard. Pricing: free (set at app creation).
+
 ## 10. Known gaps and decisions for the owner
 
 1. **Account deletion must be live before production.** Play's policy (https://support.google.com/googleplay/android-developer/answer/13327111) wants an in-app deletion path plus a web link. The Profile section and `https://diatur.com/privacy#delete-account` come from the account-deletion work; deploy `apps/app` and `apps/web` before submitting, and check both.
