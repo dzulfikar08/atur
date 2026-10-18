@@ -122,6 +122,7 @@ export interface MyIdea {
   id: string;
   sequence_id: number;
   name: string;
+  kind: string;
   created_at: string | null;
   state_name: string | null;
   state_color: string | null;
@@ -131,6 +132,8 @@ export interface MyIdea {
 
 export interface PortalMine {
   ideas: MyIdea[];
+  // Reports typed in with this email but never verified (not signed by the host app).
+  unverified: MyIdea[];
   tickets: TicketSummary[];
 }
 

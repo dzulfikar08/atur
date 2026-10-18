@@ -42,6 +42,7 @@ export default function PortalTicketsPage() {
 
   const tickets = data?.tickets ?? [];
   const ideas = data?.ideas ?? [];
+  const unverified = data?.unverified ?? [];
 
   return (
     <div className="space-y-6">
@@ -140,6 +141,33 @@ export default function PortalTicketsPage() {
                     </CardContent>
                   </Card>
                 </button>
+              ))}
+            </section>
+          )}
+
+          {unverified.length > 0 && (
+            <section className="space-y-2" aria-label="Submitted without verification">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Submitted without verification ({unverified.length})
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Someone sent these using your email address, but nobody confirmed it was you. If you
+                did not send them, ignore them.
+              </p>
+              {unverified.map((i) => (
+                <Card key={i.id}>
+                  <CardContent className="flex items-center justify-between gap-3 py-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{i.name}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {i.board_title ? `${i.board_title} · ` : ""}
+                        {fmtDate(i.created_at)}
+                      </p>
+                    </div>
+                    <Badge variant="outline">Unverified</Badge>
+                    <StateBadge name={i.state_name} color={i.state_color} />
+                  </CardContent>
+                </Card>
               ))}
             </section>
           )}

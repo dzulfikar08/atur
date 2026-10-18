@@ -1130,18 +1130,17 @@ export const feedbackMeta = sqliteTable(
     contextJson: text("context_json"),
     // Host-app user id from Atur.identify().
     externalUserId: text("external_user_id"),
-    // 1 when the identify signature checked out against the board secret.
+    // 1 when the identify signature (HMAC of `${id}:${email}`) checked out against
+    // the board secret, i.e. author_email is proven. 0 = typed/unsigned email: kept
+    // for staff and shown "unverified", never linked to a customer or ticket.
     identityVerified: integer("identity_verified").notNull().default(0),
-    // 1 when author_email may be matched to a portal login: the board has no
-    // identify secret, or the signature verified. 0 = shown as unverified only.
-    emailTrusted: integer("email_trusted").notNull().default(1),
     createdAt: text("created_at"),
   },
   (table) => [index("idx_feedback_meta_email").on(table.authorEmail)],
 );
 
 // Files uploaded through the public attachments endpoint. issue_id stays NULL
-// until a submission claims the file; unclaimed rows older than 24h are
+// until a submission claims the file; unclaimed rows older than the 2h TTL are
 // garbage-collected (services/feedback_attachments.ts).
 export const feedbackAttachments = sqliteTable(
   "feedback_attachments",

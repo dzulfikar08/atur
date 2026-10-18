@@ -249,12 +249,11 @@ export async function getItem(db: DbClient, token: string, issueId: string, vote
   return { ...items[0], comments };
 }
 
-// Resolve who the reporter is and whether their email can be trusted.
-//  - external_user with a valid HMAC signature → verified, email trusted.
-//  - board has an identify secret but the signature is missing/invalid → email is
-//    kept for the team (flagged unverified) but NOT matched to a portal login.
-//  - no identify secret configured → nothing to verify against; the typed email
-//    is accepted as before (unverified, portal-matchable via its own OTP).
+// Resolve who the reporter is. The email is trusted ("verified") ONLY when the
+// board has an identify secret and external_user.signature is the HMAC of
+// `${id}:${email.toLowerCase()}` for that exact email. Anything else — no secret,
+// no/bad signature, a typed email — is kept as unverified text on the report:
+// it never creates or links a customer, ticket or CRM record.
 async function resolveReporter(
   board: { identifySecret: string | null },
   data: z.infer<typeof createItemSchema>,
@@ -267,11 +266,10 @@ async function resolveReporter(
   const name = ext?.name ?? data.name;
 
   const verified =
-    !!ext && !!board.identifySecret
-      ? await verifyIdentitySignature(board.identifySecret, ext.id, ext.signature)
+    !!ext && !!extEmail && !!board.identifySecret
+      ? await verifyIdentitySignature(board.identifySecret, ext.id, extEmail, ext.signature)
       : false;
-  const emailTrusted = !board.identifySecret || verified;
-  return { email, name, verified, emailTrusted, externalUserId: ext?.id ?? null };
+  return { email, name, verified, externalUserId: ext?.id ?? null };
 }
 
 function reportHtml(p: {
@@ -293,7 +291,7 @@ function reportHtml(p: {
       .filter(Boolean)
       .join(" ");
     parts.push(
-      `<p><strong>Reporter:</strong> ${label} <em>(${p.verified ? "verified" : "unverified"} identity)</em></p>`,
+      `<p><strong>Reporter:</strong> ${label} <em>(${p.verified ? "verified identity" : "submitted without verification"})</em></p>`,
     );
   }
   if (p.kind !== "idea" || p.source !== "portal") {
@@ -337,9 +335,11 @@ export async function createItem(
   const context = data.context ? sanitizeContext(data.context) : undefined;
   const isTicket = data.kind !== "idea";
 
-  // Tickets of a trusted email belong to that person's portal account.
+  // Only a verified email owns a customer record + ticket link. An unverified
+  // report still reaches staff as an issue (email kept in feedback_meta only);
+  // the real owner can see it, marked unverified, after signing in by OTP.
   const customer =
-    isTicket && reporter.email && reporter.emailTrusted
+    isTicket && reporter.email && reporter.verified
       ? await findOrCreateCustomer(db, board.workspaceId, reporter.email, reporter.name)
       : null;
 
@@ -378,7 +378,6 @@ export async function createItem(
     contextJson: context ? JSON.stringify(context) : null,
     externalUserId: reporter.externalUserId,
     identityVerified: reporter.verified,
-    emailTrusted: reporter.emailTrusted,
   });
   await attachmentsService.claimAttachments(
     db,
@@ -412,9 +411,11 @@ export async function createItem(
     .where(eq(schema.workspaces.id, board.workspaceId))
     .limit(1);
   const portal = `${origin}/portal/${workspace?.slug ?? ""}`;
-  const url = isTicket
+  const url = customer
     ? `${portal}/tickets/${sequenceId}?project=${board.projectId}`
-    : `${portal}/ideas?board=${encodeURIComponent(board.publicToken)}&item=${id}`;
+    : isTicket
+      ? `${portal}/tickets`
+      : `${portal}/ideas?board=${encodeURIComponent(board.publicToken)}&item=${id}`;
   return { id, sequence_id: sequenceId, url };
 }
 

@@ -59,8 +59,9 @@ export default {
   },
   // Cron triggers (wrangler.toml [triggers]): 08:00 UTC sends due-date
   // reminder emails to issue followers (each recipient's local day derives
-  // from users.user_timezone) and garbage-collects abandoned widget uploads;
-  // 03:30 UTC dumps D1 to the atur-backups R2 bucket (services/backup.ts).
+  // from users.user_timezone); 03:30 UTC dumps D1 to the atur-backups R2 bucket
+  // (services/backup.ts); the hourly :15 run garbage-collects abandoned widget
+  // uploads (feedback_attachments).
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     if (controller.cron === "30 3 * * *") {
       ctx.waitUntil(
@@ -70,8 +71,7 @@ export default {
       );
       return;
     }
-    ctx.waitUntil(runDueDateReminders(env));
-    // Unclaimed widget/native uploads older than 24h (feedback_attachments).
+    if (controller.cron === "0 8 * * *") ctx.waitUntil(runDueDateReminders(env));
     ctx.waitUntil(
       gcUnclaimedAttachments(getDb(env.DB), env).catch((e: unknown) => {
         console.error("feedback attachment gc failed:", e);

@@ -174,6 +174,10 @@
   // ── Public API ──
 
   let identity = null;
+  // identify({ id, email, name, signature }): `signature` must be computed on the
+  // host app's SERVER as hex(HMAC-SHA256(identifySecret, `${id}:${email.toLowerCase()}`)).
+  // Atur trusts the email only when the signature matches that exact id+email pair;
+  // otherwise the report is stored "submitted without verification".
   const api = {
     identify: function (user) {
       if (!user || user.id == null) {
