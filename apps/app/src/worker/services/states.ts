@@ -4,6 +4,7 @@ import { eq, and, isNull } from "drizzle-orm";
 import type { DbClient } from "../db/index";
 import * as schema from "../db/schema";
 import * as statesRepo from "../repositories/states";
+import * as issuesRepo from "../repositories/issues";
 import * as projectRepo from "../repositories/projects";
 import { nowISO } from "../lib/pagination";
 import { HTTPException } from "hono/http-exception";
@@ -218,7 +219,15 @@ export async function update(
       (updateData.groupName as string) ?? existing.group,
     );
   }
-  return statesRepo.update(db, id, workspaceId, updateData);
+  const updated = await statesRepo.update(db, id, workspaceId, updateData);
+  if (data.group_name !== undefined && data.group_name !== existing.group) {
+    await issuesRepo.syncCompletedAtForState(
+      db,
+      id,
+      data.group_name === "completed" || data.group_name === "cancelled",
+    );
+  }
+  return updated;
 }
 
 export async function remove(db: DbClient, id: string, workspaceId: string) {

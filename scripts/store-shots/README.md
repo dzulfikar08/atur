@@ -4,6 +4,19 @@ Capture plan and tooling for the Play and App Store screenshots. Captures show r
 with the demo/review account, never a real person's workspace. Outputs go to `apps/native/dist/store/`
 (gitignored).
 
+## Review account and web capture (what the current store set used)
+
+- `scripts/store-review-seed.ts` creates / tops up the store-review account on prod (`review@diatur.com`, workspace
+  "Acme Mobile", projects Mobile App and Website, 16 issues, a module, a saved view, comments that fill the inbox) and
+  writes `~/.config/atur/review-login.txt` (mode 600; never committed). It is idempotent and reads the credentials from
+  that file. Re-run it if a reviewer deletes the account (the teammate user inherits the workspace and the script adds
+  the review user back) or before recapturing, since dates are relative to the run day.
+- `scripts/store-shots/capture-web.ts` captures the Expo web build (`cd apps/native && EXPO_PUBLIC_SERVER_URL=https://app.diatur.com bunx expo start --web --port 8081`)
+  with headless Chromium at 360x640, 440x956 and 414x896 CSS px, device scale 3, into `/tmp/atur-store-shots/{play,ios-6.9,ios-6.5}`.
+  Expo web has no system chrome, so each capture sits under a drawn status bar (9:41, signal, Wi-Fi, battery); nothing
+  else is added. These are web renders of the same JS UI, not on-device captures.
+- `scripts/store-shots/graphics.ts` writes the Play icon (512x512) and feature graphic (1024x500).
+
 ## Sizes
 
 | Store     | Slot                 | Size                                                                   | Notes                                                                            |

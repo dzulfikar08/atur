@@ -176,12 +176,13 @@ describe("DEV-19 HTTP issue update state validation", () => {
   });
 
   it("accepts an in-workspace state change and still records trail names", async () => {
-    // Select order: issue, new state (validation), issue re-read after
+    // Select order: issue, new state (validation), completed_at group lookup, issue re-read after
     // update, old state (trail), labels, assignees, enriched state.
     const newState = { id: "s-new", workspaceId: MINE, name: "New" };
     const db = mockDb([
       [issue],
       [newState],
+      [{ groupName: "started" }],
       [{ ...issue, stateId: "s-new" }],
       [{ id: "s-old", name: "Old" }],
       [],
@@ -547,7 +548,7 @@ describe("DEV-19 round 4 — label/assignee service binding + happy paths", () =
 
   it("HTTP create: valid state+label+assignee inserts the issue", async () => {
     // Select order: state, labels batch, assignee owner, assignee members,
-    // issue re-read after create, subscribe existing check, enrich labels,
+    // completed_at group lookup, issue re-read after create, subscribe existing check, enrich labels,
     // enrich assignees, enrich state.
     const db = mockDb(
       [
@@ -555,6 +556,7 @@ describe("DEV-19 round 4 — label/assignee service binding + happy paths", () =
         [{ id: "l1" }],
         [{ ownerId: "u1" }],
         [{ memberId: "u2" }],
+        [{ groupName: "started" }],
         [{ ...issue, stateId: "s1" }],
         [],
         [],

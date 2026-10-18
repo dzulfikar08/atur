@@ -1781,6 +1781,7 @@ async function handleToolRaw(
         descriptionHtml: (params.description_html as string) ?? null,
         priority: (params.priority as string) ?? "none",
         stateId: (params.state_id as string) ?? null,
+        completedAt: await issuesRepo.completedAtForState(db, params.state_id as string, now),
         parentId: (params.parent_id as string) ?? null,
         sequenceId: await issuesRepo.allocateNextSequence(db, projectId),
         projectId,
@@ -1829,6 +1830,7 @@ async function handleToolRaw(
         // The new state must live in the named workspace before any write.
         await assertStateInWorkspace(db, params.state_id as string, workspaceId);
         updates.stateId = params.state_id;
+        updates.completedAt = await issuesRepo.completedAtForState(db, params.state_id as string);
       }
       if (params.priority !== undefined) updates.priority = params.priority;
       if (params.name !== undefined) updates.name = params.name;

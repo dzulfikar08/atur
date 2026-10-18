@@ -52,9 +52,15 @@ creds.password ||= password();
 creds.teammate_email ||= "maya.chen@acme-mobile.example";
 creds.teammate_password ||= password();
 mkdirSync(dirname(CREDS), { recursive: true });
-writeFileSync(CREDS, Object.entries(creds).map(([k, v]) => `${k}=${v}`).join("\n") + "\n", {
-  mode: 0o600,
-});
+writeFileSync(
+  CREDS,
+  Object.entries(creds)
+    .map(([k, v]) => `${k}=${v}`)
+    .join("\n") + "\n",
+  {
+    mode: 0o600,
+  },
+);
 chmodSync(CREDS, 0o600);
 
 // ── http ────────────────────────────────────────────────────────────────────
@@ -66,6 +72,7 @@ type Json = {
   member_id?: string;
   session_token?: string;
   user?: { id: string };
+  emoji?: string | null;
 };
 
 class Api {
@@ -96,13 +103,18 @@ class Api {
   }
 
   get = <T = Json>(path: string) => this.req<T>("GET", path).then((r) => r.data);
-  post = <T = Json>(path: string, body?: unknown) => this.req<T>("POST", path, body ?? {}).then((r) => r.data);
-  patch = <T = Json>(path: string, body: unknown) => this.req<T>("PATCH", path, body).then((r) => r.data);
+  post = <T = Json>(path: string, body?: unknown) =>
+    this.req<T>("POST", path, body ?? {}).then((r) => r.data);
+  patch = <T = Json>(path: string, body: unknown) =>
+    this.req<T>("PATCH", path, body).then((r) => r.data);
 
   async signIn(email: string, pw: string, username: string) {
-    const reg = await this.req<Json>("POST", "/auth/register", { email, username, password: pw }, [
-      409,
-    ]);
+    const reg = await this.req<Json>(
+      "POST",
+      "/auth/register",
+      { email, username, password: pw },
+      [409],
+    );
     const session =
       reg.status === 409
         ? (await this.req<Json>("POST", "/auth/sign-in", { email, password: pw })).data
@@ -176,12 +188,16 @@ const ws = (a: Api) => `/api/workspaces/${WORKSPACE_SLUG}`;
 
 async function ensureProject(name: string, identifier: string, emoji: string) {
   const existing = list<Json>(await alex.get(`${ws(alex)}/projects/`)).find((p) => p.name === name);
-  if (existing) return existing;
+  if (existing) {
+    if (existing.emoji !== emoji)
+      await alex.patch(`${ws(alex)}/projects/${existing.id}`, { emoji });
+    return existing;
+  }
   return alex.post(`${ws(alex)}/projects/`, { name, identifier, emoji, timezone: "UTC" });
 }
 
-const mobile = await ensureProject("Mobile App", "MOB", "1f4f1");
-const web = await ensureProject("Website", "WEB", "1f310");
+const mobile = await ensureProject("Mobile App", "MOB", "📱");
+const web = await ensureProject("Website", "WEB", "🌐");
 
 type Ctx = {
   project: Json;
@@ -258,7 +274,8 @@ const seeds: Seed[] = [
   {
     ctx: mob,
     name: "Crash when opening a notification from a cold start",
-    html: p("Tapping a push notification while the app is closed lands on a blank screen on iOS 18.") +
+    html:
+      p("Tapping a push notification while the app is closed lands on a blank screen on iOS 18.") +
       p("Repro: force-quit, send a comment notification, tap it."),
     priority: "urgent",
     state: "in_progress",
@@ -267,14 +284,26 @@ const seeds: Seed[] = [
     start: -6,
     target: -2,
     comments: [
-      { by: "maya", html: p(`${mention(alex, "Alex Rivera")} I can reproduce on an iPhone 15 with 18.1. The router is not ready when the deep link arrives.`) },
-      { by: "alex", html: p("Found it: the link is handled before the session is restored. Fix is up for review tomorrow.") },
+      {
+        by: "maya",
+        html: p(
+          `${mention(alex, "Alex Rivera")} I can reproduce on an iPhone 15 with 18.1. The router is not ready when the deep link arrives.`,
+        ),
+      },
+      {
+        by: "alex",
+        html: p(
+          "Found it: the link is handled before the session is restored. Fix is up for review tomorrow.",
+        ),
+      },
     ],
   },
   {
     ctx: mob,
     name: "Shorten sign-up to two screens",
-    html: p("Drop the intro carousel and ask for email and workspace name only. Target: first issue created within 60 seconds."),
+    html: p(
+      "Drop the intro carousel and ask for email and workspace name only. Target: first issue created within 60 seconds.",
+    ),
     priority: "high",
     state: "in_progress",
     labels: ["Feature", "Design"],
@@ -284,9 +313,11 @@ const seeds: Seed[] = [
   },
   {
     ctx: mob,
-    name: "Decision: ship offline mode in 1.1 or 1.2?",
-    html: p("Offline reads are done. Offline writes need a conflict policy and about three more weeks.") +
-      p("Option A: ship read-only offline in 1.1. Option B: hold for full offline in 1.2."),
+    name: "Ship offline mode in 1.1 or 1.2?",
+    html:
+      p(
+        "Offline reads are done. Offline writes need a conflict policy and about three more weeks.",
+      ) + p("Option A: ship read-only offline in 1.1. Option B: hold for full offline in 1.2."),
     priority: "high",
     state: "needs_you",
     labels: ["Feature"],
@@ -294,13 +325,20 @@ const seeds: Seed[] = [
     target: 2,
     decision: true,
     comments: [
-      { by: "maya", html: p(`${mention(alex, "Alex Rivera")} I lean towards A. Read-only offline is the most requested part and it is already stable. Your call.`) },
+      {
+        by: "maya",
+        html: p(
+          `${mention(alex, "Alex Rivera")} I lean towards A. Read-only offline is the most requested part and it is already stable. Your call.`,
+        ),
+      },
     ],
   },
   {
     ctx: mob,
     name: "Ask for notification permission after the first assigned issue",
-    html: p("Today the prompt appears at launch and 70% decline. Move it to the moment it is useful."),
+    html: p(
+      "Today the prompt appears at launch and 70% decline. Move it to the moment it is useful.",
+    ),
     priority: "medium",
     state: "need_review",
     labels: ["Feature", "iOS"],
@@ -308,7 +346,12 @@ const seeds: Seed[] = [
     start: -3,
     target: 1,
     comments: [
-      { by: "maya", html: p("Implemented and behind a flag. Please try it with a fresh install and tell me if the wording works.") },
+      {
+        by: "maya",
+        html: p(
+          "Implemented and behind a flag. Please try it with a fresh install and tell me if the wording works.",
+        ),
+      },
     ],
   },
   {
@@ -365,20 +408,29 @@ const seeds: Seed[] = [
   {
     ctx: site,
     name: "Review pricing page copy before the launch email",
-    html: p("The launch email links to /pricing on Thursday. Check headlines, plan names and the FAQ wording."),
+    html: p(
+      "The launch email links to /pricing on Thursday. Check headlines, plan names and the FAQ wording.",
+    ),
     priority: "high",
     state: "needs_you",
     labels: ["Content"],
     assignee: "alex",
     target: 0,
     comments: [
-      { by: "maya", html: p(`${mention(alex, "Alex Rivera")} draft is in the doc. I need your sign-off on the plan names before I publish.`) },
+      {
+        by: "maya",
+        html: p(
+          `${mention(alex, "Alex Rivera")} draft is in the doc. I need your sign-off on the plan names before I publish.`,
+        ),
+      },
     ],
   },
   {
     ctx: site,
     name: "Compress hero images to fix slow loading on mobile",
-    html: p("Largest Contentful Paint is 4.1 s on a mid-range phone. Serve WebP and size images per breakpoint."),
+    html: p(
+      "Largest Contentful Paint is 4.1 s on a mid-range phone. Serve WebP and size images per breakpoint.",
+    ),
     priority: "high",
     state: "todo",
     labels: ["Bug"],
@@ -399,8 +451,10 @@ const seeds: Seed[] = [
   },
   {
     ctx: site,
-    name: "Decision: move the docs to a subdomain?",
-    html: p("docs.acme-mobile.example would give the docs their own search and analytics, at the cost of a redirect for old links."),
+    name: "Move the docs to a subdomain?",
+    html: p(
+      "docs.acme-mobile.example would give the docs their own search and analytics, at the cost of a redirect for old links.",
+    ),
     priority: "medium",
     state: "needs_you",
     labels: ["Content"],
@@ -475,7 +529,17 @@ for (const s of seeds) {
       state_id: body.state_id,
     });
   } else {
-    const issue = await alex.post(`${s.ctx.base}/issues/`, body);
+    // Finished issues are created open and then moved, like a real workflow.
+    // The API does not stamp issues.completed_at on that move, so the Today
+    // "Done" tile stays 0 unless the two done rows are stamped by hand:
+    //   UPDATE issues SET completed_at = <iso> WHERE name IN (...) AND workspace_id = <acme-mobile>
+    const issue = await alex.post(`${s.ctx.base}/issues/`, {
+      ...body,
+      state_id: s.state === "done" ? s.ctx.states.todo : body.state_id,
+    });
+    if (s.state === "done") {
+      await alex.patch(`${s.ctx.base}/issues/${issue.id}`, { state_id: body.state_id });
+    }
     console.log(`created ${s.ctx.project.identifier}: ${s.name}`);
     // Comments come from the teammate so the review user's inbox has entries.
     for (const c of s.comments ?? []) {
@@ -498,6 +562,9 @@ if (!release) {
   });
 }
 const mobIssues = list<Json>(await alex.get(`${mob.base}/issues/?limit=200`));
+const inModule = new Set(
+  list<Json>(await alex.get(`${mob.base}/modules/${release.id}/issues`)).map((i) => i.id),
+);
 for (const name of [
   "Crash when opening a notification from a cold start",
   "Shorten sign-up to two screens",
@@ -505,8 +572,8 @@ for (const name of [
   "Android back button should close the filter sheet first",
 ]) {
   const issue = mobIssues.find((i) => i.name === name);
-  if (issue) {
-    await alex.req("POST", `${mob.base}/modules/${release.id}/issues`, { issue_id: issue.id }, [409]);
+  if (issue && !inModule.has(issue.id)) {
+    await alex.post(`${mob.base}/modules/${release.id}/issues`, { issue_id: issue.id });
   }
 }
 
@@ -534,6 +601,21 @@ if (!views.some((v) => v.name === "Mine, by due date")) {
       start_to: "",
     },
   });
+}
+
+// Notifications die with the account; after a deletion + re-seed the inbox would be empty, so the
+// teammate comments again on the issues that carry a comment from her.
+if (list<Json>(await alex.get("/api/notifications/?limit=1")).length === 0) {
+  for (const s of seeds) {
+    const issue = (await issuesOf(s.ctx)).find((i) => i.name === s.name);
+    if (!issue) continue;
+    for (const c of s.comments ?? []) {
+      if (c.by === "maya") {
+        await maya.post(`${s.ctx.base}/issues/${issue.id}/comments/`, { comment_html: c.html });
+      }
+    }
+  }
+  console.log("inbox was empty: teammate commented again");
 }
 
 console.log("done");

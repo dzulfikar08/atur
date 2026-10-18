@@ -277,6 +277,38 @@ export async function listByParent(db: DbClient, parentId: string) {
   return rows;
 }
 
+/**
+ * `issues.completed_at` mirrors "closed": set when the state's group is
+ * `completed` or `cancelled` (the same rule as `isOpen` in routes/me.ts),
+ * null otherwise. Returns the value to store for an issue landing in `stateId`.
+ */
+export async function completedAtForState(
+  db: DbClient,
+  stateId: string | null | undefined,
+  now: string = nowISO(),
+): Promise<string | null> {
+  if (!stateId) return null;
+  const [state] = await db
+    .select({ groupName: states.groupName })
+    .from(states)
+    .where(eq(states.id, stateId))
+    .limit(1);
+  return state && (state.groupName === "completed" || state.groupName === "cancelled") ? now : null;
+}
+
+/** A state's group moved: re-derive completed_at for the issues already sitting in it. */
+export async function syncCompletedAtForState(db: DbClient, stateId: string, closed: boolean) {
+  const now = nowISO();
+  if (closed) {
+    await db
+      .update(issues)
+      .set({ completedAt: now })
+      .where(and(eq(issues.stateId, stateId), isNull(issues.completedAt)));
+  } else {
+    await db.update(issues).set({ completedAt: null }).where(eq(issues.stateId, stateId));
+  }
+}
+
 export async function create(
   db: DbClient,
   data: {
@@ -318,6 +350,7 @@ export async function create(
     estimatePoints: data.estimatePoints ?? null,
     parentId: data.parentId ?? null,
     isDecision: data.isDecision ?? 0,
+    completedAt: await completedAtForState(db, data.stateId, now),
     createdAt: now,
     updatedAt: now,
   };
@@ -355,9 +388,14 @@ export async function update(
     descriptionStripped?: string;
   },
 ) {
+  const now = nowISO();
+  const completedAt =
+    data.stateId !== undefined
+      ? { completedAt: await completedAtForState(db, data.stateId, now) }
+      : {};
   await db
     .update(issues)
-    .set({ ...data, updatedAt: nowISO() })
+    .set({ ...data, ...completedAt, updatedAt: now })
     .where(and(eq(issues.id, id), isNull(issues.deletedAt)));
   return findById(db, id);
 }
