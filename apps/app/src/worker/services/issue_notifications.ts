@@ -47,12 +47,34 @@ export async function resolveReceivers(db: DbClient, userIds: string[]): Promise
   }));
 }
 
-function issueUrl(issue: IssueLike): string {
-  return `https://app.diatur.com/${issue.workspaceId}/projects/${issue.projectId}/issues/${issue.sequenceId}`;
+interface IssueRefs {
+  projectIdentifier: string;
+  workspaceSlug: string;
 }
 
-function issueLabel(issue: IssueLike): string {
-  return `${issue.sequenceId}`;
+// One lookup per notification: the project identifier (MOB-2 label) and the
+// workspace slug (SPA route segment — the router keys on :slug, not the id).
+async function resolveRefs(db: DbClient, issue: IssueLike): Promise<IssueRefs> {
+  const [row] = await db
+    .select({
+      projectIdentifier: schema.projects.identifier,
+      workspaceSlug: schema.workspaces.slug,
+    })
+    .from(schema.projects)
+    .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.projects.workspaceId))
+    .where(eq(schema.projects.id, issue.projectId))
+    .limit(1);
+  return row ?? { projectIdentifier: "", workspaceSlug: issue.workspaceId };
+}
+
+export function issueUrl(issue: IssueLike, refs: IssueRefs): string {
+  return `https://app.diatur.com/${refs.workspaceSlug}/projects/${issue.projectId}/issues/${issue.sequenceId}`;
+}
+
+export function issueLabel(issue: IssueLike, refs: IssueRefs): string {
+  return refs.projectIdentifier
+    ? `${refs.projectIdentifier}-${issue.sequenceId}`
+    : `${issue.sequenceId}`;
 }
 
 // New comment on an issue → notify all followers (author excluded).
@@ -63,6 +85,7 @@ export async function notifyCommentAdded(
   comment: CommentLike,
   actorName?: string | null,
 ) {
+  const refs = await resolveRefs(db, issue);
   const subscribers = await subscribersRepo.listByIssue(db, issue.id);
   const receivers = subscribers
     .map((s): NotifyReceiver | null =>
@@ -91,18 +114,18 @@ export async function notifyCommentAdded(
     actorName,
     workspaceId: issue.workspaceId,
     projectId: issue.projectId,
-    title: `${who} commented on ${issueLabel(issue)} — ${issue.name}`,
+    title: `${who} commented on ${issueLabel(issue, refs)} — ${issue.name}`,
     message: snippet || "New comment on this issue.",
     data: { issue_id: issue.id, comment_id: comment.id },
     entityIdentifier: issue.id,
     entityName: "issue",
     notificationType: "comment",
     email: {
-      subject: `[${issueLabel(issue)}] ${who} commented — ${issue.name}`,
-      text: `${who} commented on ${issue.name}:\n\n${snippet}\n\n${issueUrl(issue)}`,
+      subject: `[${issueLabel(issue, refs)}] ${who} commented — ${issue.name}`,
+      text: `${who} commented on ${issue.name}:\n\n${snippet}\n\n${issueUrl(issue, refs)}`,
       bodyHtml: `<p><strong>${who}</strong> commented on <strong>${issue.name}</strong>:</p><blockquote style="margin:16px 0;padding:12px 16px;border-left:3px solid #e5e7eb;color:#4b5563;">${snippet.replace(/</g, "&lt;")}</blockquote>`,
       ctaText: "View issue",
-      ctaUrl: issueUrl(issue),
+      ctaUrl: issueUrl(issue, refs),
     },
   });
 }
@@ -128,6 +151,7 @@ export async function notifyMentioned(
   const mentioned = await resolveReceivers(db, opts.mentionedIds);
   const idSet = new Set(mentioned.map((u) => u.id));
 
+  const refs = await resolveRefs(db, issue);
   const subscribers = await subscribersRepo.listByIssue(db, issue.id);
   const receivers = subscribers
     .map((s): NotifyReceiver | null =>
@@ -162,7 +186,7 @@ export async function notifyMentioned(
     actorName: opts.actorName,
     workspaceId: issue.workspaceId,
     projectId: issue.projectId,
-    title: `${who} ${where} on ${issueLabel(issue)} — ${issue.name}`,
+    title: `${who} ${where} on ${issueLabel(issue, refs)} — ${issue.name}`,
     message: snippet || `${who} mentioned you on ${issue.name}.`,
     data: { issue_id: issue.id, source: opts.source },
     entityIdentifier: issue.id,
@@ -170,10 +194,10 @@ export async function notifyMentioned(
     notificationType: "mention",
     email: {
       subject: `${who} mentioned you — ${issue.name}`,
-      text: `${who} ${where}:\n\n${snippet}\n\n${issueUrl(issue)}`,
+      text: `${who} ${where}:\n\n${snippet}\n\n${issueUrl(issue, refs)}`,
       bodyHtml: `<p><strong>${who}</strong> ${where} on <strong>${issue.name}</strong>:</p><blockquote style="margin:16px 0;padding:12px 16px;border-left:3px solid #e5e7eb;color:#4b5563;">${snippet.replace(/</g, "&lt;")}</blockquote>`,
       ctaText: "View issue",
-      ctaUrl: issueUrl(issue),
+      ctaUrl: issueUrl(issue, refs),
     },
   });
 }

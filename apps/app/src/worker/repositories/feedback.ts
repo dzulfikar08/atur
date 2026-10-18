@@ -1,6 +1,6 @@
 import { eq, and, isNull, desc, inArray, sql } from "drizzle-orm";
 import type { DbClient } from "../db/index";
-import { allocateNextSequence } from "./issues";
+import { allocateNextSequence, completedAtForState } from "./issues";
 import {
   feedbackBoards,
   feedbackVotes,
@@ -149,6 +149,7 @@ export async function createFeedbackIssue(
     descriptionHtml: data.descriptionHtml,
     descriptionStripped: data.descriptionStripped,
     stateId: data.stateId,
+    completedAt: await completedAtForState(db, data.stateId, now),
     externalSource: "feedback",
     sortOrder: 65535.0,
     createdAt: now,
