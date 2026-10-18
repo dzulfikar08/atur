@@ -15,6 +15,13 @@
       "usesAppleSignIn": true,
       "config": {
         "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Atur only touches your photo library when you choose to attach an image or save a screenshot of a bug report.",
+        "NSPhotoLibraryAddUsageDescription": "Atur saves an image to your photo library only when you ask it to.",
+        "NSFaceIDUsageDescription": "Atur can use Face ID to protect your saved sign-in.",
+        "NSMicrophoneUsageDescription": "Atur uses the microphone only while you dictate text, for example a comment or a prompt to an agent.",
+        "NSSpeechRecognitionUsageDescription": "Atur turns your speech into text on your iPhone when you tap the microphone button."
       }
     },
     "android": {
