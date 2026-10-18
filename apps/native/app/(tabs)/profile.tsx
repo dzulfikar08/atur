@@ -26,9 +26,19 @@ import { DELETE_ACCOUNT_INFO_URL, DELETE_CONFIRMATION, deleteAccount } from "@/l
 import { api } from "@/lib/api";
 import { SERVER_URL } from "@/lib/config";
 import { displayName } from "@/lib/format";
+import { OTA_ENABLED, useOtaUpdate, type OtaPhase } from "@/lib/ota";
 import { endSession } from "@/lib/session";
 import { loadThemePref, saveThemePref, type ThemePref } from "@/lib/theme-pref";
 import { setCurrentWorkspace, useCurrentWorkspace } from "@/lib/workspace";
+
+const OTA_STATUS: Record<OtaPhase, string> = {
+  disabled: "Off in this build",
+  idle: "Up to date",
+  checking: "Checking…",
+  downloading: "Downloading…",
+  ready: "Update ready — restart to apply",
+  error: "Could not check",
+};
 
 const THEMES: { value: ThemePref; label: string }[] = [
   { value: "system", label: "System" },
@@ -42,6 +52,8 @@ export default function Profile() {
   const { slug: currentSlug } = useCurrentWorkspace();
   const [themePref, setThemePref] = useState<ThemePref>("system");
   const report = useReportSheet();
+  const ota = useOtaUpdate();
+  const otaBusy = ota.phase === "checking" || ota.phase === "downloading";
 
   useEffect(() => {
     void loadThemePref().then((pref) => setThemePref(pref ?? "system"));
@@ -135,6 +147,52 @@ export default function Profile() {
         />
       </ListGroup>
       {report.sheet}
+
+      {OTA_ENABLED ? (
+        <>
+          <SectionTitle title="App updates" />
+          <ListGroup>
+            <ListRow
+              icon="cloud-download-outline"
+              title="Status"
+              value={
+                ota.phase === "downloading" && ota.percent !== null
+                  ? `Downloading ${ota.percent}%`
+                  : OTA_STATUS[ota.phase]
+              }
+            />
+            <ListRow icon="git-branch-outline" title="Channel" value={ota.channel ?? "—"} />
+            <ListRow
+              icon="cube-outline"
+              title="Running"
+              value={
+                ota.embedded || !ota.updateId
+                  ? "Built into the app"
+                  : `${ota.updateId.slice(0, 8)} · ${ota.createdAt?.toISOString().slice(0, 10) ?? ""}`
+              }
+            />
+            <ListRow
+              icon="finger-print-outline"
+              title="Runtime"
+              value={ota.runtimeVersion?.slice(0, 8) ?? "—"}
+            />
+            <ListRow
+              icon="refresh-outline"
+              title={otaBusy ? "Checking…" : "Check for updates"}
+              chevron
+              onPress={otaBusy ? undefined : () => void ota.check()}
+            />
+            {ota.phase === "ready" ? (
+              <ListRow
+                icon="reload-outline"
+                title="Restart to update"
+                chevron
+                onPress={() => void ota.restart()}
+              />
+            ) : null}
+          </ListGroup>
+        </>
+      ) : null}
 
       <SectionTitle title="About" />
       <ListGroup>
