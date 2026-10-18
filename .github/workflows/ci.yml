@@ -19,7 +19,16 @@ jobs:
       - run: bun --filter @atur/app typecheck
       # Fail on high/critical advisories; moderate ones are reported without
       # breaking the build (bun audit exits 0 for moderate).
-      - run: bun audit --audit-level=high
+      # Ignored: no fixed release exists upstream, and the code paths are dev/build tooling only
+      # (never shipped in the worker bundle or the mobile app). Re-check and drop when fixed.
+      #   GHSA-vfj7-8cjw-p6xm  braces <=3.0.3 (latest is 3.0.3; glob tooling)
+      #   GHSA-86w9-cpqp-85rv  node-forge <=1.4.0 (latest is 1.4.0; @expo/cli dev-server TLS)
+      #   GHSA-rfgv-xxqx-mfg5, GHSA-w293-vg96-wgc3  undici 7.29.0 pinned exactly by miniflare
+      #     (local Workers simulator; even miniflare's latest pins a vulnerable undici)
+      - run: >-
+          bun audit --audit-level=high
+          --ignore=GHSA-vfj7-8cjw-p6xm --ignore=GHSA-86w9-cpqp-85rv
+          --ignore=GHSA-rfgv-xxqx-mfg5 --ignore=GHSA-w293-vg96-wgc3
       - run: bun --filter @atur/app test
       - run: bun --filter @atur/app build
       - run: bun --filter @atur/web build
