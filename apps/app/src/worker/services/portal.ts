@@ -360,8 +360,14 @@ export async function getChangelog(db: DbClient, workspaceId: string) {
   };
 }
 
-// Everything the signed-in person filed: tickets tied to their customer record
-// plus ideas/reports authored with their (trusted) email, across all boards.
+// Everything the signed-in person filed. The OTP login proves ownership of
+// `customer.email`, so reports submitted WITHOUT identity verification (typed
+// email, no/bad signature) that name this address surface here — in a separate
+// `unverified` list, because the person never vouched for them and they must
+// not be mistaken for their own requests.
+//  - tickets: support tickets tied to their customer record (verified only)
+//  - ideas: board ideas whose email was proven by a valid identify signature
+//  - unverified: any idea/bug/question typed in with their email, unproven
 export async function getMine(db: DbClient, customer: PortalCustomer) {
   const [tickets, boards] = await Promise.all([
     supportTicketsRepo.listByCustomer(db, customer.id, { offset: 0, limit: 100 }),
@@ -369,7 +375,7 @@ export async function getMine(db: DbClient, customer: PortalCustomer) {
   ]);
   const byProject = new Map(boards.map((b) => [b.project_id, b]));
   const email = customer.email.trim().toLowerCase();
-  const ideaRows = email
+  const rows = email
     ? await db
         .select({
           id: schema.issues.id,
@@ -379,6 +385,8 @@ export async function getMine(db: DbClient, customer: PortalCustomer) {
           createdAt: schema.issues.createdAt,
           stateName: schema.states.name,
           stateColor: schema.states.color,
+          kind: schema.feedbackMeta.kind,
+          verified: schema.feedbackMeta.identityVerified,
         })
         .from(schema.feedbackMeta)
         .innerJoin(schema.issues, eq(schema.issues.id, schema.feedbackMeta.issueId))
@@ -386,26 +394,27 @@ export async function getMine(db: DbClient, customer: PortalCustomer) {
         .where(
           and(
             eq(schema.issues.workspaceId, customer.workspaceId),
-            eq(schema.issues.externalSource, "feedback"),
             isNull(schema.issues.deletedAt),
             sql`lower(${schema.feedbackMeta.authorEmail}) = ${email}`,
-            eq(schema.feedbackMeta.emailTrusted, 1),
           ),
         )
         .orderBy(desc(schema.issues.createdAt))
-        .limit(100)
+        .limit(200)
     : [];
+  const toItem = (r: (typeof rows)[number]) => ({
+    id: r.id,
+    sequence_id: r.sequenceId,
+    name: r.name,
+    kind: r.kind,
+    created_at: r.createdAt,
+    state_name: r.stateName,
+    state_color: r.stateColor,
+    board_token: byProject.get(r.projectId)?.token ?? null,
+    board_title: byProject.get(r.projectId)?.title ?? null,
+  });
   return {
-    ideas: ideaRows.map((r) => ({
-      id: r.id,
-      sequence_id: r.sequenceId,
-      name: r.name,
-      created_at: r.createdAt,
-      state_name: r.stateName,
-      state_color: r.stateColor,
-      board_token: byProject.get(r.projectId)?.token ?? null,
-      board_title: byProject.get(r.projectId)?.title ?? null,
-    })),
+    ideas: rows.filter((r) => r.verified === 1 && r.kind === "idea").map(toItem),
+    unverified: rows.filter((r) => r.verified !== 1).map(toItem),
     tickets: tickets.rows,
   };
 }

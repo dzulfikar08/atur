@@ -27,11 +27,18 @@ Ideas tab of the portal.
   tickets) and ideas they posted. Needs sign-in.
 - **Changelog** – ideas whose state is in the _completed_ group, newest first.
 
-Sign-in is one email OTP per workspace. "Everything you filed" is matched by the **verified**
-email of the OTP login. A report counts only when its email is trusted: the board has no identify
-secret, or the reporter's `Atur.identify()` signature verified. Reports with an unsigned email on a
-board that has a secret are kept for the team (shown "unverified" in the issue) but never appear in
-anyone's portal.
+Sign-in is one email OTP per workspace; the OTP proves the email. The Support tab lists:
+
+- **Tickets** – support tickets linked to your customer record, and **ideas** you posted. Both only
+  exist for a **verified** email: the board has an identify secret and the reporter's
+  `Atur.identify()` signature matched that exact id + email.
+- **Submitted without verification** – reports that name your email but were typed in (no secret on
+  the board, or a missing/invalid signature). They are shown read-only with an "Unverified" badge
+  and never become your tickets, never create a customer/CRM record in your name, and their
+  attachments are not readable from your portal login.
+
+Staff still receive every report as an issue; the reporter line reads "submitted without
+verification" and the email lives only in `feedback_meta`.
 
 Attachments are served by `/api/assets/<id>` to workspace members and, in the portal, only to the
 person who filed the issue they are attached to.
@@ -88,18 +95,21 @@ Atur.identify({ id: "user-42", email: "ana@example.com", name: "Ana", signature 
 ```
 
 With an **identify secret** on the board (create it in the board settings), the email is trusted
-only when `signature = hex(HMAC-SHA256(secret, id))`. Compute it on **your server**, never in the
-browser:
+only when `signature = hex(HMAC-SHA256(secret, id + ":" + email.toLowerCase()))` — the signature
+binds the id **and** the email, so a valid signature for one address can't be reused for another.
+Compute it on **your server**, never in the browser, and send the same email to `Atur.identify`:
 
 ```js
+const email = user.email.toLowerCase();
 const signature = crypto
   .createHmac("sha256", process.env.ATUR_IDENTIFY_SECRET)
-  .update(String(user.id))
+  .update(`${user.id}:${email}`)
   .digest("hex");
 ```
 
-Without a secret on the board, the email is accepted as typed but never marked verified.
-Rotating the secret invalidates old signatures immediately; removing it turns enforcement off.
+Without a secret on the board, or with a missing/invalid signature, the email is stored as typed but
+marked unverified (see Portal). Rotating the secret invalidates old signatures immediately;
+removing it makes every email unverified.
 
 ## Submit from anywhere (native app, scripts)
 
@@ -110,10 +120,12 @@ POST /api/feedback/<token>/items            application/json         →  201 { 
 
 Item body: `{ title (3-120), description?, email?, name?, kind?: "idea"|"bug"|"question",
 source?: "portal"|"widget"|"native"|"api", context?: {…}, attachment_ids?: string[] (≤5),
-external_user?: { id, email?, name?, signature? } }`. `kind` `bug`/`question` create a support
-ticket (visible under Support for that email); `idea` stays on the board. Unclaimed uploads older than
-24 h are deleted by the daily cron (and opportunistically on upload). Public endpoints are rate
-limited; errors return JSON with `message`.
+external_user?: { id, email?, name?, signature? } }`. `kind` `bug`/`question` create an issue for the
+team; with a verified identity it is also a support ticket under Support for that email, otherwise it
+is flagged unverified (no customer/ticket link). `idea` stays on the board. Unclaimed uploads are
+deleted after 2 h (hourly cron, and opportunistically on upload). A board holds at most 50 files /
+200 MB of unclaimed uploads (429 beyond that). Public endpoints are rate limited per IP and per
+board; errors return JSON with `message`.
 
 The Atur mobile app files its in-app reports to Atur's own board this way
 (`source: "native"`).

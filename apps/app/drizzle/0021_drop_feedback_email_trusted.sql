@@ -1,0 +1,1 @@
+ALTER TABLE `feedback_meta` DROP COLUMN `email_trusted`;

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import type { DbClient } from "../db/index";
 import type { Env } from "../lib/env";
@@ -7,7 +7,14 @@ import * as assetsService from "./assets";
 import { nowISO } from "../lib/pagination";
 
 export const FEEDBACK_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
-export const UNCLAIMED_TTL_MS = 24 * 60 * 60 * 1000;
+// Unclaimed uploads are only needed for the minutes between picking a file and
+// pressing submit.
+export const UNCLAIMED_TTL_MS = 2 * 60 * 60 * 1000;
+// Per-board ceiling on uploads nobody has attached to a submission yet, so one
+// public token cannot park unbounded R2 storage no matter how many IPs it uses.
+export const BOARD_UNCLAIMED_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const BOARD_UNCLAIMED_MAX_FILES = 50;
+export const BOARD_UNCLAIMED_MAX_BYTES = 200 * 1024 * 1024;
 
 const ALLOWED_MIME = new Set([
   "image/png",
@@ -79,6 +86,34 @@ export async function uploadAttachment(
     throw new HTTPException(415, { message: "File content does not match its type." });
   }
 
+  // Sweep expired uploads first so they don't count against the board's cap.
+  await gcUnclaimedAttachments(db, env, 10);
+  const [pending] = await db
+    .select({
+      files: sql<number>`count(*)`,
+      bytes: sql<number>`coalesce(sum(${schema.fileAssets.size}), 0)`,
+    })
+    .from(schema.feedbackAttachments)
+    .leftJoin(schema.fileAssets, eq(schema.fileAssets.id, schema.feedbackAttachments.assetId))
+    .where(
+      and(
+        eq(schema.feedbackAttachments.boardId, board.id),
+        isNull(schema.feedbackAttachments.issueId),
+        gt(
+          schema.feedbackAttachments.createdAt,
+          new Date(Date.now() - BOARD_UNCLAIMED_WINDOW_MS).toISOString(),
+        ),
+      ),
+    );
+  if (
+    Number(pending?.files ?? 0) >= BOARD_UNCLAIMED_MAX_FILES ||
+    Number(pending?.bytes ?? 0) + bytes.byteLength > BOARD_UNCLAIMED_MAX_BYTES
+  ) {
+    throw new HTTPException(429, {
+      message: "Too many pending uploads for this board. Submit your report or try again later.",
+    });
+  }
+
   const filename = cleanFilename(file.name);
   const stored = await assetsService.uploadBytes(db, env, botUserId, {
     bytes,
@@ -93,9 +128,6 @@ export async function uploadAttachment(
     filename,
     createdAt: nowISO(),
   });
-
-  // Opportunistic cleanup keeps abandoned uploads from piling up between cron runs.
-  await gcUnclaimedAttachments(db, env, 5);
 
   return { id: stored.id, url: `${origin}${stored.url}`, filename, size: stored.size, mime };
 }
@@ -149,7 +181,7 @@ export async function claimAttachments(db: DbClient, issueId: string, ids: strin
     );
 }
 
-// Removes uploads nobody claimed within 24h (R2 object, asset row, attachment row).
+// Removes uploads nobody claimed within the TTL (R2 object, asset row, attachment row).
 export async function gcUnclaimedAttachments(
   db: DbClient,
   env: Env,
@@ -184,7 +216,7 @@ export async function gcUnclaimedAttachments(
 // feedback attachment (the caller falls back to the generic owner rules).
 //  - workspace members: any attachment of their workspace
 //  - portal customers: only attachments on an issue they filed — a support
-//    ticket tied to them, or an idea/report authored with their (trusted) email
+//    ticket tied to them, or an idea/report authored with their verified email
 export async function authorizeFeedbackAsset(
   db: DbClient,
   assetId: string,
@@ -217,7 +249,7 @@ export async function authorizeFeedbackAsset(
           email
             ? and(
                 sql`lower(${schema.feedbackMeta.authorEmail}) = ${email}`,
-                eq(schema.feedbackMeta.emailTrusted, 1),
+                eq(schema.feedbackMeta.identityVerified, 1),
               )
             : undefined,
         ),

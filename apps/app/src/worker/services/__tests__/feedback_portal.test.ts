@@ -6,7 +6,7 @@ import type { DbClient } from "../../db/index";
 import type { Env } from "../../lib/env";
 import { errorMiddleware } from "../../middleware/error";
 import { hmacSha256Hex } from "../../lib/identify";
-import { redactUrl } from "../../lib/feedbackContext";
+import { redactUrl, renderContextHtml } from "../../lib/feedbackContext";
 import { createTestDb, sqliteSupported, type TestDb } from "../../test/sqliteD1";
 import { feedbackRoutes } from "../../routes/feedback";
 import { ingestRoutes } from "../../routes/ingest";
@@ -23,6 +23,10 @@ const { File: NodeFile } = (await import(/* @vite-ignore */ nodeBuffer)) as { Fi
 const NOW = "2026-10-18T00:00:00.000Z";
 const SECRET = "ids_test_secret";
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+
+// The documented signing format: hex(HMAC-SHA256(secret, `${id}:${email.toLowerCase()}`)).
+const sign = (id: string, email: string, secret = SECRET) =>
+  hmacSha256Hex(secret, `${id}:${email.toLowerCase()}`);
 
 function fakeR2() {
   const store = new Map<string, Uint8Array>();
@@ -56,6 +60,18 @@ describe("context redaction", () => {
     expect(redactUrl("https://u:p@x.test/api?api_key=1&x=2", { keepQuery: false })).toBe(
       "https://x.test/api",
     );
+  });
+});
+
+describe("context html", () => {
+  it("escapes extra keys and values, so attacker markup never reaches description_html", () => {
+    const html = renderContextHtml({
+      extra: { "<img src=x onerror=alert(1)>": '"><script>alert(2)</script>' },
+    });
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("<th>&lt;img src=x onerror=alert(1)&gt;</th>");
+    expect(html).toContain("<td>&quot;&gt;&lt;script&gt;alert(2)&lt;/script&gt;</td>");
   });
 });
 
@@ -206,7 +222,7 @@ describe.skipIf(!sqliteSupported)("feedback portal, attachments and ingest", () 
           id: "user-7",
           email: "Ana@Example.com",
           name: "Ana",
-          signature: await hmacSha256Hex(SECRET, "user-7"),
+          signature: await sign("user-7", "Ana@Example.com"),
         },
         context: {
           url: "https://shop.test/cart?session=zzz&step=2",
@@ -227,7 +243,6 @@ describe.skipIf(!sqliteSupported)("feedback portal, attachments and ingest", () 
         source: "widget",
         authorEmail: "ana@example.com",
         identityVerified: 1,
-        emailTrusted: 1,
         externalUserId: "user-7",
       });
       const ctx = JSON.parse(m.contextJson!);
@@ -238,11 +253,97 @@ describe.skipIf(!sqliteSupported)("feedback portal, attachments and ingest", () 
       expect(issue.externalSource).toBe("portal");
       expect(issue.descriptionHtml).toContain("<details><summary>Context</summary>");
       expect(issue.descriptionHtml).toContain("verified identity");
+      expect(issue.descriptionHtml).not.toContain("without verification");
       const [ticket] = await db
         .select()
         .from(schema.supportTickets)
         .where(eq(schema.supportTickets.issueId, out.id));
       expect(ticket).toBeTruthy();
+      expect(issue.createdById).toBeTruthy();
+    });
+
+    it("does not trust a signature moved to a different email (swapped-email forgery)", async () => {
+      // Mallory is a signed-in user of the host app: he holds a VALID signature for
+      // his own id+email and tries to pair it with the victim's address.
+      const forged = [
+        {
+          id: "user-7",
+          email: "victim@example.com",
+          signature: await sign("user-7", "mallory@x.test"),
+        },
+        // Old scheme: signature over the id alone.
+        {
+          id: "user-7",
+          email: "victim@example.com",
+          signature: await hmacSha256Hex(SECRET, "user-7"),
+        },
+      ];
+      for (const external_user of forged) {
+        const res = await post(`/api/feedback/${TOKEN}/items`, {
+          title: "Forged report",
+          kind: "bug",
+          external_user,
+        });
+        expect(res.status).toBe(201);
+        const out = (await res.json()) as { id: string; url: string };
+        expect(await meta(out.id)).toMatchObject({
+          authorEmail: "victim@example.com",
+          identityVerified: 0,
+        });
+        expect(out.url).not.toContain("/tickets/");
+        expect(
+          await db
+            .select()
+            .from(schema.supportTickets)
+            .where(eq(schema.supportTickets.issueId, out.id)),
+        ).toHaveLength(0);
+        const [issue] = await db.select().from(schema.issues).where(eq(schema.issues.id, out.id));
+        expect(issue.createdById).toBeNull();
+        expect(issue.descriptionHtml).toContain("submitted without verification");
+      }
+      expect(await db.select().from(schema.customers)).toHaveLength(0);
+
+      // The genuine signature for the genuine pair still verifies.
+      const ok = await post(`/api/feedback/${TOKEN}/items`, {
+        title: "Real report",
+        kind: "bug",
+        external_user: {
+          id: "user-7",
+          email: "mallory@x.test",
+          signature: await sign("user-7", "mallory@x.test"),
+        },
+      });
+      expect(await meta(((await ok.json()) as { id: string }).id)).toMatchObject({
+        identityVerified: 1,
+      });
+    });
+
+    it("a typed data.email is never promoted to trusted, even next to a valid signature", async () => {
+      const res = await post(`/api/feedback/${TOKEN}/items`, {
+        title: "Typed email only",
+        kind: "question",
+        email: "victim@example.com",
+        external_user: { id: "user-7", signature: await sign("user-7", "victim@example.com") },
+      });
+      const out = (await res.json()) as { id: string };
+      expect(await meta(out.id)).toMatchObject({
+        authorEmail: "victim@example.com",
+        identityVerified: 0,
+      });
+      expect(await db.select().from(schema.customers)).toHaveLength(0);
+      expect(await db.select().from(schema.supportTickets)).toHaveLength(0);
+    });
+
+    it("escapes context.extra keys in the stored description", async () => {
+      const res = await post(`/api/feedback/${TOKEN}/items`, {
+        title: "Hostile context key",
+        kind: "bug",
+        context: { extra: { "<img src=x onerror=alert(1)>": "v" } },
+      });
+      const out = (await res.json()) as { id: string };
+      const [issue] = await db.select().from(schema.issues).where(eq(schema.issues.id, out.id));
+      expect(issue.descriptionHtml).not.toContain("<img");
+      expect(issue.descriptionHtml).toContain("&lt;img src=x onerror=alert(1)&gt;");
     });
 
     it("keeps an unsigned email on boards with an identify secret, but flags it and skips the portal link", async () => {
@@ -259,7 +360,6 @@ describe.skipIf(!sqliteSupported)("feedback portal, attachments and ingest", () 
         expect(await meta(out.id)).toMatchObject({
           authorEmail: "mallory@example.com",
           identityVerified: 0,
-          emailTrusted: 0,
         });
         const tickets = await db
           .select()
@@ -267,24 +367,57 @@ describe.skipIf(!sqliteSupported)("feedback portal, attachments and ingest", () 
           .where(eq(schema.supportTickets.issueId, out.id));
         expect(tickets).toHaveLength(0);
         const [issue] = await db.select().from(schema.issues).where(eq(schema.issues.id, out.id));
-        expect(issue.descriptionHtml).toContain("unverified identity");
+        expect(issue.descriptionHtml).toContain("submitted without verification");
       }
     });
 
-    it("accepts the typed email on boards without an identify secret", async () => {
+    it("boards without an identify secret: a typed email creates no customer, ticket link or CRM record", async () => {
       await seedWorkspace("open", false, null);
       const res = await post(`/api/feedback/pk_fb_open/items`, {
         title: "Open board bug",
         kind: "bug",
         email: "bo@example.com",
+        external_user: {
+          id: "u1",
+          email: "bo@example.com",
+          signature: await sign("u1", "bo@example.com"),
+        },
       });
-      const out = (await res.json()) as { id: string };
-      expect(await meta(out.id)).toMatchObject({ emailTrusted: 1, identityVerified: 0 });
-      const rows = await db
-        .select()
-        .from(schema.supportTickets)
-        .where(eq(schema.supportTickets.issueId, out.id));
-      expect(rows).toHaveLength(1);
+      expect(res.status).toBe(201);
+      const out = (await res.json()) as { id: string; url: string };
+      expect(out.url).not.toContain("/tickets/");
+      expect(await meta(out.id)).toMatchObject({
+        authorEmail: "bo@example.com",
+        identityVerified: 0,
+      });
+      expect(await db.select().from(schema.customers)).toHaveLength(0);
+      expect(await db.select().from(schema.supportTickets)).toHaveLength(0);
+      expect(await db.select().from(schema.crmActivities)).toHaveLength(0);
+      const [issue] = await db.select().from(schema.issues).where(eq(schema.issues.id, out.id));
+      expect(issue.createdById).toBeNull();
+      expect(
+        await db
+          .select()
+          .from(schema.issueActivities)
+          .where(eq(schema.issueActivities.issueId, out.id)),
+      ).toHaveLength(0);
+      expect(issue.descriptionHtml).toContain("submitted without verification");
+
+      // Staff still got the issue. The victim's own OTP login (email proven) is the
+      // first moment it surfaces — read-only, labelled unverified, never a ticket.
+      const c = await feedback.findOrCreateCustomer(db, "ws-open", "BO@example.com", null);
+      const session = {
+        id: c.id,
+        workspaceId: c.workspaceId,
+        userId: c.userId!,
+        email: c.email ?? "",
+        displayName: c.name,
+      };
+      const mine = await portal.getMine(db, session);
+      expect(mine.tickets).toHaveLength(0);
+      expect(mine.ideas).toHaveLength(0);
+      expect(mine.unverified.map((i) => i.id)).toEqual([out.id]);
+      expect(mine.unverified[0].kind).toBe("bug");
     });
 
     it("ideas stay on the public board and never become tickets", async () => {
@@ -348,7 +481,7 @@ describe.skipIf(!sqliteSupported)("feedback portal, attachments and ingest", () 
       expect(foreign.status).toBe(400);
     });
 
-    it("garbage-collects unclaimed uploads older than 24h and keeps claimed/fresh ones", async () => {
+    it("garbage-collects unclaimed uploads older than the 2h TTL and keeps claimed/fresh ones", async () => {
       const stale = await upload("old.png");
       const fresh = await upload("new.png");
       const claimed = await upload("kept.png");
@@ -356,7 +489,7 @@ describe.skipIf(!sqliteSupported)("feedback portal, attachments and ingest", () 
         title: "Claims one",
         attachment_ids: [claimed.id],
       });
-      const old = new Date(Date.now() - 25 * 3600_000).toISOString();
+      const old = new Date(Date.now() - 3 * 3600_000).toISOString();
       for (const id of [stale.id, claimed.id]) {
         await db
           .update(schema.feedbackAttachments)
@@ -371,6 +504,76 @@ describe.skipIf(!sqliteSupported)("feedback portal, attachments and ingest", () 
       expect(assets.map((a) => a.id)).not.toContain(stale.id);
     });
 
+    it("caps unclaimed uploads per board by count and bytes with 429, and frees room on claim", async () => {
+      const ids: string[] = [];
+      for (let i = 0; i < attachments.BOARD_UNCLAIMED_MAX_FILES; i++) {
+        ids.push((await upload(`f${i}.png`)).id);
+      }
+      await expect(upload("one-too-many.png")).rejects.toMatchObject({ status: 429 });
+
+      // Another board is unaffected.
+      await seedWorkspace("other", false, null);
+      const otherBoard = { id: "board-other", workspaceId: "ws-other" };
+      const file = new NodeFile([PNG], "x.png", { type: "image/png" }) as unknown as File;
+      await expect(
+        attachments.uploadAttachment(
+          db,
+          env,
+          otherBoard,
+          file,
+          "https://app.test",
+          feedback.FEEDBACK_BOT_USER_ID,
+        ),
+      ).resolves.toMatchObject({ mime: "image/png" });
+
+      // Claiming uploads frees capacity.
+      const res = await post(`/api/feedback/${TOKEN}/items`, {
+        title: "Claims five",
+        attachment_ids: ids.slice(0, 5),
+      });
+      expect(res.status).toBe(201);
+      await expect(upload("fits-again.png")).resolves.toMatchObject({ mime: "image/png" });
+    });
+
+    it("caps unclaimed upload bytes per board with 429", async () => {
+      const big = await upload("big.png");
+      await db
+        .update(schema.fileAssets)
+        .set({ size: attachments.BOARD_UNCLAIMED_MAX_BYTES - 1 })
+        .where(eq(schema.fileAssets.id, big.id));
+      await expect(upload("over.png")).rejects.toMatchObject({ status: 429 });
+    });
+
+    it("rate-limits uploads per board as well as per IP", async () => {
+      const kv = new Map<string, string>();
+      const rlEnv = {
+        ...env,
+        RATE_LIMIT: {
+          get: async (k: string) => kv.get(k) ?? null,
+          put: async (k: string, v: string) => void kv.set(k, v),
+        },
+      } as unknown as Env;
+      const send = (ip: string) =>
+        app().fetch(
+          new Request(`http://localhost/api/feedback/${TOKEN}/attachments`, {
+            method: "POST",
+            headers: { "cf-connecting-ip": ip },
+            body: new FormData(),
+          }),
+          rlEnv,
+        );
+      // Same IP: 15 per minute.
+      for (let i = 0; i < 15; i++) expect((await send("10.1.1.1")).status).toBe(400);
+      expect((await send("10.1.1.1")).status).toBe(429);
+      // Many IPs: the board-wide counter trips at 60 per minute (15 already counted).
+      let allowed = 15;
+      for (let i = 0; i < 100; i++) {
+        if ((await send(`10.2.${i}.1`)).status === 429) break;
+        allowed++;
+      }
+      expect(allowed).toBe(60);
+    });
+
     it("authorizes reads: members of the workspace, and only the customer who filed the issue", async () => {
       const mine = await upload();
       const other = await upload();
@@ -381,7 +584,7 @@ describe.skipIf(!sqliteSupported)("feedback portal, attachments and ingest", () 
           title: `Report ${email}`,
           kind: "bug",
           attachment_ids: [attId],
-          external_user: { id: email, email, signature: await hmacSha256Hex(SECRET, email) },
+          external_user: { id: email, email, signature: await sign(email, email) },
         });
         return (await r.json()) as { id: string };
       };
@@ -520,7 +723,6 @@ describe.skipIf(!sqliteSupported)("feedback portal, attachments and ingest", () 
     }
 
     it("shows a person their own ideas and tickets by verified email, and nobody else's", async () => {
-      const sig = async (id: string) => hmacSha256Hex(SECRET, id);
       const file = async (title: string, kind: string, email: string, signed: boolean) => {
         const res = await post(`/api/feedback/${TOKEN}/items`, {
           title,
@@ -528,7 +730,7 @@ describe.skipIf(!sqliteSupported)("feedback portal, attachments and ingest", () 
           external_user: {
             id: email,
             email,
-            ...(signed ? { signature: await sig(email) } : {}),
+            ...(signed ? { signature: await sign(email, email) } : {}),
           },
         });
         return (await res.json()) as { id: string };
@@ -544,6 +746,11 @@ describe.skipIf(!sqliteSupported)("feedback portal, attachments and ingest", () 
       expect(mine.ideas.map((i) => i.id)).toEqual([idea.id]);
       expect(mine.tickets.map((tk) => tk.issueId)).toEqual([ticket.id]);
       expect(mine.ideas[0].board_token).toBe(TOKEN);
+      // Reports typed in with her address show up only now, marked unverified.
+      expect(mine.unverified.map((i) => i.name).sort()).toEqual([
+        "Spoofed as Ana",
+        "Spoofed bug as Ana",
+      ]);
 
       const ben = await seedCustomerSession("ben@example.com");
       const benMine = await portal.getMine(db, ben);
@@ -558,7 +765,7 @@ describe.skipIf(!sqliteSupported)("feedback portal, attachments and ingest", () 
         external_user: {
           id: "u9",
           email: "ana@example.com",
-          signature: await hmacSha256Hex(SECRET, "u9"),
+          signature: await sign("u9", "ana@example.com"),
         },
       });
       const out = (await res.json()) as { sequence_id: number };

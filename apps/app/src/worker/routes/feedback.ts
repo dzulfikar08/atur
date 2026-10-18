@@ -56,7 +56,9 @@ feedbackRoutes
   .post("/attachments", async (c) => {
     const db = getDb(c.env.DB);
     const token = c.req.param("token")!;
-    const ok = await rateLimit(c.env, `fb:${token}:${clientIp(c)}:upload`, 15, 60);
+    const ok =
+      (await rateLimit(c.env, `fb:${token}:${clientIp(c)}:upload`, 15, 60)) &&
+      (await rateLimit(c.env, `fb:${token}:upload`, 60, 60));
     if (!ok) return c.json({ message: "Too many uploads. Try again shortly." }, 429);
     const board = await feedback.findBoardForUpload(db, token);
     const form = await c.req.formData().catch(() => null);

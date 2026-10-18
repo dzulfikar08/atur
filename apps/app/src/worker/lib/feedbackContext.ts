@@ -88,7 +88,7 @@ export function escapeHtml(s: string): string {
 }
 
 function row(label: string, value: string | undefined): string {
-  return value ? `<tr><th>${label}</th><td>${escapeHtml(value)}</td></tr>` : "";
+  return value ? `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>` : "";
 }
 
 // Collapsible block for the issue description (<details> is allowed by the

@@ -270,7 +270,6 @@ export async function insertFeedbackMeta(
     contextJson?: string | null;
     externalUserId?: string | null;
     identityVerified?: boolean;
-    emailTrusted?: boolean;
   },
 ) {
   await db.insert(feedbackMeta).values({
@@ -282,7 +281,6 @@ export async function insertFeedbackMeta(
     contextJson: data.contextJson ?? null,
     externalUserId: data.externalUserId ?? null,
     identityVerified: data.identityVerified ? 1 : 0,
-    emailTrusted: data.emailTrusted === false ? 0 : 1,
     createdAt: nowISO(),
   });
 }

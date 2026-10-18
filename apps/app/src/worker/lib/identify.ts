@@ -1,6 +1,8 @@
-// Atur.identify() signatures: hex(HMAC-SHA256(secret, id)). The host app's
-// server signs the user id with the board's identify secret; the widget sends
-// the result so the email attached to the report can be trusted.
+// Atur.identify() signatures: hex(HMAC-SHA256(secret, `${id}:${email.toLowerCase()}`)).
+// The host app's server signs the user id together with the user's email using
+// the board's identify secret; the widget sends the result so that exact email
+// can be trusted. Binding the email stops a signed-in user of the host app from
+// pairing their own valid signature with somebody else's address.
 
 const encoder = new TextEncoder();
 
@@ -28,13 +30,18 @@ function safeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+export function identityMessage(id: string, email: string): string {
+  return `${id}:${email.trim().toLowerCase()}`;
+}
+
 export async function verifyIdentitySignature(
   secret: string,
   id: string,
+  email: string,
   signature: string | undefined,
 ): Promise<boolean> {
   if (!signature) return false;
-  const expected = await hmacSha256Hex(secret, id);
+  const expected = await hmacSha256Hex(secret, identityMessage(id, email));
   return safeEqual(expected, signature.trim().toLowerCase());
 }
 

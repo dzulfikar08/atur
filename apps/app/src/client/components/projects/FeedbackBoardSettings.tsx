@@ -345,19 +345,23 @@ export default function FeedbackBoardSettings({
 
       <SecretCard
         title="Identify users"
-        description="Tell Atur who is reporting so you see their name and email — and so they can follow their tickets in the portal. Without a secret, any typed email is accepted unverified."
+        description="Tell Atur who is reporting so you see their name and email — and so they can follow their tickets in the portal. Only an email signed with this secret is trusted; without a secret, or with a missing/invalid signature, a typed email is stored as “submitted without verification” and never linked to a customer or ticket."
         secret={form.identify_secret}
         secretLabel="Identify secret"
         pending={rotateIdentify.isPending || revokeIdentify.isPending}
         onRotate={() => rotateIdentify.mutate()}
         onRevoke={() => revokeIdentify.mutate()}
         confirmRotate="Rotate the identify secret? Signatures made with the old secret stop verifying immediately."
-        confirmRevoke="Remove the identify secret? Emails will be accepted unverified again."
-        usage={`// Server side: sign the user id with the identify secret
-const signature = crypto.createHmac("sha256", IDENTIFY_SECRET).update(user.id).digest("hex");
+        confirmRevoke="Remove the identify secret? Every email will be treated as submitted without verification."
+        usage={`// Server side: sign "<user id>:<lowercased email>" with the identify secret
+const email = user.email.toLowerCase();
+const signature = crypto
+  .createHmac("sha256", IDENTIFY_SECRET)
+  .update(\`\${user.id}:\${email}\`)
+  .digest("hex");
 
-// Browser, after the widget script
-Atur.identify({ id: user.id, email: user.email, name: user.name, signature });`}
+// Browser, after the widget script (send the same lowercased email)
+Atur.identify({ id: user.id, email, name: user.name, signature });`}
       />
 
       <SecretCard
