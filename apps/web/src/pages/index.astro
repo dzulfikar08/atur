@@ -533,121 +533,56 @@ const paneLines = [
       </section>
     </main>
 
-    <figure class="lp-wrap lp-scene">
-      <svg viewBox="0 0 1100 400" role="img" aria-labelledby="scene-title">
-        <title id="scene-title">A person in sunglasses lounges on a beanbag with a coffee and cracks a pecut. Three robots hurry past carrying issue cards over their heads toward a Need Review tray at the person's feet.</title>
-        <defs>
-          <clipPath id="sc-stage"><rect width="1100" height="400" rx="40" /></clipPath>
-        </defs>
-        <g clip-path="url(#sc-stage)">
-          <rect class="sc-stage" width="1100" height="400" />
-          <circle class="sc-sun" cx="230" cy="150" r="130" />
-          <path class="sc-cloud" d="M820 70 a22 22 0 0 1 40 -10 a26 26 0 0 1 48 12 a18 18 0 0 1 -6 34 h-76 a18 18 0 0 1 -6 -36 z" />
-          <path class="sc-cloud" d="M520 50 a16 16 0 0 1 30 -6 a18 18 0 0 1 34 10 a12 12 0 0 1 -4 24 h-56 a12 12 0 0 1 -4 -28 z" />
-          <path class="sc-hill" d="M0 320 C 180 280, 360 300, 560 318 S 920 290, 1100 306 V400 H0 Z" />
-        </g>
-
-        <!-- Plant beside the beanbag -->
-        <g class="sc-line">
-          <path class="sc-pot" d="M70 330 h44 l-6 40 h-32 z" />
-          <path class="sc-leaf" d="M92 330 C 70 300, 72 278, 84 262 C 96 284, 98 306, 92 330 Z" />
-          <path class="sc-leaf" d="M94 330 C 110 304, 126 296, 140 292 C 134 312, 116 326, 94 330 Z" />
-        </g>
-
-        <!-- The human, lounging -->
-        <g class="sc-line">
-          <path class="sc-bag" d="M120 360 C 100 300, 150 236, 230 240 C 320 244, 350 316, 330 362 C 300 380, 150 382, 120 360 Z" />
-          <path class="sc-pants" d="M250 300 C 300 296, 344 300, 372 318 L 366 338 C 340 326, 300 324, 262 330 Z" />
-          <path class="sc-pants" d="M252 316 C 300 320, 330 334, 350 356 L 334 368 C 314 350, 290 342, 256 340 Z" />
-          <path class="sc-shoe" d="M366 316 c 14 -4 26 2 28 12 l -30 8 z" />
-          <path class="sc-shoe" d="M346 352 c 14 -2 24 6 24 16 l -32 2 z" />
-          <path class="sc-shirt" d="M196 236 C 214 214, 262 214, 276 238 L 286 310 C 260 324, 214 324, 200 312 Z" />
-          <circle class="sc-skin" cx="232" cy="192" r="30" />
-          <path class="sc-hair" d="M202 188 C 200 158, 238 148, 262 168 C 256 172, 236 172, 222 166 C 216 176, 210 184, 202 188 Z" />
-          <path class="sc-shades" d="M216 190 h18 v8 a8 8 0 0 1 -18 0 z M240 190 h18 v8 a8 8 0 0 1 -18 0 z M234 192 h6" />
-          <path class="sc-mouth" d="M230 210 q8 6 16 0" />
-          <path class="sc-skin" d="M206 262 C 186 278, 176 290, 172 300 L 186 306 C 194 294, 206 284, 220 276 Z" />
-          <path class="sc-mug" d="M160 290 h28 v30 a6 6 0 0 1 -6 6 h-16 a6 6 0 0 1 -6 -6 z M188 298 q12 0 12 10 q0 10 -12 10" />
-          <path class="sc-steam" d="M168 280 q-6 -10 0 -20 M180 280 q-6 -10 0 -20" />
-          <path class="sc-skin" d="M268 250 C 290 236, 306 214, 312 190 L 298 184 C 290 206, 276 224, 258 236 Z" />
-          <path class="sc-handle" d="M300 196 L 322 136" />
-        </g>
-        <path class="sc-whip" d="M322 136 C 380 40, 500 30, 560 96 S 640 170, 690 118" />
-        <path class="sc-whip-thin" d="M690 118 C 700 108, 712 104, 724 108" />
-
-        <!-- The crack, as a sticker -->
-        <g transform="translate(748 96) rotate(-10)">
-          <path class="sc-burst" d="M0 -46 L12 -18 L42 -30 L26 -4 L54 10 L22 16 L30 46 L4 26 L-18 50 L-14 18 L-48 18 L-20 -2 L-40 -30 L-8 -16 Z" />
-          <text class="sc-burst-text" x="2" y="10">CTAK!</text>
-        </g>
-
-        <!-- Need Review tray at the human's feet -->
-        <g transform="translate(410 300)">
-          <rect class="sc-card-shape" x="14" y="-30" width="96" height="30" rx="8" transform="rotate(-6 62 -15)" />
-          <rect class="sc-card-shape" x="10" y="-18" width="96" height="30" rx="8" transform="rotate(4 58 -3)" />
-          <rect class="sc-tray" x="0" y="0" width="124" height="54" rx="14" />
-          <rect class="sc-chip" x="14" y="16" width="96" height="22" rx="11" />
-          <text class="sc-chip-text" x="62" y="31">Need Review</text>
-        </g>
-
-        <!-- Three robots hurrying in with issues held overhead -->
-        <g class="lp-tone-started" transform="translate(640 196)">
-          <path class="sc-speed" d="M100 70 h36 M104 92 h48 M100 114 h28" />
-          <g class="sc-line">
-            <rect class="sc-card-shape" x="-8" y="-40" width="96" height="40" rx="10" />
-            <circle class="sc-card-dot" cx="10" cy="-20" r="5" /><text class="sc-card-key" x="22" y="-16">ATUR-41</text>
-            <path d="M14 0 L20 30 M66 0 L60 30" />
-            <rect class="sc-bot-head" x="12" y="30" width="56" height="44" rx="16" />
-            <rect class="sc-visor" x="20" y="40" width="40" height="22" rx="10" />
-            <path class="sc-eyes" d="M28 54 q4 -6 8 0 M44 54 q4 -6 8 0" />
-            <rect class="sc-bot-body" x="16" y="80" width="48" height="40" rx="14" />
-            <path d="M28 120 L18 150 M52 120 L66 148" />
-          </g>
-        </g>
-        <g class="lp-tone-done" transform="translate(800 196)">
-          <path class="sc-speed" d="M100 70 h40 M104 92 h56" />
-          <g class="sc-line">
-            <rect class="sc-card-shape" x="-8" y="-44" width="96" height="40" rx="10" transform="rotate(-4 40 -24)" />
-            <circle class="sc-card-dot" cx="10" cy="-24" r="5" /><text class="sc-card-key" x="22" y="-20">ATUR-42</text>
-            <path d="M14 0 L20 30 M66 0 L60 30" />
-            <rect class="sc-bot-head" x="12" y="30" width="56" height="44" rx="16" />
-            <rect class="sc-visor" x="20" y="40" width="40" height="22" rx="10" />
-            <path class="sc-eyes" d="M28 54 q4 -6 8 0 M44 54 q4 -6 8 0" />
-            <rect class="sc-bot-body" x="16" y="80" width="48" height="40" rx="14" />
-            <path d="M26 120 L34 150 M54 120 L44 150" />
-          </g>
-        </g>
-        <g class="lp-tone-needs" transform="translate(960 196)">
-          <g class="sc-line">
-            <rect class="sc-card-shape" x="-8" y="-40" width="96" height="40" rx="10" />
-            <circle class="sc-card-dot" cx="10" cy="-20" r="5" /><text class="sc-card-key" x="22" y="-16">ATUR-43</text>
-            <path d="M14 0 L20 30 M66 0 L60 30" />
-            <rect class="sc-bot-head" x="12" y="30" width="56" height="44" rx="16" />
-            <rect class="sc-visor" x="20" y="40" width="40" height="22" rx="10" />
-            <circle class="sc-eye-dot" cx="32" cy="51" r="3" /><circle class="sc-eye-dot" cx="48" cy="51" r="3" />
-            <rect class="sc-bot-body" x="16" y="80" width="48" height="40" rx="14" />
-            <path d="M28 120 L18 150 M52 120 L66 148" />
-          </g>
-          <path class="sc-sweat" d="M82 40 q7 12 0 18 q-7 -6 0 -18 Z" />
-          <path class="sc-sweat" d="M90 64 q5 8 0 12 q-5 -4 0 -12 Z" />
-        </g>
-      </svg>
-      <figcaption><span>You hold the pecut. The agents carry the issues. Merging is still your call.</span></figcaption>
-    </figure>
-
-    <footer class="lp-footer">
-      <div class="lp-wrap lp-footer-inner">
-        <a class="lp-brand" href="/"><img src="/logo-128.png" alt="" width="24" height="24" />Atur</a>
-        <nav aria-label="Footer">
-          <a href="/blog">Blog</a>
-          <a href="/privacy">Privacy</a>
-          <a href="/support">Support</a>
-          <a href="#phone">Phone beta</a>
-          <a href={SIGNUP_URL}>Sign in</a>
+    <footer class="lp-foot">
+      <div class="lp-foot-photo" aria-hidden="true"></div>
+      <div class="lp-wrap"><div class="lp-foot-card">
+      <div class="lp-foot-top">
+        <div class="lp-foot-brand">
+          <a class="lp-brand" href="/"><img src="/logo-128.png" alt="" width="28" height="28" />Atur</a>
+          <p class="lp-foot-tag">You hold the pecut.<br />Agents carry the issues.</p>
+          <p class="lp-foot-blurb">One workspace for projects, customers, docs and time, with AI agents that ship on a branch and stop at Need Review for you.</p>
+          <div class="lp-foot-apps">
+            <a class="lp-btn lp-btn-primary" href="#tester" data-revklik-goal="tester_cta_click" data-revklik-goal-location="footer">
+              <svg class="lp-android" viewBox={ANDROID_VIEWBOX} aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" d={ANDROID_PATH} /></svg>
+              Android testers
+            </a>
+            <a class="lp-btn lp-btn-outline" href={TESTFLIGHT_URL} target="_blank" rel="noopener" data-revklik-goal="testflight_click" data-revklik-goal-location="footer">
+              <svg class="lp-apple" viewBox={APPLE_VIEWBOX} aria-hidden="true" focusable="false"><path fill="currentColor" d={APPLE_PATH} /></svg>
+              iPhone beta
+            </a>
+          </div>
+        </div>
+        <nav class="lp-foot-cols" aria-label="Footer">
+          <div>
+            <p>Product</p>
+            <a href="#loop">How it works</a>
+            <a href="#panes">Panes</a>
+            <a href="#herdr">herdr</a>
+            <a href="#mcp">MCP</a>
+            <a href="#pricing">Pricing</a>
+          </div>
+          <div>
+            <p>Read</p>
+            <a href="/blog">Blog</a>
+            <a href="/blog/why-we-built-atur">Why we built Atur</a>
+            <a href="/blog/how-atur-is-built">How Atur is built</a>
+          </div>
+          <div>
+            <p>Help</p>
+            <a href="/support">Support</a>
+            <a href="/privacy">Privacy</a>
+            <a href={SIGNUP_URL}>Sign in</a>
+          </div>
         </nav>
-        <span>© {new Date().getFullYear()} Atur</span>
       </div>
-      <p class="lp-wrap lp-credit">{ANDROID_CREDIT}</p>
+      <div class="lp-foot-bottom">
+        <span>© {new Date().getFullYear()} Atur. Made with kopi and a pecut in Indonesia.</span>
+        <span class="lp-credit">
+          Photo: Mount Bromo and Semeru at sunrise by Thomas Hirsch, <a href="https://commons.wikimedia.org/wiki/File:Mount_Bromo_at_sunrise,_showing_its_volcanoes_and_Mount_Semeru_(background).jpg" target="_blank" rel="noopener">Wikimedia Commons</a>, <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a>, cropped and toned. {ANDROID_CREDIT}
+        </span>
+      </div>
+      </div></div>
+      <p class="lp-foot-mark" aria-hidden="true">Atur</p>
     </footer>
   </div>
 </BaseLayout>
