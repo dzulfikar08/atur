@@ -1492,11 +1492,12 @@
   }
 }
 
-/* Footer scene: the page's joke, drawn in the same line weight and state
-   tints as everything above it. Static on purpose (MOTION 1). */
+/* Footer scene: the page's joke, drawn as a JoyoRogo-style sticker stage.
+   Filled shapes with one ink outline; robots wear the workflow-state tints
+   of the issues they carry. Static on purpose (MOTION 1). */
 .lp-scene {
   padding-top: 24px;
-  padding-bottom: 8px;
+  padding-bottom: 40px;
   color: var(--lp-fg);
 }
 .lp-scene svg {
@@ -1505,94 +1506,156 @@
   height: auto;
 }
 .lp-scene figcaption {
-  margin-top: 4px;
-  text-align: center;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--lp-muted-fg);
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
 }
-.lp-scene :is(.sc-ink, .sc-bot) path,
-.lp-scene :is(.sc-ink, .sc-bot) line,
-.lp-scene .sc-bot rect,
-.lp-scene .sc-bot circle:not(.sc-eye) {
-  fill: none;
-  stroke: currentColor;
+@media (min-width: 700px) {
+  .lp-scene figcaption {
+    margin-top: -22px;
+  }
+}
+.lp-scene figcaption span {
+  padding: 10px 18px;
+  border-radius: 14px;
+  background: var(--lp-card);
+  border: 2px solid var(--lp-fg);
+  font-size: 0.9375rem;
+  font-weight: 800;
+  text-align: center;
+  transform: rotate(-1.5deg);
+}
+.lp-scene .sc-stage {
+  fill: var(--lp-review-soft);
+}
+.lp-scene .sc-sun {
+  fill: var(--lp-card);
+  opacity: 0.7;
+}
+.lp-scene .sc-cloud {
+  fill: var(--lp-card);
+}
+.lp-scene .sc-hill {
+  fill: var(--lp-done-soft);
+}
+.lp-scene .sc-line,
+.lp-scene .sc-line > * {
+  stroke: var(--lp-fg);
   stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.lp-scene .sc-bot rect,
-.lp-scene .sc-skin {
+.lp-scene .sc-line path:not([class]),
+.lp-scene .sc-mouth,
+.lp-scene .sc-steam {
+  fill: none;
+}
+.lp-scene .sc-steam {
+  opacity: 0.5;
+}
+.lp-scene .sc-pot {
+  fill: var(--lp-review-ink);
+}
+.lp-scene .sc-leaf {
+  fill: var(--lp-done-ink);
+}
+.lp-scene .sc-bag {
+  fill: var(--lp-needs-soft);
+}
+.lp-scene .sc-pants {
+  fill: var(--lp-started-ink);
+}
+.lp-scene .sc-shoe,
+.lp-scene .sc-hair,
+.lp-scene .sc-shades {
+  fill: #1c1c1a;
+}
+.lp-scene .sc-shirt,
+.lp-scene .sc-mug {
   fill: var(--lp-card);
-  stroke: currentColor;
-  stroke-width: 3;
 }
-.lp-scene .sc-eye {
-  fill: currentColor;
+.lp-scene .sc-skin {
+  fill: #e8b48a;
 }
-.lp-scene .sc-ground {
-  stroke: var(--lp-border);
-  stroke-width: 2;
+.lp-scene .sc-line .sc-handle {
+  stroke: #8a5a2b;
+  stroke-width: 8;
+}
+.lp-scene .sc-whip,
+.lp-scene .sc-whip-thin,
+.lp-scene .sc-speed {
+  fill: none;
+  stroke: var(--lp-fg);
+  stroke-linecap: round;
 }
 .lp-scene .sc-whip {
-  fill: none;
-  stroke: var(--lp-review-ink);
-  stroke-width: 3;
-  stroke-linecap: round;
+  stroke-width: 4;
 }
-.lp-scene .sc-crack path {
-  stroke: var(--lp-review-ink);
-  stroke-width: 3;
-  stroke-linecap: round;
+.lp-scene .sc-whip-thin {
+  stroke-width: 2;
 }
-.lp-scene .sc-crack text {
+.lp-scene .sc-speed {
+  stroke-width: 3;
+  opacity: 0.35;
+}
+.lp-scene .sc-burst {
   fill: var(--lp-review-ink);
-  font-size: 22px;
-  font-weight: 800;
-  font-style: italic;
+  stroke: var(--lp-fg);
+  stroke-width: 3;
+  stroke-linejoin: round;
 }
-.lp-scene .sc-mug {
+.lp-scene .sc-burst-text {
+  fill: var(--lp-review-soft);
+  font-size: 17px;
+  font-weight: 800;
+  text-anchor: middle;
+}
+.lp-scene .sc-tray,
+.lp-scene .sc-card-shape {
+  fill: var(--lp-card);
+  stroke: var(--lp-fg);
+  stroke-width: 3;
+}
+.lp-scene .sc-chip {
   fill: var(--lp-review-soft);
 }
-.lp-scene .sc-steam,
-.lp-scene .sc-sweat {
-  stroke-width: 2;
-  opacity: 0.6;
+.lp-scene .sc-chip-text {
+  fill: var(--lp-review-ink);
+  font-size: 11px;
+  font-weight: 800;
+  text-anchor: middle;
+}
+.lp-scene .sc-line .sc-card-dot {
+  fill: var(--tone-ink);
+  stroke: none;
+}
+.lp-scene .sc-line .sc-card-key {
+  fill: var(--lp-fg);
+  stroke: none;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+.lp-scene .sc-bot-head,
+.lp-scene .sc-bot-body {
+  fill: var(--tone-soft);
+}
+.lp-scene .sc-visor {
+  fill: #1c1c1a;
+}
+.lp-scene .sc-line .sc-eyes {
+  fill: none;
+  stroke: #fafafa;
+}
+.lp-scene .sc-line .sc-eye-dot {
+  fill: #fafafa;
+  stroke: none;
 }
 .lp-scene .sc-sweat {
   fill: var(--lp-started-soft);
   stroke: var(--lp-started-ink);
-}
-.lp-scene .sc-tray {
-  fill: var(--lp-muted);
-}
-.lp-scene .sc-card {
-  stroke: currentColor;
   stroke-width: 2;
-}
-.lp-scene .sc-started {
-  fill: var(--lp-started-soft);
-}
-.lp-scene .sc-done {
-  fill: var(--lp-done-soft);
-}
-.lp-scene .sc-needs {
-  fill: var(--lp-needs-soft);
-}
-.lp-scene .sc-review {
-  fill: var(--lp-review-soft);
-}
-.lp-scene :is(.sc-key, .sc-label) {
-  fill: currentColor;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 10px;
-  font-weight: 700;
-  text-anchor: middle;
-}
-.lp-scene .sc-label {
-  font-family: "Manrope", system-ui, sans-serif;
-  font-size: 10px;
-  fill: var(--lp-review-ink);
 }
 
 /* Footer. */
