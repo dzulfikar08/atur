@@ -65,17 +65,6 @@
   }
 }
 
-/* The body belongs to global.css (dark, for the blog); paint it to match so
-   overscroll and the area under short viewports never flash the old colour. */
-body:has(.lp) {
-  background: #f7f6f2;
-}
-@media (prefers-color-scheme: dark) {
-  body:has(.lp) {
-    background: #0f0f0e;
-  }
-}
-
 /* Resets use :where() so every component class below wins without !important. */
 :where(.lp) *,
 :where(.lp) *::before,

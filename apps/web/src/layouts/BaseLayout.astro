@@ -2,7 +2,7 @@
 import "../styles/global.css";
 
 // Base layout for the Atur marketing site (diatur.com). Provides the SEO head,
-// site header (Sign In / Open App → the app origin), and footer.
+// the site header and footer for content pages (the landing draws its own).
 const APP_URL = "https://app.diatur.com";
 // Revklik site "Atur" (diatur.com). Cookieless; klikapa.js skips localhost.
 const REVKLIK_SITE_ID = "954201cb-3d15-47ae-857b-6e32c79e1f4c";
@@ -54,7 +54,7 @@ const {
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <script is:inline defer data-site-id={REVKLIK_SITE_ID} src="https://app.revklik.com/klikapa.js"
@@ -69,11 +69,13 @@ const {
             <img src="/logo-128.png" alt="" width="32" height="32" />
             <span>Atur</span>
           </a>
-          <nav class="site-nav">
-            <a href="/#features">Features</a>
+          <nav class="site-nav" aria-label="Site">
+            <a href="/#loop">How it works</a>
+            <a href="/#phone">Phone app</a>
+            <a href="/#pricing">Pricing</a>
             <a href="/blog">Blog</a>
-            <a href={APP_URL + "/auth/login"} data-revklik-goal="signin_click" data-revklik-goal-location="header">Sign In</a>
-            <a class="btn" href={APP_URL} data-revklik-goal="open_app_click" data-revklik-goal-location="header">Open App →</a>
+            <a href={APP_URL + "/auth/login"} data-revklik-goal="signin_click" data-revklik-goal-location="header">Sign in</a>
+            <a class="btn" href={APP_URL + "/auth/login"} data-revklik-goal="signup_click" data-revklik-goal-location="header">Open workspace</a>
           </nav>
         </div>
       </header>
@@ -85,28 +87,14 @@ const {
       <footer class="site-footer">
         <div class="container footer-inner">
           <span>© {year} Atur</span>
-          <span class="footer-links">
+          <nav class="footer-links" aria-label="Footer">
             <a href="/blog">Blog</a>
             <a href="/privacy">Privacy</a>
             <a href="/support">Support</a>
-          </span>
+            <a href="/#phone">Phone beta</a>
+          </nav>
         </div>
       </footer>
     )}
-    <script>
-      // Scroll-triggered reveal for .demo-window blocks
-      const io = new IntersectionObserver(
-        (entries) => {
-          for (const e of entries) {
-            if (e.isIntersecting) {
-              e.target.classList.add("demo-in");
-              io.unobserve(e.target);
-            }
-          }
-        },
-        { threshold: 0.18 },
-      );
-      document.querySelectorAll(".demo-window").forEach((el) => io.observe(el));
-    </script>
   </body>
 </html>
