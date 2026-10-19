@@ -168,12 +168,12 @@ export default function PaneViewPage() {
 
   return (
     <div className="flex flex-col h-full gap-4">
-      {/* Header */}
-      <div className="flex items-center gap-3 border-b pb-4">
+      {/* Header: on a phone the title takes the first line, controls wrap below. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b pb-4">
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate("/panes")}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-48">
           <h1 className="truncate text-lg font-semibold">{pane?.title ?? paneId}</h1>
           <p className="truncate text-xs text-muted-foreground">
             {[pane?.workspace_label, pane?.agent, pane?.cwd].filter(Boolean).join(" · ") || paneId}
