@@ -397,7 +397,7 @@ add_comment(
 | Pages                 | `list_pages`, `get_page`, `create_page`, `update_page`                                                                                   |
 | States/Labels/Members | `list_states`, `list_labels`, `list_members`, `set_assignee`                                                                             |
 | Time                  | `list_time_entries`, `create_time_entry`, `delete_time_entry`, `get_agent_usage`                                                         |
-| CRM Contacts          | `list_contacts`, `create_contact`, `get_contact`, `update_contact`                                                                       |
+| CRM Contacts          | `list_contacts`, `create_contact`, `get_contact`, `update_contact`, `log_activity` (contacts key on email or `threads_username`)         |
 | CRM Deals             | `create_deal`, `list_deals`, `move_deal_stage`, `update_deal`                                                                            |
 | Assets                | `upload_image`                                                                                                                           |
 

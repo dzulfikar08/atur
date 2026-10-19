@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,6 +44,7 @@ const EMPTY = {
   seniority: "",
   function: "",
   linkedin_url: "",
+  threads_username: "",
   phone: "",
   source: "",
 };
@@ -77,7 +78,10 @@ export default function ContactsListPage() {
       setForm(EMPTY);
       toast.success("Contact created");
     },
-    onError: () => toast.error("Failed to create contact"),
+    onError: (err) =>
+      toast.error("Failed to create contact", {
+        description: err instanceof ApiError ? err.message : undefined,
+      }),
   });
 
   const updateMut = useMutation({
@@ -88,7 +92,10 @@ export default function ContactsListPage() {
       setEditing(null);
       toast.success("Contact updated");
     },
-    onError: () => toast.error("Failed to update contact"),
+    onError: (err) =>
+      toast.error("Failed to update contact", {
+        description: err instanceof ApiError ? err.message : undefined,
+      }),
   });
 
   const deleteMut = useMutation({
@@ -111,6 +118,7 @@ export default function ContactsListPage() {
         seniority: editing.seniority ?? "",
         function: editing.function ?? "",
         linkedin_url: editing.linkedin_url ?? "",
+        threads_username: editing.threads_username ?? "",
         phone: editing.phone ?? "",
         source: editing.source ?? "",
       });
@@ -193,6 +201,14 @@ export default function ContactsListPage() {
                 />
               </div>
               <div>
+                <label className="text-sm font-medium">Threads</label>
+                <Input
+                  value={form.threads_username}
+                  onChange={(e) => setForm({ ...form, threads_username: e.target.value })}
+                  placeholder="@handle or threads.com/@handle"
+                />
+              </div>
+              <div>
                 <label className="text-sm font-medium">Phone</label>
                 <Input
                   value={form.phone}
@@ -209,7 +225,7 @@ export default function ContactsListPage() {
               </div>
               <Button
                 className="w-full"
-                disabled={!form.email || createMut.isPending}
+                disabled={(!form.email && !form.threads_username) || createMut.isPending}
                 onClick={() => createMut.mutate(form)}
               >
                 {createMut.isPending ? "Creating…" : "Create contact"}
@@ -280,6 +296,14 @@ export default function ContactsListPage() {
                 />
               </div>
               <div>
+                <label className="text-sm font-medium">Threads</label>
+                <Input
+                  value={form.threads_username}
+                  onChange={(e) => setForm({ ...form, threads_username: e.target.value })}
+                  placeholder="@handle or threads.com/@handle"
+                />
+              </div>
+              <div>
                 <label className="text-sm font-medium">Phone</label>
                 <Input
                   value={form.phone}
@@ -296,7 +320,7 @@ export default function ContactsListPage() {
               </div>
               <Button
                 className="w-full"
-                disabled={!form.email || updateMut.isPending}
+                disabled={(!form.email && !form.threads_username) || updateMut.isPending}
                 onClick={() => updateMut.mutate(form)}
               >
                 {updateMut.isPending ? "Saving…" : "Save changes"}
@@ -384,7 +408,10 @@ export default function ContactsListPage() {
                           to={`/${c.workspace_slug || slug}/crm/contacts/${c.id}`}
                           className="font-medium hover:underline"
                         >
-                          {c.name || c.email || "—"}
+                          {c.name ||
+                            c.email ||
+                            (c.threads_username && `@${c.threads_username}`) ||
+                            "—"}
                         </Link>
                         {stale && (
                           <Badge variant="destructive" className="ml-2 text-[10px]">
@@ -392,7 +419,9 @@ export default function ContactsListPage() {
                           </Badge>
                         )}
                       </td>
-                      <td className="p-3 text-muted-foreground">{c.email || "—"}</td>
+                      <td className="p-3 text-muted-foreground">
+                        {c.email || (c.threads_username && `@${c.threads_username}`) || "—"}
+                      </td>
                       <td className="p-3 text-muted-foreground">
                         {c.company_name || c.company || "—"}
                       </td>

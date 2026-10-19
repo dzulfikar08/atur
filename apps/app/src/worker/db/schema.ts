@@ -950,6 +950,9 @@ export const customers = sqliteTable(
     seniority: text("seniority"),
     function: text("function"),
     linkedinUrl: text("linkedin_url"),
+    // Threads handle, lowercase without "@". Prospects found on Threads rarely
+    // share an email, so this is the contact's second identity key.
+    threadsUsername: text("threads_username"),
     imageUrl: text("image_url"),
     // Rollup stamped by the CRM activity timeline (crm_activities).
     lastActivityAt: text("last_activity_at"),
@@ -961,6 +964,7 @@ export const customers = sqliteTable(
   (table) => [
     uniqueIndex("uq_customers_workspace_user").on(table.workspaceId, table.userId),
     uniqueIndex("uq_customers_workspace_email").on(table.workspaceId, table.email),
+    uniqueIndex("uq_customers_workspace_threads").on(table.workspaceId, table.threadsUsername),
     index("idx_customers_session_token").on(table.sessionToken),
     index("idx_customers_company").on(table.companyId),
   ],
@@ -1315,7 +1319,7 @@ export const crmActivities = sqliteTable(
       .references(() => workspaces.id, { onDelete: "cascade" }),
     customerId: text("customer_id").references(() => customers.id, { onDelete: "set null" }),
     dealId: text("deal_id").references(() => deals.id, { onDelete: "set null" }),
-    // NOTE | CALL | EMAIL | MEETING | TASK | STAGE_CHANGE | ENRICHMENT.
+    // NOTE | CALL | EMAIL | MEETING | TASK | MESSAGE | STAGE_CHANGE | ENRICHMENT.
     type: text("type").notNull(),
     subject: text("subject"),
     body: text("body"),

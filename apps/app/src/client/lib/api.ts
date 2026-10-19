@@ -488,9 +488,25 @@ export const api = {
     apiFetch<{ results: PolarLink[] }>(`/workspaces/${slug}/polar/contacts/${contactId}/links`),
   createContact: (
     slug: string,
-    data: { email: string; name?: string; company?: string; phone?: string; source?: string },
+    data: {
+      email?: string;
+      threads_username?: string;
+      name?: string;
+      company?: string;
+      phone?: string;
+      source?: string;
+    },
   ) =>
     apiFetch<Contact>(`/workspaces/${slug}/contacts/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  logContactActivity: (
+    slug: string,
+    contactId: string,
+    data: { type: CrmActivity["type"]; subject?: string; body?: string },
+  ) =>
+    apiFetch<CrmActivity>(`/workspaces/${slug}/contacts/${contactId}/activities/`, {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -1288,6 +1304,7 @@ export interface Contact {
   seniority: string | null;
   function: string | null;
   linkedin_url: string | null;
+  threads_username: string | null;
   image_url: string | null;
   last_activity_at: string | null;
   enriched_at: string | null;
@@ -1439,7 +1456,7 @@ export interface CrmActivity {
   workspace_id: string;
   customer_id: string | null;
   deal_id: string | null;
-  type: "NOTE" | "CALL" | "EMAIL" | "MEETING" | "TASK" | "STAGE_CHANGE" | "ENRICHMENT";
+  type: "NOTE" | "CALL" | "EMAIL" | "MEETING" | "TASK" | "MESSAGE" | "STAGE_CHANGE" | "ENRICHMENT";
   subject: string | null;
   body: string | null;
   occurred_at: string;

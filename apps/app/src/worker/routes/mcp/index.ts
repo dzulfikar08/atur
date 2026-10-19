@@ -914,18 +914,20 @@ export const TOOLS = [
   },
   {
     name: "create_contact",
-    description: "Create a CRM lead/contact (no auth account)",
+    description:
+      "Create a CRM lead/contact (no auth account). Needs email or threads_username (handle, @handle or profile URL); dedupes on either.",
     inputSchema: {
       type: "object",
       properties: {
         workspace: { type: "string" },
         email: { type: "string" },
+        threads_username: { type: "string" },
         name: { type: "string" },
         company: { type: "string" },
         phone: { type: "string" },
         source: { type: "string" },
       },
-      required: ["workspace", "email"],
+      required: ["workspace"],
     },
   },
   {
@@ -939,7 +941,8 @@ export const TOOLS = [
   },
   {
     name: "update_contact",
-    description: "Update a contact (name/company/phone/status/source/email)",
+    description:
+      "Update a contact (name/company/phone/status/source/email/threads_username). Pass an empty string to clear email or threads_username.",
     inputSchema: {
       type: "object",
       properties: {
@@ -951,6 +954,7 @@ export const TOOLS = [
         status: { type: "string", enum: ["lead", "active", "churned"] },
         source: { type: "string" },
         email: { type: "string" },
+        threads_username: { type: "string" },
       },
       required: ["workspace", "contact_id"],
     },
@@ -1128,6 +1132,23 @@ export const TOOLS = [
         offset: { type: "integer" },
       },
       required: ["workspace"],
+    },
+  },
+  {
+    name: "log_activity",
+    description:
+      "Log a timeline entry on a contact by hand: a call, meeting, task, note, email, or MESSAGE (a DM, e.g. a Threads DM follow-up)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        customer_id: { type: "string" },
+        type: { type: "string", enum: ["NOTE", "CALL", "EMAIL", "MEETING", "TASK", "MESSAGE"] },
+        subject: { type: "string" },
+        body: { type: "string" },
+        occurred_at: { type: "string", description: "ISO 8601; defaults to now" },
+      },
+      required: ["workspace", "customer_id", "type"],
     },
   },
   {
@@ -2762,13 +2783,18 @@ async function handleToolRaw(
     }
     case "create_contact": {
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
-      return customersRepo.createLead(db, workspaceId, {
-        email: params.email as string,
-        name: (params.name as string) ?? null,
-        company: (params.company as string) ?? null,
-        phone: (params.phone as string) ?? null,
-        source: (params.source as string) ?? null,
-      });
+      return crmService.createContact(
+        db,
+        workspaceId,
+        crmService.createContactSchema.parse({
+          email: params.email,
+          threads_username: params.threads_username,
+          name: params.name,
+          company: params.company,
+          phone: params.phone,
+          source: params.source,
+        }),
+      );
     }
     case "get_contact": {
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
@@ -2776,14 +2802,20 @@ async function handleToolRaw(
     }
     case "update_contact": {
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
-      return crmService.updateContact(db, workspaceId, params.contact_id as string, {
-        name: params.name as string | undefined,
-        company: params.company as string | undefined,
-        phone: params.phone as string | undefined,
-        status: params.status as "lead" | "active" | "churned" | undefined,
-        source: params.source as string | undefined,
-        email: params.email as string | undefined,
-      });
+      return crmService.updateContact(
+        db,
+        workspaceId,
+        params.contact_id as string,
+        crmService.updateContactSchema.parse({
+          name: params.name,
+          company: params.company,
+          phone: params.phone,
+          status: params.status,
+          source: params.source,
+          email: params.email,
+          threads_username: params.threads_username,
+        }),
+      );
     }
     case "create_deal": {
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
@@ -2920,6 +2952,21 @@ async function handleToolRaw(
         offset,
         limit,
       });
+    }
+    case "log_activity": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      return crmService.logActivity(
+        db,
+        workspaceId,
+        params.customer_id as string,
+        userId,
+        crmService.logActivitySchema.parse({
+          type: params.type,
+          subject: params.subject,
+          body: params.body,
+          occurred_at: params.occurred_at,
+        }),
+      );
     }
     default:
       throw new HTTPException(400, { message: `Unknown tool: ${toolName}` });

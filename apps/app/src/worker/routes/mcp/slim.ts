@@ -55,7 +55,17 @@ const CUSTOM_FIELD = ["id", "name", "fieldType", "isRequired", "settings"];
 const COMMENT = ["id", "issueId", "actorId", "access", "createdAt"];
 const RELATION = ["id", "issueId", "relatedIssueId", "relationType"];
 const TIME_ENTRY = ["id", "issueId", "userId", "durationSeconds", "description", "startedAt"];
-const CONTACT = ["id", "email", "name", "company", "phone", "status", "source", "companyId"];
+const CONTACT = [
+  "id",
+  "email",
+  "threadsUsername",
+  "name",
+  "company",
+  "phone",
+  "status",
+  "source",
+  "companyId",
+];
 const DEAL = [
   "id",
   "issueId",
