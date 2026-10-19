@@ -125,6 +125,7 @@ export default function PaneView() {
         <View style={styles.flex}>
           {view === "native" ? (
             <NativeTerminal
+              paneId={paneId}
               screen={screen}
               canType={canType}
               isAgent={Boolean(pane?.agent)}

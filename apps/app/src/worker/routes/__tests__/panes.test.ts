@@ -79,6 +79,7 @@ const env = { DB: {}, HERDR_BRIDGE_URL: "http://127.0.0.1:7601" } as unknown as 
 let bridgePanes: { pane_id: string; cwd: string | null }[] = [];
 let bridgeRepoPath: { status: number; body: unknown } | null = null;
 let lastUpgradeHeaders: Headers | null = null;
+let lastPaste: { url: string; body: Uint8Array } | null = null;
 
 function stubFetch(input: string | URL | Request, init?: RequestInit): Response {
   const url = String(input);
@@ -94,6 +95,10 @@ function stubFetch(input: string | URL | Request, init?: RequestInit): Response 
     lastUpgradeHeaders = new Headers(init?.headers);
     return Response.json({ error: "bridge refused" }, { status: 404 });
   }
+  if (url.includes("/panes/paste")) {
+    lastPaste = { url, body: init?.body as Uint8Array };
+    return Response.json({ path: "/home/x/.cache/atur/pastes/paste-1.png", bytes: 3 });
+  }
   return new Response("not found", { status: 404 });
 }
 
@@ -108,6 +113,7 @@ function testApp() {
 beforeEach(() => {
   vi.clearAllMocks();
   lastUpgradeHeaders = null;
+  lastPaste = null;
   bridgeRepoPath = null;
   isMember.mockResolvedValue(true);
   vi.stubGlobal("fetch", vi.fn(stubFetch));
@@ -189,5 +195,39 @@ describe("pane routes (DEV-32 per-pane authz)", () => {
     expect(res.status).toBe(404); // stubbed bridge refusal surfaced
     expect(lastUpgradeHeaders?.get("upgrade")).toBe("websocket");
     expect(lastUpgradeHeaders?.get("x-bridge-token")).toBe("sekrit");
+  });
+
+  describe("POST /paste", () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const post = (pane: string, body: BodyInit = png) =>
+      testApp().request(`/api/panes/paste?pane=${pane}`, { method: "POST", body }, env);
+
+    it("saves a member's image on the execution plane and returns its path", async () => {
+      bridgePanes = [{ pane_id: "p1", cwd: "/srv/acme" }];
+      const res = await post("p1");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        path: "/home/x/.cache/atur/pastes/paste-1.png",
+        bytes: 3,
+      });
+      expect(lastPaste?.url).toBe("http://127.0.0.1:7601/panes/paste?pane=p1");
+      expect(new Uint8Array(lastPaste!.body)).toEqual(png);
+    });
+
+    it("refuses non-members and unbound panes before touching the bridge", async () => {
+      bridgePanes = [{ pane_id: "p9", cwd: "/tmp" }];
+      expect((await post("p9")).status).toBe(403);
+      bridgePanes = [{ pane_id: "p1", cwd: "/srv/acme" }];
+      isMember.mockResolvedValue(false);
+      expect((await post("p1")).status).toBe(403);
+      expect(lastPaste).toBeNull();
+    });
+
+    it("refuses empty and oversized bodies", async () => {
+      bridgePanes = [{ pane_id: "p1", cwd: "/srv/acme" }];
+      expect((await post("p1", new Uint8Array(0))).status).toBe(400);
+      expect((await post("p1", new Uint8Array(20 * 1024 * 1024 + 1))).status).toBe(413);
+      expect(lastPaste).toBeNull();
+    });
   });
 });

@@ -388,6 +388,15 @@ export const api = {
   me: () => request<Me>("/api/users/me"),
   panes: () => request<{ panes: PaneListItem[] }>("/api/panes").then((r) => r.panes),
   screenStatus: () => request<ScreenStatus>("/api/screen/status"),
+  /** Save an image on the pane's machine; returns the path to put in the prompt. */
+  panePasteImage: (paneId: string, image: ArrayBuffer, type: string) =>
+    request<{ path: string; bytes: number }>(
+      `/api/panes/paste?pane=${encodeURIComponent(paneId)}`,
+      {
+        method: "POST",
+        raw: { data: image, type },
+      },
+    ),
   /** Put a PNG on the desktop's clipboard (the Screen view then presses Ctrl+V). */
   screenClipboardImage: (png: ArrayBuffer) =>
     request<{ ok: true }>("/api/screen/clipboard", {

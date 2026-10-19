@@ -799,6 +799,26 @@ export const api = {
     }),
   // ── Panes (herdr execution plane, proxied by the Worker; see ATUR-2) ──
   listPanes: () => apiFetch<PanesListResponse>("/panes"),
+  /** Save an image on the pane's machine; returns the path to put in the prompt. */
+  pastePaneImage: async (paneId: string, image: Blob): Promise<{ path: string; bytes: number }> => {
+    const res = await fetch(`${API_BASE}/panes/paste?pane=${encodeURIComponent(paneId)}`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": image.type || "application/octet-stream", ...authHeaders() },
+      body: image,
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as {
+        error?: string;
+        message?: string;
+      } | null;
+      throw new ApiError(
+        res.status,
+        body?.error ?? body?.message ?? `Upload failed (${res.status})`,
+      );
+    }
+    return res.json();
+  },
   // ── Workspace links (DEV-29 control-plane bindings; /admin/bindings) ──
   listWorkspaceLinks: () => apiFetch<{ results: WorkspaceLink[] }>("/workspaces/links"),
   updateWorkspaceLink: (workspace: string, data: WorkspaceLinkPatch) =>

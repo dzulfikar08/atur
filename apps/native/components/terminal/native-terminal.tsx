@@ -18,6 +18,7 @@ import type { TerminalScreen } from "@/lib/terminal-screen";
 const SENTINEL = "\u200b\u200b";
 
 interface NativeTerminalProps {
+  paneId: string;
   screen: TerminalScreen;
   /** Keyboard is ours and the socket is open. */
   canType: boolean;
@@ -32,6 +33,7 @@ interface NativeTerminalProps {
  * keyboard, the extra-key row and (for agent panes) the prompt composer.
  */
 export function NativeTerminal({
+  paneId,
   screen,
   canType,
   isAgent,
@@ -140,7 +142,7 @@ export function NativeTerminal({
         importantForAccessibility="no"
       />
 
-      {isAgent ? <PromptComposer enabled={canType} onSend={sendPrompt} /> : null}
+      {isAgent ? <PromptComposer paneId={paneId} enabled={canType} onSend={sendPrompt} /> : null}
       <KeyRow
         enabled={canType}
         mods={mods}

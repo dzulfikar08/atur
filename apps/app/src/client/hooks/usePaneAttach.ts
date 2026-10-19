@@ -7,7 +7,7 @@
  *   bridge → client: {type:"hello", pane:{...,cols,rows}}
  *                    {type:"snapshot", revision, ansi}
  *                    {type:"pong"} | {type:"error", message} | {type:"exit", reason}
- *   client → bridge: {type:"input", data} | {type:"ping"}
+ *   client → bridge: {type:"input", data} | {type:"paste", text, submit} | {type:"claim"} | {type:"ping"}
  *
  * Reconnects with exponential backoff (1s → 15s, MAX_ATTEMPTS tries) and then
  * reports "unreachable" so the UI can offer a manual retry. A bridge `exit`
@@ -68,6 +68,18 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: "input", data }));
     }
+  }, []);
+
+  /**
+   * Literal text as one paste (newlines stay newlines, not Enter presses),
+   * optionally followed by Enter. False when the socket is not open, so a
+   * composer can keep its draft.
+   */
+  const sendPaste = useCallback((text: string, submit: boolean): boolean => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    ws.send(JSON.stringify({ type: "paste", text, submit }));
+    return true;
   }, []);
 
   /** Request (or steal) keyboard ownership; the bridge arbitrates. */
@@ -211,5 +223,5 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
       ws?.close(1000, "unmount");
     };
   }, [paneId, retryKey]);
-  return { status, sendInput, retry, claimKeyboard };
+  return { status, sendInput, sendPaste, retry, claimKeyboard };
 }

@@ -10,8 +10,13 @@ import { ArrowLeft, Code2, FileText } from "@/lib/icons";
 import { usePaneAttach, type PaneAttachStatus } from "@/hooks/usePaneAttach";
 import { usePaneObserve } from "@/hooks/usePaneObserve";
 import TranscriptView from "@/components/panes/TranscriptView";
+import { PromptComposer } from "@/components/panes/PromptComposer";
+import { TerminalKeyRow } from "@/components/panes/TerminalKeyRow";
+import { applyModifiers, fitFontSize, type Modifiers } from "@/lib/terminalKeys";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+
+const FIT_KEY = "atur.pane.fit";
 
 const STATUS_LABELS: Record<PaneAttachStatus, string> = {
   connecting: "Connecting…",
@@ -42,16 +47,25 @@ export default function PaneViewPage() {
   // Keyboard ownership is bridge-arbitrated: hello + keyboard frames decide,
   // the button only asks. Starts read-only on every (re)connect.
   const [ownsKeyboard, setOwnsKeyboard] = useState(false);
+  // Touch devices get the app's extras: a key row for keys a phone keyboard
+  // lacks, and "Fit width" (the pane's grid is fixed, phones are narrow).
+  const [touch] = useState(() => window.matchMedia?.("(pointer: coarse)").matches ?? false);
+  const [mods, setMods] = useState<Modifiers>({ ctrl: false, alt: false });
+  const modsRef = useRef(mods);
+  modsRef.current = mods;
+  const [fit, setFit] = useState(() => localStorage.getItem(FIT_KEY) !== "0");
+  const [cols, setCols] = useState(0);
 
   // Pane meta (title, cwd, agent) comes from the shared panes list cache; the
   // view still works if the list is unavailable — the id is the fallback title.
   const panesQuery = useQuery({ queryKey: ["panes"], queryFn: api.listPanes });
   const pane = panesQuery.data?.panes.find((p) => p.pane_id === paneId);
 
-  const { status, sendInput, retry, claimKeyboard } = usePaneAttach(paneId ?? "", {
+  const { status, sendInput, sendPaste, retry, claimKeyboard } = usePaneAttach(paneId ?? "", {
     // hello carries the real pane geometry — the grid is authoritative.
     onHello: ({ cols, rows, keyboard }) => {
       setOwnsKeyboard(keyboard === true);
+      setCols(cols);
       termRef.current?.resize(cols, rows);
     },
     // Full frame: home + clear + replay in ONE write (one parse pass → one
@@ -115,11 +129,39 @@ export default function PaneViewPage() {
     const term = termRef.current;
     if (!term) return;
     if (!ownsKeyboard) return;
-    const disposable = term.onData((data) => sendInput(data));
+    // Sticky Ctrl/Alt from the key row act on the next key typed.
+    const disposable = term.onData((data) => {
+      const m = modsRef.current;
+      if (m.ctrl || m.alt) {
+        sendInput(applyModifiers(data, m));
+        setMods({ ctrl: false, alt: false });
+      } else {
+        sendInput(data);
+      }
+    });
     term.focus();
     return () => disposable.dispose();
   }, [ownsKeyboard, sendInput, status]);
 
+  // Fit width (touch only): size the font so the pane's columns fill the box.
+  useEffect(() => {
+    const term = termRef.current;
+    const box = containerRef.current?.parentElement;
+    if (!term || !box) return;
+    const apply = () => {
+      const size = touch && fit && cols > 0 ? fitFontSize(box.clientWidth - 16, cols) : 13;
+      if (term.options.fontSize !== size) term.options.fontSize = size;
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [touch, fit, cols]);
+
+  const pressKey = (data: string) => {
+    sendInput(applyModifiers(data, mods));
+    if (mods.ctrl || mods.alt) setMods({ ctrl: false, alt: false });
+  };
   if (!paneId) return null;
 
   const paneGone = status === "exited" || status === "unreachable";
@@ -145,6 +187,19 @@ export default function PaneViewPage() {
         {!ownsKeyboard && status === "connected" && (
           <Button variant="outline" size="sm" onClick={claimKeyboard}>
             Take keyboard
+          </Button>
+        )}
+        {touch && cols > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            aria-pressed={fit}
+            onClick={() => {
+              localStorage.setItem(FIT_KEY, fit ? "0" : "1");
+              setFit(!fit);
+            }}
+          >
+            {fit ? "Actual size" : "Fit width"}
           </Button>
         )}
         <Badge variant={statusBadgeVariant(status)}>{STATUS_LABELS[status]}</Badge>
@@ -209,6 +264,24 @@ export default function PaneViewPage() {
               </div>
             )}
           </div>
+          {touch && ownsKeyboard && !paneGone && (
+            <div className="mt-2">
+              <TerminalKeyRow
+                mods={mods}
+                onToggle={(mod) => setMods((m) => ({ ...m, [mod]: !m[mod] }))}
+                onKey={pressKey}
+              />
+            </div>
+          )}
+          {pane?.agent && !paneGone && (
+            <div className="mt-2">
+              <PromptComposer
+                paneId={paneId}
+                enabled={ownsKeyboard && status === "connected"}
+                onSend={(text) => sendPaste(text, true)}
+              />
+            </div>
+          )}
         </TabsContent>
         <TabsContent value="transcript" className="min-h-0 flex-1">
           <TranscriptView {...observe} />

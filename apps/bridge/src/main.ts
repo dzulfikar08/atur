@@ -20,6 +20,7 @@
 import type { ServerWebSocket } from "bun";
 import { PaneHub, type BridgeMeta } from "./hub";
 import { ObserveHub } from "./observe";
+import { imageExtension, MAX_PASTE_BYTES, PasteError, pasteDirFromEnv, savePaste } from "./pastes";
 import { ScreenHub, screenConfigFromEnv, type ScreenMeta } from "./screen";
 
 const PORT = Number(process.env.BRIDGE_PORT ?? 7601);
@@ -32,17 +33,10 @@ function authorized(req: Request): boolean {
   return req.headers.get("x-bridge-token") === TOKEN;
 }
 
-/** Phone screenshots are a few MB; the Worker enforces the same cap. */
-const MAX_CLIPBOARD_BYTES = 20 * 1024 * 1024;
-const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-
-function isPng(bytes: Uint8Array): boolean {
-  return PNG_MAGIC.every((b, i) => bytes[i] === b);
-}
-
 const hub = new PaneHub();
 const observeHub = new ObserveHub();
 const screenHub = new ScreenHub(screenConfigFromEnv(process.env));
+const pasteDir = pasteDirFromEnv(process.env);
 
 type Meta = BridgeMeta | ScreenMeta;
 
@@ -117,12 +111,31 @@ Bun.serve<Meta>({
       }
       return undefined as unknown as Response; // upgraded — Bun ignores this
     }
+    if (url.pathname === "/panes/paste" && req.method === "POST") {
+      // Image pasted into a pane's prompt: saved here, its path goes into the prompt.
+      const image = new Uint8Array(await req.arrayBuffer());
+      try {
+        const saved = await savePaste(pasteDir, image);
+        console.log(
+          `paste: pane=${url.searchParams.get("pane") ?? "-"} ${saved.bytes} bytes → ${saved.path}`,
+        );
+        return Response.json(saved);
+      } catch (e) {
+        if (e instanceof PasteError)
+          return Response.json({ error: e.message }, { status: e.status });
+        return Response.json(
+          { error: e instanceof Error ? e.message : String(e) },
+          { status: 500 },
+        );
+      }
+    }
     if (url.pathname === "/screen/clipboard" && req.method === "POST") {
       const png = new Uint8Array(await req.arrayBuffer());
-      if (png.length > MAX_CLIPBOARD_BYTES) {
+      if (png.length > MAX_PASTE_BYTES) {
         return Response.json({ error: "image too large" }, { status: 413 });
       }
-      if (!isPng(png)) return Response.json({ error: "not a PNG" }, { status: 415 });
+      if (imageExtension(png) !== "png")
+        return Response.json({ error: "not a PNG" }, { status: 415 });
       try {
         await screenHub.setClipboardImage(png);
         return Response.json({ ok: true });
