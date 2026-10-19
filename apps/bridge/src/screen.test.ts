@@ -8,7 +8,7 @@ import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ScreenHub, type ScreenConfig, type ScreenWs } from "./screen";
+import { SCREEN_CLOSE, ScreenHub, type ScreenConfig, type ScreenWs } from "./screen";
 
 let fakeBin = "";
 let nextPort = 15900 + Math.floor(Math.random() * 1000);
@@ -40,6 +40,7 @@ process.on("SIGTERM", () => process.exit(0));
 
 interface FakeWs extends ScreenWs {
   received: Uint8Array[];
+  texts: string[];
   closed: { code?: number; reason?: string } | null;
 }
 
@@ -47,9 +48,11 @@ function fakeWs(id: number): FakeWs {
   const ws: FakeWs = {
     data: { screen: true, id },
     received: [],
+    texts: [],
     closed: null,
     send(data) {
-      ws.received.push(Uint8Array.from(data));
+      if (typeof data === "string") ws.texts.push(data);
+      else ws.received.push(Uint8Array.from(data));
       return data.length;
     },
     close(code, reason) {
@@ -86,6 +89,7 @@ function makeHub(over: Partial<ScreenConfig> = {}): {
     graceMs: 100,
     maxViewers: 2,
     startTimeoutMs: 5000,
+    viewerTimeoutMs: 30_000,
     ...over,
   };
   const notes: string[] = [];
@@ -152,15 +156,47 @@ describe("ScreenHub", () => {
     await until(() => text(ws).endsWith("early"));
   });
 
-  it("rejects viewers beyond the cap", async () => {
+  it("replaces the oldest viewer when a new one arrives at the cap", async () => {
     const { hub } = makeHub({ maxViewers: 1 });
     hubs.push(hub);
     const a = fakeWs(1);
     const b = fakeWs(2);
     void hub.open(a);
     await until(() => text(a).includes("RFB"));
-    await hub.open(b);
-    expect(b.closed?.code).toBe(1013);
+    void hub.open(b);
+    expect(a.closed).toEqual({ code: SCREEN_CLOSE.replaced, reason: "replaced by a newer viewer" });
+    await until(() => text(b).includes("RFB"));
+    expect(hub.status().viewers).toBe(1);
+  });
+
+  it("answers pings on the side channel without touching the RFB stream", async () => {
+    const { hub } = makeHub();
+    hubs.push(hub);
+    const ws = fakeWs(1);
+    void hub.open(ws);
+    await until(() => text(ws).includes("RFB"));
+    hub.message(ws, JSON.stringify({ t: "ping", id: 7, ts: 123.5 }));
+    expect(ws.texts.map((t) => JSON.parse(t))).toEqual([{ t: "pong", id: 7, ts: 123.5 }]);
+    // The fake server echoes what it gets, in order: once a later binary
+    // marker is back, a forwarded ping would already be in the stream.
+    hub.message(ws, new TextEncoder().encode("marker"));
+    await until(() => text(ws).endsWith("marker"));
+    expect(text(ws)).not.toContain("ping");
+  });
+
+  it("drops a viewer whose pings stop, but never one that never pinged", async () => {
+    const { hub } = makeHub({ viewerTimeoutMs: 300 });
+    hubs.push(hub);
+    const pinger = fakeWs(1);
+    const legacy = fakeWs(2);
+    void hub.open(pinger);
+    void hub.open(legacy);
+    await until(() => text(pinger).includes("RFB") && text(legacy).includes("RFB"));
+    hub.message(pinger, JSON.stringify({ t: "ping", id: 1, ts: 0 }));
+    await until(() => pinger.closed !== null, 2000);
+    expect(pinger.closed?.code).toBe(SCREEN_CLOSE.timedOut);
+    expect(legacy.closed).toBeNull();
+    expect(hub.status().viewers).toBe(1);
   });
 
   it("refuses to relay to a listener it did not start", async () => {

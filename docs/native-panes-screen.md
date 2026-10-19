@@ -59,14 +59,47 @@ WebViews load bundled HTML from memory (`lib/webview/*.generated.ts`, built by `
 - **States.** Permission denied → alert with an **Open Settings** button. Language pack missing or recognizer error → alert with the reason ("Didn't catch that" for no speech). Web (Expo web build) → the mic is disabled and explains that dictation needs the iOS or Android app; audio is never sent to a browser speech service.
 - **Native config.** The `expo-speech-recognition` plugin in `app.json` sets `NSMicrophoneUsageDescription`, `NSSpeechRecognitionUsageDescription` and Android `RECORD_AUDIO`, plus a `<queries>` entry for the Google app so the recognizer is discoverable. Store disclosures: `docs/app-store.md` section 5, `docs/play-store.md` sections 6-8.
 
-## Screen gestures
+## Screen (remote desktop)
 
-tap = left click · two-finger tap = right click · long-press + drag = mouse drag · one-finger drag = pan · pinch = zoom (1–6×) · two-finger drag = wheel. View-only is on by default; opening the keyboard switches to control mode.
+`app/screen.tsx` hosts `webview/screen.ts` (noVNC). The behaviour follows Microsoft's Windows App (Remote Desktop) for iOS/Android. Pure logic lives in `lib/` and is unit-tested: `screen-gestures.ts` (gesture recognizer), `screen-view.ts` (zoom/pan geometry, pointer acceleration), `screen-session.ts` (reconnect policy).
+
+### Mouse modes
+
+Switched from the connection bar (arrow / hand icon), remembered in `atur.screen.prefs`. **Mouse pointer** is the default.
+
+| Gesture                     | Mouse pointer                            | Direct touch                   |
+| --------------------------- | ---------------------------------------- | ------------------------------ |
+| One-finger drag             | Move the pointer (trackpad, accelerated) | Pan the zoomed view            |
+| Tap                         | Click at the pointer                     | Click where you touch          |
+| Double-tap                  | Double click                             | Double click                   |
+| Double-tap, hold, then drag | Left drag (select text, move windows)    | Left drag from the finger      |
+| Hold (500 ms), release      | Right click (haptic at the hold)         | Right click where you touch    |
+| Two-finger tap              | Right click                              | Right click under the fingers  |
+| Three-finger tap            | Middle click                             | Middle click under the fingers |
+| Two-finger drag             | Wheel (natural direction)                | Wheel under the fingers        |
+| Pinch                       | Zoom 1-6x about the fingers (local only) | Same                           |
+
+- A single tap's click waits 280 ms for a possible second tap, so "double-tap, hold, drag" reaches the desktop as one drag, never as a click followed by a press (which GTK reads as a double click and opens files).
+- **Pointer.** Drawn locally at a fixed 26 px whatever the zoom: wayvnc (`-r`) paints the real cursor into a 1920 px frame, which shrinks to a few pixels on a phone. When zoomed, the view follows the pointer once it comes within 48 px of an edge.
+- **View only** (More menu) sends no input; one finger then pans as in Direct touch. Opening the keyboard switches to control.
+- **Input path.** Actions become synthetic mouse/wheel events on noVNC's canvas, so noVNC's own coordinate mapping applies at every zoom. noVNC's `setCapture` polyfill is replaced by no-ops: its full-screen capture div is only removed by a mouseup reaching `window`, which synthetic events never do, and it would swallow every touch after the first click.
+
+### Connection bar and keys
+
+A floating bar at the top (drag it sideways; the chevron tucks it into a status pill): status dot + round-trip time, mouse mode, keyboard, fit, More. **More**: view only, picture quality (Sharp / Balanced / Low data → noVNC quality 8/6/2, compression 2/2/9), copy the desktop clipboard (dot on More when the desktop copied something), paste the phone clipboard (Ctrl+V after), reconnect, the gesture table for the current mode, disconnect. The key row above the soft keyboard: hide, sticky Ctrl/Alt/Shift/Super (one-shot), Esc, Tab, arrows, Home, End, PgUp, PgDn, Del, Ins, PrtSc, F1-F12, Paste. With the keyboard up, the desktop area shrinks above it instead of hiding under it.
+
+### Robustness
+
+- **Ping.** Beside the binary RFB stream the page sends text frames `{"t":"ping","id","ts"}` every 5 s; the bridge answers `{"t":"pong",…}` (`ScreenHub.control`). Round-trip time and receive rate show in the bar and the More menu. Text frames never reach wayvnc. Older bridges ignore them, and the page then never applies the watchdog.
+- **Dead socket.** Once pongs have been seen, 15 s with no bytes at all kills the session locally (close 4000) instead of waiting for TCP. On return to the foreground (`AppState` active) a live session is pinged and killed if nothing comes back within 4 s. A connection that hasn't finished the RFB handshake after 15 s is abandoned.
+- **Auto-reconnect.** Any drop reconnects with a fresh ticket: immediately, then after 1, 2, 3, then 5 s, up to 20 attempts (the budget resets after 10 s connected). The last frame stays on screen meanwhile ("Reconnecting…, attempt n of 20", Stop reconnecting). It does not reconnect after close **4001** (another viewer took over) or 1013 (an older bridge's viewer cap). Coming back to the foreground retries a pending attempt at once.
+- **Server side.** At the viewer cap (`SCREEN_MAX_VIEWERS`, 4) the bridge replaces the oldest viewer (close 4001) instead of refusing the newcomer, and a viewer that has pinged but then goes silent for `SCREEN_VIEWER_TIMEOUT_MS` (30 s) is dropped (close 4002). This clears the ghost sessions a phone leaves behind when its network changes. The Worker relay forwards close codes and reasons in both directions (reserved codes become 1011).
+- Events from a replaced session (Reconnect pressed mid-session) are ignored by a per-connect generation counter, so a late "disconnected" can no longer end the new session.
 
 ## Tests
 
-`bun test apps/native/lib` (also `bun run test` from the root): `ansi.test.ts` (SGR parsing, colour resolution, wide chars), `terminal-screen.test.ts` (snapshot/diff model, replay, link detection), `terminal-keys.test.ts` (modifiers, swipe steps, font sizing), `dictation-text.test.ts` (locale choice, transcript merging). Bridge: `apps/bridge/src/hub.test.ts` (Ctrl letters, `paste`).
+`bun test apps/native/lib` (also `bun run test` from the root): `ansi.test.ts` (SGR parsing, colour resolution, wide chars), `terminal-screen.test.ts` (snapshot/diff model, replay, link detection), `terminal-keys.test.ts` (modifiers, swipe steps, font sizing), `dictation-text.test.ts` (locale choice, transcript merging), `screen-gestures.test.ts` (both mouse modes: deferred tap, double click, double-tap-drag, hold, multi-finger taps, scroll vs pinch, mode switch releasing a held button), `screen-view.test.ts` (fit, pan clamping, zoom anchoring, pointer follow, acceleration), `screen-session.test.ts` (backoff, which closes retry). Bridge: `apps/bridge/src/hub.test.ts` (Ctrl letters, `paste`), `apps/bridge/src/screen.test.ts` (ping/pong off the RFB stream, liveness timeout, replace-oldest).
 
 ## Release note
 
-New native modules (`react-native-webview`, `expo-clipboard`, `expo-screen-orientation`, `expo-speech-recognition`) and `orientation: default` change the native fingerprint: this needs a **new store build**; OTA alone will not deliver it. Dictation additionally adds the microphone and speech-recognition permissions, so the store privacy answers in `docs/app-store.md` / `docs/play-store.md` must match before submitting.
+New native modules (`react-native-webview`, `expo-clipboard`, `expo-screen-orientation`, `expo-speech-recognition`) and `orientation: default` change the native fingerprint: this needs a **new store build**; OTA alone will not deliver it. Dictation additionally adds the microphone and speech-recognition permissions, so the store privacy answers in `docs/app-store.md` / `docs/play-store.md` must match before submitting. The Screen rework (mouse modes, pointer, reconnect) is JS and bundled HTML only and ships over EAS Update to builds that already have the WebView.

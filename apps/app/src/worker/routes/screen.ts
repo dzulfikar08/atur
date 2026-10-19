@@ -101,21 +101,31 @@ screenRoutes.get("/ws", async (c) => {
   server.addEventListener("message", (event) => origin.send(event.data));
 
   // Either side closing (or erroring) tears the relay down and stamps the
-  // audit row. waitUntil: the execution context may end once both sockets
-  // close, which would cancel a plain await.
+  // audit row. The close code and reason travel to the other leg: the app
+  // needs the bridge's 4001 (replaced) to know not to reconnect. Reserved
+  // codes can't be sent: 1005 (closed without a code, i.e. an ordinary
+  // disconnect) becomes 1000, 1006/1015 and errors become 1011. waitUntil:
+  // the execution context may end once both sockets close, which would
+  // cancel a plain await.
   let detached = false;
-  const detach = () => {
+  const detach = (event?: Event) => {
     if (detached) return;
     detached = true;
-    try {
-      origin.close();
-    } catch {
-      /* already closed */
-    }
-    try {
-      server.close();
-    } catch {
-      /* already closed */
+    const closed = event && "code" in event ? (event as CloseEvent) : null;
+    const code = !closed
+      ? 1011
+      : closed.code === 1005
+        ? 1000
+        : sendableCloseCode(closed.code)
+          ? closed.code
+          : 1011;
+    const reason = closed?.reason ?? "";
+    for (const leg of [origin, server]) {
+      try {
+        leg.close(code, reason);
+      } catch {
+        /* already closed */
+      }
     }
     console.log(`screen session stop user=${user.sub} audit=${auditId}`);
     let execCtx: ExecutionContext;
@@ -132,9 +142,17 @@ screenRoutes.get("/ws", async (c) => {
     );
   };
   origin.addEventListener("close", detach);
-  origin.addEventListener("error", detach);
+  origin.addEventListener("error", () => detach());
   server.addEventListener("close", detach);
-  server.addEventListener("error", detach);
+  server.addEventListener("error", () => detach());
 
   return new Response(null, { status: 101, webSocket: pair[0] });
 });
+
+/** Codes a WebSocket may send in a close frame (RFC 6455 §7.4). */
+function sendableCloseCode(code: number): boolean {
+  return (
+    (code >= 1000 && code <= 1014 && ![1004, 1005, 1006].includes(code)) ||
+    (code >= 3000 && code <= 4999)
+  );
+}
