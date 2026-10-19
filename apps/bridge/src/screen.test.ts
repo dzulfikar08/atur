@@ -5,7 +5,7 @@
  * process, real sockets and the real grace-period timer, which fake timers can't drive.
  */
 import { afterEach, beforeAll, describe, expect, it } from "bun:test";
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SCREEN_CLOSE, ScreenHub, type ScreenConfig, type ScreenWs } from "./screen";
@@ -90,6 +90,7 @@ function makeHub(over: Partial<ScreenConfig> = {}): {
     maxViewers: 2,
     startTimeoutMs: 5000,
     viewerTimeoutMs: 30_000,
+    wlCopyBin: "wl-copy",
     ...over,
   };
   const notes: string[] = [];
@@ -223,5 +224,30 @@ describe("ScreenHub", () => {
     const ws = fakeWs(1);
     await hub.open(ws);
     expect(ws.closed?.code).toBe(1011);
+  });
+
+  it("hands a pasted image to wl-copy on the configured Wayland display", () => {
+    const dir = mkdtempSync(join(tmpdir(), "wlcopy-test-"));
+    const bin = join(dir, "wl-copy");
+    // Records argv, the display it was given, and stdin.
+    writeFileSync(bin, `#!/bin/sh\necho "$@ $WAYLAND_DISPLAY" > ${dir}/args\ncat > ${dir}/stdin\n`);
+    chmodSync(bin, 0o755);
+    const { hub } = makeHub({ wlCopyBin: bin });
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 7, 8, 9]);
+    return hub.setClipboardImage(png).then(() => {
+      expect(readFileSync(join(dir, "args"), "utf8").trim()).toBe("--type image/png wayland-test");
+      expect(new Uint8Array(readFileSync(join(dir, "stdin")))).toEqual(png);
+    });
+  });
+
+  it("reports wl-copy failures with its stderr", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "wlcopy-test-"));
+    const bin = join(dir, "wl-copy");
+    writeFileSync(bin, `#!/bin/sh\necho "no wayland" >&2\nexit 1\n`);
+    chmodSync(bin, 0o755);
+    const { hub } = makeHub({ wlCopyBin: bin });
+    await expect(hub.setClipboardImage(new Uint8Array([1]))).rejects.toThrow(
+      "wl-copy exited 1: no wayland",
+    );
   });
 });

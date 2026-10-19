@@ -406,10 +406,35 @@ export default function DesktopScreen() {
     }
   };
 
+  // Text goes through RFB's clipboard; an image (RFB carries text only) is
+  // uploaded and put on the desktop's Wayland clipboard by the bridge. Either
+  // way the desktop then gets Ctrl+V.
   const pasteFromPhone = async () => {
     setMenu(false);
+    if (await Clipboard.hasImageAsync().catch(() => false)) {
+      const image = await Clipboard.getImageAsync({ format: "png" }).catch(() => null);
+      const base64 = image?.data.slice(image.data.indexOf(",") + 1);
+      if (base64) {
+        flashHint("Sending image to the desktop…");
+        try {
+          const binary = atob(base64);
+          const png = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+          await api.screenClipboardImage(png.buffer);
+          page.current?.send({ t: "tap", keysym: 0x76, mods: { ctrl: true } });
+          flashHint("Image pasted");
+        } catch (error) {
+          flashHint(
+            error instanceof Error
+              ? `Couldn't paste the image: ${error.message}`
+              : "Couldn't paste the image",
+          );
+        }
+        return;
+      }
+    }
     const text = await Clipboard.getStringAsync();
     if (text) page.current?.send({ t: "paste", text, pressPaste: true });
+    else flashHint("The phone clipboard is empty");
   };
 
   const copyFromDesktop = () => {
@@ -695,7 +720,7 @@ export default function DesktopScreen() {
             <MenuRow
               icon="clipboard-outline"
               label="Paste phone clipboard"
-              detail="Sends it to the desktop and presses Ctrl+V"
+              detail="Text or an image: sends it to the desktop and presses Ctrl+V"
               onPress={() => void pasteFromPhone()}
             />
             <MenuRow icon="refresh" label="Reconnect" onPress={reconnectNow} />

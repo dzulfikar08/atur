@@ -29,6 +29,38 @@ export const screenRoutes = new Hono<{ Bindings: Env }>({ strict: false });
 screenRoutes.use("/ws", wsTicketAuth("screen"));
 screenRoutes.use("*", requireSuperuser);
 
+// Paste an image from the phone: the app reads its clipboard and posts the
+// PNG here; the bridge puts it on the desktop's Wayland clipboard and the app
+// then presses Ctrl+V over the RFB session. Superuser-gated like the rest of
+// /api/screen. Body: raw image/png, at most 20 MiB.
+const MAX_CLIPBOARD_BYTES = 20 * 1024 * 1024;
+
+screenRoutes.post("/clipboard", async (c) => {
+  const base = bridgeBase(c.env);
+  if (!base) return c.json({ error: "execution plane unreachable" }, 502);
+  if (Number(c.req.header("content-length") ?? 0) > MAX_CLIPBOARD_BYTES) {
+    return c.json({ error: "image too large" }, 413);
+  }
+  const png = new Uint8Array(await c.req.arrayBuffer());
+  if (png.length === 0) return c.json({ error: "empty body" }, 400);
+  if (png.length > MAX_CLIPBOARD_BYTES) return c.json({ error: "image too large" }, 413);
+  const headers = bridgeHeaders(c.env);
+  headers.set("content-type", "image/png");
+  let res: Response;
+  try {
+    res = await fetch(`${base}/screen/clipboard`, { method: "POST", headers, body: png });
+  } catch {
+    return c.json({ error: "execution plane unreachable" }, 502);
+  }
+  console.log(
+    `screen clipboard image user=${c.get("user").sub} bytes=${png.length} status=${res.status}`,
+  );
+  return new Response(res.body, {
+    status: res.status,
+    headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
+  });
+});
+
 // Is the desktop-sharing side reachable and ready, and who's watching.
 screenRoutes.get("/status", async (c) => {
   const base = bridgeBase(c.env);
