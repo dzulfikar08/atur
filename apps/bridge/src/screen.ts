@@ -52,6 +52,8 @@ export interface ScreenConfig {
   startTimeoutMs: number;
   /** A viewer that has pinged before and goes quiet this long is dropped. */
   viewerTimeoutMs: number;
+  /** wl-copy, for pasting images from the phone. */
+  wlCopyBin: string;
 }
 
 export function screenConfigFromEnv(env: Record<string, string | undefined>): ScreenConfig {
@@ -69,6 +71,7 @@ export function screenConfigFromEnv(env: Record<string, string | undefined>): Sc
     maxViewers: Math.max(1, Number(env.SCREEN_MAX_VIEWERS) || 4),
     startTimeoutMs: Number(env.SCREEN_START_TIMEOUT_MS ?? 8_000),
     viewerTimeoutMs: Number(env.SCREEN_VIEWER_TIMEOUT_MS ?? 30_000),
+    wlCopyBin: env.SCREEN_WL_COPY_BIN || "wl-copy",
   };
 }
 
@@ -206,6 +209,30 @@ export class ScreenHub {
       `screen: viewer #${ws.data.id} socket closed code=${code ?? "-"} ${reason ?? ""}`.trimEnd(),
     );
     this.drop(conn);
+  }
+
+  /**
+   * Put a PNG on the desktop's Wayland clipboard (the viewer then sends
+   * Ctrl+V). wl-copy forks a server for the selection and exits, so this
+   * resolves once the image is on offer.
+   */
+  async setClipboardImage(png: Uint8Array): Promise<void> {
+    const proc = Bun.spawn([this.cfg.wlCopyBin, "--type", "image/png"], {
+      env: {
+        ...(process.env as Record<string, string>),
+        WAYLAND_DISPLAY: this.cfg.waylandDisplay,
+        XDG_RUNTIME_DIR: this.cfg.runtimeDir,
+      },
+      stdin: png,
+      stdout: "ignore",
+      stderr: "pipe",
+    });
+    const code = await proc.exited;
+    if (code !== 0) {
+      const err = (await new Response(proc.stderr as ReadableStream).text()).trim();
+      throw new Error(`wl-copy exited ${code}${err ? `: ${err}` : ""}`);
+    }
+    console.log(`screen: clipboard image set (${png.length} bytes)`);
   }
 
   /** Tear everything down (daemon shutdown / tests). */

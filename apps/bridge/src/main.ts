@@ -32,6 +32,14 @@ function authorized(req: Request): boolean {
   return req.headers.get("x-bridge-token") === TOKEN;
 }
 
+/** Phone screenshots are a few MB; the Worker enforces the same cap. */
+const MAX_CLIPBOARD_BYTES = 20 * 1024 * 1024;
+const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+function isPng(bytes: Uint8Array): boolean {
+  return PNG_MAGIC.every((b, i) => bytes[i] === b);
+}
+
 const hub = new PaneHub();
 const observeHub = new ObserveHub();
 const screenHub = new ScreenHub(screenConfigFromEnv(process.env));
@@ -108,6 +116,22 @@ Bun.serve<Meta>({
         return Response.json({ error: "websocket upgrade failed" }, { status: 426 });
       }
       return undefined as unknown as Response; // upgraded — Bun ignores this
+    }
+    if (url.pathname === "/screen/clipboard" && req.method === "POST") {
+      const png = new Uint8Array(await req.arrayBuffer());
+      if (png.length > MAX_CLIPBOARD_BYTES) {
+        return Response.json({ error: "image too large" }, { status: 413 });
+      }
+      if (!isPng(png)) return Response.json({ error: "not a PNG" }, { status: 415 });
+      try {
+        await screenHub.setClipboardImage(png);
+        return Response.json({ ok: true });
+      } catch (e) {
+        return Response.json(
+          { error: e instanceof Error ? e.message : String(e) },
+          { status: 502 },
+        );
+      }
     }
     if (url.pathname === "/screen/status") {
       return Response.json(screenHub.status());

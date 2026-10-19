@@ -88,6 +88,8 @@ Switched from the connection bar (arrow / hand icon), remembered in `atur.screen
 
 A floating bar at the top (drag it sideways; the chevron tucks it into a status pill): status dot + round-trip time, mouse mode, keyboard, fit, More. **More**: view only, picture quality (Sharp / Balanced / Low data → noVNC quality 8/6/2, compression 2/2/9), copy the desktop clipboard (dot on More when the desktop copied something), paste the phone clipboard (Ctrl+V after), reconnect, the gesture table for the current mode, disconnect. The key row above the soft keyboard: hide, sticky Ctrl/Alt/Shift/Super (one-shot), Esc, Tab, arrows, Home, End, PgUp, PgDn, Del, Ins, PrtSc, F1-F12, Paste. With the keyboard up, the desktop area shrinks above it instead of hiding under it.
 
+**Paste** (More menu or key row) sends whatever the phone clipboard holds. Text goes over RFB's clipboard. RFB carries text only, so an image takes another path: the app reads it as PNG (`Clipboard.getImageAsync`), posts the bytes to `POST /api/screen/clipboard` (superuser, at most 20 MiB), the Worker forwards them to the bridge's `POST /screen/clipboard` (bridge token, PNG magic checked), the bridge pipes them into `wl-copy --type image/png` on the desktop's Wayland session, and the app then presses Ctrl+V. The image pastes into whatever has focus. It replaces the desktop clipboard, as any copy would.
+
 ### Robustness
 
 - **Ping.** Beside the binary RFB stream the page sends text frames `{"t":"ping","id","ts"}` every 5 s; the bridge answers `{"t":"pong",…}` (`ScreenHub.control`). Round-trip time and receive rate show in the bar and the More menu. Text frames never reach wayvnc. Older bridges ignore them, and the page then never applies the watchdog.

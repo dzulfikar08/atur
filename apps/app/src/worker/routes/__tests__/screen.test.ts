@@ -110,4 +110,40 @@ describe("screen routes", () => {
     expect(upgradeHeaders?.get("upgrade")).toBe("websocket");
     expect(upgradeHeaders?.get("x-bridge-token")).toBe("sekrit");
   });
+
+  describe("POST /clipboard", () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    const post = (body: BodyInit, e: Env = env) =>
+      testApp().request(
+        "/api/screen/clipboard",
+        { method: "POST", headers: { "content-type": "image/png" }, body },
+        e,
+      );
+
+    it("forwards the image bytes to the bridge with its token", async () => {
+      let forwarded: { body: Uint8Array; token: string | null } | null = null;
+      fetchStub.mockImplementationOnce(async (_input, init) => {
+        forwarded = {
+          body: new Uint8Array(await new Response(init?.body).arrayBuffer()),
+          token: new Headers(init?.headers).get("x-bridge-token"),
+        };
+        return Response.json({ ok: true });
+      });
+      const res = await post(png, { ...env, HERDR_BRIDGE_TOKEN: "sekrit" } as Env);
+      expect(res.status).toBe(200);
+      expect(forwarded).toEqual({ body: png, token: "sekrit" });
+    });
+
+    it("refuses oversized and empty bodies before calling the bridge", async () => {
+      expect((await post(new Uint8Array(20 * 1024 * 1024 + 1))).status).toBe(413);
+      expect((await post(new Uint8Array(0))).status).toBe(400);
+      expect(fetchStub).not.toHaveBeenCalled();
+    });
+
+    it("is superuser-only", async () => {
+      superuserRow.mockResolvedValue({ isSuperuser: 0 });
+      expect((await post(png)).status).toBe(403);
+      expect(fetchStub).not.toHaveBeenCalled();
+    });
+  });
 });

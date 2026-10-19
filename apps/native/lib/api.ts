@@ -279,19 +279,24 @@ export class ApiError extends Error {
 
 export async function request<T>(
   path: string,
-  init: { method?: string; body?: unknown } = {},
+  init: { method?: string; body?: unknown; raw?: { data: ArrayBuffer; type: string } } = {},
 ): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = { Accept: "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
-  if (init.body !== undefined) headers["Content-Type"] = "application/json";
+  if (init.raw) headers["Content-Type"] = init.raw.type;
+  else if (init.body !== undefined) headers["Content-Type"] = "application/json";
 
   let res: Response;
   try {
     res = await fetch(`${SERVER_URL}${path}`, {
       method: init.method ?? "GET",
       headers,
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      body: init.raw
+        ? init.raw.data
+        : init.body === undefined
+          ? undefined
+          : JSON.stringify(init.body),
     });
   } catch {
     recordFailedRequest(init.method ?? "GET", path, 0);
@@ -383,6 +388,12 @@ export const api = {
   me: () => request<Me>("/api/users/me"),
   panes: () => request<{ panes: PaneListItem[] }>("/api/panes").then((r) => r.panes),
   screenStatus: () => request<ScreenStatus>("/api/screen/status"),
+  /** Put a PNG on the desktop's clipboard (the Screen view then presses Ctrl+V). */
+  screenClipboardImage: (png: ArrayBuffer) =>
+    request<{ ok: true }>("/api/screen/clipboard", {
+      method: "POST",
+      raw: { data: png, type: "image/png" },
+    }),
   /** One-time ticket (≤60s, single use) for the screen WebView's WebSocket. */
   screenTicket: () =>
     request<{ ticket: string; expires_at: number }>("/api/ws-tickets", {
