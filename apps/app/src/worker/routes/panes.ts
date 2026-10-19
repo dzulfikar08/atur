@@ -259,6 +259,52 @@ paneRoutes.get("/attach", async (c) => {
 
   return new Response(null, { status: 101, webSocket: pair[0] });
 });
+
+// Image pasted into a pane's prompt (web composer or app). Same per-pane authz
+// as attach; the bridge saves it on the execution plane and returns the path,
+// which the client inserts into the prompt for the agent to read.
+const MAX_PASTE_BYTES = 20 * 1024 * 1024;
+
+paneRoutes.post("/paste", async (c) => {
+  const pane = c.req.query("pane");
+  if (!pane) throw new HTTPException(400, { message: "pane is required" });
+  const user = c.get("user");
+  const db = getDb(c.env.DB);
+  const slug = await paneWorkspaceSlug(db, c.env, pane);
+  if (!slug) throw new HTTPException(403, { message: "pane is not bound to an atur workspace" });
+  if (!(await isMemberOfSlug(db, slug, user.sub))) {
+    throw new HTTPException(403, { message: "not a member of the pane's workspace" });
+  }
+  if (Number(c.req.header("content-length") ?? 0) > MAX_PASTE_BYTES) {
+    return c.json({ error: "image too large" }, 413);
+  }
+  const image = new Uint8Array(await c.req.arrayBuffer());
+  if (image.length === 0) return c.json({ error: "empty body" }, 400);
+  if (image.length > MAX_PASTE_BYTES) return c.json({ error: "image too large" }, 413);
+
+  const base = bridgeBase(c.env);
+  if (!base) return c.json({ error: "execution plane unreachable" }, 502);
+  const headers = bridgeHeaders(c.env);
+  headers.set("content-type", "application/octet-stream");
+  let res: Response;
+  try {
+    res = await fetch(`${base}/panes/paste?pane=${encodeURIComponent(pane)}`, {
+      method: "POST",
+      headers,
+      body: image,
+    });
+  } catch {
+    return c.json({ error: "execution plane unreachable" }, 502);
+  }
+  console.log(
+    `pane paste user=${user.sub} pane=${pane} bytes=${image.length} status=${res.status}`,
+  );
+  return new Response(res.body, {
+    status: res.status,
+    headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
+  });
+});
+
 paneRoutes.get("/observe", async (c) => {
   const pane = c.req.query("pane");
   if (!pane) throw new HTTPException(400, { message: "pane is required" });

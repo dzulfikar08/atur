@@ -52,3 +52,20 @@ export function applyModifiers(data: string, mods: Modifiers): string {
 export function swipeSteps(totalPx: number, stepPx: number, emitted: number): number {
   return Math.trunc(totalPx / stepPx) - emitted;
 }
+
+/**
+ * Insert an image path into a prompt draft at the caret, padded with spaces so
+ * it stays a separate word. Mirrors insertPath in the web's lib/terminalKeys.ts.
+ */
+export function insertPath(
+  text: string,
+  caret: number,
+  path: string,
+): { text: string; caret: number } {
+  const before = text.slice(0, caret);
+  const after = text.slice(caret);
+  const lead = before === "" || /\s$/.test(before) ? "" : " ";
+  const trail = after.startsWith(" ") ? "" : " ";
+  const inserted = `${lead}${path}${trail}`;
+  return { text: before + inserted + after, caret: before.length + inserted.length };
+}

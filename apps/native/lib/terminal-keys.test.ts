@@ -1,9 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
-import { applyModifiers, controlChar, KEY_DATA, swipeSteps } from "./terminal-keys";
+import { applyModifiers, controlChar, insertPath, KEY_DATA, swipeSteps } from "./terminal-keys";
 import { clampFontSize, DEFAULT_FONT_SIZE, fitFontSize } from "./terminal-metrics";
 
 const none = { ctrl: false, alt: false };
+
+describe("insertPath", () => {
+  test("keeps the image path a separate word wherever the caret is", () => {
+    expect(insertPath("", 0, "/p.png")).toEqual({ text: "/p.png ", caret: 7 });
+    expect(insertPath("look at", 7, "/p.png")).toEqual({ text: "look at /p.png ", caret: 15 });
+    expect(insertPath("see  it", 4, "/p.png")).toEqual({ text: "see /p.png it", caret: 10 });
+  });
+});
 
 describe("controlChar", () => {
   test("letters and the ctrl punctuation range map to control bytes", () => {
