@@ -460,6 +460,73 @@ const paneLines = [
       </section>
     </main>
 
+    <figure class="lp-wrap lp-scene">
+      <svg viewBox="0 0 1100 280" role="img" aria-labelledby="scene-title">
+        <title id="scene-title">A person relaxes in a chair with a coffee and cracks a pecut while three robots carry issue cards to a Need Review tray beside them.</title>
+        <line class="sc-ground" x1="20" y1="250" x2="1080" y2="250" />
+
+        <!-- The human: chair, body, coffee, and the pecut arm -->
+        <g class="sc-ink">
+          <path d="M120 250 V196 H196 V250 M110 196 H206 M190 196 V136" />
+          <circle class="sc-skin" cx="160" cy="110" r="20" />
+          <path d="M146 100 Q160 84 176 100" class="sc-hair" />
+          <path d="M160 130 V190 M160 190 L200 196 L214 250 M160 150 L132 170 L120 160" />
+          <path class="sc-mug" d="M108 150 h16 v18 h-16 z M124 154 q8 0 8 6 q0 6 -8 6" />
+          <path d="M114 144 q-4 -6 0 -12 M120 144 q-4 -6 0 -12" class="sc-steam" />
+          <path d="M160 150 L196 128 L214 96" />
+        </g>
+        <path class="sc-whip" d="M214 96 C 300 20, 420 30, 470 110 S 560 170, 600 128" />
+        <g class="sc-crack">
+          <path d="M606 118 l14 -12 M610 132 l18 2 M600 112 l2 -16" />
+          <text x="626" y="104">ctak!</text>
+        </g>
+
+        <!-- The Need Review tray next to the human -->
+        <g transform="translate(250 206)">
+          <rect class="sc-tray" width="96" height="44" rx="10" />
+          <rect class="sc-card sc-review" x="12" y="-10" width="72" height="22" rx="6" />
+          <text class="sc-label" x="48" y="5">Need Review</text>
+        </g>
+
+        <!-- Three robots, each carrying an issue toward the tray -->
+        <g transform="translate(690 132)">
+          <rect class="sc-card sc-started" x="-46" y="20" width="58" height="34" rx="6" />
+          <text class="sc-key" x="-17" y="42">ATUR-41</text>
+          <g class="sc-bot">
+            <line x1="30" y1="0" x2="30" y2="-14" /><circle cx="30" cy="-18" r="4" />
+            <rect x="10" y="0" width="40" height="32" rx="10" />
+            <circle class="sc-eye" cx="23" cy="16" r="3.5" /><circle class="sc-eye" cx="37" cy="16" r="3.5" />
+            <rect x="6" y="38" width="48" height="48" rx="12" />
+            <path d="M10 56 L0 46 M18 86 L12 118 M42 86 L50 118" />
+          </g>
+        </g>
+        <g transform="translate(830 132)">
+          <rect class="sc-card sc-done" x="-46" y="26" width="58" height="34" rx="6" />
+          <text class="sc-key" x="-17" y="48">ATUR-42</text>
+          <g class="sc-bot">
+            <line x1="30" y1="0" x2="30" y2="-14" /><circle cx="30" cy="-18" r="4" />
+            <rect x="10" y="0" width="40" height="32" rx="10" />
+            <circle class="sc-eye" cx="23" cy="16" r="3.5" /><circle class="sc-eye" cx="37" cy="16" r="3.5" />
+            <rect x="6" y="38" width="48" height="48" rx="12" />
+            <path d="M10 60 L0 52 M14 86 L22 118 M46 86 L38 118" />
+          </g>
+        </g>
+        <g transform="translate(970 132)">
+          <rect class="sc-card sc-needs" x="-46" y="20" width="58" height="34" rx="6" />
+          <text class="sc-key" x="-17" y="42">ATUR-43</text>
+          <g class="sc-bot">
+            <line x1="30" y1="0" x2="30" y2="-14" /><circle cx="30" cy="-18" r="4" />
+            <rect x="10" y="0" width="40" height="32" rx="10" />
+            <circle class="sc-eye" cx="23" cy="16" r="3.5" /><circle class="sc-eye" cx="37" cy="16" r="3.5" />
+            <rect x="6" y="38" width="48" height="48" rx="12" />
+            <path d="M10 56 L0 46 M18 86 L12 118 M42 86 L50 118" />
+          </g>
+          <path class="sc-sweat" d="M58 4 q4 8 0 12 q-4 -4 0 -12" />
+        </g>
+      </svg>
+      <figcaption>You hold the pecut. The agents carry the issues. Merging is still your call.</figcaption>
+    </figure>
+
     <footer class="lp-footer">
       <div class="lp-wrap lp-footer-inner">
         <a class="lp-brand" href="/"><img src="/logo-128.png" alt="" width="24" height="24" />Atur</a>
