@@ -1267,6 +1267,109 @@
   }
 }
 
+/* Footer scene: the page's joke, drawn in the same line weight and state
+   tints as everything above it. Static on purpose (MOTION 1). */
+.lp-scene {
+  padding-top: 24px;
+  padding-bottom: 8px;
+  color: var(--lp-fg);
+}
+.lp-scene svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.lp-scene figcaption {
+  margin-top: 4px;
+  text-align: center;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--lp-muted-fg);
+}
+.lp-scene :is(.sc-ink, .sc-bot) path,
+.lp-scene :is(.sc-ink, .sc-bot) line,
+.lp-scene .sc-bot rect,
+.lp-scene .sc-bot circle:not(.sc-eye) {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.lp-scene .sc-bot rect,
+.lp-scene .sc-skin {
+  fill: var(--lp-card);
+  stroke: currentColor;
+  stroke-width: 3;
+}
+.lp-scene .sc-eye {
+  fill: currentColor;
+}
+.lp-scene .sc-ground {
+  stroke: var(--lp-border);
+  stroke-width: 2;
+}
+.lp-scene .sc-whip {
+  fill: none;
+  stroke: var(--lp-review-ink);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.lp-scene .sc-crack path {
+  stroke: var(--lp-review-ink);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.lp-scene .sc-crack text {
+  fill: var(--lp-review-ink);
+  font-size: 22px;
+  font-weight: 800;
+  font-style: italic;
+}
+.lp-scene .sc-mug {
+  fill: var(--lp-review-soft);
+}
+.lp-scene .sc-steam,
+.lp-scene .sc-sweat {
+  stroke-width: 2;
+  opacity: 0.6;
+}
+.lp-scene .sc-sweat {
+  fill: var(--lp-started-soft);
+  stroke: var(--lp-started-ink);
+}
+.lp-scene .sc-tray {
+  fill: var(--lp-muted);
+}
+.lp-scene .sc-card {
+  stroke: currentColor;
+  stroke-width: 2;
+}
+.lp-scene .sc-started {
+  fill: var(--lp-started-soft);
+}
+.lp-scene .sc-done {
+  fill: var(--lp-done-soft);
+}
+.lp-scene .sc-needs {
+  fill: var(--lp-needs-soft);
+}
+.lp-scene .sc-review {
+  fill: var(--lp-review-soft);
+}
+.lp-scene :is(.sc-key, .sc-label) {
+  fill: currentColor;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  text-anchor: middle;
+}
+.lp-scene .sc-label {
+  font-family: "Manrope", system-ui, sans-serif;
+  font-size: 10px;
+  fill: var(--lp-review-ink);
+}
+
 /* Footer. */
 .lp-footer {
   padding: 32px 0 40px;
