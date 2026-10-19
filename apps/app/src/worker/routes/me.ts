@@ -470,6 +470,7 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
           like(schema.customers.email, q),
           like(schema.customers.name, q),
           like(schema.customers.company, q),
+          like(schema.customers.threadsUsername, q),
         )!,
       );
     }
@@ -485,6 +486,7 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         workspaceId: schema.customers.workspaceId,
         userId: schema.customers.userId,
         email: schema.customers.email,
+        threadsUsername: schema.customers.threadsUsername,
         name: schema.customers.name,
         company: schema.customers.company,
         phone: schema.customers.phone,

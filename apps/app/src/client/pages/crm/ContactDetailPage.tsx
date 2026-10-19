@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import type { ContactEmailLogEntry, CrmActivity, Fact, PolarLink } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -21,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Mail, ExternalLink } from "@/lib/icons";
+import { ArrowLeft, Mail, ExternalLink, MessageSquare } from "@/lib/icons";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
@@ -310,6 +312,7 @@ const ACTIVITY_LABELS: Record<CrmActivity["type"], string> = {
   EMAIL: "Email",
   MEETING: "Meeting",
   TASK: "Task",
+  MESSAGE: "Message",
   STAGE_CHANGE: "Stage change",
   ENRICHMENT: "Enrichment",
 };
@@ -320,9 +323,117 @@ const ACTIVITY_COLORS: Record<CrmActivity["type"], string> = {
   EMAIL: "bg-blue-500",
   MEETING: "bg-amber-500",
   TASK: "bg-emerald-500",
+  MESSAGE: "bg-cyan-500",
   STAGE_CHANGE: "bg-indigo-500",
   ENRICHMENT: "bg-pink-500",
 };
+
+// Types a rep can log by hand; the server rejects the system-only ones.
+const LOGGABLE_TYPES = ["MESSAGE", "NOTE", "CALL", "MEETING", "TASK", "EMAIL"] as const;
+
+// Threads has no DM API, so DM conversations are logged here by hand: the
+// timeline stays the one place a follow-up is recorded.
+function LogActivityDialog({
+  slug,
+  contactId,
+  threadsUsername,
+}: {
+  slug: string;
+  contactId: string;
+  threadsUsername: string | null;
+}) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState<(typeof LOGGABLE_TYPES)[number]>("MESSAGE");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const defaultSubject = threadsUsername ? "Threads DM" : "";
+
+  const logMut = useMutation({
+    mutationFn: () =>
+      api.logContactActivity(slug, contactId, {
+        type,
+        subject: subject.trim() || undefined,
+        body: body.trim() || undefined,
+      }),
+    onSuccess: () => {
+      toast.success("Activity logged");
+      setOpen(false);
+      setBody("");
+      qc.invalidateQueries({ queryKey: ["contact", slug, contactId] });
+    },
+    onError: (err) =>
+      toast.error("Failed to log activity", {
+        description: err instanceof ApiError ? err.message : undefined,
+      }),
+  });
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (o) {
+          setType("MESSAGE");
+          setSubject(defaultSubject);
+        }
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          <MessageSquare className="h-4 w-4 mr-1" />
+          Log follow-up
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Log follow-up</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <label className="text-sm font-medium">Type</label>
+            <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LOGGABLE_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {ACTIVITY_LABELS[t]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Subject</label>
+            <Input
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              placeholder="Threads DM, intro call, …"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium">What happened</label>
+            <Textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={4}
+              placeholder="Asked for pricing; send the deck on Friday."
+            />
+          </div>
+          <Button
+            className="w-full"
+            disabled={(!subject.trim() && !body.trim()) || logMut.isPending}
+            onClick={() => logMut.mutate()}
+          >
+            {logMut.isPending ? "Logging…" : "Log it"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function ActivityTimelineCard({ activities }: { activities: CrmActivity[] }) {
   if (activities.length === 0) return null;
@@ -346,7 +457,9 @@ function ActivityTimelineCard({ activities }: { activities: CrmActivity[] }) {
                     {formatDistanceToNow(new Date(a.occurred_at), { addSuffix: true })}
                   </span>
                 </div>
-                {a.body && <p className="text-muted-foreground truncate">{a.body}</p>}
+                {a.body && (
+                  <p className="text-muted-foreground whitespace-pre-wrap break-words">{a.body}</p>
+                )}
               </div>
             </li>
           ))}
@@ -479,7 +592,8 @@ export default function ContactDetailPage() {
   const c = data.contact;
   const stale =
     !!c.last_activity_at && Date.now() - Date.parse(c.last_activity_at) > STALE_AFTER_MS;
-  const initials = (c.name || c.email || "?").slice(0, 2).toUpperCase();
+  const handle = c.threads_username ? `@${c.threads_username}` : null;
+  const initials = (c.name || c.email || c.threads_username || "?").slice(0, 2).toUpperCase();
 
   return (
     <div className="space-y-4">
@@ -496,8 +610,8 @@ export default function ContactDetailPage() {
           <AvatarFallback>{initials}</AvatarFallback>
         </Avatar>
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold">{c.name || c.email || "Contact"}</h1>
-          <p className="text-muted-foreground text-sm">{c.email || "—"}</p>
+          <h1 className="text-2xl font-bold">{c.name || c.email || handle || "Contact"}</h1>
+          <p className="text-muted-foreground text-sm">{c.email || handle || "—"}</p>
           <div className="flex flex-wrap gap-2 mt-2">
             <Badge variant="secondary">{c.status}</Badge>
             {c.title && <Badge variant="outline">{c.title}</Badge>}
@@ -513,23 +627,37 @@ export default function ContactDetailPage() {
             )}
             {stale && <Badge variant="destructive">stale</Badge>}
           </div>
-          {c.linkedin_url && (
-            <a
-              href={c.linkedin_url}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-2 inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              LinkedIn
-            </a>
-          )}
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            {c.threads_username && (
+              <a
+                href={`https://www.threads.com/@${c.threads_username}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Threads {handle}
+              </a>
+            )}
+            {c.linkedin_url && (
+              <a
+                href={c.linkedin_url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                LinkedIn
+              </a>
+            )}
+          </div>
         </div>
       </div>
 
       {slug && id && (
-        <div>
-          <SendEmailDialog slug={slug} contactId={id} />
+        <div className="flex flex-wrap gap-2">
+          {c.email && <SendEmailDialog slug={slug} contactId={id} />}
+          <LogActivityDialog slug={slug} contactId={id} threadsUsername={c.threads_username} />
         </div>
       )}
 

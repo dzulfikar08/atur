@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { paginationParams } from "../lib/pagination";
+import { parseOr400 } from "../lib/validate";
 import { resolveWorkspaceForCaller } from "../middleware/workspace";
 import * as workspaceRepo from "../repositories/workspaces";
 import * as crmService from "../services/crm";
@@ -27,7 +28,7 @@ contactsRoutes.get("/", async (c) => {
 contactsRoutes.post("/", async (c) => {
   const db = getDb(c.env.DB);
   const ws = await resolveWorkspaceForCaller(c);
-  const body = crmService.createContactSchema.parse(await c.req.json());
+  const body = parseOr400(crmService.createContactSchema, await c.req.json());
   const contact = await crmService.createContact(db, ws.id, body);
   return c.json(contact, 201);
 });
@@ -159,10 +160,25 @@ contactsRoutes.post("/:id/facts/:factId/dismiss", async (c) => {
   return c.json(fact);
 });
 
+// Log a timeline entry by hand (a call, a Threads DM follow-up, a note).
+contactsRoutes.post("/:id/activities", async (c) => {
+  const db = getDb(c.env.DB);
+  const ws = await resolveWorkspaceForCaller(c);
+  const body = parseOr400(crmService.logActivitySchema, await c.req.json());
+  const activity = await crmService.logActivity(
+    db,
+    ws.id,
+    c.req.param("id")!,
+    c.get("user").sub,
+    body,
+  );
+  return c.json(activity, 201);
+});
+
 contactsRoutes.patch("/:id", async (c) => {
   const db = getDb(c.env.DB);
   const ws = await resolveWorkspaceForCaller(c);
-  const body = crmService.updateContactSchema.parse(await c.req.json());
+  const body = parseOr400(crmService.updateContactSchema, await c.req.json());
   const contact = await crmService.updateContact(db, ws.id, c.req.param("id")!, body);
   return c.json(contact);
 });

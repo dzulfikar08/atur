@@ -11,6 +11,7 @@ export const ACTIVITY_TYPES = [
   "EMAIL",
   "MEETING",
   "TASK",
+  "MESSAGE",
   "STAGE_CHANGE",
   "ENRICHMENT",
 ] as const;

@@ -30,14 +30,39 @@ import * as factsRepo from "../repositories/contact_facts";
 import * as companiesRepo from "../repositories/companies";
 
 // ── Contact (lead / customer) schemas ──
-export const createContactSchema = z.object({
-  email: z.string().email(),
+
+// Threads handles are letters, digits, "." and "_", at most 30 characters.
+const THREADS_USERNAME = /^[a-z0-9._]{1,30}$/;
+
+// Accepts "@handle", "handle" or a profile URL (threads.com or threads.net);
+// returns the bare lowercase handle. Blank means "no handle" (null).
+export function normalizeThreadsUsername(raw: unknown): unknown {
+  if (typeof raw !== "string") return raw;
+  const value = raw.trim();
+  if (!value) return null;
+  const fromUrl = /threads\.(?:com|net)\/@?([^/?#\s]+)/i.exec(value)?.[1];
+  return (fromUrl ?? value).replace(/^@/, "").toLowerCase();
+}
+
+const blankToNull = (v: unknown) => (typeof v === "string" && v.trim() === "" ? null : v);
+
+const contactFields = z.object({
+  email: z.preprocess(blankToNull, z.string().email().nullable().optional()),
+  threads_username: z.preprocess(
+    normalizeThreadsUsername,
+    z.string().regex(THREADS_USERNAME, "Not a Threads username").nullable().optional(),
+  ),
   name: z.string().max(200).optional(),
   company: z.string().max(200).optional(),
   phone: z.string().max(60).optional(),
   source: z.string().max(120).optional(),
 });
-export const updateContactSchema = createContactSchema.partial().extend({
+// A contact is identified by email or by Threads handle; it needs at least one.
+export const createContactSchema = contactFields.refine((d) => !!d.email || !!d.threads_username, {
+  message: "Email or Threads username is required",
+  path: ["email"],
+});
+export const updateContactSchema = contactFields.partial().extend({
   status: z.enum(["lead", "active", "churned"]).optional(),
   company_id: z.string().uuid().nullable().optional(),
   title: z.string().max(200).nullable().optional(),
@@ -45,6 +70,15 @@ export const updateContactSchema = createContactSchema.partial().extend({
   function: z.string().max(120).nullable().optional(),
   linkedin_url: z.string().max(500).nullable().optional(),
   image_url: z.string().max(500).nullable().optional(),
+});
+
+// Manual timeline entries a rep logs (a Threads DM follow-up is a MESSAGE).
+// STAGE_CHANGE and ENRICHMENT stay system-only.
+export const logActivitySchema = z.object({
+  type: z.enum(["NOTE", "CALL", "EMAIL", "MEETING", "TASK", "MESSAGE"]),
+  subject: z.string().max(200).optional(),
+  body: z.string().max(5000).optional(),
+  occurred_at: z.string().datetime({ offset: true }).optional(),
 });
 
 // ── Deal schemas (wire format is snake_case) ──
@@ -76,7 +110,14 @@ export async function createContact(
   workspaceId: string,
   data: z.infer<typeof createContactSchema>,
 ) {
-  return customersRepo.createLead(db, workspaceId, data);
+  return customersRepo.createLead(db, workspaceId, {
+    email: data.email,
+    threadsUsername: data.threads_username,
+    name: data.name,
+    company: data.company,
+    phone: data.phone,
+    source: data.source,
+  });
 }
 
 export async function listContacts(
@@ -118,6 +159,28 @@ export async function updateContact(
   customerId: string,
   data: z.infer<typeof updateContactSchema>,
 ) {
+  const existing = await customersRepo.getContact(db, workspaceId, customerId);
+  if (!existing) throw new HTTPException(404, { message: "Contact not found" });
+  const email = data.email === undefined ? existing.email : data.email;
+  const threadsUsername =
+    data.threads_username === undefined ? existing.threadsUsername : data.threads_username;
+  if (!email && !threadsUsername) {
+    throw new HTTPException(400, { message: "Email or Threads username is required" });
+  }
+  // Both identity keys are unique per workspace: name the clash instead of
+  // letting the unique index surface as a 500.
+  for (const [key, value] of [
+    ["email", data.email],
+    ["threadsUsername", data.threads_username],
+  ] as const) {
+    if (!value) continue;
+    const holder = await customersRepo.findByIdentity(db, workspaceId, { [key]: value });
+    if (holder && holder.id !== customerId) {
+      throw new HTTPException(409, {
+        message: `${holder.name || holder.email || "Another contact"} already uses ${value}`,
+      });
+    }
+  }
   // Wire keys are snake_case for the new fields (company_id etc.) — translate
   // to the repo's camelCase patch. Legacy camelCase keys pass through as-is.
   const contact = await customersRepo.updateContact(db, workspaceId, customerId, {
@@ -128,6 +191,7 @@ export async function updateContact(
     seniority: data.seniority,
     function: data.function,
     linkedinUrl: data.linkedin_url,
+    threadsUsername: data.threads_username,
     imageUrl: data.image_url,
     phone: data.phone,
     status: data.status,
@@ -136,6 +200,25 @@ export async function updateContact(
   });
   if (!contact) throw new HTTPException(404, { message: "Contact not found" });
   return contact;
+}
+
+export async function logActivity(
+  db: DbClient,
+  workspaceId: string,
+  customerId: string,
+  createdBy: string,
+  data: z.infer<typeof logActivitySchema>,
+) {
+  const contact = await customersRepo.getContact(db, workspaceId, customerId);
+  if (!contact) throw new HTTPException(404, { message: "Contact not found" });
+  return activitiesService.recordActivity(db, workspaceId, {
+    customerId,
+    type: data.type,
+    subject: data.subject ?? null,
+    body: data.body ?? null,
+    occurredAt: data.occurred_at,
+    createdBy,
+  });
 }
 
 export async function deleteContact(db: DbClient, workspaceId: string, customerId: string) {

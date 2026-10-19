@@ -18,6 +18,7 @@ export interface CustomerRow {
   seniority: string | null;
   function: string | null;
   linkedinUrl: string | null;
+  threadsUsername: string | null;
   imageUrl: string | null;
   lastActivityAt: string | null;
   enrichedAt: string | null;
@@ -49,6 +50,7 @@ const contactSelect = {
   seniority: schema.customers.seniority,
   function: schema.customers.function,
   linkedinUrl: schema.customers.linkedinUrl,
+  threadsUsername: schema.customers.threadsUsername,
   imageUrl: schema.customers.imageUrl,
   lastActivityAt: schema.customers.lastActivityAt,
   enrichedAt: schema.customers.enrichedAt,
@@ -118,6 +120,37 @@ export async function findByWorkspaceEmail(
     )
     .limit(1);
   return row ?? null;
+}
+
+// CRM identity lookup on either key: email or Threads handle. With both given,
+// a contact matching either one is returned (the email match first).
+export async function findByIdentity(
+  db: DbClient,
+  workspaceId: string,
+  keys: { email?: string | null; threadsUsername?: string | null },
+): Promise<CustomerRow | null> {
+  const matches = [
+    keys.email ? eq(schema.customers.email, keys.email) : undefined,
+    keys.threadsUsername ? eq(schema.customers.threadsUsername, keys.threadsUsername) : undefined,
+  ].filter((m) => m !== undefined);
+  if (matches.length === 0) return null;
+  const rows = await db
+    .select(contactSelect)
+    .from(schema.customers)
+    .leftJoin(schema.users, eq(schema.users.id, schema.customers.userId))
+    .leftJoin(
+      schema.companies,
+      and(eq(schema.companies.id, schema.customers.companyId), isNull(schema.companies.deletedAt)),
+    )
+    .where(
+      and(
+        eq(schema.customers.workspaceId, workspaceId),
+        or(...matches),
+        isNull(schema.users.deletedAt),
+      ),
+    )
+    .limit(2);
+  return rows.find((r) => keys.email && r.email === keys.email) ?? rows[0] ?? null;
 }
 
 // Unique username derived from the email local-part, with a short random
@@ -214,22 +247,39 @@ export async function ensure(
 }
 
 // Create a CRM lead — a contact with NO auth account (user_id NULL). Dedupes
-// on (workspace, email); if a contact exists there, backfill any newly
-// provided fields and return it.
+// on (workspace, email) or (workspace, Threads handle); if a contact exists
+// there, backfill any newly provided fields and return it.
 export async function createLead(
   db: DbClient,
   workspaceId: string,
   opts: {
-    email: string;
+    email?: string | null;
+    threadsUsername?: string | null;
     name?: string | null;
     company?: string | null;
     phone?: string | null;
     source?: string | null;
   },
 ): Promise<CustomerRow> {
-  const existing = await findByWorkspaceEmail(db, workspaceId, opts.email);
+  const existing = await findByIdentity(db, workspaceId, opts);
   if (existing) {
     const patch: Record<string, unknown> = { updatedAt: nowISO() };
+    // Backfill the other identity key only when no second contact holds it
+    // (the unique indexes would reject the write).
+    if (
+      !existing.email &&
+      opts.email &&
+      !(await findByIdentity(db, workspaceId, { email: opts.email }))
+    ) {
+      patch.email = opts.email;
+    }
+    if (
+      !existing.threadsUsername &&
+      opts.threadsUsername &&
+      !(await findByIdentity(db, workspaceId, { threadsUsername: opts.threadsUsername }))
+    ) {
+      patch.threadsUsername = opts.threadsUsername;
+    }
     if (!existing.name && opts.name) patch.name = opts.name;
     if (!existing.company && opts.company) patch.company = opts.company;
     if (!existing.phone && opts.phone) patch.phone = opts.phone;
@@ -247,12 +297,14 @@ export async function createLead(
   }
 
   const now = nowISO();
+  const id = uuid();
   const companyId = await resolveCompanyId(db, workspaceId, opts.company);
   await db.insert(schema.customers).values({
-    id: uuid(),
+    id,
     workspaceId,
     userId: null,
-    email: opts.email,
+    email: opts.email ?? null,
+    threadsUsername: opts.threadsUsername ?? null,
     name: opts.name ?? null,
     company: opts.company ?? null,
     companyId,
@@ -264,7 +316,7 @@ export async function createLead(
     updatedAt: now,
   });
 
-  const created = await findByWorkspaceEmail(db, workspaceId, opts.email);
+  const created = await getContact(db, workspaceId, id);
   return created!;
 }
 
@@ -282,6 +334,7 @@ export async function listContacts(
         like(schema.customers.email, q),
         like(schema.customers.name, q),
         like(schema.customers.company, q),
+        like(schema.customers.threadsUsername, q),
       )!,
     );
   }
@@ -337,6 +390,7 @@ export async function updateContact(
     seniority?: string | null;
     function?: string | null;
     linkedinUrl?: string | null;
+    threadsUsername?: string | null;
     imageUrl?: string | null;
     phone?: string | null;
     status?: string;
@@ -353,6 +407,7 @@ export async function updateContact(
   if (patch.seniority !== undefined) set.seniority = patch.seniority;
   if (patch.function !== undefined) set.function = patch.function;
   if (patch.linkedinUrl !== undefined) set.linkedinUrl = patch.linkedinUrl;
+  if (patch.threadsUsername !== undefined) set.threadsUsername = patch.threadsUsername;
   if (patch.imageUrl !== undefined) set.imageUrl = patch.imageUrl;
   if (patch.phone !== undefined) set.phone = patch.phone;
   if (patch.status !== undefined) set.status = patch.status;
