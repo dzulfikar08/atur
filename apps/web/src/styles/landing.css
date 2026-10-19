@@ -832,6 +832,231 @@
   font-weight: 600;
 }
 
+/* herdr band: In Progress tint, because herdr is where work in progress
+   lives. A laptop window and a phone overlap to show one pane in two places;
+   the tilted sticker is the one playful note. */
+.lp-herdr {
+  padding: 80px 0;
+  background: var(--lp-started-soft);
+  color: var(--lp-started-ink);
+}
+.lp-herdr-grid {
+  display: grid;
+  gap: 56px;
+  align-items: center;
+}
+.lp-herdr h2 {
+  color: var(--lp-fg);
+}
+.lp-herdr .lp-section-lead {
+  color: var(--lp-started-ink);
+}
+.lp-herdr-eyebrow {
+  margin-bottom: 12px;
+  font-size: 0.9375rem;
+  font-weight: 800;
+}
+.lp-herdr-list {
+  display: grid;
+  gap: 18px;
+  margin-top: 28px;
+}
+.lp-herdr-list li {
+  display: flex;
+  gap: 14px;
+}
+.lp-herdr-list strong {
+  color: var(--lp-fg);
+}
+.lp-herdr-list p {
+  margin-top: 2px;
+  font-size: 0.9375rem;
+}
+.lp-herdr-icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--lp-card);
+}
+.lp-herdr .lp-fine {
+  color: var(--lp-started-ink);
+}
+@media (min-width: 900px) {
+  .lp-herdr {
+    padding: 112px 0;
+  }
+  .lp-herdr-grid {
+    grid-template-columns: 1fr 1.1fr;
+    gap: 56px;
+  }
+}
+
+.lp-herdr-visual {
+  position: relative;
+  padding-bottom: 72px;
+}
+.lp-hw {
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--lp-term-bg);
+  color: var(--lp-term-fg);
+  box-shadow: 0 30px 60px -24px rgba(22, 22, 22, 0.45);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+}
+.lp-hw-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: #161616;
+}
+.lp-hw-bar span {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #3a3a38;
+}
+.lp-hw-bar p {
+  margin-left: 8px;
+  color: #a8a8a2;
+}
+.lp-hw-body {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  min-height: 230px;
+}
+.lp-hw-side {
+  padding: 12px 8px;
+  border-right: 1px solid #262624;
+  color: #a8a8a2;
+}
+.lp-hw-side li {
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.lp-hw-side li.on {
+  background: #262624;
+  color: #fafafa;
+}
+.lp-hw-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px 0;
+  border-bottom: 1px solid #262624;
+  color: #a8a8a2;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.lp-hw-tabs span {
+  padding: 5px 10px;
+  border-radius: 6px 6px 0 0;
+}
+.lp-hw-tabs span.on {
+  background: #1e1e1c;
+  color: #fafafa;
+}
+.lp-hw-term {
+  padding: 14px 16px;
+  line-height: 1.7;
+}
+.lp-hw-term .dim,
+.lp-hp-term .dim {
+  color: #8a8a8a;
+}
+.lp-hw-term .ok,
+.lp-hp-term .ok {
+  color: #4ade80;
+}
+.lp-hw-term .warn {
+  color: #f9a8d4;
+}
+
+.lp-hp {
+  position: absolute;
+  right: 4%;
+  bottom: 0;
+  width: 210px;
+  padding: 6px;
+  border-radius: 30px;
+  background: var(--lp-device);
+  box-shadow: 0 24px 40px -18px rgba(22, 22, 22, 0.45);
+}
+.lp-hp > * {
+  background: #fff;
+  color: #0d0d0d;
+}
+.lp-hp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px 8px;
+  border-radius: 24px 24px 0 0;
+  font-size: 12px;
+  font-weight: 800;
+}
+.lp-hp-head span {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: #15803d;
+}
+.lp-hp .lp-hp-term {
+  padding: 10px 12px;
+  background: var(--lp-term-bg);
+  color: var(--lp-term-fg);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9.5px;
+  line-height: 1.6;
+}
+.lp-hp-composer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 12px;
+  border-radius: 0 0 24px 24px;
+  font-size: 10px;
+}
+.lp-hp-composer span {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #e1e1e1;
+  border-radius: 10px;
+}
+.lp-hp-composer b {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #161616;
+  color: #fafafa;
+}
+.lp-sticker {
+  position: absolute;
+  left: 2%;
+  bottom: 18px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--lp-review-soft);
+  color: var(--lp-review-ink);
+  border: 2px solid currentColor;
+  font-size: 0.875rem;
+  font-weight: 800;
+  line-height: 1.25;
+  transform: rotate(-6deg);
+}
+.lp-herdr-visual figcaption {
+  position: absolute;
+  bottom: -28px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.8125rem;
+}
+
 /* Paired panels and the workspace pair. */
 .lp-pair,
 .lp-workspace {

@@ -108,6 +108,22 @@ const posts = [
   ["atur-vs-linear", "Atur vs Linear", "Linear made issues fast. Atur makes issues something an agent can pick up and answer for."],
 ];
 
+const herdrPoints = [
+  ["link", "From the issue to the pane", "An agent's claim comment links its herdr pane. Open it from the issue, in the browser or the app."],
+  ["terminal", "The session keeps running", "Close the browser or lock the phone. The herdr session keeps going on your machine, and you reattach to the same screen later."],
+  ["layers", "Each workspace knows its place", "An Atur workspace records its repo, checkout, branch and herdr workspace, so a new agent starts in the right one."],
+  ["comment", "Read it without the terminal", "The Transcript view turns a pane into tool calls and output you can skim on a phone."],
+];
+
+const herdrLines = [
+  ["dim", "› add retries with backoff to the webhook sender"],
+  ["", "Editing src/webhooks/send.ts"],
+  ["", "Retries back off 2s, 4s, 8s, then give up."],
+  ["ok", "✓ 6 tests passing"],
+  ["warn", "? Which Stripe account should replays use?"],
+  ["dim", "  Moved ATUR-41 to Needs You"],
+];
+
 const paneLines = [
   ["dim", "› fix the verify flow in ATUR-35"],
   ["", "Reading src/auth/verify.ts"],
@@ -280,6 +296,63 @@ const paneLines = [
               </div>
             </div>
             <figcaption>Example screen.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="herdr" class="lp-herdr">
+        <div class="lp-wrap lp-herdr-grid">
+          <div>
+            <p class="lp-herdr-eyebrow">Deep integration with <a class="lp-text-link" href="https://herdr.dev" target="_blank" rel="noopener">herdr</a></p>
+            <h2>Close the laptop. Pick the work up again from anywhere.</h2>
+            <p class="lp-section-lead">
+              Your agents run in herdr, the terminal workspace manager for AI coding agents. Atur
+              knows which herdr pane holds each issue, so going back to a piece of work is one
+              tap, not a hunt through terminals.
+            </p>
+            <ul class="lp-herdr-list">
+              {herdrPoints.map(([icon, title, body]) => (
+                <li>
+                  <span class="lp-herdr-icon"><Icon name={icon} size={18} /></span>
+                  <div><strong>{title}</strong><p>{body}</p></div>
+                </li>
+              ))}
+            </ul>
+            <p class="lp-fine">Needs herdr and the Atur bridge on the machine where your agents work.</p>
+          </div>
+
+          <figure class="lp-herdr-visual">
+            <div class="lp-hw" role="img" aria-label="Example herdr workspace with three panes: two agents on Atur issues and a shell.">
+              <div class="lp-hw-bar"><span></span><span></span><span></span><p>herdr · atur</p></div>
+              <div class="lp-hw-body">
+                <ul class="lp-hw-side">
+                  <li class="on">atur</li>
+                  <li>web</li>
+                  <li>docs</li>
+                </ul>
+                <div class="lp-hw-main">
+                  <div class="lp-hw-tabs">
+                    <span class="on">ATUR-41 agent</span>
+                    <span>ATUR-42 agent</span>
+                    <span>shell</span>
+                  </div>
+                  <div class="lp-hw-term">
+                    {herdrLines.map(([kind, text]) => <p class={kind}>{text}</p>)}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="lp-hp" role="img" aria-label="Example phone screen reattached to the same ATUR-41 pane.">
+              <div class="lp-hp-head"><p>ATUR-41 agent</p><span>Live</span></div>
+              <div class="lp-hp-term">
+                <p class="dim">› retries now back off 2s, 4s, 8s</p>
+                <p class="ok">✓ 6 tests passing</p>
+                <p>Waiting for your answer…</p>
+              </div>
+              <div class="lp-hp-composer"><span>Use test mode, then open the PR</span><b><Icon name="send" size={12} /></b></div>
+            </div>
+            <p class="lp-sticker">Same pane.<br />Same scrollback.</p>
+            <figcaption>Example screens.</figcaption>
           </figure>
         </div>
       </section>
