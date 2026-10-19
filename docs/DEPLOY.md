@@ -175,6 +175,11 @@ Path: browser → Worker `/api/screen/ws` (superuser gate + audit) → tunnel �
   `SCREEN_WAYVNC_BIN` / `SCREEN_WAYVNC_LIBDIR`). Needs the Wayland session
   (`WAYLAND_DISPLAY`, default `wayland-1`).
 - Each viewer connect/disconnect fires a `notify-send` on the desktop.
+- At most `SCREEN_MAX_VIEWERS` (4) viewers: a new one replaces the oldest
+  (close 4001, the app then stays disconnected). Viewers that ping (the native
+  app, text frames beside the RFB stream) and then fall silent for
+  `SCREEN_VIEWER_TIMEOUT_MS` (30 s) are dropped (close 4002). The Worker relay
+  passes close codes through. Details: `docs/native-panes-screen.md`.
 - `GET /api/screen/status` (superuser) → `{available, running, viewers}`.
 - Restarting `atur-bridge` ends open viewer sessions (wayvnc lives in its
   cgroup); herdr panes are unaffected.

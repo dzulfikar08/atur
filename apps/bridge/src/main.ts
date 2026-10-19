@@ -15,6 +15,7 @@
  *   GET /observe?pane=<id> → WebSocket upgrade: read-only structured transcript
  *   GET /screen/status    → desktop-sharing availability, running state, viewer count
  *   GET /screen           → WebSocket upgrade: raw RFB bytes to the loopback wayvnc
+ *                           (text frames are the viewer's ping/pong, answered here)
  */
 import type { ServerWebSocket } from "bun";
 import { PaneHub, type BridgeMeta } from "./hub";
@@ -177,9 +178,9 @@ Bun.serve<Meta>({
     drain(ws): void {
       if (isScreen(ws)) screenHub.drain(ws);
     },
-    close(ws): void {
+    close(ws, code, reason): void {
       if (isScreen(ws)) {
-        screenHub.close(ws);
+        screenHub.close(ws, code, reason);
         return;
       }
       const paneWs = ws as ServerWebSocket<BridgeMeta>;

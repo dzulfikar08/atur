@@ -25,9 +25,15 @@ export interface ScreenMeta {
 /** The slice of Bun's ServerWebSocket the hub needs (kept narrow for tests). */
 export interface ScreenWs {
   data: ScreenMeta;
-  send(data: Uint8Array): number;
+  send(data: Uint8Array | string): number;
   close(code?: number, reason?: string): void;
 }
+
+/**
+ * Close codes the app acts on (apps/native/lib/screen-session.ts mirrors them):
+ * a replaced viewer must not reconnect on its own, a timed-out one may.
+ */
+export const SCREEN_CLOSE = { replaced: 4001, timedOut: 4002 } as const;
 
 export interface ScreenConfig {
   /** Loopback port wayvnc listens on. */
@@ -41,8 +47,11 @@ export interface ScreenConfig {
   output: string;
   /** How long wayvnc lingers after the last viewer leaves. */
   graceMs: number;
+  /** At the cap, the oldest viewer is replaced by the newcomer. */
   maxViewers: number;
   startTimeoutMs: number;
+  /** A viewer that has pinged before and goes quiet this long is dropped. */
+  viewerTimeoutMs: number;
 }
 
 export function screenConfigFromEnv(env: Record<string, string | undefined>): ScreenConfig {
@@ -56,8 +65,10 @@ export function screenConfigFromEnv(env: Record<string, string | undefined>): Sc
     runtimeDir,
     output: env.SCREEN_OUTPUT ?? "",
     graceMs: Number(env.SCREEN_GRACE_MS ?? 15_000),
-    maxViewers: Number(env.SCREEN_MAX_VIEWERS ?? 4),
+    // At least one: the cap evicts to make room, so 0 would leave none.
+    maxViewers: Math.max(1, Number(env.SCREEN_MAX_VIEWERS) || 4),
     startTimeoutMs: Number(env.SCREEN_START_TIMEOUT_MS ?? 8_000),
+    viewerTimeoutMs: Number(env.SCREEN_VIEWER_TIMEOUT_MS ?? 30_000),
   };
 }
 
@@ -76,6 +87,8 @@ interface Conn {
   closed: boolean;
   /** TCP reads paused because the WebSocket is backed up. */
   paused: boolean;
+  /** When the viewer last pinged (0 = never: older clients don't, so no timeout). */
+  lastPing: number;
 }
 
 type Notify = (title: string, body: string, urgency: "low" | "critical") => void;
@@ -85,6 +98,7 @@ export class ScreenHub {
   private proc: Subprocess | null = null;
   private starting: Promise<void> | null = null;
   private stopTimer: ReturnType<typeof setTimeout> | null = null;
+  private sweepTimer: Timer | null = null;
   private nextId = 1;
 
   constructor(
@@ -108,13 +122,16 @@ export class ScreenHub {
 
   /** A viewer socket opened: bring wayvnc up (if needed) and bridge to it. */
   async open(ws: ScreenWs): Promise<void> {
-    if (this.conns.size >= this.cfg.maxViewers) {
-      ws.close(1013, "too many screen viewers");
-      return;
+    // The desktop has one owner: a new session (often the same phone after a
+    // network change, its old socket not yet noticed dead) replaces the oldest.
+    for (const oldest of this.conns.values()) {
+      if (this.conns.size < this.cfg.maxViewers) break;
+      this.drop(oldest, SCREEN_CLOSE.replaced, "replaced by a newer viewer");
     }
-    const conn: Conn = { ws, tcp: null, pending: [], closed: false, paused: false };
+    const conn: Conn = { ws, tcp: null, pending: [], closed: false, paused: false, lastPing: 0 };
     this.conns.set(ws, conn);
     this.cancelStop();
+    this.startSweep();
     console.log(`screen: viewer #${ws.data.id} connecting (viewers=${this.conns.size})`);
 
     try {
@@ -160,10 +177,14 @@ export class ScreenHub {
     );
   }
 
-  /** Client → wayvnc bytes. */
+  /** Client → wayvnc bytes; text frames are the app's ping/pong, never RFB. */
   message(ws: ScreenWs, data: string | Uint8Array): void {
     const conn = this.conns.get(ws);
-    if (!conn || conn.closed || typeof data === "string") return;
+    if (!conn || conn.closed) return;
+    if (typeof data === "string") {
+      this.control(conn, data);
+      return;
+    }
     conn.pending.push(data);
     this.flush(conn);
   }
@@ -178,16 +199,52 @@ export class ScreenHub {
   }
 
   /** The WebSocket closed. */
-  close(ws: ScreenWs): void {
+  close(ws: ScreenWs, code?: number, reason?: string): void {
     const conn = this.conns.get(ws);
-    if (conn) this.drop(conn);
+    if (!conn) return;
+    console.log(
+      `screen: viewer #${ws.data.id} socket closed code=${code ?? "-"} ${reason ?? ""}`.trimEnd(),
+    );
+    this.drop(conn);
   }
 
   /** Tear everything down (daemon shutdown / tests). */
   async shutdown(): Promise<void> {
     for (const conn of [...this.conns.values()]) this.drop(conn, 1001, "bridge shutting down");
     this.cancelStop();
+    clearInterval(this.sweepTimer ?? undefined);
+    this.sweepTimer = null;
     await this.stopServer();
+  }
+
+  private control(conn: Conn, raw: string): void {
+    let msg: { t?: unknown; id?: unknown; ts?: unknown };
+    try {
+      msg = JSON.parse(raw) as typeof msg;
+    } catch {
+      return;
+    }
+    if (msg.t !== "ping") return;
+    conn.lastPing = Date.now();
+    conn.ws.send(JSON.stringify({ t: "pong", id: msg.id, ts: msg.ts }));
+  }
+
+  /** Drop viewers whose pings stopped: their phone is gone, the socket just doesn't know. */
+  private startSweep(): void {
+    if (this.sweepTimer) return;
+    const every = Math.max(50, Math.min(5_000, this.cfg.viewerTimeoutMs / 3));
+    this.sweepTimer = setInterval(() => {
+      const now = Date.now();
+      for (const conn of [...this.conns.values()]) {
+        if (conn.lastPing > 0 && now - conn.lastPing > this.cfg.viewerTimeoutMs) {
+          this.drop(conn, SCREEN_CLOSE.timedOut, "viewer timed out");
+        }
+      }
+      if (this.conns.size === 0 && this.sweepTimer) {
+        clearInterval(this.sweepTimer);
+        this.sweepTimer = null;
+      }
+    }, every);
   }
 
   private onTcpData(conn: Conn, chunk: Uint8Array): void {

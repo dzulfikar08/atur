@@ -1,16 +1,25 @@
-// Mirrors apps/app/src/client/lib/screenKeys.ts (the web Screen page): X11
-// keysyms for typed text, the soft keyboard and the extra-key row. Keep the two
-// in step — the native app cannot import from the web workspace.
+// charToKeysym/diffInput mirror apps/app/src/client/lib/screenKeys.ts (the web
+// Screen page); keep the two in step, the native app cannot import from the
+// web workspace. KEYSYM also carries the native extended key row's keys.
 
 export const KEYSYM = {
   BackSpace: 0xff08,
   Tab: 0xff09,
   Return: 0xff0d,
   Escape: 0xff1b,
+  Home: 0xff50,
   Left: 0xff51,
   Up: 0xff52,
   Right: 0xff53,
   Down: 0xff54,
+  PageUp: 0xff55,
+  PageDown: 0xff56,
+  End: 0xff57,
+  Print: 0xff61,
+  Insert: 0xff63,
+  Delete: 0xffff,
+  /** F1; F(n) is F1 + n - 1, up to F12. */
+  F1: 0xffbe,
 } as const;
 
 /** Keysym for one typed character; null for characters with no keysym (control chars). */

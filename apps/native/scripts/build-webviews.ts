@@ -57,11 +57,14 @@ const screen = page({
   connectSrc: "__CONNECT_SRC__",
   style: `html,body{margin:0;height:100%;background:#000;overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 #viewport{position:fixed;inset:0;overflow:hidden}
-#screen{position:absolute;left:0;top:0;background:#000}
+#screen,#ghost{position:absolute;left:0;top:0}
+#ghost{display:none}
 #overlay{position:fixed;inset:0;touch-action:none}
+#pointer{position:fixed;left:0;top:0;width:26px;height:26px;display:none;pointer-events:none;will-change:transform;z-index:2}
 .ripple{position:absolute;width:36px;height:36px;margin:-18px 0 0 -18px;border:3px solid;border-radius:50%;pointer-events:none;animation:ripple .45s ease-out forwards}
 @keyframes ripple{from{opacity:.9;transform:scale(.4)}to{opacity:0;transform:scale(1.3)}}`,
-  body: `<div id="viewport"><div id="screen"></div></div><div id="overlay"></div>`,
+  // #pointer: the trackpad pointer, a classic arrow with its tip at (3, 2).
+  body: `<div id="viewport"><canvas id="ghost"></canvas><div id="screen"></div></div><div id="overlay"></div><div id="pointer"><svg viewBox="0 0 26 26" width="26" height="26"><path d="M3 2v18.5l4.9-4.6 3.2 7.2 3.3-1.5-3.1-7h6.8z" fill="#fff" stroke="#000" stroke-width="1.5" stroke-linejoin="round"/></svg></div>`,
   script: await bundle("screen.ts"),
 });
 
