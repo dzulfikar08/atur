@@ -1,134 +1,86 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Icon from "../components/Icon.astro";
+import { ANDROID_CREDIT, ANDROID_PATH, ANDROID_VIEWBOX, APPLE_PATH, APPLE_VIEWBOX } from "../lib/marks";
 import "../styles/landing.css";
 
 const APP_URL = "https://app.diatur.com";
+const SIGNUP_URL = `${APP_URL}/auth/login`;
+const TESTFLIGHT_URL = "https://testflight.apple.com/join/9f11gxvK";
+// Android closed test: the Google group is the tester list Play checks, then
+// the opt-in page enrolls that Google account.
+const TESTER_GROUP_URL = "https://groups.google.com/g/atur-testers";
+const TESTER_OPTIN_URL = "https://play.google.com/apps/testing/com.diatur.app";
 
-const boardCols = [
-  {
-    name: "Backlog",
-    dot: "var(--lp-text-3)",
-    count: "3",
-    cards: [
-      { key: "ATUR-41", title: "Add webhook retries with backoff", chip: null },
-      { key: "ATUR-44", title: "Draft v0.9 changelog", chip: { kind: "gray", icon: "bot", text: "queued" } },
-    ],
-  },
-  {
-    name: "In progress",
-    dot: "var(--lp-blue)",
-    count: "2 · WIP 3",
-    cards: [
-      { key: "ATUR-38", title: "Rate-limit login attempts", chip: { kind: "green", icon: "terminal", text: "firstmate · working" } },
-      { key: "ATUR-39", title: "Fix OAuth callback race", chip: { kind: "green", icon: "terminal", text: "sonnet · working" } },
-    ],
-  },
-  {
-    name: "Needs review",
-    dot: "var(--lp-amber)",
-    count: "2",
-    hot: true,
-    cards: [
-      { key: "ATUR-35", title: "Invite email returns 500 on verify", chip: { kind: "amber", icon: "checkmarkCircle", text: "evidence ready" } },
-      { key: "ATUR-33", title: "Migrate assets to R2", chip: { kind: "amber", icon: "checkmarkCircle", text: "evidence ready" } },
-    ],
-  },
-  {
-    name: "Done",
-    dot: "var(--lp-green)",
-    count: "12",
-    cards: [
-      { key: "ATUR-28", title: "Cycle burndown chart", chip: { kind: "green", icon: "gitMerge", text: "merged · dzul" } },
-      { key: "ATUR-26", title: "Portal ticket threading", chip: { kind: "green", icon: "gitMerge", text: "merged · dzul" } },
-    ],
-  },
+const androidSteps = [
+  "Join the atur-testers Google group with the Google account you use on the Play Store. The group is what opens the closed test to you.",
+  "Open the test page on Google Play and tap Become a tester. If the page won't open yet, wait a few minutes and try again.",
+  "Install Atur from the Play Store and sign in with the account you use on the web. Your workspaces come with you.",
 ];
 
-const metrics = [
-  ["70+", "MCP tools for agents"],
-  ["1", "connected workspace"],
-  ["0", "unreviewed merges"],
-  ["24/7", "agents on shift"],
+const iosSteps = [
+  "Install TestFlight from the App Store if it isn't on your iPhone yet.",
+  "Open the Atur TestFlight link on your iPhone and tap Accept.",
+  "Tap Install in TestFlight, then sign in with the account you use on the web. Your workspaces come with you.",
 ];
 
-const steps = [
-  ["Write it like a brief", "Link the repo, the customer, the page. The issue carries everything an agent needs, with no context lost in a handoff."],
-  ["An agent picks it up", "It claims the issue and ships in an isolated branch. Its live terminal is one click away in your browser. No black box."],
-  ["You review the proof", "What changed and why it works land on the issue as evidence. Approve and merge. Nothing ships without you."],
-];
+const MCP_CMD = `claude mcp add atur --transport http https://app.diatur.com/mcp -H "X-API-Key: <your-key>"`;
 
-const groups = [
+// The board's own workflow states. Each tint on this page is one of these
+// states, so a colour always means the same thing it means in the app.
+const loop = [
   {
-    icon: "kanban",
-    title: "Plan & ship",
-    rows: [
-      ["kanban", "Projects, issues, and cycles"],
-      ["gitBranch", "Agent work on branches, proof on issues"],
-      ["timer", "Time tracked where work happens"],
-    ],
+    tone: "started",
+    state: "In Progress",
+    title: "An agent claims it",
+    body: "It comments that it picked the issue up, links its live pane, and works on a branch in its own worktree.",
   },
   {
-    icon: "contactBook",
-    title: "Keep customers close",
-    rows: [
-      ["contactBook", "Contacts, companies, and pipeline"],
-      ["lifeBuoy", "Support portal and feedback board"],
-      ["chart", "Reports that follow projects"],
-    ],
+    tone: "needs",
+    state: "Needs You",
+    title: "A stuck agent asks",
+    body: "Missing a key or a decision? The issue moves to Needs You with the exact question. Answer in a comment and it carries on.",
   },
   {
-    icon: "file",
-    title: "Remember everything",
-    rows: [
-      ["notebookPen", "Pages with slash commands and callouts"],
-      ["link", "Wikilinks with backlinks"],
-      ["flow", "A knowledge graph of the work"],
-    ],
+    tone: "review",
+    state: "Need Review",
+    title: "The proof lands on the issue",
+    body: "What changed, the test run, and a screenshot for UI work, posted where you will read it.",
+  },
+  {
+    tone: "done",
+    state: "Done",
+    title: "You merge",
+    body: "Agents leave a branch or open a PR. Merging stays with you unless you switch on auto-merge for that workspace.",
   },
 ];
 
-const reasons = [
-  ["gitPullRequest", "Agents never merge", "Every agent task ends at Need Review. What changed and the proof sit on the issue, and only a human clicks merge."],
-  ["comment", "A blocked agent asks", "Missing a credential or a decision? It moves the issue to Needs You and comments exactly what it needs. Answer, and it resumes."],
-  ["slidersHorizontal", "Autonomy you set", "Per workspace: leave a branch, open a PR, or (only if you say so) merge after green checks. Widen it deliberately."],
+const facts = [
+  ["70+", "MCP tools for Claude, Codex, Cursor and any MCP client"],
+  ["$29/mo", "Team plan, for the whole team, not per seat"],
+  ["Web + phone", "iPhone and Android apps in public testing"],
+  ["Need Review", "where every agent task stops for you"],
 ];
 
-const surfaces = [
-  ["issues", "var(--lp-green)"],
-  ["tickets", "var(--lp-blue)"],
-  ["deals", "var(--lp-amber)"],
-  ["time", "var(--lp-text-3)"],
-  ["pages", "var(--lp-text-3)"],
+const paneSteps = [
+  ["Open the pane", "Every claim links to its pane. It opens read-only, so a stray tap types nothing."],
+  ["Take the keyboard", "Ctrl, Esc, Tab and the arrows sit above the phone keyboard. Fit width scales a wide terminal to your screen."],
+  ["Type or talk", "The prompt box sends a whole message at once. In the app, dictation runs on the phone."],
 ];
 
-const termLines: [string, string, string][] = [
-  ["$", "# claude mcp add atur --transport http \\", "cmd"],
-  ["", "    https://app.diatur.com/mcp \\", "cmd"],
-  ["", "    -H \"X-API-Key: pk_live_…\"", "cmd"],
-  ["", "", "dim"],
-  ["#", "# 70+ tools. one connected data model.", "dim"],
-  ["", "", "dim"],
-  ["$", "atur claim ATUR-41 --agent firstmate", "cmd"],
-  ["✓", "claimed · branch feat/webhook-retries · pane wJ:pJ", "ok"],
-  ["→", "evidence will post to the issue at Need Review", "dim"],
+const extras = [
+  { icon: "calendar", title: "Sprints and modules", body: "Plan a cycle, group issues into modules, and watch progress per sprint.", href: "/blog/ai-sprint-planning" },
+  { icon: "lifeBuoy", title: "Support portal", body: "Customers file tickets in your portal. Triage them into issues an agent can take.", href: "/blog/ai-ticket-triage" },
+  { icon: "comment", title: "Feedback board", body: "A public board where customers post and vote, linked to the work that answers them.", href: "/blog/customer-feedback-loop" },
+  { icon: "timer", title: "Time and billable hours", body: "Log time on issues by hand or with a timer, and roll it up per project.", href: "/blog/track-billable-hours" },
+  { icon: "money", title: "Sales pipeline", body: "Deals move through stages like issues do. Connect Polar and paying customers arrive as contacts.", href: "/blog/sales-pipeline-stages" },
+  { icon: "slidersHorizontal", title: "Custom fields", body: "Text, number, date, select, user and currency fields on any project.", href: null },
 ];
 
-const MCP_CMD = "claude mcp add atur --transport http https://app.diatur.com/mcp -H \"X-API-Key: <your-key>\"";
-
-const compareRows = [
-  ["issues & cycles", "linear or jira: $8–10/seat", "✓ built in"],
-  ["agent execution", "nothing ships proof", "✓ claims, ships, posts evidence"],
-  ["pages & graph", "notion: $10/seat", "✓ wikilinks + knowledge graph"],
-  ["crm & portal", "hubspot + zendesk", "✓ deals, contacts, support portal"],
-  ["time", "toggl: $9/seat", "✓ rolled up per issue"],
-  ["price model", "per-seat, grows with you", "✓ flat: team $29/mo"],
-];
-
-const posts = [
-  ["origin", "why-we-built-atur", "Why we built Atur", "Small teams don't fail from lack of tools. They fail from context scattered across too many of them, and now agents inherit that mess."],
-  ["comparison", "atur-vs-linear", "Atur vs Linear", "Linear made issues fast. Atur makes issues something an agent can pick up, ship, and answer for, with the review still yours."],
-  ["engineering", "how-atur-is-built", "How Atur is built", "One Hono worker on Cloudflare, one D1 database, and an MCP server that exposes the same data model your team uses."],
+const promises = [
+  ["gitPullRequest", "Agents do not merge", "By default an agent's work ends at a branch or a PR. You choose when it ships."],
+  ["userMultiple", "One price for the team", "Team is $29 a month for everyone in the workspace. Adding a person costs nothing."],
+  ["trash", "Leave with your data", "Delete a workspace or your whole account from settings, on the web or in the app."],
 ];
 
 const plans = [
@@ -137,356 +89,442 @@ const plans = [
     price: "$9",
     blurb: "For individuals and small teams building a calmer operating system.",
     items: ["Projects, issues, and cycles", "Support portal and feedback", "CRM contacts and pipeline", "Pages and knowledge graph", "Time tracking", "AI agents via MCP"],
-    hot: false,
+    cta: "Start with Starter",
+    team: false,
   },
   {
     name: "Team",
     price: "$29",
     blurb: "For growing teams bringing delivery and customer work together.",
     items: ["Everything in Starter", "Flat price: the whole team, not per seat", "Custom domain", "Daily automatic backups", "Priority support", "Onboarding assistance"],
-    hot: true,
+    cta: "Start with Team",
+    team: true,
   },
+];
+
+const posts = [
+  ["why-we-built-atur", "Why we built Atur", "Small teams don't fail from lack of tools. They fail from context scattered across too many of them."],
+  ["project-management-for-ai-agents", "Project management for AI agent crews", "How issues, states and evidence change when some of your teammates are agents."],
+  ["atur-vs-linear", "Atur vs Linear", "Linear made issues fast. Atur makes issues something an agent can pick up and answer for."],
+];
+
+const paneLines = [
+  ["dim", "› fix the verify flow in ATUR-35"],
+  ["", "Reading src/auth/verify.ts"],
+  ["", "Token TTL is compared in seconds"],
+  ["", "against Date.now() in milliseconds."],
+  ["ok", "✓ 3 tests added, all passing"],
+  ["", "Posting evidence to ATUR-35…"],
 ];
 ---
 
 <BaseLayout
   title="Atur: one workspace for teams and their agents"
-  description="Atur connects projects, customers, docs, and time in one workspace, and gives your AI agents 70+ MCP tools to ship real work, with evidence on every issue and a human holding the merge."
+  description="Atur keeps projects, customers, docs and time in one workspace. AI agents pick up issues, ship them on a branch and post the proof. You review and merge, from the web or your phone."
   canonical="/"
   showChrome={false}
 >
   <div class="lp">
-    <nav class="lp-nav">
-      <a class="lp-brand" href="/"><img src="/logo-128.png" alt="" width={30} height={30} />Atur</a>
-      <div class="lp-links">
-        <a href="#mcp">Product</a>
-        <a href="#agents">Agents</a>
-        <a href="#pricing">Pricing</a>
-        <a href="/blog">Blog</a>
-      </div>
-      <div class="lp-nav-actions">
-        <a class="signin" href={`${APP_URL}/auth/login`} data-revklik-goal="signin_click" data-revklik-goal-location="nav">Sign in</a>
-        <a class="lp-btn" href={`${APP_URL}/auth/login`} data-revklik-goal="signup_click" data-revklik-goal-location="nav">Open workspace <Icon name="arrowRight" size={15} class="i" /></a>
-      </div>
-    </nav>
-
-    <header class="lp-hero">
-      <h1>You review the work.</h1>
-      <p class="h1-serif">the agents do the rest.</p>
-      <p class="sub">
-        Atur runs your whole operation (projects, customers, docs, time) and your AI agents work
-        the board like teammates: they claim issues, ship them, and post the evidence. Nothing
-        merges without you.
-      </p>
-      <div class="lp-hero-ctas">
-        <a class="lp-btn lp-btn-lg" href={`${APP_URL}/auth/login`} data-revklik-goal="signup_click" data-revklik-goal-location="hero">Start free <Icon name="arrowRight" size={17} class="i" /></a>
-        <a class="lp-btn lp-btn-lg lp-btn-ghost" href="#agents">See how agents work <Icon name="arrowDown" size={16} class="i" /></a>
-      </div>
-
-      <div class="lp-proof">
-        <div class="lp-proof-chrome">
-          <span class="url">app.diatur.com / joyodigitama / Q3 Launch</span>
-          <span class="spacer"></span>
-          <span class="lp-live-chip"><span class="lp-dot"></span>2 agents working</span>
+    <header class="lp-header">
+      <div class="lp-wrap lp-header-inner">
+        <a class="lp-brand" href="/"><img src="/logo-128.png" alt="" width="28" height="28" />Atur</a>
+        <nav class="lp-links" aria-label="Sections">
+          <a href="#loop">How it works</a>
+          <a href="#panes">Panes</a>
+          <a href="#phone">Phone app</a>
+          <a href="#pricing">Pricing</a>
+          <a href="/blog">Blog</a>
+        </nav>
+        <div class="lp-header-actions">
+          <a class="lp-signin" href={SIGNUP_URL} data-revklik-goal="signin_click" data-revklik-goal-location="nav">Sign in</a>
+          <a class="lp-btn lp-btn-primary" href={SIGNUP_URL} data-revklik-goal="signup_click" data-revklik-goal-location="nav">Open workspace</a>
         </div>
-        <div class="lp-board">
-          {boardCols.map((col) => (
-            <div class="lp-col">
-              <div class="lp-col-head">
-                <span class="cdot" style={`background:${col.dot}`}></span>
-                <span class="name">{col.name}</span>
-                <span class="count">{col.count}</span>
-              </div>
-              {col.cards.map((card) => (
-                <div class="lp-card" style={col.hot && card.chip?.kind === "amber" ? "border-color:var(--lp-amber)" : ""}>
-                  <span class="key">{card.key}</span>
-                  <span class="title">{card.title}</span>
-                  {card.chip && (
-                    <span class={`lp-chip ${card.chip.kind}`}><Icon name={card.chip.icon} size={11} />{card.chip.text}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div class="lp-metrics">
-        {metrics.map(([v, l]) => (
-          <div class="lp-stat"><strong>{v}</strong><span>{l}</span></div>
-        ))}
       </div>
     </header>
 
-    <section id="agents" class="lp-section">
-      <div class="wrap">
-        <div class="lp-section-head">
-          <div class="lp-eyebrow-row">
-            <span class="lp-eyebrow-label">THE AGENT LOOP</span>
-            <span class="lp-eyebrow-line"></span>
-          </div>
-          <h2 class="lp-h2">From issue to shipped,</h2>
-          <p class="lp-h2-serif">with a human at the wheel.</p>
-          <p class="lp-section-sub">
-            Agents work your board like teammates. They claim the issue, ship it in a branch, and
-            post the evidence. The merge stays yours.
+    <main>
+      <section class="lp-wrap lp-hero">
+        <div>
+          <h1>You review the work. Agents do the rest.</h1>
+          <p class="lp-lead">
+            Atur keeps your projects, customers, docs and time in one workspace. AI agents pick up
+            issues, ship them on a branch and post the proof on the issue. Nothing merges until you
+            say so.
           </p>
-        </div>
-        <div class="lp-steps">
-          {steps.map(([title, body], i) => (
-            <article class="lp-step">
-              <span class="num">{String(i + 1).padStart(2, "0")}</span>
-              <h3>{title}</h3>
-              <p>{body}</p>
-            </article>
-          ))}
-        </div>
-        <div class="lp-flow">
-          <span class="lp-flow-pill blue"><span class="lp-dot"></span>In progress</span>
-          <Icon name="arrowRight" size={16} class="lp-flow-sep" />
-          <span class="lp-flow-pill amber"><span class="lp-dot"></span>Need review</span>
-          <Icon name="arrowRight" size={16} class="lp-flow-sep" />
-          <span class="lp-flow-pill green"><span class="lp-dot"></span>Done</span>
-        </div>
-      </div>
-    </section>
-
-    <section class="lp-section elevated">
-      <div class="wrap">
-        <div class="lp-section-head">
-          <div class="lp-eyebrow-row">
-            <span class="lp-eyebrow-label">ONE CONNECTED WORKSPACE</span>
-            <span class="lp-eyebrow-line"></span>
+          <div class="lp-cta-row">
+            <a class="lp-btn lp-btn-primary lp-btn-lg" href={SIGNUP_URL} data-revklik-goal="signup_click" data-revklik-goal-location="hero">Open a free workspace</a>
+            <a class="lp-btn lp-btn-outline lp-btn-lg" href="#tester" data-revklik-goal="tester_cta_click" data-revklik-goal-location="hero">
+              <svg class="lp-android" viewBox={ANDROID_VIEWBOX} aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" d={ANDROID_PATH} /></svg>
+              Join Android testers
+            </a>
+            <a class="lp-btn lp-btn-outline lp-btn-lg" href={TESTFLIGHT_URL} target="_blank" rel="noopener" data-revklik-goal="testflight_click" data-revklik-goal-location="hero">
+              <svg class="lp-apple" viewBox={APPLE_VIEWBOX} aria-hidden="true" focusable="false"><path fill="currentColor" d={APPLE_PATH} /></svg>
+              iPhone beta
+            </a>
           </div>
-          <h2 class="lp-h2">Everything your team needs,</h2>
-          <p class="lp-h2-serif">connected for small teams.</p>
-          <p class="lp-section-sub">
-            Work that doesn't fit one tool shouldn't need five. Bring delivery, customers, docs, and
-            time together, for the team and the agents they put to work on it.
-          </p>
+          <p class="lp-fine">Free to start. The phone apps are in public testing: TestFlight on iPhone, a closed test on Google Play.</p>
         </div>
-        <div class="lp-groups">
-          {groups.map((g) => (
-            <article class="lp-group">
-              <span class="ic"><Icon name={g.icon} size={19} /></span>
-              <h3>{g.title}</h3>
-              <ul>
-                {g.rows.map(([ic, text]) => (
-                  <li><Icon name={ic} size={14} />{text}</li>
-                ))}
-              </ul>
-            </article>
-          ))}
-        </div>
-      </div>
-    </section>
 
-    <section class="lp-section">
-      <div class="wrap">
-        <div class="lp-control-panel">
-          <span class="eyebrow">WHY ATUR</span>
-          <div class="lp-control-h2">
-            <h2 class="lp-h2">Agent speed,</h2>
-            <p class="lp-h2-serif">human judgment.</p>
-          </div>
-          <div class="lp-reasons">
-            {reasons.map(([icon, title, body]) => (
-              <div class="lp-reason">
-                <Icon name={icon} size={20} />
-                <h3>{title}</h3>
-                <p>{body}</p>
+        <figure class="lp-hero-visual">
+          <div class="lp-stage" aria-hidden="true"></div>
+          <div class="lp-phone">
+            <div class="lp-screen" role="img" aria-label="Example Atur app screen: issue ATUR-35 in Need Review with the agent's evidence comment.">
+              <div class="lp-status"><span>09.41</span><span class="lp-notch"></span><span class="lp-status-pad"></span></div>
+              <div class="lp-app">
+                <p class="lp-app-key">ATUR-35</p>
+                <p class="lp-app-title">Invite email returns 500 on verify</p>
+                <div class="lp-app-chips">
+                  <span class="lp-state lp-tone-review"><span class="lp-dot"></span>Need Review</span>
+                  <span class="lp-chip-plain">High</span>
+                </div>
+                <p class="lp-app-label">Evidence</p>
+                <div class="lp-comment">
+                  <div class="lp-comment-head">
+                    <span class="lp-avatar">F</span>
+                    <span><strong>firstmate</strong> · agent</span>
+                  </div>
+                  <p>Token TTL was compared in seconds against milliseconds. Fixed in verify.ts, 3 tests added, all passing.</p>
+                  <span class="lp-attach"><Icon name="image" size={12} />verify-flow.png</span>
+                </div>
+                <p class="lp-app-label">Activity</p>
+                <p class="lp-activity">firstmate moved this from In Progress to Need Review</p>
+                <p class="lp-activity">firstmate opened a PR from fix/verify-ttl</p>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section id="mcp" class="lp-section" style="padding-top:0">
-      <div class="lp-mcp">
-        <div class="lp-mcp-left">
-          <div class="lp-eyebrow-row">
-            <span class="lp-eyebrow-num">01</span>
-            <span class="lp-eyebrow-label">MCP NATIVE</span>
-            <span class="lp-eyebrow-line"></span>
-          </div>
-          <h2 class="lp-h2">One agent,</h2>
-          <p class="lp-h2-serif">the whole operation.</p>
-          <p class="body">
-            Atur ships an MCP server with 70+ tools over one connected data model: issues, tickets,
-            deals, time, pages. Scope an agent to a project; every action it takes is an auditable
-            record.
-          </p>
-          <div class="lp-surface-chips">
-            {surfaces.map(([name, color]) => (
-              <span class="lp-surface-chip"><span class="lp-dot" style={`background:${color}`}></span>{name}</span>
-            ))}
-          </div>
-          <div class="lp-meta-row">
-            <span class="lp-meta"><strong>70+</strong><span>tools</span></span>
-            <span class="lp-meta-sep"></span>
-            <span class="lp-meta"><strong>1</strong><span>connected model</span></span>
-            <span class="lp-meta-sep"></span>
-            <span class="lp-meta audit"><Icon name="shieldCheck" size={14} /><span>auditable</span></span>
-          </div>
-        </div>
-        <div class="lp-term">
-          <div class="lp-term-chrome">
-            <div class="left">
-              <span class="tdot" style="background:#ff5f57"></span>
-              <span class="tdot" style="background:#febc2e"></span>
-              <span class="tdot" style="background:#28c840"></span>
-              <span class="title">agent setup: zsh</span>
-            </div>
-            <span class="compat"><span class="lp-dot" style="background:var(--lp-green)"></span>claude • cursor • windsurf</span>
-          </div>
-          <div class="lp-term-body">
-            {termLines.map(([p, t, kind]) => (
-              <div class="lp-term-line">
-                <span class={`p ${p === "$" || p === "✓" ? "ok" : ""}`}>{p}</span>
-                <span class={`t ${kind === "dim" ? "dim" : ""}`}>{t}</span>
+              <div class="lp-tabbar">
+                <Icon name="checklist" size={16} />
+                <Icon name="kanban" size={16} />
+                <Icon name="terminal" size={16} />
+                <Icon name="search" size={16} />
               </div>
-            ))}
-          </div>
-          <div class="lp-term-foot">
-            <div class="left">
-              <span class="icon-box"><Icon name="shieldCheck" size={12} /></span>
-              <span class="kv">
-                <span class="k">Scoped to one project</span>
-                <span class="v">Agent only sees what you scope it to</span>
-              </span>
             </div>
-            <button class="lp-copy-btn" data-copy={MCP_CMD} type="button">
-              <Icon name="copy" size={12} />Copy
-            </button>
           </div>
-        </div>
-      </div>
-    </section>
+          <div class="lp-float" role="img" aria-label="Example: an agent waiting for an answer on ATUR-41.">
+            <span class="lp-state lp-tone-needs"><span class="lp-dot"></span>Needs You</span>
+            <p class="lp-float-title">ATUR-41 · Webhook retries</p>
+            <p class="lp-float-body">Which Stripe account should replays use, test or live?</p>
+          </div>
+          <figcaption>Example screen. The issues are illustrative.</figcaption>
+        </figure>
+      </section>
 
-    <section id="pricing" class="lp-section" style="padding-top:0">
-      <div class="wrap">
-        <div class="lp-section-head">
-          <div class="lp-eyebrow-row">
-            <span class="lp-eyebrow-label">PRICING</span>
-            <span class="lp-eyebrow-line"></span>
+      <section class="lp-facts" aria-label="Facts">
+        <dl class="lp-wrap lp-facts-grid">
+          {facts.map(([value, label]) => (
+            <div>
+              <dt class="sr-only">{label}</dt>
+              <dd><strong>{value}</strong><span>{label}</span></dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      <section id="loop" class="lp-wrap lp-section">
+        <div class="lp-head">
+          <h2>Four states. The last one is yours.</h2>
+          <p>Agents move issues across the board the way a teammate would, and every step is on the record: who claimed it, what they asked, what they proved.</p>
+        </div>
+        <ol class="lp-loop">
+          {loop.map((step) => (
+            <li class={`lp-loop-card lp-tone-${step.tone}`}>
+              <span class="lp-state"><span class="lp-dot"></span>{step.state}</span>
+              <h3>{step.title}</h3>
+              <p>{step.body}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section id="panes" class="lp-band">
+        <div class="lp-wrap lp-split">
+          <div>
+            <h2>Watch an agent work, from your phone.</h2>
+            <p class="lp-section-lead">
+              Panes shows the live terminal of each agent session on your machine, in the browser
+              and in the app. When it needs you, take the keyboard.
+            </p>
+            <ol class="lp-steps">
+              {paneSteps.map(([title, body], i) => (
+                <li>
+                  <span class="lp-step-num">{i + 1}</span>
+                  <div><h3>{title}</h3><p>{body}</p></div>
+                </li>
+              ))}
+            </ol>
+            <div class="lp-note">
+              <Icon name="image" size={18} />
+              <p><strong>Screenshots go in as a path.</strong> Paste an image into the prompt. Atur saves it on your machine and puts the file path in your message, so the agent can open it.</p>
+            </div>
+            <p class="lp-fine">Panes needs the Atur bridge running on the machine where your agents work.</p>
           </div>
-          <h2 class="lp-h2">A flat price,</h2>
-          <p class="lp-h2-serif">not a per-seat tax.</p>
-          <p class="lp-section-sub">
-            Simple plans for a connected workspace. Pay one flat rate for the whole team. No
-            per-seat math as you grow.
-          </p>
+
+          <figure class="lp-pane-visual">
+            <div class="lp-phone lp-phone-pane">
+              <div class="lp-screen" role="img" aria-label="Example pane screen: an agent's terminal, a prompt box with mic and send, and a key row.">
+                <div class="lp-status"><span>09.44</span><span class="lp-notch"></span><span class="lp-status-pad"></span></div>
+                <div class="lp-pane-head">
+                  <p>ATUR-35 agent</p>
+                  <span class="lp-live">Live</span>
+                </div>
+                <div class="lp-term">
+                  {paneLines.map(([kind, text]) => <p class={kind}>{text}</p>)}
+                </div>
+                <div class="lp-composer">
+                  <span class="lp-composer-input">Message the agent…</span>
+                  <span class="lp-composer-btn"><Icon name="image" size={14} /></span>
+                  <span class="lp-composer-btn"><Icon name="mic" size={14} /></span>
+                  <span class="lp-composer-send"><Icon name="send" size={14} /></span>
+                </div>
+                <div class="lp-keys">
+                  {["Ctrl", "Alt", "Esc", "Tab", "←", "↓", "↑", "→"].map((k) => <span>{k}</span>)}
+                </div>
+              </div>
+            </div>
+            <figcaption>Example screen.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="lp-wrap lp-section lp-pair">
+        <article class="lp-panel lp-tone-started">
+          <Icon name="mic" size={22} />
+          <h3>Talk to the agent instead of typing.</h3>
+          <p>The mic in the app's prompt box turns speech into text on the phone when the phone supports it. Atur never records or uploads the audio. English and Indonesian, switched with one tap.</p>
+        </article>
+        <article class="lp-panel lp-tone-needs">
+          <Icon name="inbox" size={22} />
+          <h3>Every open decision, in one list.</h3>
+          <p>Mark an issue as a decision and it joins the inbox that spans all your workspaces, so nothing waits on you without your knowing.</p>
+        </article>
+      </section>
+
+      <section class="lp-wrap lp-section lp-workspace" style="padding-top:0">
+        <article class="lp-panel lp-tone-done lp-workspace-main">
+          <h2>Customers sit next to the work.</h2>
+          <p>Contacts, companies, deals and support tickets live in the same workspace as the issues, so the agent fixing a bug can read who reported it.</p>
+          <ul class="lp-mini">
+            <li><Icon name="contactBook" size={16} />Contacts and companies</li>
+            <li><Icon name="money" size={16} />Deals by stage</li>
+            <li><Icon name="lifeBuoy" size={16} />Portal tickets</li>
+          </ul>
+        </article>
+        <article class="lp-panel lp-card">
+          <h3>Docs and hours, in the same place.</h3>
+          <p>Write it down once and link it from the work.</p>
+          <ul class="lp-rows">
+            <li><span class="lp-row-icon"><Icon name="notebookPen" size={18} /></span><div><strong>Pages</strong><p>Slash commands, callouts, wikilinks with backlinks, and a graph of what links to what.</p></div></li>
+            <li><span class="lp-row-icon"><Icon name="timer" size={18} /></span><div><strong>Time</strong><p>Hours logged on issues and rolled up per project and person.</p></div></li>
+            <li><span class="lp-row-icon"><Icon name="chart" size={18} /></span><div><strong>Agent usage</strong><p>Tokens and cost per agent, model and issue, kept apart from human timesheets.</p></div></li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="lp-wrap lp-section" style="padding-top:0">
+        <div class="lp-head">
+          <h2>Also in the workspace</h2>
+          <p>The rest of what a small team runs on, without another subscription.</p>
+        </div>
+        <ul class="lp-extras">
+          {extras.map((item) => (
+            <li class="lp-extra">
+              <span class="lp-extra-icon"><Icon name={item.icon} size={18} /></span>
+              <h3>{item.title}</h3>
+              <p>{item.body}</p>
+              {item.href && <a class="lp-text-link" href={item.href}>Read the guide</a>}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section id="mcp" class="lp-wrap lp-section" style="padding-top:0">
+        <div class="lp-mcp">
+          <div>
+            <h2>Connect your agent with one command.</h2>
+            <p>Atur's MCP server gives an agent the same issues, comments, states and time entries your team uses. Create an API key in Atur, then add the server to your client.</p>
+            <div class="lp-cmd">
+              <code>{MCP_CMD}</code>
+              <button type="button" class="lp-btn lp-btn-outline lp-copy" data-copy={MCP_CMD}><Icon name="copy" size={15} /><span>Copy</span></button>
+            </div>
+          </div>
+          <ul class="lp-rules">
+            <li>Agents stop at Need Review. You decide what becomes Done.</li>
+            <li>Autonomy is set per workspace: leave a branch, open a PR, or merge after green checks if you allow it.</li>
+            <li>Each agent session can log its tokens, so cost shows up per agent and per model.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="lp-promises" aria-label="Promises">
+        <div class="lp-wrap">
+          <ul class="lp-promises-grid">
+            {promises.map(([icon, title, body]) => (
+              <li>
+                <span class="lp-promise-icon"><Icon name={icon} size={18} /></span>
+                <div><strong>{title}</strong><p>{body}</p></div>
+              </li>
+            ))}
+          </ul>
+          <p class="lp-fine">Details on the <a class="lp-text-link" href="/privacy">Privacy</a> page.</p>
+        </div>
+      </section>
+
+      <section id="pricing" class="lp-wrap lp-section lp-pricing">
+        <div>
+          <h2>One flat price for the whole team.</h2>
+          <p class="lp-section-lead">Start on Starter. Move to Team when delivery and customer work share the workspace. No per-seat math as you grow.</p>
+          <p class="lp-fine">No credit card required to try it.</p>
         </div>
         <div class="lp-plans">
           {plans.map((plan) => (
-            <article class={`lp-plan${plan.hot ? " hot" : ""}`}>
-              {plan.hot && <span class="tag">FOR GROWING TEAMS</span>}
-              <h3>{plan.name}</h3>
-              <div class="price"><strong>{plan.price}</strong><span>/ month</span></div>
-              <p class="blurb">{plan.blurb}</p>
+            <div class={plan.team ? "lp-plan lp-plan-team" : "lp-plan"}>
+              <p class="lp-plan-name">{plan.name}</p>
+              <p class="lp-plan-price"><strong>{plan.price}</strong><span>/ month</span></p>
+              <p class="lp-plan-blurb">{plan.blurb}</p>
               <ul>
-                {plan.items.map((item) => (
-                  <li><Icon name="check" size={14} />{item}</li>
-                ))}
+                {plan.items.map((item) => <li><Icon name="check" size={16} />{item}</li>)}
               </ul>
-              <a class="plan-btn" href={`${APP_URL}/auth/login`} data-revklik-goal="signup_click" data-revklik-goal-location="pricing" data-revklik-goal-plan={plan.name}>Start with {plan.name}</a>
-            </article>
-          ))}
-        </div>
-        <p class="lp-reassure">No credit card required to try it.</p>
-      </div>
-    </section>
-
-    <section class="lp-section" style="padding-top:0">
-      <div class="wrap">
-        <div class="lp-section-head" style="align-items:flex-start;text-align:left">
-          <div class="lp-eyebrow-row">
-            <span class="lp-eyebrow-num">02</span>
-            <span class="lp-eyebrow-label">THE STACK IT REPLACES</span>
-            <span class="lp-eyebrow-line"></span>
-          </div>
-          <h2 class="lp-h2" style="font-size:30px;letter-spacing:-1px">Five subscriptions, one flat workspace.</h2>
-        </div>
-        <div class="lp-compare">
-          {compareRows.map(([surface, stack, atur], i) => (
-            <div class={`lp-compare-row${i === 0 ? " head" : ""}`}>
-              <span class="a">{surface}</span>
-              <span class="b">{stack}</span>
-              <span class={`c${i === 0 ? "" : " mono"}`}>{atur}</span>
+              <a class={plan.team ? "lp-btn lp-btn-primary" : "lp-btn lp-btn-outline"} href={SIGNUP_URL} data-revklik-goal="signup_click" data-revklik-goal-location={`pricing_${plan.name.toLowerCase()}`}>{plan.cta}</a>
             </div>
           ))}
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="lp-section" style="padding-top:0;padding-bottom:96px">
-      <div class="wrap">
-        <div class="lp-blog-head">
-          <div class="lp-eyebrow-row">
-            <span class="lp-eyebrow-num">03</span>
-            <span class="lp-eyebrow-label">FROM THE BUILD LOG</span>
-            <span class="lp-eyebrow-line"></span>
+      <section id="phone" class="lp-wrap lp-section" style="padding-top:0">
+        <div class="lp-install">
+          <div role="tablist" aria-label="Choose your phone" class="lp-tabs">
+            <button type="button" role="tab" id="install-tab-android" aria-controls="tester" aria-selected="true">
+              <svg class="lp-android" viewBox={ANDROID_VIEWBOX} aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" d={ANDROID_PATH} /></svg>
+              Android
+            </button>
+            <button type="button" role="tab" id="install-tab-ios" aria-controls="iphone-beta" aria-selected="false" tabindex="-1">
+              <svg class="lp-apple" viewBox={APPLE_VIEWBOX} aria-hidden="true" focusable="false"><path fill="currentColor" d={APPLE_PATH} /></svg>
+              iPhone
+            </button>
           </div>
-          <a class="all" href="/blog">read the blog →</a>
-        </div>
-        <div class="lp-blog-cards">
-          {posts.map(([tag, slug, title, ex]) => (
-            <a class="lp-post" href={`/blog/${slug}`}>
-              <span class="ptag">{tag}</span>
-              <h3>{title}</h3>
-              <p>{ex}</p>
-              <span class="go">read →</span>
-            </a>
-          ))}
-        </div>
-      </div>
-    </section>
 
-    <section class="lp-section" style="padding-top:0">
-      <div class="wrap">
-        <div class="lp-cta-panel">
-          <span class="eyebrow">04 · START</span>
-          <h2>Give your work</h2>
-          <p class="h2-serif">one place to land.</p>
-          <p>
-            Open a workspace, bind your repos, and give an agent its first issue. You keep the
-            review, and it takes the busywork.
-          </p>
-          <a class="lp-btn lp-btn-lg" href={`${APP_URL}/auth/login`} data-revklik-goal="signup_click" data-revklik-goal-location="closing">Open Atur <Icon name="arrowRight" size={16} class="i" /></a>
+          <div id="tester" role="tabpanel" aria-labelledby="install-tab-android" class="lp-install-panel">
+            <div>
+              <h2>Atur on Android: join the testers</h2>
+              <p>The Android app is in a closed test on Google Play. Google opens an app to everyone only after 12 testers have used it for 14 days, so every tester helps. Free, and it needs Android 8 or later.</p>
+              <div class="lp-cta-row">
+                <a class="lp-btn lp-btn-primary lp-btn-lg" href={TESTER_GROUP_URL} target="_blank" rel="noopener" data-revklik-goal="tester_group_click" data-revklik-goal-location="tester">
+                  <svg class="lp-android" viewBox={ANDROID_VIEWBOX} aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" d={ANDROID_PATH} /></svg>
+                  1. Join the Google group
+                </a>
+                <a class="lp-btn lp-btn-outline lp-btn-lg" href={TESTER_OPTIN_URL} target="_blank" rel="noopener" data-revklik-goal="tester_optin_click" data-revklik-goal-location="tester">2. Become a tester on Play</a>
+              </div>
+            </div>
+            <ol class="lp-install-steps">
+              {androidSteps.map((step, i) => <li><span>{i + 1}</span><p>{step}</p></li>)}
+            </ol>
+          </div>
+
+          <div id="iphone-beta" role="tabpanel" aria-labelledby="install-tab-ios" class="lp-install-panel">
+            <div>
+              <h2>Atur on iPhone: public beta</h2>
+              <p>The iPhone app is on TestFlight, Apple's app for beta testing. The App Store release is in Apple's review. Free.</p>
+              <div class="lp-cta-row">
+                <a class="lp-btn lp-btn-primary lp-btn-lg" href={TESTFLIGHT_URL} target="_blank" rel="noopener" data-revklik-goal="testflight_click" data-revklik-goal-location="tester">
+                  <svg class="lp-apple" viewBox={APPLE_VIEWBOX} aria-hidden="true" focusable="false"><path fill="currentColor" d={APPLE_PATH} /></svg>
+                  Open TestFlight
+                </a>
+              </div>
+            </div>
+            <ol class="lp-install-steps">
+              {iosSteps.map((step, i) => <li><span>{i + 1}</span><p>{step}</p></li>)}
+            </ol>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+
+      <section class="lp-wrap lp-section" style="padding-top:0">
+        <div class="lp-head lp-head-row">
+          <h2>From the build log</h2>
+          <a class="lp-text-link" href="/blog">All posts</a>
+        </div>
+        <ul class="lp-posts">
+          {posts.map(([slug, title, blurb]) => (
+            <li><a href={`/blog/${slug}`}><strong>{title}</strong><p>{blurb}</p></a></li>
+          ))}
+        </ul>
+      </section>
+
+      <section class="lp-wrap lp-section" style="padding-top:0">
+        <div class="lp-final">
+          <h2>Give an agent its first issue.</h2>
+          <p>Open a workspace, bind a repo, and assign the issue. You keep the review.</p>
+          <div class="lp-cta-row">
+            <a class="lp-btn lp-btn-invert lp-btn-lg" href={SIGNUP_URL} data-revklik-goal="signup_click" data-revklik-goal-location="final">Open a free workspace</a>
+            <a class="lp-btn lp-btn-ghost-invert lp-btn-lg" href="#phone" data-revklik-goal="tester_cta_click" data-revklik-goal-location="final">Get the phone app</a>
+          </div>
+        </div>
+      </section>
+    </main>
 
     <footer class="lp-footer">
-      <a class="brand" href="/"><img src="/logo-128.png" alt="" width={22} height={22} />Atur</a>
-      <nav>
-        <a href="#mcp">Product</a>
-        <a href="#agents">Agents</a>
-        <a href="#pricing">Pricing</a>
-        <a href="/blog">Blog</a>
-      </nav>
-      <span class="copy">© 2026 Atur</span>
+      <div class="lp-wrap lp-footer-inner">
+        <a class="lp-brand" href="/"><img src="/logo-128.png" alt="" width="24" height="24" />Atur</a>
+        <nav aria-label="Footer">
+          <a href="/blog">Blog</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/support">Support</a>
+          <a href="#phone">Phone beta</a>
+          <a href={SIGNUP_URL}>Sign in</a>
+        </nav>
+        <span>© {new Date().getFullYear()} Atur</span>
+      </div>
+      <p class="lp-wrap lp-credit">{ANDROID_CREDIT}</p>
     </footer>
   </div>
 </BaseLayout>
 
 <script>
-  document.querySelectorAll<HTMLButtonElement>(".lp-copy-btn").forEach((btn) => {
-    const setLabel = (text: string) => {
-      const label = btn.lastChild;
-      if (label && label.nodeType === 3) label.textContent = text;
-    };
+  document.querySelectorAll<HTMLButtonElement>(".lp-copy").forEach((btn) => {
+    const label = btn.querySelector("span");
+    if (!label) return;
     btn.addEventListener("click", async () => {
-      const text = btn.dataset.copy ?? "";
       try {
-        await navigator.clipboard.writeText(text);
-        setLabel(" Copied");
-        setTimeout(() => setLabel("Copy"), 1600);
+        await navigator.clipboard.writeText(btn.dataset.copy ?? "");
+        label.textContent = "Copied";
       } catch {
-        setLabel(" Copy failed");
-        setTimeout(() => setLabel("Copy"), 1600);
+        label.textContent = "Copy failed";
       }
+      setTimeout(() => (label.textContent = "Copy"), 1600);
     });
   });
+
+  // Phone install tabs (ARIA tabs pattern). Both panels ship visible in the
+  // HTML so they work without JS; this hides the inactive one. The visitor's
+  // phone picks the first tab; #tester and #iphone-beta pick it explicitly.
+  const tabs = [...document.querySelectorAll<HTMLButtonElement>(".lp-tabs [role=tab]")];
+  const select = (tab: HTMLButtonElement, focus = false) => {
+    for (const t of tabs) {
+      const on = t === tab;
+      t.setAttribute("aria-selected", String(on));
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute("aria-controls") ?? "")?.toggleAttribute("hidden", !on);
+    }
+    if (focus) tab.focus();
+  };
+  const byPanel = (id: string) => tabs.find((t) => t.getAttribute("aria-controls") === id);
+  tabs.forEach((tab, i) => {
+    tab.addEventListener("click", () => select(tab));
+    tab.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      e.preventDefault();
+      select(tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length], true);
+    });
+  });
+  const fromHash = () => {
+    const id = location.hash.slice(1);
+    const tab = byPanel(id);
+    if (!tab) return;
+    select(tab);
+    // The panel was hidden when the browser jumped; land on the section so the tabs stay in view.
+    document.getElementById("phone")?.scrollIntoView();
+  };
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const first = byPanel(ios ? "iphone-beta" : "tester");
+  if (first) select(first);
+  fromHash();
+  window.addEventListener("hashchange", fromHash);
 </script>
