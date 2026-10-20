@@ -169,6 +169,13 @@
       "when": 1792451944347,
       "tag": "0023_customers_threads_username",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1792453954719,
+      "tag": "0024_threads_inbox",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
-import { GitBranch, Clock, Zap, Bot, ArrowUpRight } from "@/lib/icons";
+import { GitBranch, Clock, Zap, Bot, ArrowUpRight, MessageSquare } from "@/lib/icons";
 
 const integrations = [
   {
@@ -21,6 +21,13 @@ const integrations = [
     name: "Polar",
     description:
       "Sync Polar customers, subscriptions, and orders into the CRM as contacts and deals.",
+  },
+  {
+    to: "crm/threads",
+    icon: MessageSquare,
+    name: "Threads",
+    description:
+      "Pull replies and mentions into a CRM inbox, answer them, and turn their authors into leads.",
   },
   {
     to: "integrations/mcp",

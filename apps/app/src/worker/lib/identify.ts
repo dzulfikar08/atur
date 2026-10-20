@@ -23,7 +23,7 @@ export async function hmacSha256Hex(secret: string, message: string): Promise<st
 
 // Constant-time on equal-length inputs; length mismatch leaks only the (public)
 // expected length of a SHA-256 hex digest.
-function safeEqual(a: string, b: string): boolean {
+export function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);

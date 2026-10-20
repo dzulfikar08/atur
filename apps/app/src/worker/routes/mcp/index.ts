@@ -10,6 +10,7 @@ import * as schema from "../../db/schema";
 import * as customersRepo from "../../repositories/customers";
 import * as dealsRepo from "../../repositories/deals";
 import * as crmService from "../../services/crm";
+import * as threadsService from "../../services/threads";
 import * as issuesRepo from "../../repositories/issues";
 import * as companiesRepo from "../../repositories/companies";
 import * as companiesService from "../../services/companies";
@@ -1149,6 +1150,45 @@ export const TOOLS = [
         occurred_at: { type: "string", description: "ISO 8601; defaults to now" },
       },
       required: ["workspace", "customer_id", "type"],
+    },
+  },
+  {
+    name: "list_threads_inbox",
+    description:
+      "List the workspace's Threads inbox: replies to our posts and posts mentioning us (no DMs; the Threads API has none). status: open|done|hidden",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        status: { type: "string", enum: ["open", "done", "hidden"] },
+        limit: { type: "integer" },
+        offset: { type: "integer" },
+      },
+      required: ["workspace"],
+    },
+  },
+  {
+    name: "reply_threads_item",
+    description:
+      "Publish a public reply on Threads to an inbox item (max 500 chars) and mark it done. Posts as the connected account; only do this when the human approved the text.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        item_id: { type: "string" },
+        text: { type: "string" },
+      },
+      required: ["workspace", "item_id", "text"],
+    },
+  },
+  {
+    name: "make_threads_lead",
+    description:
+      "Create or link the CRM contact for a Threads inbox item's author (deduped on threads_username) and log the post on their timeline",
+    inputSchema: {
+      type: "object",
+      properties: { workspace: { type: "string" }, item_id: { type: "string" } },
+      required: ["workspace", "item_id"],
     },
   },
   {
@@ -2967,6 +3007,24 @@ async function handleToolRaw(
           occurred_at: params.occurred_at,
         }),
       );
+    }
+    case "list_threads_inbox": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      const { rows, total } = await threadsService.listInbox(db, workspaceId, {
+        status: params.status as string | undefined,
+        offset: Number(params.offset) || 0,
+        limit: Math.min(Number(params.limit) || 50, 100),
+      });
+      return { results: rows, total };
+    }
+    case "reply_threads_item": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      const { text } = threadsService.replySchema.parse({ text: params.text });
+      return threadsService.reply(db, workspaceId, params.item_id as string, userId, text);
+    }
+    case "make_threads_lead": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      return threadsService.makeLead(db, workspaceId, params.item_id as string, userId);
     }
     default:
       throw new HTTPException(400, { message: `Unknown tool: ${toolName}` });

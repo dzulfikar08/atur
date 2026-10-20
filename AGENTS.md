@@ -398,6 +398,7 @@ add_comment(
 | States/Labels/Members | `list_states`, `list_labels`, `list_members`, `set_assignee`                                                                             |
 | Time                  | `list_time_entries`, `create_time_entry`, `delete_time_entry`, `get_agent_usage`                                                         |
 | CRM Contacts          | `list_contacts`, `create_contact`, `get_contact`, `update_contact`, `log_activity` (contacts key on email or `threads_username`)         |
+| CRM Threads           | `list_threads_inbox`, `reply_threads_item` (public post; human-approved text only), `make_threads_lead`                                  |
 | CRM Deals             | `create_deal`, `list_deals`, `move_deal_stage`, `update_deal`                                                                            |
 | Assets                | `upload_image`                                                                                                                           |
 

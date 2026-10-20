@@ -510,6 +510,45 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  // CRM Threads inbox (replies + mentions; Threads has no DM API)
+  getThreadsStatus: (slug: string) =>
+    apiFetch<{ configured: boolean; account: ThreadsAccount | null }>(
+      `/workspaces/${slug}/threads/`,
+    ),
+  getThreadsConnectUrl: (slug: string) =>
+    apiFetch<{ url: string }>(`/workspaces/${slug}/threads/connect-url/`),
+  connectThreads: (slug: string, code: string, state: string) =>
+    apiFetch<{ account: ThreadsAccount }>(`/workspaces/${slug}/threads/connect/`, {
+      method: "POST",
+      body: JSON.stringify({ code, state }),
+    }),
+  disconnectThreads: (slug: string) =>
+    apiFetch(`/workspaces/${slug}/threads/account/`, { method: "DELETE" }),
+  syncThreads: (slug: string) =>
+    apiFetch<{ inserted: number }>(`/workspaces/${slug}/threads/sync/`, { method: "POST" }),
+  listThreadsInbox: (slug: string, status: ThreadsInboxItem["status"]) =>
+    apiFetch<PaginatedResponse<ThreadsInboxItem>>(
+      `/workspaces/${slug}/threads/inbox/?status=${status}&limit=100`,
+    ),
+  replyThreadsItem: (slug: string, itemId: string, text: string) =>
+    apiFetch<ThreadsInboxItem>(`/workspaces/${slug}/threads/inbox/${itemId}/reply/`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+  makeThreadsLead: (slug: string, itemId: string) =>
+    apiFetch<ThreadsInboxItem>(`/workspaces/${slug}/threads/inbox/${itemId}/lead/`, {
+      method: "POST",
+    }),
+  hideThreadsItem: (slug: string, itemId: string) =>
+    apiFetch<ThreadsInboxItem>(`/workspaces/${slug}/threads/inbox/${itemId}/hide/`, {
+      method: "POST",
+    }),
+  setThreadsItemStatus: (slug: string, itemId: string, status: "open" | "done") =>
+    apiFetch<ThreadsInboxItem>(`/workspaces/${slug}/threads/inbox/${itemId}/`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
   getContact: (slug: string, contactId: string) =>
     apiFetch<ContactDetail>(`/workspaces/${slug}/contacts/${contactId}/`),
   updateContact: (slug: string, contactId: string, data: Partial<Contact>) =>
@@ -1067,6 +1106,26 @@ export interface PaginatedResponse<T> {
   total: number;
   limit: number;
   offset: number;
+}
+
+export interface ThreadsAccount {
+  username: string;
+  expires_at: string;
+  last_sync_at: string | null;
+  last_error: string | null;
+}
+
+export interface ThreadsInboxItem {
+  id: string;
+  media_id: string;
+  kind: "reply" | "mention";
+  username: string | null;
+  text: string | null;
+  permalink: string | null;
+  posted_at: string;
+  status: "open" | "done" | "hidden";
+  customer_id: string | null;
+  replied_at: string | null;
 }
 
 export interface State {
