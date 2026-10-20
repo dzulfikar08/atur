@@ -74,6 +74,8 @@ threadsRoutes.get("/inbox", async (c) => {
   const { offset, limit } = paginationParams(c);
   const { rows, total } = await threadsService.listInbox(db, ws.id, {
     status: c.req.query("status"),
+    replied:
+      c.req.query("replied") === "yes" ? "yes" : c.req.query("replied") === "no" ? "no" : undefined,
     offset,
     limit,
   });

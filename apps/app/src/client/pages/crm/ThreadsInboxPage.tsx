@@ -17,6 +17,14 @@ const TABS: { status: ThreadsInboxItem["status"]; label: string }[] = [
   { status: "hidden", label: "Hidden" },
 ];
 
+// "Replied" counts answers posted from Atur and from the Threads app itself
+// (the sync spots our replies in each conversation).
+type Replied = "all" | "no" | "yes";
+const REPLIED_FILTERS: { value: Replied; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "no", label: "Needs reply" },
+  { value: "yes", label: "Replied" },
+];
 // Threads caps a post at 500 characters.
 const MAX_REPLY = 500;
 
@@ -81,8 +89,16 @@ function InboxItem({ slug, item }: { slug: string; item: ThreadsInboxItem }) {
             ) : (
               <span className="font-medium">Unknown author</span>
             )}
-            <Badge variant="outline">{item.kind === "mention" ? "mentioned you" : "replied"}</Badge>
-            {item.replied_at && <Badge variant="secondary">answered</Badge>}
+            <Badge variant="outline">
+              {item.kind === "mention" ? "mentioned you" : "reply to your post"}
+            </Badge>
+            {item.replied_at ? (
+              <Badge variant="secondary">replied</Badge>
+            ) : (
+              <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                needs reply
+              </Badge>
+            )}
           </div>
           <span className="text-xs text-muted-foreground">
             {formatDistanceToNow(new Date(item.posted_at), { addSuffix: true })}
@@ -192,6 +208,7 @@ export default function ThreadsInboxPage() {
   const { slug } = useParams<{ slug: string }>();
   const qc = useQueryClient();
   const [tab, setTab] = useState<ThreadsInboxItem["status"]>("open");
+  const [replied, setReplied] = useState<Replied>("all");
 
   const { data: status, isLoading } = useQuery({
     queryKey: ["threads-status", slug],
@@ -200,8 +217,8 @@ export default function ThreadsInboxPage() {
   });
   const account = status?.account ?? null;
   const { data: inbox } = useQuery({
-    queryKey: ["threads-inbox", slug, tab],
-    queryFn: () => api.listThreadsInbox(slug!, tab),
+    queryKey: ["threads-inbox", slug, tab, replied],
+    queryFn: () => api.listThreadsInbox(slug!, tab, replied === "all" ? undefined : replied),
     enabled: !!slug && !!account,
   });
 
@@ -231,7 +248,7 @@ export default function ThreadsInboxPage() {
   if (isLoading) return <p className="text-muted-foreground">Loading…</p>;
 
   return (
-    <div className="space-y-4 max-w-3xl">
+    <div className="mx-auto w-full max-w-3xl space-y-4">
       <Link
         to={`/${slug}/crm`}
         className="inline-flex items-center text-sm text-muted-foreground hover:underline"
@@ -302,19 +319,34 @@ export default function ThreadsInboxPage() {
             </CardContent>
           </Card>
 
-          <div role="tablist" aria-label="Inbox status" className="flex gap-2">
-            {TABS.map((t) => (
-              <Button
-                key={t.status}
-                role="tab"
-                aria-selected={tab === t.status}
-                size="sm"
-                variant={tab === t.status ? "secondary" : "ghost"}
-                onClick={() => setTab(t.status)}
-              >
-                {t.label}
-              </Button>
-            ))}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div role="tablist" aria-label="Inbox status" className="flex gap-1">
+              {TABS.map((t) => (
+                <Button
+                  key={t.status}
+                  role="tab"
+                  aria-selected={tab === t.status}
+                  size="sm"
+                  variant={tab === t.status ? "secondary" : "ghost"}
+                  onClick={() => setTab(t.status)}
+                >
+                  {t.label}
+                </Button>
+              ))}
+            </div>
+            <div role="group" aria-label="Reply filter" className="flex gap-1">
+              {REPLIED_FILTERS.map((f) => (
+                <Button
+                  key={f.value}
+                  aria-pressed={replied === f.value}
+                  size="sm"
+                  variant={replied === f.value ? "secondary" : "ghost"}
+                  onClick={() => setReplied(f.value)}
+                >
+                  {f.label}
+                </Button>
+              ))}
+            </div>
           </div>
 
           <div className="space-y-3">

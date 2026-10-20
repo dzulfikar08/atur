@@ -527,9 +527,9 @@ export const api = {
     apiFetch(`/workspaces/${slug}/threads/account/`, { method: "DELETE" }),
   syncThreads: (slug: string) =>
     apiFetch<{ inserted: number }>(`/workspaces/${slug}/threads/sync/`, { method: "POST" }),
-  listThreadsInbox: (slug: string, status: ThreadsInboxItem["status"]) =>
+  listThreadsInbox: (slug: string, status: ThreadsInboxItem["status"], replied?: "yes" | "no") =>
     apiFetch<PaginatedResponse<ThreadsInboxItem>>(
-      `/workspaces/${slug}/threads/inbox/?status=${status}&limit=100`,
+      `/workspaces/${slug}/threads/inbox/?status=${status}&limit=100${replied ? `&replied=${replied}` : ""}`,
     ),
   replyThreadsItem: (slug: string, itemId: string, text: string) =>
     apiFetch<ThreadsInboxItem>(`/workspaces/${slug}/threads/inbox/${itemId}/reply/`, {
