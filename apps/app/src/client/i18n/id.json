@@ -203,5 +203,19 @@
     "members": "Anggota",
     "recent": "Pencarian Terbaru",
     "clearRecent": "Hapus Terbaru"
+  },
+  "workspaceSwitcher": {
+    "manage": "Kelola workspace",
+    "manageDescription": "Pilih workspace yang tampil di pengalih workspace. Ini hanya mengubah pengalih: keanggotaan Anda di setiap workspace tidak berubah.",
+    "showAll": "Tampilkan semua",
+    "showAllCount": "Tampilkan semua ({{count}} tersembunyi)",
+    "hideHidden": "Sembunyikan yang disembunyikan",
+    "currentWorkspace": "Aktif",
+    "hiddenBadge": "Tersembunyi",
+    "toggleLabel": "Tampilkan {{name}} di pengalih",
+    "empty": "Tidak ada workspace",
+    "saveFailed": "Gagal memperbarui visibilitas workspace",
+    "settingsTitle": "Pengalih workspace",
+    "settingsDescription": "Pilih workspace yang tampil di pengalih. Tersinkron di semua perangkat Anda."
   }
 }

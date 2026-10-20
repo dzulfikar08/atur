@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Plus, Layers } from "@/lib/icons";
+import { useTranslation } from "react-i18next";
+import { Plus, Layers, Settings, Eye, EyeOff } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 import { useWorkspaceStore } from "@/stores/workspace";
-import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { useSwitcherWorkspaces } from "@/hooks/useHiddenWorkspaces";
 import CreateWorkspaceDialog from "@/components/layout/CreateWorkspaceDialog";
+import ManageWorkspacesDialog from "@/components/layout/ManageWorkspaces";
 
 /**
  * WorkspaceRail — "most-left" icon rail of the user's workspaces (Linear-style):
@@ -16,11 +18,16 @@ import CreateWorkspaceDialog from "@/components/layout/CreateWorkspaceDialog";
 export default function WorkspaceRail() {
   const navigate = useNavigate();
   const { slug } = useParams<{ slug: string }>();
-  const { data: workspaces = [] } = useWorkspaces();
+  const { t } = useTranslation();
   const { currentSlug, switchWorkspace } = useWorkspaceStore();
   const [createOpen, setCreateOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
 
   const activeSlug = currentSlug ?? slug;
+  const { visible, hidden } = useSwitcherWorkspaces(activeSlug);
+  const workspaces = showHidden ? [...visible, ...hidden] : visible;
+  const hiddenSlugs = new Set(hidden.map((w) => w.slug));
   const isAll = activeSlug === "all";
 
   const tile = (ws: { logo?: string | null; name: string }, className?: string) =>
@@ -68,6 +75,7 @@ export default function WorkspaceRail() {
                 className={cn(
                   "flex size-9 shrink-0 items-center justify-center rounded-lg outline-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
                   active ? "bg-accent ring-2 ring-foreground/80" : "hover:bg-accent",
+                  hiddenSlugs.has(ws.slug) && "opacity-50",
                 )}
               >
                 {tile(ws, "size-9 text-[13px]")}
@@ -76,6 +84,26 @@ export default function WorkspaceRail() {
           })}
         </nav>
 
+        {hidden.length > 0 && (
+          <button
+            onClick={() => setShowHidden((v) => !v)}
+            title={
+              showHidden
+                ? t("workspaceSwitcher.hideHidden")
+                : t("workspaceSwitcher.showAllCount", { count: hidden.length })
+            }
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+          >
+            {showHidden ? <EyeOff size={17} /> : <Eye size={17} />}
+          </button>
+        )}
+        <button
+          onClick={() => setManageOpen(true)}
+          title={t("workspaceSwitcher.manage")}
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+        >
+          <Settings size={17} />
+        </button>
         <button
           onClick={() => setCreateOpen(true)}
           title="Create workspace"
@@ -86,6 +114,7 @@ export default function WorkspaceRail() {
       </aside>
 
       <CreateWorkspaceDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <ManageWorkspacesDialog open={manageOpen} onOpenChange={setManageOpen} />
     </>
   );
 }

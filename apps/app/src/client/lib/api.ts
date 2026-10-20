@@ -50,6 +50,17 @@ export const api = {
     const data = await apiFetch<{ results: Workspace[] }>("/workspaces/");
     return data.results;
   },
+  hiddenWorkspaces: async () => {
+    const data = await apiFetch<{ workspace_ids: string[] }>("/me/hidden-workspaces");
+    return data.workspace_ids;
+  },
+  setWorkspaceHidden: async (workspaceId: string, hidden: boolean) => {
+    const data = await apiFetch<{ workspace_ids: string[] }>("/me/hidden-workspaces", {
+      method: "PATCH",
+      body: JSON.stringify(hidden ? { hide: [workspaceId] } : { show: [workspaceId] }),
+    });
+    return data.workspace_ids;
+  },
   analyticsOverview: (slug: string) =>
     apiFetch<AnalyticsOverview>(`/workspaces/${slug}/analytics/overview`),
   completionTrend: (slug: string) =>

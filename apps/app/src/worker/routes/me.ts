@@ -30,6 +30,8 @@ import { paginationParams, paginatedResponse } from "../lib/pagination";
 import * as schema from "../db/schema";
 import * as workspaceRepo from "../repositories/workspaces";
 import * as issuesService from "../services/issues";
+import * as hiddenWorkspaces from "../services/hiddenWorkspaces";
+import { parseOr400 } from "../lib/validate";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -174,6 +176,24 @@ async function enrichRows(db: Db, rows: Awaited<ReturnType<typeof selectIssueRow
 }
 
 export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
+
+  // Workspaces the user hid from their own switcher (syncs across devices).
+  // Presentation only — /api/workspaces, MCP and API keys still list everything.
+  .get("/hidden-workspaces", async (c) => {
+    const db = getDb(c.env.DB);
+    const ids = await hiddenWorkspaces.list(db, c.get("user").sub);
+    return c.json({ workspace_ids: ids });
+  })
+  // Body { hide?: id[], show?: id[] } (ids, not slugs). Returns the new list.
+  .patch("/hidden-workspaces", async (c) => {
+    const db = getDb(c.env.DB);
+    const body = parseOr400(
+      hiddenWorkspaces.updateHiddenWorkspacesSchema,
+      await c.req.json().catch(() => null),
+    );
+    const ids = await hiddenWorkspaces.update(db, c.get("user").sub, body);
+    return c.json({ workspace_ids: ids });
+  })
 
   // Recent + filterable issues across all the user's workspaces. Each row is
   // enriched (state/assignees/labels) and tagged with project + workspace fields

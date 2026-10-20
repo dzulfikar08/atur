@@ -37,6 +37,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import UserMenu from "@/components/layout/UserMenu";
 import CreateWorkspaceDialog from "@/components/layout/CreateWorkspaceDialog";
+import ManageWorkspacesDialog from "@/components/layout/ManageWorkspaces";
 import { WorkspaceMenuItems } from "@/components/layout/WorkspaceSwitcher";
 
 interface NavItem {
@@ -175,6 +176,7 @@ export default function Sidebar() {
   const workspaceRail = useUiPrefsStore((s) => s.workspaceRail);
   const [createOpen, setCreateOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
+  const [manageWsOpen, setManageWsOpen] = useState(false);
 
   const activeSlug = currentSlug ?? slug;
   const isAll = activeSlug === "all";
@@ -320,7 +322,10 @@ export default function Sidebar() {
                 </span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
-                <WorkspaceMenuItems onCreateWorkspace={() => setCreateOpen(true)} />
+                <WorkspaceMenuItems
+                  onCreateWorkspace={() => setCreateOpen(true)}
+                  onManageWorkspaces={() => setManageWsOpen(true)}
+                />
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -498,6 +503,7 @@ export default function Sidebar() {
       </aside>
 
       <CreateWorkspaceDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <ManageWorkspacesDialog open={manageWsOpen} onOpenChange={setManageWsOpen} />
     </TooltipProvider>
   );
 }

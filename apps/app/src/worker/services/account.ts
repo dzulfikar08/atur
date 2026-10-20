@@ -74,6 +74,9 @@ export async function deleteAccount(
   await db
     .delete(schema.notificationPreferences)
     .where(eq(schema.notificationPreferences.userId, userId));
+  await db
+    .delete(schema.userHiddenWorkspaces)
+    .where(eq(schema.userHiddenWorkspaces.userId, userId));
   await db.delete(schema.integrationTokens).where(eq(schema.integrationTokens.userId, userId));
   await db.delete(schema.notes).where(eq(schema.notes.userId, userId));
   await db.delete(schema.profiles).where(eq(schema.profiles.userId, userId));

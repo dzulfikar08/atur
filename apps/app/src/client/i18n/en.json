@@ -203,5 +203,19 @@
     "members": "Members",
     "recent": "Recent Searches",
     "clearRecent": "Clear Recent"
+  },
+  "workspaceSwitcher": {
+    "manage": "Manage workspaces",
+    "manageDescription": "Choose which workspaces appear in the workspace switcher. This only changes the switcher: you stay a member of every workspace.",
+    "showAll": "Show all",
+    "showAllCount": "Show all ({{count}} hidden)",
+    "hideHidden": "Hide hidden",
+    "currentWorkspace": "Current",
+    "hiddenBadge": "Hidden",
+    "toggleLabel": "Show {{name}} in the switcher",
+    "empty": "No workspaces",
+    "saveFailed": "Failed to update workspace visibility",
+    "settingsTitle": "Workspace switcher",
+    "settingsDescription": "Choose which workspaces show in the switcher. Synced across your devices."
   }
 }

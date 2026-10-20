@@ -176,6 +176,13 @@
       "when": 1792453954719,
       "tag": "0024_threads_inbox",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1792484938714,
+      "tag": "0025_user_hidden_workspaces",
+      "breakpoints": true
     }
   ]
 }

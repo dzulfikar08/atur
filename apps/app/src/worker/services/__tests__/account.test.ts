@@ -129,6 +129,8 @@ describe.skipIf(!sqliteSupported)("deleteAccount", () => {
     });
     await db.insert(schema.profiles).values({ id: "p1", userId: "u1", role: "founder" });
     await db.insert(schema.notes).values({ id: "n1", userId: "u1", content: "private" });
+    await addWorkspace("w-hidden", "u1");
+    await db.insert(schema.userHiddenWorkspaces).values({ userId: "u1", workspaceId: "w-hidden" });
     await db
       .insert(schema.notificationPreferences)
       .values({ id: "np1", userId: "u1", notificationType: "comment" });
@@ -160,6 +162,7 @@ describe.skipIf(!sqliteSupported)("deleteAccount", () => {
       schema.notes,
       schema.notificationPreferences,
       schema.integrationTokens,
+      schema.userHiddenWorkspaces,
     ]) {
       expect(await db.select().from(table)).toHaveLength(0);
     }

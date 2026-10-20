@@ -6,6 +6,7 @@ import {
   blob,
   index,
   uniqueIndex,
+  primaryKey,
   type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
 
@@ -735,6 +736,22 @@ export const notificationPreferences = sqliteTable("notification_preferences", {
   updatedAt: text("updated_at"),
   deletedAt: text("deleted_at"),
 });
+
+// Workspaces a user hid from their own workspace switcher. Presentation only:
+// membership, permissions and every API listing are untouched.
+export const userHiddenWorkspaces = sqliteTable(
+  "user_hidden_workspaces",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    createdAt: text("created_at"),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.workspaceId] })],
+);
 
 export const webhooks = sqliteTable("webhooks", {
   id: text("id").primaryKey(),

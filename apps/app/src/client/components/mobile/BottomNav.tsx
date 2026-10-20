@@ -22,8 +22,11 @@ import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { useSwitcherWorkspaces } from "@/hooks/useHiddenWorkspaces";
 import BottomSheet from "@/components/mobile/BottomSheet";
 import CreateWorkspaceDialog from "@/components/layout/CreateWorkspaceDialog";
+import ManageWorkspacesDialog from "@/components/layout/ManageWorkspaces";
+import { useTranslation } from "react-i18next";
 
 const mainTabs = [
   { to: "", icon: LayoutDashboard, label: "Home" },
@@ -53,8 +56,12 @@ export default function BottomNav() {
   const { data: workspaces = [] } = useWorkspaces();
   const { currentSlug, switchWorkspace } = useWorkspaceStore();
   const [createWsOpen, setCreateWsOpen] = useState(false);
+  const [manageWsOpen, setManageWsOpen] = useState(false);
+  const [showHiddenWs, setShowHiddenWs] = useState(false);
+  const { t } = useTranslation();
 
   const activeSlug = currentSlug ?? slug;
+  const { visible, hidden } = useSwitcherWorkspaces(activeSlug);
 
   return (
     <>
@@ -123,7 +130,7 @@ export default function BottomNav() {
                 <span className="flex-1">All Workspaces</span>
                 {activeSlug === "all" && <div className="h-2 w-2 rounded-full bg-primary" />}
               </button>
-              {workspaces.map((ws) => {
+              {[...visible, ...(showHiddenWs ? hidden : [])].map((ws) => {
                 const isActive = ws.slug === activeSlug;
                 return (
                   <button
@@ -149,9 +156,32 @@ export default function BottomNav() {
                   </button>
                 );
               })}
+              {hidden.length > 0 && (
+                <button
+                  onClick={() => setShowHiddenWs((v) => !v)}
+                  className="w-full px-3 py-2 rounded-xl text-left text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+                >
+                  {showHiddenWs
+                    ? t("workspaceSwitcher.hideHidden")
+                    : t("workspaceSwitcher.showAllCount", { count: hidden.length })}
+                </button>
+              )}
             </div>
           </div>
         )}
+        {/* Manage workspaces */}
+        <button
+          onClick={() => {
+            setMoreOpen(false);
+            setManageWsOpen(true);
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+        >
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-dashed border-border">
+            <Settings className="h-3.5 w-3.5" />
+          </div>
+          <span className="flex-1">{t("workspaceSwitcher.manage")}</span>
+        </button>
         {/* Create workspace */}
         <button
           onClick={() => {
@@ -214,6 +244,7 @@ export default function BottomNav() {
         </div>
       </BottomSheet>
       <CreateWorkspaceDialog open={createWsOpen} onOpenChange={setCreateWsOpen} />
+      <ManageWorkspacesDialog open={manageWsOpen} onOpenChange={setManageWsOpen} />
     </>
   );
 }

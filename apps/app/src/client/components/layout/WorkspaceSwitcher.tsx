@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ChevronDown, Layers, Plus } from "@/lib/icons";
+import { useTranslation } from "react-i18next";
+import { ChevronDown, Layers, Plus, Settings } from "@/lib/icons";
+import type { Workspace } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { useSwitcherWorkspaces } from "@/hooks/useHiddenWorkspaces";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,17 +15,54 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import CreateWorkspaceDialog from "@/components/layout/CreateWorkspaceDialog";
+import ManageWorkspacesDialog from "@/components/layout/ManageWorkspaces";
+
+function WorkspaceItem({
+  ws,
+  currentSlug,
+  dimmed,
+  onSelect,
+}: {
+  ws: Workspace;
+  currentSlug: string | null | undefined;
+  dimmed?: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <DropdownMenuItem onClick={onSelect} className={cn(dimmed && "text-muted-foreground")}>
+      {ws.logo ? (
+        <img src={ws.logo} alt="" className="size-4 rounded object-cover" />
+      ) : (
+        <span className="flex size-4 items-center justify-center rounded bg-primary text-[10px] font-semibold text-primary-foreground">
+          {(ws.name[0] ?? "").toUpperCase()}
+        </span>
+      )}
+      <span className={cn(ws.slug === currentSlug && "font-medium")}>{ws.name}</span>
+    </DropdownMenuItem>
+  );
+}
 
 /**
  * Shared dropdown items for the workspace switchers (sidebar + top bar):
- * "All Workspaces", the user's workspaces, then "Create workspace".
- * `onCreateWorkspace` opens the host's CreateWorkspaceDialog — the dialog
- * state lives with the host so it survives the menu closing.
+ * "All Workspaces", the user's non-hidden workspaces (the active one always
+ * shows), a "Show all" expander for hidden ones, then "Manage workspaces" and
+ * "Create workspace". `onCreateWorkspace` / `onManageWorkspaces` open dialogs
+ * owned by the host so their state survives the menu closing.
  */
-export function WorkspaceMenuItems({ onCreateWorkspace }: { onCreateWorkspace: () => void }) {
+export function WorkspaceMenuItems({
+  onCreateWorkspace,
+  onManageWorkspaces,
+}: {
+  onCreateWorkspace: () => void;
+  onManageWorkspaces: () => void;
+}) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data: workspaces = [] } = useWorkspaces();
+  const { slug } = useParams<{ slug: string }>();
   const { currentSlug, switchWorkspace } = useWorkspaceStore();
+  const activeSlug = currentSlug ?? slug;
+  const { visible, hidden } = useSwitcherWorkspaces(activeSlug);
+  const [showHidden, setShowHidden] = useState(false);
 
   return (
     <>
@@ -30,23 +70,56 @@ export function WorkspaceMenuItems({ onCreateWorkspace }: { onCreateWorkspace: (
         <span className="text-muted-foreground">
           <Layers size={16} />
         </span>
-        <span className={cn(currentSlug === "all" && "font-medium")}>All Workspaces</span>
+        <span className={cn(activeSlug === "all" && "font-medium")}>All Workspaces</span>
       </DropdownMenuItem>
       <DropdownMenuSeparator />
-      {workspaces.map((ws) => (
-        <DropdownMenuItem key={ws.id} onClick={() => navigate(switchWorkspace(ws.slug))}>
-          {ws.logo ? (
-            <img src={ws.logo} alt="" className="size-4 rounded object-cover" />
-          ) : (
-            <span className="flex size-4 items-center justify-center rounded bg-primary text-[10px] font-semibold text-primary-foreground">
-              {(ws.name[0] ?? "").toUpperCase()}
-            </span>
-          )}
-          <span className={cn(ws.slug === currentSlug && "font-medium")}>{ws.name}</span>
+      <div className="max-h-[60vh] overflow-y-auto">
+        {visible.map((ws) => (
+          <WorkspaceItem
+            key={ws.id}
+            ws={ws}
+            currentSlug={activeSlug}
+            onSelect={() => navigate(switchWorkspace(ws.slug))}
+          />
+        ))}
+        {visible.length === 0 && hidden.length === 0 && (
+          <DropdownMenuItem disabled>No workspaces</DropdownMenuItem>
+        )}
+        {showHidden &&
+          hidden.map((ws) => (
+            <WorkspaceItem
+              key={ws.id}
+              ws={ws}
+              dimmed
+              currentSlug={activeSlug}
+              onSelect={() => navigate(switchWorkspace(ws.slug))}
+            />
+          ))}
+      </div>
+      {hidden.length > 0 && (
+        <DropdownMenuItem
+          onSelect={(e) => {
+            // Keep the menu open: the expander reveals rows in place.
+            e.preventDefault();
+            setShowHidden((v) => !v);
+          }}
+          className="text-muted-foreground"
+        >
+          <span className="text-muted-foreground">
+            <ChevronDown size={16} className={cn(showHidden && "rotate-180")} />
+          </span>
+          {showHidden
+            ? t("workspaceSwitcher.hideHidden")
+            : t("workspaceSwitcher.showAllCount", { count: hidden.length })}
         </DropdownMenuItem>
-      ))}
-      {workspaces.length === 0 && <DropdownMenuItem disabled>No workspaces</DropdownMenuItem>}
+      )}
       <DropdownMenuSeparator />
+      <DropdownMenuItem onClick={onManageWorkspaces}>
+        <span className="text-muted-foreground">
+          <Settings size={16} />
+        </span>
+        {t("workspaceSwitcher.manage")}
+      </DropdownMenuItem>
       <DropdownMenuItem onClick={onCreateWorkspace}>
         <span className="text-muted-foreground">
           <Plus size={16} />
@@ -68,6 +141,7 @@ export default function WorkspaceSwitcher() {
   const { data: workspaces = [] } = useWorkspaces();
   const { currentSlug } = useWorkspaceStore();
   const [createOpen, setCreateOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
 
   const activeSlug = currentSlug ?? slug;
   const isAll = activeSlug === "all";
@@ -96,11 +170,15 @@ export default function WorkspaceSwitcher() {
           <ChevronDown size={14} className="shrink-0 text-muted-foreground" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
-          <WorkspaceMenuItems onCreateWorkspace={() => setCreateOpen(true)} />
+          <WorkspaceMenuItems
+            onCreateWorkspace={() => setCreateOpen(true)}
+            onManageWorkspaces={() => setManageOpen(true)}
+          />
         </DropdownMenuContent>
       </DropdownMenu>
 
       <CreateWorkspaceDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <ManageWorkspacesDialog open={manageOpen} onOpenChange={setManageOpen} />
     </>
   );
 }

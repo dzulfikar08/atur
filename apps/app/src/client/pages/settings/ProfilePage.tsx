@@ -30,6 +30,7 @@ import { useThemeStore } from "@/stores/theme";
 import { useUiPrefsStore } from "@/stores/ui";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { WorkspaceVisibilityList } from "@/components/layout/ManageWorkspaces";
 import { useNavigate, useParams } from "react-router-dom";
 import { Building2, Check } from "@/lib/icons";
 import { cn } from "@/lib/utils";
@@ -48,7 +49,7 @@ export default function ProfilePage() {
   const qc = useQueryClient();
   const { theme, setTheme } = useThemeStore();
   const { workspaceRail, setWorkspaceRail } = useUiPrefsStore();
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { data: workspaces = [] } = useWorkspaces();
   const { currentSlug, switchWorkspace } = useWorkspaceStore();
   const navigate = useNavigate();
@@ -451,6 +452,17 @@ export default function ProfilePage() {
                 />
               </button>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Workspace switcher visibility */}
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("workspaceSwitcher.settingsTitle")}</CardTitle>
+            <CardDescription>{t("workspaceSwitcher.settingsDescription")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <WorkspaceVisibilityList />
           </CardContent>
         </Card>
 
