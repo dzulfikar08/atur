@@ -1333,6 +1333,59 @@ export const crmActivities = sqliteTable(
   ],
 );
 
+// ── Threads integration ──
+// One connected Threads profile per workspace. The long-lived user token
+// (60 days) is refreshed by the sync cron before it expires.
+export const threadsAccounts = sqliteTable("threads_accounts", {
+  workspaceId: text("workspace_id")
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  threadsUserId: text("threads_user_id").notNull(),
+  username: text("username").notNull(),
+  accessToken: text("access_token").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  connectedBy: text("connected_by"),
+  lastSyncAt: text("last_sync_at"),
+  // Last sync failure (Graph error text), cleared by the next good sync.
+  lastError: text("last_error"),
+  createdAt: text("created_at"),
+  updatedAt: text("updated_at"),
+});
+
+// Replies to the account's posts and posts mentioning it, pulled by the sync
+// cron. media_id is the Threads post id (dedupe key); status is the rep's
+// triage state: open → done (handled) or hidden (hidden on Threads too).
+export const threadsInbox = sqliteTable(
+  "threads_inbox",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    mediaId: text("media_id").notNull(),
+    // reply | mention
+    kind: text("kind").notNull(),
+    username: text("username"),
+    text: text("text"),
+    permalink: text("permalink"),
+    // The post this item answers (for replies: our post or a reply under it).
+    repliedToId: text("replied_to_id"),
+    rootPostId: text("root_post_id"),
+    postedAt: text("posted_at").notNull(),
+    status: text("status").notNull().default("open"),
+    customerId: text("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    // Our published reply, when answered from Atur.
+    replyMediaId: text("reply_media_id"),
+    repliedAt: text("replied_at"),
+    createdAt: text("created_at"),
+    updatedAt: text("updated_at"),
+  },
+  (table) => [
+    uniqueIndex("uq_threads_inbox_media").on(table.workspaceId, table.mediaId),
+    index("idx_threads_inbox_status").on(table.workspaceId, table.status, table.postedAt),
+  ],
+);
+
 // ── Polar integration ──
 // One row per Polar entity imported into the CRM. Gives idempotency (unique
 // on service+type+polar_id) and provenance (which contact/deal a Polar

@@ -2,6 +2,7 @@ import { createApp } from "./app";
 import { runD1Backup } from "./services/backup";
 import { runDueDateReminders } from "./services/reminders";
 import { gcUnclaimedAttachments } from "./services/feedback_attachments";
+import { syncAll as syncThreadsInboxes } from "./services/threads";
 import { getDb } from "./db/index";
 import { OAUTH_NAV_PATHS } from "./lib/oauth";
 import type { Env } from "./lib/env";
@@ -61,8 +62,13 @@ export default {
   // reminder emails to issue followers (each recipient's local day derives
   // from users.user_timezone); 03:30 UTC dumps D1 to the atur-backups R2 bucket
   // (services/backup.ts); the hourly :15 run garbage-collects abandoned widget
-  // uploads (feedback_attachments).
+  // uploads (feedback_attachments); every 10 minutes the CRM Threads inboxes
+  // pull new replies and mentions (services/threads.ts).
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (controller.cron === "*/10 * * * *") {
+      ctx.waitUntil(syncThreadsInboxes(getDb(env.DB)));
+      return;
+    }
     if (controller.cron === "30 3 * * *") {
       ctx.waitUntil(
         runD1Backup(env).catch((e: unknown) => {

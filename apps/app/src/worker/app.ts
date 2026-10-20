@@ -54,6 +54,7 @@ import { meRoutes } from "./routes/me";
 // Personal notes — static /notes prefix must win over meRoutes' generic
 // /api/me sub-app, so mount it first (Hono resolves in mount order).
 import { noteRoutes } from "./routes/notes";
+import { threadsRoutes } from "./routes/threads";
 import type { Env } from "./lib/env";
 
 export function createApp(): Hono<{ Bindings: Env }> {
@@ -112,6 +113,7 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/api/workspaces/:slug/projects", projectRoutes);
   app.route("/api/workspaces/:slug/portal-settings", portalSettingsRoutes);
   app.route("/api/workspaces/:slug/contacts", contactsRoutes);
+  app.route("/api/workspaces/:slug/threads", threadsRoutes);
   app.route("/api/workspaces/:slug/companies", companiesRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/deals", dealsRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/issues", issueRoutes);

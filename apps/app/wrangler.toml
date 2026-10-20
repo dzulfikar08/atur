@@ -53,7 +53,7 @@ enabled = true
 # followers. Daily 03:30 UTC cron → D1 dump to R2 (services/backup.ts). Hourly
 # :15 cron → GC of unclaimed widget/native uploads (2h TTL).
 [triggers]
-crons = ["0 8 * * *", "30 3 * * *", "15 * * * *"]
+crons = ["0 8 * * *", "30 3 * * *", "15 * * * *", "*/10 * * * *"]
 
 [assets]
 directory = "./dist/client"

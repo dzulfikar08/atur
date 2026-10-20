@@ -32,4 +32,8 @@ export type Env = {
   // Optional shared secret; when set, proxied requests carry the
   // x-bridge-token header the bridge validates. Never in wrangler vars.
   HERDR_BRIDGE_TOKEN?: string;
+  // Meta "ThreadsAPI" app (Threads app id + secret, not the Facebook app id).
+  // Secrets in prod. Absent → the Threads inbox connect endpoint answers 503.
+  THREADS_APP_ID?: string;
+  THREADS_APP_SECRET?: string;
 };

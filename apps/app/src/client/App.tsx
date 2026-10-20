@@ -38,6 +38,8 @@ const TimesheetPage = lazy(() => import("@/pages/timesheet/TimesheetPage"));
 const CrmPage = lazy(() => import("@/pages/crm/CrmPage"));
 const ContactsListPage = lazy(() => import("@/pages/crm/ContactsListPage"));
 const ContactDetailPage = lazy(() => import("@/pages/crm/ContactDetailPage"));
+const ThreadsInboxPage = lazy(() => import("@/pages/crm/ThreadsInboxPage"));
+const ThreadsCallbackPage = lazy(() => import("@/pages/crm/ThreadsCallbackPage"));
 const StrategyPage = lazy(() => import("@/pages/strategy/StrategyPage"));
 const CompaniesPage = lazy(() => import("@/pages/crm/CompaniesPage"));
 const CompanyDetailPage = lazy(() => import("@/pages/crm/CompanyDetailPage"));
@@ -161,6 +163,8 @@ export default function App() {
           }
         >
           {/* Pane observation — herdr execution plane via Worker proxy (ATUR-2) */}
+          {/* Threads OAuth redirect: one fixed URI, workspace rides in the signed state */}
+          <Route path="/integrations/threads/callback" element={<ThreadsCallbackPage />} />
           <Route path="/panes" element={<PanesPage />} />
           <Route path="/panes/:paneId" element={<PaneViewPage />} />
           {/* Desktop sharing (noVNC) — superuser-only, gated again by the Worker */}
@@ -201,6 +205,7 @@ export default function App() {
           <Route path="/:slug/crm" element={<CrmPage />} />
           <Route path="/:slug/crm/contacts" element={<ContactsListPage />} />
           <Route path="/:slug/crm/contacts/:id" element={<ContactDetailPage />} />
+          <Route path="/:slug/crm/threads" element={<ThreadsInboxPage />} />
           <Route path="/:slug/crm/companies" element={<CompaniesPage />} />
           <Route path="/:slug/crm/companies/:id" element={<CompanyDetailPage />} />
           <Route path="/:slug/crm/pipelines" element={<CrmPipelineListPage />} />
