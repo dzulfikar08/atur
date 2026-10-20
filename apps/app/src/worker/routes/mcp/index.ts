@@ -1161,6 +1161,11 @@ export const TOOLS = [
       properties: {
         workspace: { type: "string" },
         status: { type: "string", enum: ["open", "done", "hidden"] },
+        replied: {
+          type: "boolean",
+          description:
+            "true = we already answered (from Atur or the Threads app), false = needs a reply",
+        },
         limit: { type: "integer" },
         offset: { type: "integer" },
       },
@@ -3012,6 +3017,7 @@ async function handleToolRaw(
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
       const { rows, total } = await threadsService.listInbox(db, workspaceId, {
         status: params.status as string | undefined,
+        replied: params.replied === true ? "yes" : params.replied === false ? "no" : undefined,
         offset: Number(params.offset) || 0,
         limit: Math.min(Number(params.limit) || 50, 100),
       });

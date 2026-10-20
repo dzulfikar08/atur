@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
@@ -171,6 +171,21 @@ async function freshToken(db: DbClient, account: ThreadsAccount): Promise<string
   return token.accessToken;
 }
 
+// Replies we posted straight from the Threads app show up in the same
+// conversations; map each post we answered to the time of our first answer,
+// so "Needs reply" stays honest without the rep re-marking it in Atur.
+export function answeredAt(ownUsername: string, posts: threads.ThreadsPost[]) {
+  const answered = new Map<string, string>();
+  for (const p of posts) {
+    const target = p.replied_to?.id;
+    if (!target || !(p.is_reply_owned_by_me || p.username === ownUsername)) continue;
+    const at = new Date(p.timestamp).toISOString();
+    const prev = answered.get(target);
+    if (!prev || at < prev) answered.set(target, at);
+  }
+  return answered;
+}
+
 export async function syncAccount(db: DbClient, account: ThreadsAccount): Promise<number> {
   const now = nowISO();
   try {
@@ -182,9 +197,13 @@ export async function syncAccount(db: DbClient, account: ThreadsAccount): Promis
       await threads.listMentions(token, account.threadsUserId),
       now,
     );
+    const answered = new Map<string, string>();
     for (const post of await threads.listOwnPosts(token, RECENT_POSTS)) {
       const conversation = await threads.listConversation(token, post.id);
       rows.push(...toInboxRows(account.workspaceId, account.username, "reply", conversation, now));
+      for (const [mediaId, at] of answeredAt(account.username, conversation)) {
+        answered.set(mediaId, at);
+      }
     }
     let inserted = 0;
     // D1 caps bound parameters per statement; 16 columns × 5 rows stays under.
@@ -195,6 +214,18 @@ export async function syncAccount(db: DbClient, account: ThreadsAccount): Promis
         .onConflictDoNothing()
         .returning({ id: schema.threadsInbox.id });
       inserted += res.length;
+    }
+    for (const [mediaId, at] of answered) {
+      await db
+        .update(schema.threadsInbox)
+        .set({ repliedAt: at, updatedAt: now })
+        .where(
+          and(
+            eq(schema.threadsInbox.workspaceId, account.workspaceId),
+            eq(schema.threadsInbox.mediaId, mediaId),
+            isNull(schema.threadsInbox.repliedAt),
+          ),
+        );
     }
     await db
       .update(schema.threadsAccounts)
@@ -228,11 +259,13 @@ export const INBOX_STATUSES = ["open", "done", "hidden"] as const;
 export async function listInbox(
   db: DbClient,
   workspaceId: string,
-  opts: { status?: string; offset: number; limit: number },
+  opts: { status?: string; replied?: "yes" | "no"; offset: number; limit: number },
 ) {
   const where = and(
     eq(schema.threadsInbox.workspaceId, workspaceId),
     opts.status ? eq(schema.threadsInbox.status, opts.status) : undefined,
+    opts.replied === "yes" ? isNotNull(schema.threadsInbox.repliedAt) : undefined,
+    opts.replied === "no" ? isNull(schema.threadsInbox.repliedAt) : undefined,
   );
   const [count] = await db
     .select({ total: sql<number>`count(*)` })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hmacSha256Hex } from "../../lib/identify";
-import { toInboxRows, verifyState } from "../threads";
+import { answeredAt, toInboxRows, verifyState } from "../threads";
 
 const SECRET = "app-secret";
 const NOW = Date.parse("2026-10-20T00:00:00Z");
@@ -70,5 +70,32 @@ describe("toInboxRows", () => {
       postedAt: "2026-10-19T10:00:00.000Z",
       status: "open",
     });
+  });
+});
+
+describe("answeredAt", () => {
+  it("marks posts we replied to, from Atur or the Threads app, at our first answer", () => {
+    const answered = answeredAt("joyorogo", [
+      { id: "q1", username: "sari", timestamp: "2026-10-19T10:00:00+0000" },
+      {
+        id: "a2",
+        username: "joyorogo",
+        timestamp: "2026-10-19T12:00:00+0000",
+        replied_to: { id: "q1" },
+      },
+      {
+        id: "a1",
+        timestamp: "2026-10-19T11:00:00+0000",
+        replied_to: { id: "q1" },
+        is_reply_owned_by_me: true,
+      },
+      {
+        id: "x",
+        username: "budi",
+        timestamp: "2026-10-19T11:30:00+0000",
+        replied_to: { id: "q2" },
+      },
+    ]);
+    expect([...answered]).toEqual([["q1", "2026-10-19T11:00:00.000Z"]]);
   });
 });
