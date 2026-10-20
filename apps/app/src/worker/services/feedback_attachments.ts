@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import type { DbClient } from "../db/index";
 import type { Env } from "../lib/env";
@@ -257,4 +257,46 @@ export async function authorizeFeedbackAsset(
     )
     .limit(1);
   return !!owned;
+}
+
+export type IssueFeedbackAttachment = {
+  id: string;
+  filename: string;
+  content_type: string;
+  size: number | null;
+  url: string;
+  created_at: string;
+};
+
+// Files a feedback submission claimed for this issue. These live in
+// feedback_attachments (not issue_attachments), so the generic issue
+// attachments endpoint never sees them. `url` is served by GET /api/assets/:id
+// to workspace members; `origin` makes it absolute when the caller has one.
+export async function listIssueAttachments(
+  db: DbClient,
+  issueId: string,
+  origin = "",
+): Promise<IssueFeedbackAttachment[]> {
+  const rows = await db
+    .select({
+      id: schema.feedbackAttachments.assetId,
+      filename: schema.feedbackAttachments.filename,
+      createdAt: schema.feedbackAttachments.createdAt,
+      contentType: schema.fileAssets.contentType,
+      size: schema.fileAssets.size,
+    })
+    .from(schema.feedbackAttachments)
+    .innerJoin(schema.fileAssets, eq(schema.fileAssets.id, schema.feedbackAttachments.assetId))
+    .where(
+      and(eq(schema.feedbackAttachments.issueId, issueId), isNull(schema.fileAssets.deletedAt)),
+    )
+    .orderBy(asc(schema.feedbackAttachments.createdAt), asc(schema.feedbackAttachments.assetId));
+  return rows.map((r) => ({
+    id: r.id,
+    filename: r.filename,
+    content_type: r.contentType ?? "application/octet-stream",
+    size: r.size,
+    url: `${origin}/api/assets/${r.id}`,
+    created_at: r.createdAt,
+  }));
 }

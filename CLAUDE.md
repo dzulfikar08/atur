@@ -266,20 +266,20 @@ add_comment(
 
 ### 72 Available Tools
 
-| Category              | Tools                                                                                                                                                           |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Workspace             | `list_workspaces`, `create_workspace`, `update_workspace`, `delete_workspace`, `list_workspace_members`                                                         |
-| Projects              | `list_projects`, `get_project`, `create_project`                                                                                                                |
-| Issues                | `list_issues`, `create_issue`, `get_issue`, `update_issue`, `delete_issue`, `search_issues`, `add_comment`, `update_comment`, `delete_comment`, `list_comments` |
-| Issue Relations       | `list_issue_relations`, `add_issue_relation`, `remove_issue_relation`                                                                                           |
-| Sprints               | `list_sprints`, `create_sprint`, `get_sprint`, `update_sprint`, `add_issue_to_sprint`, `remove_issue_from_sprint`, `get_sprint_progress`                        |
-| Modules               | `list_modules`, `get_module`, `add_issue_to_module`, `remove_issue_from_module`                                                                                 |
-| Pages                 | `list_pages`, `get_page`, `create_page`, `update_page`                                                                                                          |
-| States/Labels/Members | `list_states`, `list_labels`, `list_members`, `set_assignee`                                                                                                    |
-| Time                  | `list_time_entries`, `create_time_entry`, `delete_time_entry`                                                                                                   |
-| CRM Contacts          | `list_contacts`, `create_contact`, `get_contact`, `update_contact`                                                                                              |
-| CRM Deals             | `create_deal`, `list_deals`, `move_deal_stage`, `update_deal`                                                                                                   |
-| Assets                | `upload_image`                                                                                                                                                  |
+| Category              | Tools                                                                                                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workspace             | `list_workspaces`, `create_workspace`, `update_workspace`, `delete_workspace`, `list_workspace_members`                                                                               |
+| Projects              | `list_projects`, `get_project`, `create_project`                                                                                                                                      |
+| Issues                | `list_issues`, `create_issue`, `get_issue`, `update_issue`, `delete_issue`, `search_issues`, `add_comment`, `update_comment`, `delete_comment`, `list_comments`, `get_issue_feedback` |
+| Issue Relations       | `list_issue_relations`, `add_issue_relation`, `remove_issue_relation`                                                                                                                 |
+| Sprints               | `list_sprints`, `create_sprint`, `get_sprint`, `update_sprint`, `add_issue_to_sprint`, `remove_issue_from_sprint`, `get_sprint_progress`                                              |
+| Modules               | `list_modules`, `get_module`, `add_issue_to_module`, `remove_issue_from_module`                                                                                                       |
+| Pages                 | `list_pages`, `get_page`, `create_page`, `update_page`                                                                                                                                |
+| States/Labels/Members | `list_states`, `list_labels`, `list_members`, `set_assignee`                                                                                                                          |
+| Time                  | `list_time_entries`, `create_time_entry`, `delete_time_entry`                                                                                                                         |
+| CRM Contacts          | `list_contacts`, `create_contact`, `get_contact`, `update_contact`                                                                                                                    |
+| CRM Deals             | `create_deal`, `list_deals`, `move_deal_stage`, `update_deal`                                                                                                                         |
+| Assets                | `upload_image`                                                                                                                                                                        |
 
 ### Registration
 

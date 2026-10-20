@@ -18,6 +18,7 @@ import * as issuesRepo from "../repositories/issues";
 import * as timeEntriesService from "../services/timeEntries";
 import * as customFieldValuesService from "../services/customFieldValues";
 import { listActivities, listIssueModules, listRelations } from "../services/issueDetail";
+import { getIssueFeedback } from "../services/feedback";
 
 type C = Context<{ Bindings: Env }>;
 
@@ -30,6 +31,20 @@ async function resolveIssue(c: C) {
 }
 
 export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
+
+  // ---- Feedback submission (reporter, auto-context, claimed files) ----
+  // Feedback-board files live in feedback_attachments, not issue_attachments,
+  // so they are exposed here instead of through /attachments.
+  .get(
+    "/feedback",
+    authMiddleware,
+    requireWorkspaceMember,
+    requireWorkspaceProject,
+    async (c: C) => {
+      const { db, issue } = await resolveIssue(c);
+      return c.json(await getIssueFeedback(db, issue.id, new URL(c.req.url).origin));
+    },
+  )
 
   // ---- Attachments ----
   .get(

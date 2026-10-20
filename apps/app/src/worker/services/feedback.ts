@@ -419,6 +419,55 @@ export async function createItem(
   return { id, sequence_id: sequenceId, url };
 }
 
+export type IssueFeedback = {
+  issue_id: string;
+  source: string | null;
+  kind: string;
+  reporter: {
+    name: string | null;
+    email: string | null;
+    external_user_id: string | null;
+    identity_verified: boolean;
+  };
+  context: FeedbackContext | null;
+  created_at: string | null;
+  attachments: attachmentsService.IssueFeedbackAttachment[];
+};
+
+// Authenticated read of what a feedback/portal submission carried: reporter,
+// auto-context and claimed files. The caller must already have checked access
+// to the issue; 404 when the issue didn't come from a feedback submission.
+export async function getIssueFeedback(
+  db: DbClient,
+  issueId: string,
+  origin = "",
+): Promise<IssueFeedback> {
+  const meta = await feedbackRepo.getFeedbackMeta(db, issueId);
+  if (!meta) throw new HTTPException(404, { message: "Issue has no feedback submission" });
+  let context: FeedbackContext | null = null;
+  if (meta.contextJson) {
+    try {
+      context = JSON.parse(meta.contextJson) as FeedbackContext;
+    } catch {
+      context = null;
+    }
+  }
+  return {
+    issue_id: issueId,
+    source: meta.source,
+    kind: meta.kind,
+    reporter: {
+      name: meta.authorName,
+      email: meta.authorEmail,
+      external_user_id: meta.externalUserId,
+      identity_verified: meta.identityVerified === 1,
+    },
+    context,
+    created_at: meta.createdAt,
+    attachments: await attachmentsService.listIssueAttachments(db, issueId, origin),
+  };
+}
+
 // Case-insensitive customer lookup so a widget email matches the row the portal
 // OTP flow created for the same person, whatever casing either side used.
 export async function findOrCreateCustomer(

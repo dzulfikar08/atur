@@ -130,6 +130,46 @@ board; errors return JSON with `message`.
 The Atur mobile app files its in-app reports to Atur's own board this way
 (`source: "native"`).
 
+### Read a submission back (authenticated)
+
+Files a submission carries are stored apart from an issue's regular attachments, so
+`GET …/issues/:issueId/attachments` does not list them. Read the report through:
+
+```http
+GET /api/workspaces/<slug>/projects/<projectId>/issues/<issueId-or-sequence>/feedback
+X-API-Key: pk_live_<key>      (or a session token; workspace members only)
+```
+
+```json
+{
+  "issue_id": "…",
+  "source": "widget",
+  "kind": "bug",
+  "reporter": {
+    "name": "Ana",
+    "email": "ana@example.com",
+    "external_user_id": "u-42",
+    "identity_verified": true
+  },
+  "context": { "url": "…", "console_errors": [], "failed_requests": [], "extra": {} },
+  "created_at": "2026-10-18T00:00:00.000Z",
+  "attachments": [
+    {
+      "id": "…",
+      "filename": "app.log.txt",
+      "content_type": "text/plain",
+      "size": 2048,
+      "url": "https://app.diatur.com/api/assets/<id>",
+      "created_at": "…"
+    }
+  ]
+}
+```
+
+`GET <url>` with the same key returns the file bytes (e.g. the `.txt` log). Issues that did not
+come from a feedback submission return 404. The MCP tool `get_issue_feedback`
+(`project_id`, `workspace`, `issue_id`) returns the same payload.
+
 ## Log ingest
 
 Create an **ingest key** in the board settings, then:
