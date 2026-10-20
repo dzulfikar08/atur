@@ -27,6 +27,7 @@ import * as linksService from "../../services/workspaceLinks";
 import { annotateSlimToolFields, slimResponse } from "./slim";
 import { canonicalStateKey } from "../../services/states";
 import * as timesheetService from "../../services/timesheet";
+import { getIssueFeedback } from "../../services/feedback";
 
 interface JsonRpcRequest {
   jsonrpc: string;
@@ -293,6 +294,20 @@ export const TOOLS = [
   {
     name: "list_comments",
     description: "List comments on an issue",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project_id: { type: "string" },
+        workspace: { type: "string" },
+        issue_id: { type: "string" },
+      },
+      required: ["project_id", "workspace", "issue_id"],
+    },
+  },
+  {
+    name: "get_issue_feedback",
+    description:
+      "What a feedback-board / widget / native submission carried: source, kind, reporter, auto-context (page URL, console errors, failed requests, extra) and its attached files (id, filename, content_type, size, url). Fetch a file's bytes (e.g. a .txt log) with GET <url> using the same X-API-Key. 404 when the issue did not come from a feedback submission",
     inputSchema: {
       type: "object",
       properties: {
@@ -2213,6 +2228,10 @@ async function handleToolRaw(
         )
         .orderBy(desc(schema.issueComments.createdAt));
       return rows;
+    }
+    case "get_issue_feedback": {
+      await assertIssueAccess(db, params.issue_id as string, userId);
+      return getIssueFeedback(db, params.issue_id as string, origin);
     }
     case "update_comment": {
       await assertCommentAccess(db, params.comment_id as string, userId);
