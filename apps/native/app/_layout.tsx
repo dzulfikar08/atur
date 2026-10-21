@@ -101,6 +101,7 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="project/[slug]/[projectId]" options={{ title: "" }} />
               <Stack.Screen name="issue/[slug]/[projectId]/[issueId]" options={{ title: "" }} />
+              <Stack.Screen name="attachment" options={{ title: "" }} />
               <Stack.Screen
                 name="new-issue"
                 options={{ title: "New issue", presentation: "modal" }}

@@ -134,19 +134,21 @@ export default function ProjectBoard() {
   const view = query.view;
   // The board always shows every column (done/cancelled collapsed unless
   // "Show completed"), so the done filter is applied as column collapse there.
+  const identifier = project?.identifier ?? "";
   const filtered = useMemo(
     () =>
       applyIssueQuery(issues, view === "board" ? { ...query, done: "show" } : query, me, {
         states: ctx.states,
+        identifier,
       }),
-    [issues, query, view, me, ctx.states],
+    [issues, query, view, me, ctx.states, identifier],
   );
   const visibleCount = useMemo(
     () =>
       view === "board"
-        ? applyIssueQuery(issues, query, me, { states: ctx.states }).length
+        ? applyIssueQuery(issues, query, me, { states: ctx.states, identifier }).length
         : filtered.length,
-    [issues, query, view, me, ctx.states, filtered],
+    [issues, query, view, me, ctx.states, identifier, filtered],
   );
 
   const groups = useMemo<IssueGroup<ViewIssue>[]>(
@@ -276,7 +278,6 @@ export default function ProjectBoard() {
 
   // ---- peek drawer (?peek=JOYO-42) ----
 
-  const identifier = project?.identifier ?? "";
   const peekedSeq = peekSeq(searchParams.get("peek"));
   const openPeek = useCallback(
     (seq: number) =>

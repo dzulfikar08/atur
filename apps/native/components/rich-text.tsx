@@ -3,17 +3,17 @@ import { Image, View, type TextStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
 import { Text } from "@/components/ui";
-import { imageSource } from "@/lib/api";
+import { assetSource } from "@/lib/api";
 import { htmlToBlocks } from "@/lib/format";
 
 /** Full-width image that keeps its aspect ratio once the size is known. */
-function InlineImage({ src }: { src: string }) {
+export function InlineImage({ src }: { src: string }) {
   const [ratio, setRatio] = useState(4 / 3);
   const [failed, setFailed] = useState(false);
   if (failed) return <Text style={styles.broken}>Image unavailable</Text>;
   return (
     <Image
-      source={imageSource(src)}
+      source={assetSource(src)}
       accessibilityIgnoresInvertColors
       resizeMode="contain"
       onLoad={(e) => {

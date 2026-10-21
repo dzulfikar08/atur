@@ -19,6 +19,7 @@ import {
   issueAssignees,
   issueLabels,
   labels,
+  projects,
   states,
   users,
   issueSequences,
@@ -178,6 +179,32 @@ function dueCondition(due: NonNullable<IssueListOpts["due"]>, todayRaw: string |
   }
 }
 
+const ISSUE_REF = /^(?:([a-z][a-z0-9]*)-)?0*(\d+)$/;
+
+/**
+ * Free-text issue match, mirroring the client's `matchesIssueText`: a name
+ * substring (plus any `extra` columns), or an issue reference — `29`, `#29`,
+ * `0029`, `DEV-29`, `dev 29` — whose number prefixes the issue's (`DEV-2` →
+ * DEV-2, DEV-20…). Zero padding is ignored: the UI shows keys as `0029`.
+ */
+export function issueTextCondition(raw: string, extra: SQL[] = []): SQL {
+  const q = raw.trim();
+  const parts: SQL[] = [like(issues.name, `%${q}%`), ...extra];
+  const ref = ISSUE_REF.exec(q.toLowerCase().replace(/^#/, "").replace(/\s+/g, "-"));
+  if (ref) {
+    const seq = sql`CAST(${issues.sequenceId} AS TEXT) LIKE ${`${ref[2]}%`}`;
+    parts.push(
+      ref[1]
+        ? and(
+            seq,
+            sql`${issues.projectId} IN (SELECT ${projects.id} FROM ${projects} WHERE lower(${projects.identifier}) = ${ref[1]})`,
+          )!
+        : seq,
+    );
+  }
+  return or(...parts)!;
+}
+
 /** Not in a completed or cancelled state group (a stateless issue counts as open). */
 function openStateCondition() {
   return or(
@@ -213,7 +240,7 @@ export async function listByProject(db: DbClient, projectId: string, opts: Issue
     );
   }
   if (opts.priorities?.length) conditions.push(inArray(issues.priority, opts.priorities));
-  if (opts.search) conditions.push(like(issues.name, `%${opts.search}%`));
+  if (opts.search?.trim()) conditions.push(issueTextCondition(opts.search));
   if (opts.hideDone) conditions.push(openStateCondition());
   if (opts.products?.length) conditions.push(productCondition(opts.products));
   if (opts.due) conditions.push(dueCondition(opts.due, opts.today));

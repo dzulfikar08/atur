@@ -29,6 +29,7 @@ import { getDb } from "../db/index";
 import { paginationParams, paginatedResponse } from "../lib/pagination";
 import * as schema from "../db/schema";
 import * as workspaceRepo from "../repositories/workspaces";
+import { issueTextCondition } from "../repositories/issues";
 import * as issuesService from "../services/issues";
 import * as hiddenWorkspaces from "../services/hiddenWorkspaces";
 import { parseOr400 } from "../lib/validate";
@@ -249,7 +250,7 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         ),
       );
     if (priority) conditions.push(eq(schema.issues.priority, priority));
-    if (search) conditions.push(like(schema.issues.name, `%${search}%`));
+    if (search?.trim()) conditions.push(issueTextCondition(search));
     if (project) conditions.push(eq(schema.issues.projectId, project));
     if (assignee === "me") conditions.push(assignedToMe(db, user.sub));
     if (due === "overdue" || due === "today" || due === "week") {

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { DbClient } from "../db/index";
 import type { Env } from "../lib/env";
 import * as assetsRepo from "../repositories/assets";
+import type { fileAssets } from "../db/schema";
 import { HTTPException } from "hono/http-exception";
 
 export const uploadSchema = z.object({
@@ -81,7 +82,11 @@ export function serveInline(contentType: string): boolean {
   // part header `Content-Type: image/SVG+XML` must not slip past the svg
   // guard and get served (and executed) inline.
   const type = contentType.trim().toLowerCase();
-  return (/^image\//.test(type) && !type.includes("svg")) || type === "application/pdf";
+  return (
+    (type.startsWith("image/") && !type.includes("svg")) ||
+    /^(video|audio)\//.test(type) ||
+    type === "application/pdf"
+  );
 }
 
 // Stored Content-Types are untrusted: both upload paths persist the multipart
@@ -93,25 +98,73 @@ export function storedContentType(raw: string | null | undefined): string {
   return /^[-\w.+]+\/[-\w.+]+$/.test(base) ? base : "application/octet-stream";
 }
 
-export async function getAsset(db: DbClient, env: Env, id: string) {
+/** Inclusive byte span of a `Range` request. */
+export type ByteRange = { start: number; end: number };
+
+/**
+ * A single `Range: bytes=…` spec → an inclusive span inside `size`. `null`
+ * serves the whole body (no header, multi-range or malformed: RFC 9110 lets a
+ * server ignore those); "unsatisfiable" is a 416. Video players (AVPlayer on
+ * iOS above all) refuse to play or seek without byte ranges.
+ */
+export function parseRange(
+  header: string | null | undefined,
+  size: number,
+): ByteRange | "unsatisfiable" | null {
+  const m = /^bytes=(\d*)-(\d*)$/.exec((header ?? "").trim());
+  if (!m || (!m[1] && !m[2])) return null;
+  if (!m[1]) {
+    const suffix = Number(m[2]);
+    if (suffix === 0 || size === 0) return "unsatisfiable";
+    return { start: Math.max(0, size - suffix), end: size - 1 };
+  }
+  const start = Number(m[1]);
+  if (start >= size) return "unsatisfiable";
+  const end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+  return end < start ? null : { start, end };
+}
+
+/** A file_assets row whose bytes exist in R2 (`asset` is the object key). */
+export type StoredAsset = typeof fileAssets.$inferSelect & { asset: string };
+
+/** The stored asset row, or a 404. Authorize against it before `readAsset`. */
+export async function findAsset(db: DbClient, id: string): Promise<StoredAsset> {
   const asset = await assetsRepo.findById(db, id);
   if (!asset) {
     throw new HTTPException(404, { message: "Asset not found" });
   }
-
-  if (!asset.asset) {
+  const key = asset.asset;
+  if (!key) {
     throw new HTTPException(404, { message: "File not found in storage" });
   }
+  return { ...asset, asset: key };
+}
 
-  const object = await env.R2.get(asset.asset);
+export async function readAsset(env: Env, asset: StoredAsset, rangeHeader?: string | null) {
+  // The row's size is recorded at upload, so a range is resolved before R2 is
+  // read; legacy rows without one are always served whole.
+  const range = asset.size != null ? parseRange(rangeHeader, asset.size) : null;
+  if (range === "unsatisfiable") {
+    throw new HTTPException(416, {
+      res: new Response(null, {
+        status: 416,
+        headers: { "Content-Range": `bytes */${asset.size}` },
+      }),
+    });
+  }
+
+  const object = await env.R2.get(
+    asset.asset,
+    range ? { range: { offset: range.start, length: range.end - range.start + 1 } } : undefined,
+  );
   if (!object) {
     throw new HTTPException(404, { message: "File not found in storage" });
   }
 
   return {
-    asset,
     body: object.body,
     contentType: asset.contentType ?? "application/octet-stream",
     size: object.size,
+    range,
   };
 }

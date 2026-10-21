@@ -149,8 +149,12 @@ export function IssueList({ scope }: { scope: IssueListScope }) {
   const meId = me.data?.id ?? null;
 
   const filtered = useMemo(
-    () => applyIssueQuery(issues ?? [], effective, meId, { states: queryStates }),
-    [issues, effective, meId, queryStates],
+    () =>
+      applyIssueQuery(issues ?? [], effective, meId, {
+        states: queryStates,
+        identifier: project?.identifier,
+      }),
+    [issues, effective, meId, queryStates, project?.identifier],
   );
   const sections = useMemo<Section[]>(
     () =>

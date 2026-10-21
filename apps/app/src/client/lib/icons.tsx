@@ -119,6 +119,9 @@ import UserIcon from "@hugeicons/core-free-icons/UserIcon";
 import UserMultipleIcon from "@hugeicons/core-free-icons/UserMultipleIcon";
 import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
 import ZapIcon from "@hugeicons/core-free-icons/ZapIcon";
+import MusicNote01Icon from "@hugeicons/core-free-icons/MusicNote01Icon";
+import Pdf01Icon from "@hugeicons/core-free-icons/Pdf01Icon";
+import Video01Icon from "@hugeicons/core-free-icons/Video01Icon";
 
 export const Activity = (props: IconProps) => <HugeiconsIcon icon={Activity01Icon} {...props} />;
 export const AlertTriangle = (props: IconProps) => <HugeiconsIcon icon={Alert02Icon} {...props} />;
@@ -191,6 +194,9 @@ export const Eye = (props: IconProps) => <HugeiconsIcon icon={EyeIcon} {...props
 export const EyeOff = (props: IconProps) => <HugeiconsIcon icon={BlindsIcon} {...props} />;
 export const File = (props: IconProps) => <HugeiconsIcon icon={File01Icon} {...props} />;
 export const FileCode = (props: IconProps) => <HugeiconsIcon icon={FileCodeIcon} {...props} />;
+export const FileAudio = (props: IconProps) => <HugeiconsIcon icon={MusicNote01Icon} {...props} />;
+export const FilePdf = (props: IconProps) => <HugeiconsIcon icon={Pdf01Icon} {...props} />;
+export const FileVideo = (props: IconProps) => <HugeiconsIcon icon={Video01Icon} {...props} />;
 export const FileIcon = (props: IconProps) => <HugeiconsIcon icon={File01Icon} {...props} />;
 export const FileImage = (props: IconProps) => <HugeiconsIcon icon={Image01Icon} {...props} />;
 export const FilePlus = (props: IconProps) => <HugeiconsIcon icon={FileAddIcon} {...props} />;

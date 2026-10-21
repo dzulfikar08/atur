@@ -76,8 +76,9 @@ export const assetRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     );
     if (feedbackAccess === false) throw new HTTPException(403, { message: "Forbidden" });
 
-    const result = await assetsService.getAsset(db, c.env, id);
-    const ownerId = result.asset.createdById;
+    // Range is resolved only after authorization: a 416 reveals the file size.
+    const asset = await assetsService.findAsset(db, id);
+    const ownerId = asset.createdById;
 
     if (feedbackAccess === null) {
       // Authorize. Assets are either portal-uploaded (owner is a customer) or
@@ -104,11 +105,20 @@ export const assetRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       // Internal asset requested by a main-app user: allowed.
     }
 
+    // A resized image variant is a different body, so byte ranges only apply
+    // to the raw stored file.
+    const wants = c.req.query();
+    const resizing = !!(wants.w || wants.h || wants.fit || wants.q);
+    const result = await assetsService.readAsset(
+      c.env,
+      asset,
+      resizing ? null : c.req.header("Range"),
+    );
+
     // On-the-fly image optimization: when the client asks for a resized or
     // reformatted variant (?w=, ?format=webp), hand the image to Cloudflare's
     // edge Image Resizing via the header instead of serving the raw R2 bytes.
     // Works on any plan; the worker simply delegates the transform to the edge.
-    const wants = c.req.query();
     const imgParams: string[] = [];
     if (wants.w) imgParams.push(`width=${Math.min(Number(wants.w) || 0, 4000)}`);
     if (wants.h) imgParams.push(`height=${Math.min(Number(wants.h) || 0, 4000)}`);
@@ -134,6 +144,13 @@ export const assetRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     c.header("X-Content-Type-Options", "nosniff");
     c.header("Content-Type", storedType);
     c.header("Content-Disposition", inline ? "inline" : "attachment");
+    if (!resizing) c.header("Accept-Ranges", "bytes");
+    if (result.range) {
+      const { start, end } = result.range;
+      c.header("Content-Range", `bytes ${start}-${end}/${result.size}`);
+      c.header("Content-Length", String(end - start + 1));
+      return c.body(result.body as ReadableStream, 206);
+    }
     c.header("Content-Length", result.size?.toString() || "0");
     return c.body(result.body as ReadableStream);
   });

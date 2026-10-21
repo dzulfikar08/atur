@@ -271,7 +271,11 @@ function DesktopMyIssues({ slug }: { slug: string }) {
       const perProject = await Promise.all(
         projects.map(async (project) => {
           const issues = await api.listIssues(slug, project.id);
-          return issues.map((issue) => ({ ...issue, project_name: project.name }));
+          return issues.map((issue) => ({
+            ...issue,
+            project_name: project.name,
+            project_identifier: project.identifier,
+          }));
         }),
       );
       return perProject.flat() as MyIssueRow[];

@@ -40,7 +40,6 @@ import {
   Activity,
   Paperclip,
   Upload,
-  FileIcon,
   Download,
   Timer,
   Package,
@@ -55,6 +54,8 @@ import {
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { useAuthStore } from "@/stores/auth";
+import { FileKindIcon, FileViewer } from "@/components/attachments/FileViewer";
+import { fileKind, formatBytes } from "@/lib/fileKind";
 
 interface Issue {
   id: string;
@@ -688,6 +689,7 @@ export default function IssueDetail() {
           id: string;
           issue_id: string;
           asset: string | null;
+          url: string | null;
           attributes: { name?: string; size?: number; type?: string } | null;
           created_at: string | null;
         }[];
@@ -696,6 +698,24 @@ export default function IssueDetail() {
       ),
     enabled: !!slug && !!projectId && !!issueId && activeTab === "attachments",
   });
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const viewerFiles = useMemo(
+    () =>
+      attachments.flatMap((a) =>
+        a.url
+          ? [
+              {
+                id: a.id,
+                url: a.url,
+                name: a.attributes?.name || "File",
+                type: a.attributes?.type,
+                size: a.attributes?.size,
+              },
+            ]
+          : [],
+      ),
+    [attachments],
+  );
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -1898,54 +1918,58 @@ export default function IssueDetail() {
                   <div className="space-y-2">
                     {attachments.map((att) => {
                       const name = att.attributes?.name || "File";
-                      const size = att.attributes?.size;
                       const type = att.attributes?.type || "";
-                      const isImage = type.startsWith("image/");
-                      const fmtSize = size
-                        ? size > 1024 * 1024
-                          ? `${(size / 1024 / 1024).toFixed(1)} MB`
-                          : `${(size / 1024).toFixed(0)} KB`
-                        : "";
+                      const kind = fileKind(type, name);
+                      const fileIndex = viewerFiles.findIndex((f) => f.id === att.id);
                       return (
                         <div
                           key={att.id}
                           className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/20 transition-colors"
                         >
-                          {isImage ? (
+                          <button
+                            type="button"
+                            className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default"
+                            disabled={fileIndex < 0}
+                            onClick={() => setViewerIndex(fileIndex)}
+                            aria-label={`Open ${name}`}
+                          >
                             <div className="h-10 w-10 rounded bg-muted flex items-center justify-center shrink-0 overflow-hidden">
-                              {att.asset ? (
+                              {kind === "image" && att.url ? (
                                 <img
-                                  src={resolveApiUrl(att.asset)}
-                                  alt={name}
+                                  src={resolveApiUrl(att.url)}
+                                  alt=""
                                   className="h-10 w-10 object-cover"
                                 />
                               ) : (
-                                <FileIcon className="h-4 w-4 text-muted-foreground" />
+                                <FileKindIcon
+                                  kind={kind}
+                                  className="h-4 w-4 text-muted-foreground"
+                                />
                               )}
                             </div>
-                          ) : (
-                            <div className="h-10 w-10 rounded bg-muted flex items-center justify-center shrink-0">
-                              <FileIcon className="h-4 w-4 text-muted-foreground" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{name}</p>
+                              <p className="font-ops-mono text-xs text-muted-foreground truncate">
+                                {[
+                                  formatBytes(att.attributes?.size),
+                                  type,
+                                  att.created_at &&
+                                    formatDistanceToNow(new Date(att.created_at), {
+                                      addSuffix: true,
+                                    }),
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </p>
                             </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{name}</p>
-                            <p className="font-ops-mono text-xs text-muted-foreground">
-                              {fmtSize}
-                              {type && ` · ${type}`}
-                              {att.created_at &&
-                                ` · ${formatDistanceToNow(new Date(att.created_at), { addSuffix: true })}`}
-                            </p>
-                          </div>
+                          </button>
                           <div className="flex items-center gap-1 shrink-0">
-                            {att.asset && (
+                            {att.url && (
                               <a
-                                href={resolveApiUrl(att.asset)}
+                                href={resolveApiUrl(att.url)}
                                 download={name}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                                aria-label={`Download ${name}`}
                                 className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-muted transition-colors"
-                                onClick={(e) => e.stopPropagation()}
                               >
                                 <Download className="h-3.5 w-3.5 text-muted-foreground" />
                               </a>
@@ -1954,6 +1978,7 @@ export default function IssueDetail() {
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 text-destructive"
+                              aria-label={`Remove ${name}`}
                               onClick={() => deleteAttachmentMutation.mutate(att.id)}
                               disabled={deleteAttachmentMutation.isPending}
                             >
@@ -1965,6 +1990,11 @@ export default function IssueDetail() {
                     })}
                   </div>
                 )}
+                <FileViewer
+                  files={viewerFiles}
+                  index={viewerIndex}
+                  onIndexChange={setViewerIndex}
+                />
               </>
             )}
 

@@ -1036,6 +1036,7 @@ export interface Project {
   id: string;
   name: string;
   slug: string;
+  identifier?: string | null;
   is_pipeline?: number;
 }
 
@@ -1081,6 +1082,8 @@ export interface Issue {
   estimate_points: number | null;
   external_source?: string | null;
   module_ids?: string[];
+  /** Cross-project lists (My Issues, all workspaces) tag rows with their project key. */
+  project_identifier?: string | null;
   // Enriched fields returned by list endpoints (issues.ts / me.ts):
   state?: { id: string; name: string; color?: string; group: string; key?: string | null } | null;
   labels?: { id: string; name: string; color?: string }[];
@@ -1248,6 +1251,8 @@ export interface Attachment {
   id: string;
   issue_id: string;
   asset: string | null;
+  /** Where to load the file: `/api/assets/<id>` or an absolute URL. */
+  url: string | null;
   attributes: {
     name?: string;
     size?: number;

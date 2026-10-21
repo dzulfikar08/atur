@@ -17,21 +17,33 @@ vi.mock("../../db/index", () => ({ getDb: vi.fn() }));
 // serveInline stays real — the header contract under test is its consumer.
 vi.mock("../../services/assets", async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  getAsset: vi.fn(),
+  findAsset: vi.fn(),
+  readAsset: vi.fn(),
 }));
 vi.mock("../../services/feedback_attachments", () => ({ authorizeFeedbackAsset: vi.fn() }));
 
 import { assetRoutes } from "../../routes/assets";
 import { extractToken, resolveRequestUser } from "../../middleware/auth";
-import { getAsset } from "../../services/assets";
+import { findAsset, readAsset } from "../../services/assets";
 import * as customersRepo from "../../repositories/customers";
 import { authorizeFeedbackAsset } from "../../services/feedback_attachments";
 
 const tokenMock = vi.mocked(extractToken);
 const resolveMock = vi.mocked(resolveRequestUser);
-const getAssetMock = vi.mocked(getAsset);
+const findAssetMock = vi.mocked(findAsset);
+const readAssetMock = vi.mocked(readAsset);
 const findCustomerMock = vi.mocked(customersRepo.findById);
 const feedbackAccessMock = vi.mocked(authorizeFeedbackAsset);
+
+function stored(contentType: string, size = 10) {
+  findAssetMock.mockResolvedValue({ createdById: "user-1", contentType, size } as never);
+  readAssetMock.mockResolvedValue({
+    contentType,
+    size,
+    body: new ReadableStream(),
+    range: null,
+  } as never);
+}
 
 function testApp() {
   const app = new Hono<{ Bindings: Env }>();
@@ -49,12 +61,7 @@ beforeEach(() => {
   resolveMock.mockResolvedValue({ id: "user-1" } as never);
   findCustomerMock.mockResolvedValue(null as never);
   feedbackAccessMock.mockResolvedValue(null);
-  getAssetMock.mockResolvedValue({
-    asset: { createdById: "user-1" },
-    contentType: "image/png",
-    size: 42,
-    body: new ReadableStream(),
-  } as never);
+  stored("image/png", 42);
 });
 
 // GET /:id feeds <img src="/api/assets/…"> across the app (workspace logos,
@@ -64,12 +71,7 @@ beforeEach(() => {
 // download. Re-writing the type to octet-stream broke every SVG logo.
 describe("asset GET /:id response headers", () => {
   it("serves SVG with its true MIME but forces download (renders in <img>, never executes)", async () => {
-    getAssetMock.mockResolvedValue({
-      asset: { createdById: "user-1" },
-      contentType: "image/svg+xml",
-      size: 4989,
-      body: new ReadableStream(),
-    } as never);
+    stored("image/svg+xml", 4989);
 
     const res = await testApp().fetch(request("a1"), {
       DB: {},
@@ -102,16 +104,11 @@ describe("asset GET /:id response headers", () => {
     } as unknown as Env);
 
     expect(res.status).toBe(401);
-    expect(getAssetMock).not.toHaveBeenCalled();
+    expect(findAssetMock).not.toHaveBeenCalled();
   });
 
   it("normalizes case-trick SVG types before classifying (image/SVG+XML never serves inline)", async () => {
-    getAssetMock.mockResolvedValue({
-      asset: { createdById: "user-1" },
-      contentType: "image/SVG+XML",
-      size: 10,
-      body: new ReadableStream(),
-    } as never);
+    stored("image/SVG+XML");
 
     const res = await testApp().fetch(request("a4"), {
       DB: {},
@@ -124,12 +121,7 @@ describe("asset GET /:id response headers", () => {
   });
 
   it("falls back to octet-stream when the stored type is not header-safe", async () => {
-    getAssetMock.mockResolvedValue({
-      asset: { createdById: "user-1" },
-      contentType: "not a valid\tmime",
-      size: 10,
-      body: new ReadableStream(),
-    } as never);
+    stored("not a valid\tmime");
 
     const res = await testApp().fetch(request("a5"), {
       DB: {},
@@ -150,7 +142,7 @@ describe("asset GET /:id feedback attachments", () => {
     feedbackAccessMock.mockResolvedValue(false);
     const res = await testApp().fetch(request("fb1"), { DB: {}, R2: {} } as unknown as Env);
     expect(res.status).toBe(403);
-    expect(getAssetMock).not.toHaveBeenCalled();
+    expect(readAssetMock).not.toHaveBeenCalled();
   });
 
   it("serves when allowed, skipping the generic owner rules", async () => {

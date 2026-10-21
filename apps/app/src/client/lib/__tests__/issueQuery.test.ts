@@ -197,6 +197,45 @@ describe("applyIssueQuery", () => {
   });
 });
 
+describe("text search by issue key", () => {
+  const rows = [
+    issue({ name: "Login bug", sequence_id: 2 }),
+    issue({ name: "Fix 29 typos", sequence_id: 7 }),
+    issue({ name: "Search", sequence_id: 29 }),
+    issue({ name: "Billing", sequence_id: 129 }),
+    issue({ name: "Export", sequence_id: 290, project_identifier: "OPS" }),
+  ];
+  const find = (q: string, identifier?: string) =>
+    applyIssueQuery(rows, { ...DEFAULT_QUERY, q }, ME, { states, identifier })
+      .map((i) => i.name)
+      .sort();
+
+  it("matches a bare or #-prefixed number as a key prefix, plus name hits", () => {
+    expect(find("29")).toEqual(["Export", "Fix 29 typos", "Search"]);
+    expect(find("#29")).toEqual(["Export", "Search"]);
+    expect(find("#2")).toEqual(["Export", "Login bug", "Search"]);
+    // The UI renders keys zero-padded (0029, DEV-0029).
+    expect(find("0029")).toEqual(["Export", "Search"]);
+    expect(find("DEV-0002", "DEV")).toEqual(["Login bug", "Search"]);
+  });
+
+  it("matches IDENT-N against the list's project identifier, case-insensitively", () => {
+    expect(find("dev-29", "DEV")).toEqual(["Search"]);
+    expect(find("DEV 29", "DEV")).toEqual(["Search"]);
+    expect(find("DEV-2", "DEV")).toEqual(["Login bug", "Search"]);
+  });
+
+  it("prefers an issue's own project identifier on cross-project lists", () => {
+    expect(find("OPS-29", "DEV")).toEqual(["Export"]);
+    expect(find("DEV-290", "DEV")).toEqual([]);
+  });
+
+  it("needs a known identifier for prefixed refs and a number to match keys", () => {
+    expect(find("DEV-29")).toEqual([]);
+    expect(find("dev", "DEV")).toEqual([]);
+  });
+});
+
 describe("dueBucket", () => {
   const ref = dueRef(TODAY);
   it("buckets by target date", () => {

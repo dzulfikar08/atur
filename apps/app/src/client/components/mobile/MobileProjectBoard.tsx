@@ -175,6 +175,12 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
     queryFn: () => api.listStates(slug, projectId),
     enabled: !!slug && !!projectId,
   });
+  const { data: project } = useQuery({
+    queryKey: ["project", slug, projectId],
+    queryFn: () => api.getProject(slug, projectId),
+    enabled: !!slug && !!projectId,
+  });
+  const identifier = project?.identifier;
 
   // Project members for @mention suggestions in the create-sheet description.
   const { data: members = [] } = useQuery({
@@ -231,8 +237,8 @@ export default function MobileProjectBoard({ slug, projectId }: MobileProjectBoa
   // Sections always list every state (completed ones start collapsed), so the
   // done filter is expressed by that collapse rather than by dropping the section.
   const filtered = useMemo(
-    () => applyIssueQuery(issues, { ...query, done: "show" }, me, { states }),
-    [issues, query, me, states],
+    () => applyIssueQuery(issues, { ...query, done: "show" }, me, { states, identifier }),
+    [issues, query, me, states, identifier],
   );
   const options = useMemo(
     () => ({

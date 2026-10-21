@@ -53,6 +53,7 @@ interface Issue {
   is_decision?: boolean | number | null;
   module_ids?: string[];
   project_name?: string;
+  project_identifier?: string | null;
   workspace_slug?: string;
   workspace_name?: string;
   state?: { id: string; name: string; color?: string; group: string; key?: string | null } | null;
@@ -169,6 +170,13 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
     queryFn: () => api.listStates(slug!, projectId!),
     enabled: !!slug && !!projectId,
   });
+  // Single-project rows don't carry `project_identifier`; issue-key search needs it.
+  const { data: project } = useQuery({
+    queryKey: ["project", slug, projectId],
+    queryFn: () => api.getProject(slug!, projectId!),
+    enabled: !!slug && !!projectId && !isAll,
+  });
+  const identifier = project?.identifier;
 
   // All projects across workspaces — powers the workspace/project filters on
   // the "All Workspaces" view.
@@ -204,7 +212,11 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
             `/workspaces/${slug}/projects/${project.id}/issues/?limit=100`,
           ).then((r) => r.results);
           for (const issue of issues) {
-            results.push({ ...issue, project_name: project.name });
+            results.push({
+              ...issue,
+              project_name: project.name,
+              project_identifier: project.identifier,
+            });
           }
         } catch {}
       }
@@ -253,8 +265,8 @@ export default function MobileIssueList({ slug, projectId }: MobileIssueListProp
     return sortStates([...map.values()]);
   }, [allIssues]);
   const filteredSorted = useMemo(
-    () => applyIssueQuery(scoped, query, me, { states: derivedStates }),
-    [scoped, query, me, derivedStates],
+    () => applyIssueQuery(scoped, query, me, { states: derivedStates, identifier }),
+    [scoped, query, me, derivedStates, identifier],
   );
 
   // Nest sub-issues under their parent card (indent + ↳ marker). Orphans

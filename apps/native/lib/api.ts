@@ -232,6 +232,17 @@ export interface SavedViewRow {
   query: unknown;
 }
 
+/** One file on an issue (GET .../issues/:id/attachments/). */
+export interface IssueAttachment {
+  id: string;
+  issue_id: string;
+  asset: string | null;
+  /** Path like /api/assets/<uuid>, or an absolute URL; load the file from it. */
+  url: string | null;
+  attributes: { name?: string; size?: number; type?: string } | null;
+  created_at: string;
+}
+
 /**
  * GET .../issues/:id/?include=… — the issue plus its project (breadcrumb) and,
  * when requested, every sub-resource the detail screen shows, in one request.
@@ -330,14 +341,16 @@ export async function request<T>(
 }
 
 /**
- * Image source for an Atur URL. Uploads live at /api/assets/<id> and are
- * auth-checked, so same-origin images carry the bearer token; relative paths
- * (how the web editor stores them) resolve against the server.
+ * Request source (`{ uri, headers }`) for an Atur URL, for images, video, PDFs
+ * and downloads alike. Uploads live at /api/assets/<id> and are auth-checked,
+ * so same-origin URLs carry the bearer token; relative paths (how the web
+ * editor stores them) resolve against the server.
  */
-export function imageSource(url: string): { uri: string; headers?: Record<string, string> } {
+export function assetSource(url: string): { uri: string; headers?: Record<string, string> } {
   const uri = url.startsWith("/") ? `${SERVER_URL}${url}` : url;
   const token = getToken();
-  return token && uri.startsWith(SERVER_URL)
+  // `${SERVER_URL}/`: a bare prefix would also match https://app.diatur.com.evil.test.
+  return token && uri.startsWith(`${SERVER_URL}/`)
     ? { uri, headers: { Authorization: `Bearer ${token}` } }
     : { uri };
 }
@@ -437,6 +450,10 @@ export const api = {
     request<IssueDetail>(
       `${issueBase(slug, projectId)}/${issueId}/${qs({ include: ISSUE_INCLUDES })}`,
     ),
+  attachments: (slug: string, projectId: string, issueId: string) =>
+    request<{ results: IssueAttachment[] }>(
+      `${issueBase(slug, projectId)}/${issueId}/attachments/`,
+    ).then((r) => r.results),
   modules: (slug: string, projectId: string) =>
     request<Paginated<ProjectModule>>(
       `/api/workspaces/${slug}/projects/${projectId}/modules/?limit=100`,

@@ -30,6 +30,13 @@ async function resolveIssue(c: C) {
   return { db, issue };
 }
 
+// `asset` holds a file_assets id (what the web/native upload flow stores) or,
+// from callers that posted a link, a URL/path. Clients load `url`.
+function attachmentUrl(asset: string | null): string | null {
+  if (!asset) return null;
+  return /^(https?:\/\/|\/)/.test(asset) ? asset : `/api/assets/${asset}`;
+}
+
 export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
 
   // ---- Feedback submission (reporter, auto-context, claimed files) ----
@@ -69,6 +76,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
           id: r.id,
           issue_id: r.issueId,
           asset: r.asset,
+          url: attachmentUrl(r.asset),
           attributes: r.attributes ? JSON.parse(r.attributes) : null,
           created_at: r.createdAt,
         })),
@@ -101,6 +109,7 @@ export const issueExtrasRoutes = new Hono<{ Bindings: Env }>({ strict: false })
           id,
           issue_id: issue.id,
           asset: body.asset ?? null,
+          url: attachmentUrl(body.asset ?? null),
           attributes: body.attributes ?? null,
           created_at: now,
         },

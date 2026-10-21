@@ -1,6 +1,7 @@
 import type { DbClient } from "../db/index";
 import * as schema from "../db/schema";
-import { eq, and, or, like, isNull, inArray } from "drizzle-orm";
+import { eq, and, like, isNull, inArray, or } from "drizzle-orm";
+import { issueTextCondition } from "./issues";
 
 export async function findWorkspaceIdBySlug(db: DbClient, slug: string) {
   const [row] = await db
@@ -45,13 +46,11 @@ export async function searchIssues(
     limit: number;
   },
 ) {
-  const searchPattern = `%${params.query}%`;
   const conditions = [
     isNull(schema.issues.deletedAt),
-    or(
-      like(schema.issues.name, searchPattern),
-      like(schema.issues.descriptionStripped, searchPattern),
-    ),
+    issueTextCondition(params.query, [
+      like(schema.issues.descriptionStripped, `%${params.query.trim()}%`),
+    ]),
   ];
   if (params.workspaceId) {
     conditions.push(eq(schema.issues.workspaceId, params.workspaceId));

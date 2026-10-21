@@ -313,12 +313,31 @@ export interface QueryIssue {
     username?: string;
     display_name?: string;
   }[];
+  /** Present on cross-project lists (My Issues); project lists pass `ctx.identifier`. */
+  project_identifier?: string | null;
 }
 
 export interface QueryContext {
   states?: QueryState[];
+  /** Project identifier (e.g. "DEV") for lists whose issues don't carry `project_identifier`. */
+  identifier?: string | null;
   /** "Now" override for tests. */
   today?: Date;
+}
+
+const ISSUE_REF = /^(?:([a-z][a-z0-9]*)-)?0*(\d+)$/;
+
+/**
+ * Free-text match for `q` (already trimmed + lowercased): a name substring, or
+ * an issue reference — `29`, `#29`, `0029`, `DEV-29`, `dev 29` — whose number
+ * prefixes the issue's so typing narrows (`DEV-2` → DEV-2, DEV-20…DEV-29,
+ * DEV-200…). Zero padding is ignored: the UI shows keys as `0029`.
+ */
+export function matchesIssueText(issue: QueryIssue, q: string, identifier?: string | null) {
+  if (issue.name.toLowerCase().includes(q)) return true;
+  const ref = ISSUE_REF.exec(q.replace(/^#/, "").replace(/\s+/g, "-"));
+  if (!ref || !String(issue.sequence_id).startsWith(ref[2]!)) return false;
+  return !ref[1] || (issue.project_identifier ?? identifier)?.toLowerCase() === ref[1];
 }
 
 export const dateKey = (d: Date) => format(d, "yyyy-MM-dd");
@@ -409,7 +428,7 @@ export function applyIssueQuery<T extends QueryIssue>(
   const hasState = query.state.length > 0;
 
   const result = issues.filter((issue) => {
-    if (q && !issue.name.toLowerCase().includes(q)) return false;
+    if (q && !matchesIssueText(issue, q, ctx.identifier)) return false;
 
     if (hasState) {
       const key = stateKeyOf(issue, byId);

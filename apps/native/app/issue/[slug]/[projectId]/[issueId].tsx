@@ -8,6 +8,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "rea
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+import { AttachmentList } from "@/components/attachment/attachment-list";
 import { DateSheet } from "@/components/date-sheet";
 import { MicButton } from "@/components/mic-button";
 import { RichText } from "@/components/rich-text";
@@ -493,11 +494,6 @@ export default function IssueDetail() {
                   style={styles.meta}
                 >{`${formatDuration(included.counts.time_seconds)} logged`}</Text>
               ) : null}
-              {included && included.counts.attachments > 0 ? (
-                <Text
-                  style={styles.meta}
-                >{`${included.counts.attachments} attachment${included.counts.attachments === 1 ? "" : "s"}`}</Text>
-              ) : null}
             </View>
           </View>
 
@@ -507,6 +503,15 @@ export default function IssueDetail() {
           ) : (
             <Text style={styles.muted}>No description.</Text>
           )}
+
+          {included && included.counts.attachments > 0 ? (
+            <AttachmentList
+              slug={slug}
+              projectId={projectId}
+              issueId={issueId}
+              count={included.counts.attachments}
+            />
+          ) : null}
 
           <View style={styles.tabs} accessibilityRole="tablist">
             {tabs.map((t) => (

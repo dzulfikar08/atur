@@ -1975,7 +1975,7 @@ async function handleToolRaw(
     }
     case "search_issues": {
       const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
-      const q = `%${params.query as string}%`;
+      const query = params.query as string;
       const rows = await db
         .select()
         .from(schema.issues)
@@ -1983,7 +1983,9 @@ async function handleToolRaw(
           and(
             eq(schema.issues.workspaceId, workspaceId),
             isNull(schema.issues.deletedAt),
-            or(like(schema.issues.name, q), like(schema.issues.descriptionStripped, q)),
+            issuesRepo.issueTextCondition(query, [
+              like(schema.issues.descriptionStripped, `%${query.trim()}%`),
+            ]),
           ),
         )
         .limit(Math.min(Number(params.limit) || 50, 100));

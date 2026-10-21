@@ -21,7 +21,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { imageSource, type Priority } from "@/lib/api";
+import { assetSource, type Priority } from "@/lib/api";
 import { productColor } from "@/lib/product";
 import { stateColor } from "@/theme";
 
@@ -585,7 +585,7 @@ export function Avatar({
       <Text style={[styles.avatarText, { fontSize: size * 0.42 }]}>{initial}</Text>
       {uri && !failed ? (
         <Image
-          source={imageSource(uri)}
+          source={assetSource(uri)}
           onError={() => setFailed(true)}
           style={[RNStyleSheet.absoluteFill, { borderRadius: radius }]}
         />
