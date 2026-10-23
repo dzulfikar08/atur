@@ -1564,3 +1564,71 @@ export const notes = sqliteTable(
   },
   (table) => [index("idx_notes_user").on(table.userId, table.createdAt)],
 );
+
+// ── MCP OAuth 2.1 authorization server (RFC 6749 / 7591 / 7009, PKCE, RFC 8707) ──
+// Lets MCP clients (omp, Claude Code, Cursor…) sign in through the browser
+// instead of pasting a pk_live_ key. Codes and tokens are stored as SHA-256
+// hex digests only — the raw values exist solely in the HTTP responses.
+
+// Dynamically registered public clients (RFC 7591). client_id is a public
+// identifier, so it is stored as-is; there is no client secret (PKCE only).
+export const oauthClients = sqliteTable("oauth_clients", {
+  id: text("id").primaryKey(),
+  clientName: text("client_name"),
+  redirectUris: text("redirect_uris").notNull(), // JSON string[]
+  createdAt: text("created_at"),
+});
+
+// Single-use authorization codes. used_at marks redemption; a second
+// redemption attempt revokes every token minted from the code (family_id).
+export const oauthCodes = sqliteTable(
+  "oauth_codes",
+  {
+    codeHash: text("code_hash").primaryKey(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    redirectUri: text("redirect_uri").notNull(),
+    codeChallenge: text("code_challenge").notNull(),
+    resource: text("resource").notNull(),
+    scope: text("scope").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    usedAt: integer("used_at"),
+  },
+  (table) => [index("idx_oauth_codes_expires").on(table.expiresAt)],
+);
+
+// One row per issued access/refresh pair. family_id ties every rotation of a
+// grant together (= the authorization code hash) so reuse of a rotated refresh
+// token — or of a code — can revoke the whole chain.
+export const oauthTokens = sqliteTable(
+  "oauth_tokens",
+  {
+    id: text("id").primaryKey(),
+    familyId: text("family_id").notNull(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    accessHash: text("access_hash").notNull(),
+    refreshHash: text("refresh_hash").notNull(),
+    resource: text("resource").notNull(),
+    scope: text("scope").notNull(),
+    accessExpiresAt: integer("access_expires_at").notNull(),
+    refreshExpiresAt: integer("refresh_expires_at").notNull(),
+    refreshUsedAt: integer("refresh_used_at"),
+    revokedAt: integer("revoked_at"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_oauth_tokens_access").on(table.accessHash),
+    uniqueIndex("uq_oauth_tokens_refresh").on(table.refreshHash),
+    index("idx_oauth_tokens_family").on(table.familyId),
+    index("idx_oauth_tokens_user").on(table.userId),
+  ],
+);

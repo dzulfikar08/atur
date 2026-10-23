@@ -5,6 +5,7 @@ import { Loader2 } from "@/lib/icons";
 
 import { useAuthStore } from "@/stores/auth";
 import { clearSessionToken } from "@/lib/native";
+import { goAfterLogin, takePostLoginRedirect } from "@/lib/postLoginRedirect";
 
 export default function OAuthCallbackPage() {
   const { provider } = useParams<{ provider: string }>();
@@ -39,9 +40,7 @@ export default function OAuthCallbackPage() {
         clearSessionToken();
         await fetchUser();
 
-        const redirect = sessionStorage.getItem("redirect_after_login") ?? "/";
-        sessionStorage.removeItem("redirect_after_login");
-        navigate(redirect, { replace: true });
+        goAfterLogin(navigate, takePostLoginRedirect());
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "OAuth authentication failed");
         navigate("/auth/login", { replace: true });

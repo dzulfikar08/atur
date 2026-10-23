@@ -36,6 +36,7 @@ import { issueExtrasRoutes } from "./routes/issue_extras";
 import { relationRoutes } from "./routes/relations";
 import { userRoutes } from "./routes/users";
 import { mcpRoutes } from "./routes/mcp/index";
+import { oauthRoutes } from "./routes/oauth";
 import { portalRoutes } from "./routes/portal";
 import { portalSettingsRoutes } from "./routes/portal_settings";
 import { contactsRoutes } from "./routes/contacts";
@@ -88,6 +89,8 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/health", healthRoutes);
   app.route("/auth", authRoutes);
   app.route("/mcp", mcpRoutes);
+  // MCP authorization: OAuth 2.1 server + RFC 9728/8414 discovery (docs/mcp-oauth.md).
+  app.route("/", oauthRoutes);
 
   // Customer support portal — public OTP auth + ticket routes. Mounted outside
   // /api/* so the global authMiddleware does NOT gate it; portal sessions are

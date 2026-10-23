@@ -283,6 +283,8 @@ add_comment(
 
 ### Registration
 
+**Browser sign-in (OAuth)**: the endpoint also speaks the MCP authorization spec — omit the `X-API-Key` header and let the client run the browser flow (`/mcp reauth atur` in omp). Details, endpoints and token rules: [docs/mcp-oauth.md](docs/mcp-oauth.md). API keys keep working.
+
 Global Claude Code config (`~/.claude.json` → `mcpServers.atur`) is **already wired to prod** (https://app.diatur.com/mcp, user scope). Restart Claude Code after editing to load `mcp__atur__*` tools.
 
 **Claude Code**: `claude mcp add atur --transport http https://app.diatur.com/mcp -s user -H "X-API-Key: pk_live_<KEY>"`

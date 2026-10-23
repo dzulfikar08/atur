@@ -38,6 +38,8 @@ export default {
       pathname === "/health" ||
       pathname === "/readiness" ||
       pathname.startsWith("/mcp") ||
+      pathname.startsWith("/oauth/") || // MCP OAuth authorization server
+      pathname.startsWith("/.well-known/oauth-") || // RFC 9728 / RFC 8414 discovery
       pathname === "/widget.js" || // embeddable feedback widget (application/javascript)
       pathname.startsWith("/public/") || // public feedback board API (token-keyed, no session)
       pathname.startsWith("/webhooks/polar"); // Polar webhook receiver (per-workspace, signed)

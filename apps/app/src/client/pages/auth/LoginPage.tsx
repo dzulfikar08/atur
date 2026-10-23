@@ -9,6 +9,7 @@ import { Eye, EyeOff, Loader2 } from "@/lib/icons";
 import { useAuthStore } from "@/stores/auth";
 import { ApiError } from "@/lib/api";
 import { GoogleButton } from "@/components/auth/GoogleButton";
+import { goAfterLogin, takePostLoginRedirect } from "@/lib/postLoginRedirect";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,12 +50,6 @@ function readErrorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
-function redirectAfterLogin(): string {
-  const redirect = sessionStorage.getItem("redirect_after_login") ?? "/";
-  sessionStorage.removeItem("redirect_after_login");
-  return redirect;
-}
-
 // Ops-console login: centered 400px card on a near-black field with a soft
 // radial glow behind it. All auth paths (password, email code, Google) are
 // unchanged — visual refresh only.
@@ -73,7 +68,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate("/", { replace: true });
+      goAfterLogin(navigate, takePostLoginRedirect());
     }
   }, [isAuthenticated, navigate]);
 
@@ -85,7 +80,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await login(values.email, values.password);
-      navigate(redirectAfterLogin(), { replace: true });
+      goAfterLogin(navigate, takePostLoginRedirect());
     } catch (err) {
       const message = readErrorMessage(err, "Invalid email or password");
       setError(message);
@@ -282,7 +277,7 @@ function OtpLogin() {
     setError(null);
     try {
       await verifyOtp(trimmedEmail, trimmedCode);
-      navigate(redirectAfterLogin(), { replace: true });
+      goAfterLogin(navigate, takePostLoginRedirect());
     } catch (err) {
       const message = readErrorMessage(err, "Invalid or expired code");
       setError(message);

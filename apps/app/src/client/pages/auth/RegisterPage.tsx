@@ -9,6 +9,7 @@ import { Eye, EyeOff, Loader2 } from "@/lib/icons";
 import { useAuthStore } from "@/stores/auth";
 import { ApiError } from "@/lib/api";
 import { AuthDivider, GoogleButton } from "@/components/auth/GoogleButton";
+import { goAfterLogin, takePostLoginRedirect } from "@/lib/postLoginRedirect";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -64,7 +65,7 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate("/", { replace: true });
+      goAfterLogin(navigate, takePostLoginRedirect());
     }
   }, [isAuthenticated, navigate]);
 
@@ -76,9 +77,7 @@ export default function RegisterPage() {
     setError(null);
     try {
       await register(values.email, values.password, values.display_name);
-      const redirect = sessionStorage.getItem("redirect_after_login") ?? "/";
-      sessionStorage.removeItem("redirect_after_login");
-      navigate(redirect, { replace: true });
+      goAfterLogin(navigate, takePostLoginRedirect());
     } catch (err) {
       const message =
         err instanceof ApiError

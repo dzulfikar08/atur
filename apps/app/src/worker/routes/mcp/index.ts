@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../../lib/env";
 import { getDb } from "../../db/index";
-import { authMiddleware } from "../../middleware/auth";
+import { mcpAuthMiddleware } from "../../middleware/mcpAuth";
 import { nowISO } from "../../lib/pagination";
 import { v4 as uuid } from "uuid";
 import { HTTPException } from "hono/http-exception";
@@ -3091,7 +3091,7 @@ export const mcpRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       protocolVersion: "2024-11-05",
     });
   })
-  .post("/", authMiddleware, async (c) => {
+  .post("/", mcpAuthMiddleware, async (c) => {
     const db = getDb(c.env.DB);
     const body = await c.req.json<JsonRpcRequest>();
 
