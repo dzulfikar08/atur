@@ -85,3 +85,14 @@ cd apps/app
 bun run db:migrate:remote      # drizzle-kit migrate → 0026_mcp_oauth.sql
 bun run deploy
 ```
+
+## Troubleshooting
+
+Token/authorize/registration outcomes and MCP 401s are logged as one JSON line each
+(`oauth.token.ok`, `oauth.token.rejected`, `oauth.authorize.rejected`, `oauth.register.*`,
+`oauth.authorize.approved`, `mcp.unauthorized`) with parameter names and non-secret
+identifiers only. Watch them with `cd apps/app && bunx wrangler tail atur-hono --format json`.
+
+If the browser runs on a different machine than the MCP client, the redirect to
+`http://localhost:<port>/callback` cannot reach the client; paste the full callback URL
+into the client (omp prompts for it) within 2 minutes (the code lifetime).

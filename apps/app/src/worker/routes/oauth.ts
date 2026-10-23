@@ -49,6 +49,19 @@ async function readParams(c: C): Promise<Record<string, unknown>> {
   return out;
 }
 
+// One structured line per token/authorize outcome. Parameter *names* and
+// non-secret identifiers only: never codes, verifiers, tokens or secrets.
+function logOAuth(event: string, c: C, fields: Record<string, unknown>): void {
+  console.log(
+    JSON.stringify({
+      event,
+      ua: c.req.header("user-agent")?.slice(0, 80),
+      ct: c.req.header("content-type")?.slice(0, 60),
+      ...fields,
+    }),
+  );
+}
+
 function str(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
@@ -146,21 +159,38 @@ async function parseAuthorize(
   const db = getDb(c.env.DB);
   const clientId = str(p.client_id);
   const found = clientId ? await oauth.getClient(db, clientId) : null;
-  if (!found) return { response: errorPage("Unknown client_id.") };
+  if (!found) {
+    logOAuth("oauth.authorize.rejected", c, { error: "unknown_client", client_id: clientId });
+    return { response: errorPage("Unknown client_id.") };
+  }
   const redirectUri = str(p.redirect_uri);
   if (!redirectUri || !redirectUriAllowed(found.redirectUris, redirectUri)) {
+    logOAuth("oauth.authorize.rejected", c, {
+      error: "redirect_uri_not_registered",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      registered: found.redirectUris,
+    });
     return { response: errorPage("redirect_uri is not registered for this client.") };
   }
   const state = str(p.state);
   const iss = origin(c);
-  const fail = (error: string, description: string) => ({
-    response: redirectWith(
-      c,
-      redirectUri,
-      { error, error_description: description, iss, ...(state ? { state } : {}) },
-      status,
-    ),
-  });
+  const fail = (error: string, description: string) => {
+    logOAuth("oauth.authorize.rejected", c, {
+      error,
+      reason: description,
+      client_id: clientId,
+      resource: p.resource,
+    });
+    return {
+      response: redirectWith(
+        c,
+        redirectUri,
+        { error, error_description: description, iss, ...(state ? { state } : {}) },
+        status,
+      ),
+    };
+  };
 
   if (p.response_type !== "code") {
     return fail("unsupported_response_type", "response_type must be 'code'");
@@ -302,6 +332,7 @@ export const oauthRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     try {
       const body = await readParams(c);
       const { client, redirectUris } = await oauth.registerClient(getDb(c.env.DB), body);
+      logOAuth("oauth.register.ok", c, { client_id: client.id, redirect_uris: redirectUris });
       c.header("Cache-Control", "no-store");
       return c.json(
         {
@@ -317,7 +348,10 @@ export const oauthRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         201,
       );
     } catch (e) {
-      if (e instanceof oauth.OAuthError) return oauthJsonError(c, e);
+      if (e instanceof oauth.OAuthError) {
+        logOAuth("oauth.register.rejected", c, { error: e.code, reason: e.description });
+        return oauthJsonError(c, e);
+      }
       throw e;
     }
   })
@@ -351,6 +385,11 @@ export const oauthRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         303,
       );
     }
+    logOAuth("oauth.authorize.approved", c, {
+      client_id: req.client.id,
+      redirect_uri: req.redirectUri,
+      user_id: user.id,
+    });
     const code = await oauth.createAuthorizationCode(getDb(c.env.DB), {
       clientId: req.client.id,
       userId: user.id,
@@ -362,10 +401,18 @@ export const oauthRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   })
 
   .post("/oauth/token", async (c) => {
+    let grantLog: Record<string, unknown> = {};
     try {
       const p = await readParams(c);
       const db = getDb(c.env.DB);
       const clientId = str(p.client_id);
+      grantLog = {
+        grant_type: p.grant_type,
+        client_id: clientId,
+        params: Object.keys(p).sort(),
+        resource: p.resource,
+        redirect_uri: p.redirect_uri,
+      };
       if (!clientId) throw new oauth.OAuthError("invalid_request", "client_id is required");
       if (!(await oauth.getClient(db, clientId))) {
         throw new oauth.OAuthError("invalid_client", "Unknown client_id", 401);
@@ -396,11 +443,15 @@ export const oauthRoutes = new Hono<{ Bindings: Env }>({ strict: false })
           "grant_type must be authorization_code or refresh_token",
         );
       }
+      logOAuth("oauth.token.ok", c, grantLog);
       c.header("Cache-Control", "no-store");
       c.header("Pragma", "no-cache");
       return c.json(tokens);
     } catch (e) {
-      if (e instanceof oauth.OAuthError) return oauthJsonError(c, e);
+      if (e instanceof oauth.OAuthError) {
+        logOAuth("oauth.token.rejected", c, { ...grantLog, error: e.code, reason: e.description });
+        return oauthJsonError(c, e);
+      }
       throw e;
     }
   })

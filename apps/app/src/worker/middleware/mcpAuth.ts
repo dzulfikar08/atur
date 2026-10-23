@@ -13,7 +13,22 @@ import { authMiddleware, extractToken } from "./auth";
 
 // MCP authorization spec: a 401 carries WWW-Authenticate pointing at the RFC 9728
 // protected-resource metadata so clients can discover the authorization server.
-function unauthorized(c: Context<{ Bindings: Env }>, origin: string, invalid: boolean): Response {
+function unauthorized(
+  c: Context<{ Bindings: Env }>,
+  origin: string,
+  invalid: boolean,
+  kind: string,
+): Response {
+  // Which credential type failed, never the credential itself.
+  console.log(
+    JSON.stringify({
+      event: "mcp.unauthorized",
+      kind,
+      ua: c.req.header("user-agent")?.slice(0, 80),
+      has_x_api_key: Boolean(c.req.header("x-api-key")),
+      has_authorization: Boolean(c.req.header("authorization")),
+    }),
+  );
   const challenge = invalid
     ? `Bearer error="invalid_token", error_description="The access token is invalid or expired", resource_metadata="${protectedResourceMetadataUrl(origin)}"`
     : `Bearer resource_metadata="${protectedResourceMetadataUrl(origin)}"`;
@@ -37,11 +52,11 @@ function unauthorized(c: Context<{ Bindings: Env }>, origin: string, invalid: bo
 export async function mcpAuthMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
   const origin = requestOrigin(c.req.url, c.req.header("x-forwarded-proto"));
   const token = extractToken(c);
-  if (!token) return unauthorized(c, origin, false);
+  if (!token) return unauthorized(c, origin, false, "no_credentials");
 
   if (token.startsWith(ACCESS_TOKEN_PREFIX)) {
     const user = await resolveAccessToken(getDb(c.env.DB), token, mcpResource(origin));
-    if (!user) return unauthorized(c, origin, true);
+    if (!user) return unauthorized(c, origin, true, "oauth_access_token");
     c.set("user", {
       sub: user.id,
       email: user.email,
@@ -61,7 +76,7 @@ export async function mcpAuthMiddleware(c: Context<{ Bindings: Env }>, next: Nex
     });
   } catch (e) {
     if (!reachedHandler && e instanceof HTTPException && e.status === 401) {
-      return unauthorized(c, origin, true);
+      return unauthorized(c, origin, true, token.startsWith("pk_live_") ? "api_key" : "session");
     }
     throw e;
   }
