@@ -1,6 +1,8 @@
 import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
 
+import { clearPaneSeen } from "@/lib/pane-seen";
+import { clearAgentAlertsLocal } from "@/lib/push-state";
 import { getItem, removeItem, setItem } from "@/lib/storage";
 
 // The opaque Atur session token (users.token) — sent as `Authorization:
@@ -48,9 +50,14 @@ export async function startSession(token: string): Promise<void> {
   publish({ status: "authed", token });
 }
 
-/** Drops the local session (server already revoked it, or it expired). */
+/**
+ * Drops the local session (server already revoked it, or it expired). The
+ * device-level alert opt-in and pane acknowledgements belong to the account,
+ * so they go too; server-side token removal is `disableAgentAlerts`, run
+ * before this while the session is still valid.
+ */
 export async function endSession(): Promise<void> {
-  await removeItem(TOKEN_KEY);
+  await Promise.all([removeItem(TOKEN_KEY), clearAgentAlertsLocal(), clearPaneSeen()]);
   queryClient.clear();
   publish({ status: "anon", token: null });
 }

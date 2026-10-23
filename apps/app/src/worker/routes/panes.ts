@@ -20,7 +20,7 @@ import { isWorkspaceMember } from "../repositories/members";
 // not observable.
 export const paneRoutes = new Hono<{ Bindings: Env }>({ strict: false });
 
-interface BridgePane {
+export interface BridgePane {
   pane_id: string;
   cwd: string | null;
 }
@@ -58,14 +58,14 @@ function matchWorkspaceSlug(
   return best?.slug ?? null;
 }
 
-// Resolve a bridge pane to its Atur workspace slug (see header comment) or
-// null when unbound/bridge-down.
-async function paneWorkspaceSlug(db: DbClient, env: Env, paneId: string): Promise<string | null> {
-  const bridge = await fetchBridgePanes(env);
-  if (!bridge.ok) return null;
-  const pane = bridge.panes.find((p) => p.pane_id === paneId);
-  if (!pane) return null;
-
+// Resolve a pane (id + cwd) to its Atur workspace slug (see header comment) or
+// null when unbound/bridge-down. Also used by the bridge agent-events route,
+// which already knows the pane and must not re-list panes from the bridge.
+export async function workspaceSlugForPane(
+  db: DbClient,
+  env: Env,
+  pane: BridgePane,
+): Promise<string | null> {
   const links = await db
     .select({
       workspaceSlug: schema.workspaceLinks.workspaceSlug,
@@ -80,7 +80,7 @@ async function paneWorkspaceSlug(db: DbClient, env: Env, paneId: string): Promis
   const base = bridgeBase(env);
   if (!base) return null;
   try {
-    const res = await fetch(`${base}/pane-repo?pane=${encodeURIComponent(paneId)}`, {
+    const res = await fetch(`${base}/pane-repo?pane=${encodeURIComponent(pane.pane_id)}`, {
       headers: bridgeHeaders(env),
     });
     if (!res.ok) return null;
@@ -89,6 +89,13 @@ async function paneWorkspaceSlug(db: DbClient, env: Env, paneId: string): Promis
   } catch {
     return null;
   }
+}
+
+async function paneWorkspaceSlug(db: DbClient, env: Env, paneId: string): Promise<string | null> {
+  const bridge = await fetchBridgePanes(env);
+  if (!bridge.ok) return null;
+  const pane = bridge.panes.find((p) => p.pane_id === paneId);
+  return pane ? workspaceSlugForPane(db, env, pane) : null;
 }
 
 // Base URL without a trailing slash so `${base}/panes` never doubles up.

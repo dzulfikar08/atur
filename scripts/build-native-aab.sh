@@ -67,11 +67,13 @@ fi
 
 # 2. Prebuild, only when native inputs changed (wiping android/ also wipes the
 #    CMake caches and recompiles all native code). Inputs: app config, deps,
-#    assets prebuild copies (icons, splash).
+#    assets prebuild copies (icons, splash), google-services.json (FCM).
 cd "$NATIVE"
 STAMP=android/.prebuild-hash
 PREBUILD_HASH="$(
-  { sha256sum app.json package.json "$ROOT/bun.lock"
+  { sha256sum app.json app.config.ts package.json "$ROOT/bun.lock"
+    # Optional Firebase config (FCM): its presence changes the prebuilt Gradle project.
+    [ -f google-services.json ] && sha256sum google-services.json
     find assets -type f -print0 | sort -z | xargs -0 sha256sum
   } | sha256sum | cut -d' ' -f1
 )"

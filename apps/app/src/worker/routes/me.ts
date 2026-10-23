@@ -33,8 +33,18 @@ import { issueTextCondition } from "../repositories/issues";
 import * as issuesService from "../services/issues";
 import * as hiddenWorkspaces from "../services/hiddenWorkspaces";
 import { parseOr400 } from "../lib/validate";
+import * as pushTokens from "../repositories/pushTokens";
+import { z } from "zod";
 
 type Db = ReturnType<typeof getDb>;
+
+const pushTokenSchema = z.object({
+  token: z
+    .string()
+    .max(256)
+    .regex(/^Expo(nent)?PushToken\[[^\]]+\]$/),
+  platform: z.enum(["ios", "android"]),
+});
 
 /** YYYY-MM-DD prefix of a date/datetime text column. */
 const dateOnly = (col: AnyColumn) => sql<string>`substr(${col}, 1, 10)`;
@@ -194,6 +204,25 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     );
     const ids = await hiddenWorkspaces.update(db, c.get("user").sub, body);
     return c.json({ workspace_ids: ids });
+  })
+
+  // Expo push token of this device. Body { token, platform }; a token held by
+  // another user (shared device, re-login) moves to the caller.
+  .put("/push-tokens", async (c) => {
+    const db = getDb(c.env.DB);
+    const body = parseOr400(pushTokenSchema, await c.req.json().catch(() => null));
+    await pushTokens.upsert(db, c.get("user").sub, body.token, body.platform);
+    return c.json({ ok: true });
+  })
+  // Idempotent; only the caller's own row is deleted.
+  .delete("/push-tokens", async (c) => {
+    const db = getDb(c.env.DB);
+    const body = parseOr400(
+      pushTokenSchema.pick({ token: true }),
+      await c.req.json().catch(() => null),
+    );
+    await pushTokens.remove(db, c.get("user").sub, body.token);
+    return c.json({ ok: true });
   })
 
   // Recent + filterable issues across all the user's workspaces. Each row is

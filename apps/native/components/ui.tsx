@@ -12,6 +12,7 @@ import {
   ScrollView,
   Text as RNText,
   StyleSheet as RNStyleSheet,
+  Switch,
   TextInput,
   View,
   type TextInputProps,
@@ -148,6 +149,8 @@ export function ListRow({
   destructive,
   onPress,
   right,
+  toggle,
+  accessibilityLabel,
 }: {
   icon?: IconName;
   left?: React.ReactNode;
@@ -158,15 +161,29 @@ export function ListRow({
   destructive?: boolean;
   onPress?: () => void;
   right?: React.ReactNode;
+  /** Spoken label when the title alone doesn't carry the row (defaults to the title). */
+  accessibilityLabel?: string;
+  /** Makes the whole row a switch; tapping anywhere flips it. */
+  toggle?: {
+    value: boolean;
+    onChange: (next: boolean) => void;
+    busy?: boolean;
+    disabled?: boolean;
+  };
 }) {
   const { theme } = useUnistyles();
   const color = destructive ? theme.colors.destructive : theme.colors.foreground;
+  const toggleInactive = toggle ? toggle.disabled || toggle.busy : false;
+  const press = toggle ? () => toggle.onChange(!toggle.value) : onPress;
   return (
     <Pressable
-      accessibilityRole={onPress ? "button" : undefined}
-      accessibilityLabel={title}
-      disabled={!onPress}
-      onPress={onPress}
+      accessibilityRole={toggle ? "switch" : onPress ? "button" : undefined}
+      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityState={
+        toggle ? { checked: toggle.value, disabled: toggleInactive, busy: toggle.busy } : undefined
+      }
+      disabled={!press || toggleInactive}
+      onPress={press}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
       {icon ? (
@@ -186,7 +203,21 @@ export function ListRow({
         ) : null}
       </View>
       {value ? <Text style={styles.rowValue}>{value}</Text> : null}
-      {right}
+      {toggle ? (
+        toggle.busy ? (
+          <ActivityIndicator color={theme.colors.mutedForeground} />
+        ) : (
+          <View pointerEvents="none" importantForAccessibility="no-hide-descendants">
+            <Switch
+              value={toggle.value}
+              disabled={toggle.disabled}
+              trackColor={{ false: theme.colors.muted, true: theme.colors.primary }}
+            />
+          </View>
+        )
+      ) : (
+        right
+      )}
       {chevron ? (
         <Ionicons name="chevron-forward" size={16} color={theme.colors.mutedForeground} />
       ) : null}

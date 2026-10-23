@@ -753,6 +753,26 @@ export const userHiddenWorkspaces = sqliteTable(
   (table) => [primaryKey({ columns: [table.userId, table.workspaceId] })],
 );
 
+// Expo push tokens of the user's devices (native app). A token belongs to one
+// user at a time: signing in on a device reassigns it.
+export const pushTokens = sqliteTable(
+  "push_tokens",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: text("token").notNull(),
+    platform: text("platform").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_push_tokens_token").on(table.token),
+    index("idx_push_tokens_user").on(table.userId),
+  ],
+);
+
 export const webhooks = sqliteTable("webhooks", {
   id: text("id").primaryKey(),
   url: text("url").notNull(),

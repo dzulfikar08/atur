@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+import { AgentsSection } from "@/components/agents-section";
 import { TodaySkeleton } from "@/components/skeletons";
 import { BUCKETS, TodayBucket, useTodayPatch } from "@/components/today";
 import {
@@ -145,6 +146,7 @@ export default function Today() {
           }
         />
         <ErrorNote error={me.error ?? today.error} />
+        <AgentsSection />
 
         {noWorkspaces ? (
           <EmptyState

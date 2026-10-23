@@ -104,6 +104,19 @@ jobs:
             echo "keyPassword=$KEY_PASSWORD"
           } > apps/native/keystore/keystore.properties
 
+      # Optional Firebase config for FCM pushes: raw JSON or base64 of it. app.config.ts picks the file up when present.
+      - name: Write google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          [ -n "$GOOGLE_SERVICES_JSON" ] || exit 0
+          umask 077
+          if [ "${GOOGLE_SERVICES_JSON:0:1}" = "{" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > apps/native/google-services.json
+          else
+            printf '%s' "$GOOGLE_SERVICES_JSON" | base64 -d > apps/native/google-services.json
+          fi
+
       # The script's manifest guard needs bundletool for the AAB (default path ~/.cache/bundletool/bundletool.jar).
       - name: Install bundletool
         run: |
@@ -157,4 +170,4 @@ jobs:
 
       - name: Remove signing material
         if: always()
-        run: rm -rf apps/native/keystore
+        run: rm -rf apps/native/keystore apps/native/google-services.json

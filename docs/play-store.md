@@ -189,7 +189,7 @@ Atur is the mobile client of the Atur workspace (https://app.diatur.com).
    Email: <review account email>
    Password: <review account password>
 2. The account is a member of the "Demo" workspace with a project, issues, comments and notifications.
-Everything in the app works without extra permissions; the app asks for no camera or location access. The only runtime permission is the microphone, requested the first time you tap the mic button to dictate (comment, issue description, pane prompt, Send feedback); decline it and the rest of the app is unaffected.
+Everything in the app works without extra permissions; the app asks for no camera or location access. Runtime permissions are the microphone, requested the first time you tap the mic button to dictate, and notifications (`POST_NOTIFICATIONS`, Android 13+), requested when you turn on agent alerts (comment, issue description, pane prompt, Send feedback); decline it and the rest of the app is unaffected.
 ```
 
 Do not put the real password in this repo. Google sign-in works too but needs a Google account; do not rely on it for review.
@@ -215,6 +215,10 @@ Source: https://support.google.com/googleplay/android-developer/answer/10787469 
 | Security practices                                                                                           | Encrypted in transit: **Yes**. Users can request deletion: **Yes** (below). Independent security review: No. |
 
 Credentials: the account password is stored hashed server-side (`apps/app/src/worker/lib/password`); the app only sends it over HTTPS and never stores it.
+
+### Push notifications (`POST_NOTIFICATIONS`)
+
+Agent alerts: a push when an agent pane finishes or needs the user. The device's Expo push token is stored server-side (tied to the user) only to deliver them. Notification content includes the pane title and a short excerpt of the agent's output or question and passes through Expo's push service and Firebase Cloud Messaging. The token is an app-scoped delivery address, not the advertising ID [INFERENCE: if Play review disagrees, declare Device or other IDs: collected, not shared beyond service providers, App functionality]. Needs `google-services.json` at build time (`native-release.md`).
 
 ### Microphone (`RECORD_AUDIO`) justification
 

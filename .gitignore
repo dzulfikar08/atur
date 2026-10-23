@@ -25,6 +25,9 @@ ios/
 android/
 !scripts/ios/
 
+# Firebase config for FCM push (per-owner; CI writes it from GOOGLE_SERVICES_JSON)
+apps/native/google-services.json
+
 # Command Code local preferences
 .commandcode/
 

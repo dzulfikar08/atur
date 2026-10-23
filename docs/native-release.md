@@ -28,7 +28,7 @@ scripts/build-native-aab.sh           # AAB, arm64-v8a + armeabi-v7a
 scripts/build-native-aab.sh --clean   # force a fresh prebuild
 ```
 
-- `android/` is reused between builds when `app.json`, `package.json`, `bun.lock` and `assets/` are unchanged; otherwise prebuild runs again. A cold build takes about 30 minutes, a warm one a few.
+- `android/` is reused between builds when `app.json`, `app.config.ts`, `google-services.json`, `package.json`, `bun.lock` and `assets/` are unchanged; otherwise prebuild runs again. A cold build takes about 30 minutes, a warm one a few.
 - The release keystore is `apps/native/keystore/atur-release.jks` with `keystore.properties` next to it (both gitignored; the script generates them once if missing, never overwrites). **Back both up outside the repo.** The Play AAB is signed with it as the Play **upload key** (see `play-store.md`, "Play App Signing").
 - The script fails when the merged manifest (bundletool) contains `REQUEST_INSTALL_PACKAGES`, `SYSTEM_ALERT_WINDOW`, `QUERY_ALL_PACKAGES` or `MANAGE_EXTERNAL_STORAGE`, and when the JS bundle does not contain the API URL. `EXPO_PUBLIC_SERVER_URL` defaults to `https://app.diatur.com` and beats any `apps/native/.env`.
 - `~/.gradle` is a symlink to the ioswork volume on this machine, which is small and shared: the script stops with a message if that volume is not mounted, and a full build peaked high enough on it to hit "No space left on device" (R8). Use `GRADLE_USER_HOME=$HOME/.cache/atur-gradle scripts/build-native-aab.sh ...` to keep Gradle's caches on /home (a first build then downloads the dependencies again).
@@ -62,6 +62,20 @@ It is JoyoFit's pipeline (`../watch-fit/scripts/build-ios-linux.sh`, `docs/ios-l
 - `--upload` needs an App Store Connect app record for `com.diatur.app`. The API cannot create one: see the checklist.
 - Nothing here runs the app on an iPhone. A build that passes `asc.py validate` has not been launched; install `--dev` builds on a registered iPhone to smoke-test.
 - The iOS app is iPhone-only (`supportsTablet: false`): the UI is portrait-only and not laid out for iPad, which also means App Store Connect asks for no iPad screenshots. Flip it only together with an iPad layout pass and iPad screenshots.
+
+## Push notifications (agent alerts)
+
+The bridge reports when an agent pane finishes or needs you; the Worker sends an Expo push, and tapping it opens that pane. The app registers its Expo push token with `PUT /api/me/push-tokens` and creates the Android channel `agents` at runtime.
+
+- Native module (`expo-notifications`): the fingerprint changes, so this needs a **new store build**; OTA cannot deliver it.
+- Android: `app.config.ts` sets `android.googleServicesFile` only when `apps/native/google-services.json` exists (gitignored); without it the build works but gets no pushes. `build-native-aab.sh` includes the file and `app.config.ts` in the prebuild hash. CI writes it from the `GOOGLE_SERVICES_JSON` secret (`ci-release.md`).
+- iOS: `build-ios-linux.sh` enables the `PUSH_NOTIFICATIONS` capability on `com.diatur.app` next to `APPLE_ID_AUTH`; the plugin writes `aps-environment` and `sign-app.py` signs the profile's `production` value. `mac-build.sh` fails when the signed entitlement is not `production`. No `UIBackgroundModes` (no silent pushes).
+
+One-time owner steps:
+
+1. Firebase console: create or pick a project, add the Android app `com.diatur.app`, download `google-services.json` to `apps/native/` and set it as the `GOOGLE_SERVICES_JSON` secret (`gh secret set GOOGLE_SERVICES_JSON --env release -R dzulfikar08/atur < apps/native/google-services.json`).
+2. Firebase -> Project settings -> Service accounts: generate a private key (FCM V1) and upload it to Expo. Create an APNs key (Apple Developer -> Keys, Apple Push Notifications service) and upload it too: `cd apps/native && bunx eas-cli credentials` (project `469744b3-e97c-4b0d-ab1e-209fb803751e`, owner `dzulfikar08`; Android: Google Service Account Key for Push Notifications (FCM V1); iOS: Push Notifications key).
+3. Ship new Play and App Store builds, then update the App Privacy / Data safety answers (`app-store.md`, `play-store.md`).
 
 ## Where secrets live (none are in the repo)
 

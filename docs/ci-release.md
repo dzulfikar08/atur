@@ -35,13 +35,14 @@ Build numbers follow the laptop scripts: Android `versionCode` = minutes since 2
 
 Set with `gh secret set NAME --env release -R dzulfikar08/atur` (value from stdin or `< file`).
 
-| Secret                                                                   | Used by              | Source                                                                                                                                |
-| ------------------------------------------------------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `ANDROID_KEYSTORE_BASE64`                                                | Android              | base64 of `apps/native/keystore/atur-release.jks` (the Play **upload** key)                                                           |
-| `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | Android              | `apps/native/keystore/keystore.properties`                                                                                            |
-| `PLAY_SERVICE_ACCOUNT_JSON`                                              | Android, Play upload | `~/.config/joyorogo/play-billing-sa.json` (`joyorogo-play-billing@joyorogo.iam.gserviceaccount.com`, has an edit on `com.diatur.app`) |
-| `ASC_KEY_BASE64`, `ASC_KEY_ID`, `ASC_ISSUER_ID`                          | iOS                  | `~/Downloads/AuthKey_BUU2CPKLGM.p8` (base64), `BUU2CPKLGM`, `9e34111d-e39f-4122-9000-6eb4628fe9b9`                                    |
-| `IOS_DIST_CERT_P12_BASE64`, `IOS_DIST_CERT_PASSWORD`                     | iOS                  | `.p12` of the team-wide Apple Distribution identity `~/.config/joyorogo-ios/distribution/{cert.der,key.pem}`, random password         |
+| Secret                                                                   | Used by              | Source                                                                                                                                            |
+| ------------------------------------------------------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ANDROID_KEYSTORE_BASE64`                                                | Android              | base64 of `apps/native/keystore/atur-release.jks` (the Play **upload** key)                                                                       |
+| `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | Android              | `apps/native/keystore/keystore.properties`                                                                                                        |
+| `GOOGLE_SERVICES_JSON` (optional)                                        | Android              | `apps/native/google-services.json` from the Firebase project (raw JSON or base64). Without it the AAB builds but cannot receive agent push alerts |
+| `PLAY_SERVICE_ACCOUNT_JSON`                                              | Android, Play upload | `~/.config/joyorogo/play-billing-sa.json` (`joyorogo-play-billing@joyorogo.iam.gserviceaccount.com`, has an edit on `com.diatur.app`)             |
+| `ASC_KEY_BASE64`, `ASC_KEY_ID`, `ASC_ISSUER_ID`                          | iOS                  | `~/Downloads/AuthKey_BUU2CPKLGM.p8` (base64), `BUU2CPKLGM`, `9e34111d-e39f-4122-9000-6eb4628fe9b9`                                                |
+| `IOS_DIST_CERT_P12_BASE64`, `IOS_DIST_CERT_PASSWORD`                     | iOS                  | `.p12` of the team-wide Apple Distribution identity `~/.config/joyorogo-ios/distribution/{cert.der,key.pem}`, random password                     |
 
 Rebuild the `.p12` (new certificate or password):
 

@@ -23,6 +23,21 @@ export async function listByWorkspace(db: DbClient, workspaceId: string) {
     .where(and(eq(workspaceMembers.workspaceId, workspaceId), isNull(workspaceMembers.deletedAt)));
 }
 
+/** Ids of the workspace's live, active members (suspended and removed ones excluded). */
+export async function listActiveMemberIds(db: DbClient, workspaceId: string): Promise<string[]> {
+  const rows = await db
+    .select({ memberId: workspaceMembers.memberId })
+    .from(workspaceMembers)
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.isActive, 1),
+        isNull(workspaceMembers.deletedAt),
+      ),
+    );
+  return rows.map((r) => r.memberId);
+}
+
 export async function addWorkspaceMember(
   db: DbClient,
   workspaceId: string,

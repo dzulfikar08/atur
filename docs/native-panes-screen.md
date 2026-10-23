@@ -1,6 +1,17 @@
 # Native: terminal panes and desktop Screen
 
-Panes tab (`app/(tabs)/panes.tsx`) lists `GET /api/panes` (only panes bound to a workspace the user belongs to). Tap → `app/pane/[paneId].tsx`: the pane in one of three views (**Native**, **Classic**, **Transcript**). The Screen button on the Panes header only renders when `/api/users/me` says `is_superuser`; `app/screen.tsx` is the full-screen (landscape-capable) noVNC view. The server enforces both rules (per-pane workspace membership; `requireSuperuser`).
+Panes tab (`app/(tabs)/panes.tsx`) lists `GET /api/panes` (only panes bound to a workspace the user belongs to). Agent panes come first, ordered by attention (**Needs you** > **Done** > **Working** > **Idle**); plain shells sit in a collapsed "Shells (n)" group (the toggle is remembered). Tap → `app/pane/[paneId].tsx`: the pane in one of three views (**Native**, **Classic**, **Transcript**). The Screen button on the Panes header only renders when `/api/users/me` says `is_superuser`; `app/screen.tsx` is the full-screen (landscape-capable) noVNC view. The server enforces both rules (per-pane workspace membership; `requireSuperuser`).
+
+## Agent attention and alerts
+
+herdr reports each agent pane's state (`idle`, `working`, `blocked`, `done`, `unknown`; the omp integration drives it from omp's lifecycle hooks). The app maps it in `lib/pane-meta.ts`: `blocked` → **Needs you** (an `ask` question, a tool approval, or a retryable provider failure), `done` → **Done** (finished, not yet seen in a herdr client), `working` → **Working**.
+
+- **Fewer taps.** The Panes tab badge and the "Agents" section at the top of Today count Needs you + Done panes the user has not opened yet. Opening a pane acknowledges its current state (`lib/pane-seen.ts`, persisted); the next change counts again.
+- **Push alerts.** Opt in from the Panes card ("Turn on alerts") or Profile → Agent alerts. The device's Expo push token goes to `PUT /api/me/push-tokens` (removed on sign-out or when switched off). Tapping a notification opens that pane; while that same pane is on screen its alerts are not shown.
+- **Who detects.** The bridge (`apps/bridge/src/agent-events.ts`) polls herdr `pane.list` every 2 s (`AGENT_POLL_MS`). It sends **blocked** when a pane enters `blocked`, and **done** when a pane goes from `working`/`blocked` to `idle`/`done`. An event fires only if the state still holds 3 s later: a flicker back to `working`, or `done` → `idle` because the pane was looked at on the desktop, cancels it. A bridge restart sends nothing for states that were already there. For omp panes it reads the tail of the omp session file to add the `ask` question or the first 180 characters of the last reply.
+- **Delivery.** The bridge sends `POST /api/bridge/agent-events` with `x-bridge-token` = `BRIDGE_TOKEN` (the Worker checks it against `HERDR_BRIDGE_TOKEN`; it is disabled when the token is unset; `ATUR_URL` defaults to `https://app.diatur.com`). The Worker resolves the pane's workspace the same way attach does, then pushes through Expo (`lib/expoPush.ts`, optional `EXPO_ACCESS_TOKEN`) to every opted-in device of that workspace's members. Tokens Expo reports as `DeviceNotRegistered` are deleted.
+- **Content.** The title and body show the pane title, the question or the start of the reply, and the workspace slug. They pass through Expo's push service and APNs/FCM and appear on the lock screen.
+- **Setup.** `expo-notifications` is a native module, so this needs a new store build plus FCM and APNs credentials (see `native-release.md`, "Push notifications"). Apply drizzle migration `0027_push_tokens` before deploying the Worker, then restart `atur-bridge.service`.
 
 ## Pane views
 

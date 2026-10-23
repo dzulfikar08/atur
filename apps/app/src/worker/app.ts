@@ -47,6 +47,7 @@ import { ingestRoutes } from "./routes/ingest";
 import { feedbackAdminRoutes } from "./routes/feedback_admin";
 import { widgetRoutes } from "./routes/widget";
 import { paneRoutes } from "./routes/panes";
+import { bridgeEventRoutes } from "./routes/bridgeEvents";
 import { screenRoutes } from "./routes/screen";
 import { wsTicketRoutes } from "./routes/wsTickets";
 import { isWsTicketUpgrade } from "./lib/wsTicket";
@@ -78,6 +79,9 @@ export function createApp(): Hono<{ Bindings: Env }> {
   // because the board token / ingest key in the path is their credential.
   app.route("/api/feedback/:token", feedbackRoutes);
   app.route("/api/ingest/:ingestKey", ingestRoutes);
+  // Bridge daemon → Worker agent notifications. Credential is the shared
+  // x-bridge-token, not a session, so it also mounts before the gate below.
+  app.route("/api/bridge", bridgeEventRoutes);
 
   // Every /api/* route requires an authenticated session (cookie or bearer).
   // /auth/* (login/register) and /health are mounted outside /api and stay public.

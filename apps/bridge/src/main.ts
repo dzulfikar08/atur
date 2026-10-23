@@ -16,8 +16,13 @@
  *   GET /screen/status    → desktop-sharing availability, running state, viewer count
  *   GET /screen           → WebSocket upgrade: raw RFB bytes to the loopback wayvnc
  *                           (text frames are the viewer's ping/pong, answered here)
+ *
+ * Outbound: a poller watches herdr panes and POSTs agent "done"/"blocked"
+ * events to ATUR_URL/api/bridge/agent-events (x-bridge-token = BRIDGE_TOKEN);
+ * disabled when BRIDGE_TOKEN is unset.
  */
 import type { ServerWebSocket } from "bun";
+import { AgentEventWatcher, agentEventsConfigFromEnv } from "./agent-events";
 import { PaneHub, type BridgeMeta } from "./hub";
 import { ObserveHub } from "./observe";
 import { imageExtension, MAX_PASTE_BYTES, PasteError, pasteDirFromEnv, savePaste } from "./pastes";
@@ -232,8 +237,18 @@ Bun.serve<Meta>({
 
 console.log(`atur-bridge listening on 127.0.0.1:${PORT}`);
 
+const agentEventsConfig = agentEventsConfigFromEnv(process.env);
+const agentEvents = agentEventsConfig ? new AgentEventWatcher(agentEventsConfig) : null;
+if (agentEvents && agentEventsConfig) {
+  agentEvents.start();
+  console.log(`agent events → ${agentEventsConfig.url}/api/bridge/agent-events`);
+} else {
+  console.log("agent events disabled: BRIDGE_TOKEN unset");
+}
+
 for (const sig of ["SIGTERM", "SIGINT"] as const) {
   process.on(sig, () => {
+    agentEvents?.stop();
     // Stop wayvnc with the daemon so a restart never leaves an orphan listener.
     void screenHub.shutdown().finally(() => process.exit(0));
   });

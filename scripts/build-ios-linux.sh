@@ -154,8 +154,9 @@ APP=$(ls -d "$OUT"/Payload/*.app)
 ASC="$OAD/tools/asc.py"
 BUNDLE_ID=$(node -p "require('$OUT/app.json').bundle_id")
 
-# Sign in with Apple is a portal capability: register the bundle id and enable it before any profile is made.
-"$PY" "$ROOT/scripts/ios/enable-capabilities.py" "$BUNDLE_ID" APPLE_ID_AUTH
+# Sign in with Apple and Push Notifications are portal capabilities: register the bundle id and enable them before
+# any profile is made. sign-app.py swaps prebuild's aps-environment "development" for the profile's "production".
+"$PY" "$ROOT/scripts/ios/enable-capabilities.py" "$BUNDLE_ID" APPLE_ID_AUTH PUSH_NOTIFICATIONS
 
 if [ "$mode" = --dev ]; then
   # iOS Development certificate + profile for every registered iPhone, reused on later runs.

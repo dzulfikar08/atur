@@ -56,6 +56,13 @@
       ],
       "expo-apple-authentication",
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#161616"
+        }
+      ],
+      [
         "expo-speech-recognition",
         {
           "microphonePermission": "Atur uses the microphone only while you dictate into a text field. Audio is turned into text on your device and is never recorded or sent to Atur.",

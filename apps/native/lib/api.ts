@@ -515,4 +515,11 @@ export const api = {
     request<{ ok: true }>(`/api/notifications/${id}`, { method: "PATCH", body: { read: true } }),
   markAllNotificationsRead: () =>
     request<{ ok: true }>("/api/notifications/mark-all-read", { method: "POST" }),
+
+  /** Register this device for agent alerts (upsert by token; reassigns it to the caller). */
+  registerPushToken: (token: string, platform: "ios" | "android") =>
+    request<{ ok: true }>("/api/me/push-tokens", { method: "PUT", body: { token, platform } }),
+  /** Idempotent: removes only the caller's row for this token. */
+  unregisterPushToken: (token: string) =>
+    request<{ ok: true }>("/api/me/push-tokens", { method: "DELETE", body: { token } }),
 };

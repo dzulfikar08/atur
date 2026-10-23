@@ -19,6 +19,7 @@ import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { UnistylesRuntime, useUnistyles } from "react-native-unistyles";
 
+import { AgentNotifications } from "@/components/agent-notifications";
 import { UpdateBanner } from "@/components/update-banner";
 import { installDiagnostics, setCurrentRoute } from "@/lib/diagnostics";
 import { loadThemePref } from "@/lib/theme-pref";
@@ -115,6 +116,7 @@ export default function RootLayout() {
               <Stack.Screen name="login" options={{ headerShown: false }} />
             </Stack.Protected>
           </Stack>
+          {authed ? <AgentNotifications /> : null}
           <UpdateBanner />
         </GestureHandlerRootView>
       </ThemeProvider>

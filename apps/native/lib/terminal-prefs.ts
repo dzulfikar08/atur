@@ -23,3 +23,14 @@ export async function loadFontSize(): Promise<number | undefined> {
 export async function saveFontSize(size: number): Promise<void> {
   await setItem(FONT_KEY, String(clampFontSize(size)));
 }
+
+const SHELLS_OPEN_KEY = "atur.panes.shellsOpen";
+
+/** Whether the Panes tab's "Shells" group was left expanded; collapsed by default. */
+export async function loadShellsOpen(): Promise<boolean> {
+  return (await getItem(SHELLS_OPEN_KEY)) === "1";
+}
+
+export async function saveShellsOpen(open: boolean): Promise<void> {
+  await setItem(SHELLS_OPEN_KEY, open ? "1" : "0");
+}

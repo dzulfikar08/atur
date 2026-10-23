@@ -45,6 +45,9 @@ verified_address = "noreply@diatur.com"
 # are secrets (not vars) — see docs/DEPLOY.md and .dev.vars.example locally.
 # URL is http://127.0.0.1:7601 in dev or the https:// tunnel hostname in prod;
 # token is the bridge's optional x-bridge-token shared secret.
+# The same token authenticates the bridge's POST /api/bridge/agent-events push
+# notifications (503 when unset). EXPO_ACCESS_TOKEN is an optional secret: the
+# Expo push-security token, sent as a bearer when pushing to devices.
 
 [observability]
 enabled = true

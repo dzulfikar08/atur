@@ -157,6 +157,8 @@ codesign -d --entitlements :- "$APPDIR" > "$OUT/entitlements.plist" 2> /dev/null
 [ "$(plist "$OUT/entitlements.plist" get-task-allow)" = false ] || fail "get-task-allow is not false"
 # Sign in with Apple (usesAppleSignIn in app.json): the app is rejected at login without it.
 plist "$OUT/entitlements.plist" com.apple.developer.applesignin > /dev/null || fail "Sign in with Apple entitlement is not signed in"
+# Push notifications (expo-notifications plugin): agent alerts need the APNs entitlement, production for App Store builds.
+[ "$(plist "$OUT/entitlements.plist" aps-environment)" = production ] || fail "aps-environment is not production"
 codesign --verify --deep --strict "$APPDIR" || fail "code signature does not verify"
 authority=$(codesign -dvv "$APPDIR" 2>&1 | sed -n 's/^Authority=\(Apple Distribution.*\)/\1/p')
 [ -n "$authority" ] || fail "not signed with an Apple Distribution identity"

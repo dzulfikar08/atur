@@ -13,7 +13,8 @@ import { NativeTerminal } from "@/components/terminal/native-terminal";
 import { Transcript } from "@/components/terminal/transcript";
 import { Chip, Text } from "@/components/ui";
 import { api } from "@/lib/api";
-import { paneTitle } from "@/lib/pane-meta";
+import { paneAttention, paneTitle } from "@/lib/pane-meta";
+import { acknowledgePane } from "@/lib/pane-seen";
 import { usePaneAttach, usePaneObserve, type PaneAttachStatus } from "@/lib/pane-streams";
 import { loadPaneView, savePaneView, type PaneView } from "@/lib/terminal-prefs";
 import { TerminalScreen } from "@/lib/terminal-screen";
@@ -37,6 +38,13 @@ export default function PaneView() {
   const { paneId } = useLocalSearchParams<{ paneId: string }>();
   const panes = useQuery({ queryKey: ["panes"], queryFn: api.panes });
   const pane = panes.data?.find((p) => p.pane_id === paneId);
+
+  // Looking at the pane acknowledges whatever state it is in, including one it
+  // reaches while the screen stays open.
+  const attention = pane ? paneAttention(pane) : null;
+  useEffect(() => {
+    if (paneId && attention) acknowledgePane(paneId, attention);
+  }, [paneId, attention]);
 
   // Native is the default; the last choice is remembered across panes and launches.
   const [view, setView] = useState<PaneView>("native");

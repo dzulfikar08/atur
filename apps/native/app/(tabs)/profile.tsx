@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet, UnistylesRuntime, useUnistyles } from "react-native-unistyles";
 
+import { useAgentAlertsControl } from "@/components/agent-alerts";
 import { useReportSheet } from "@/components/report-sheet";
 import {
   Avatar,
@@ -27,6 +28,7 @@ import { api } from "@/lib/api";
 import { SERVER_URL } from "@/lib/config";
 import { displayName } from "@/lib/format";
 import { OTA_ENABLED, useOtaUpdate, type OtaPhase } from "@/lib/ota";
+import { AGENT_ALERTS_SUPPORTED, disableAgentAlerts } from "@/lib/push";
 import { endSession } from "@/lib/session";
 import { loadThemePref, saveThemePref, type ThemePref } from "@/lib/theme-pref";
 import { setCurrentWorkspace, useCurrentWorkspace } from "@/lib/workspace";
@@ -72,10 +74,15 @@ export default function Profile() {
   };
 
   const signOut = useMutation({
-    // Revoke server-side when reachable; the local session ends regardless.
-    mutationFn: () => api.signOut().catch(() => undefined),
+    // Drop this device's push token while the session can still authorise it,
+    // then revoke server-side when reachable; the local session ends regardless.
+    mutationFn: async () => {
+      await disableAgentAlerts().catch(() => undefined);
+      await api.signOut().catch(() => undefined);
+    },
     onSettled: () => endSession(),
   });
+  const alerts = useAgentAlertsControl();
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -122,6 +129,25 @@ export default function Profile() {
             onPress={() => setCurrentWorkspace(w.slug)}
           />
         ))}
+      </ListGroup>
+
+      <SectionTitle title="Notifications" />
+      <ListGroup>
+        <ListRow
+          icon="notifications-outline"
+          title="Agent alerts"
+          subtitle={
+            AGENT_ALERTS_SUPPORTED
+              ? "When an agent finishes or needs you"
+              : "Only in the iOS and Android apps"
+          }
+          toggle={{
+            value: alerts.enabled,
+            onChange: (next) => void alerts.set(next),
+            busy: alerts.busy,
+            disabled: !AGENT_ALERTS_SUPPORTED || !alerts.loaded,
+          }}
+        />
       </ListGroup>
 
       <SectionTitle title="Appearance" />

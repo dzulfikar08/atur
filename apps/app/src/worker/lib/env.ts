@@ -36,4 +36,7 @@ export type Env = {
   // Secrets in prod. Absent → the Threads inbox connect endpoint answers 503.
   THREADS_APP_ID?: string;
   THREADS_APP_SECRET?: string;
+  // Optional Expo access token ("enhanced push security" in the Expo project
+  // settings); sent as a bearer on push sends when set. Secret in prod.
+  EXPO_ACCESS_TOKEN?: string;
 };
