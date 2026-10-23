@@ -71,6 +71,7 @@ else:
     if before is None:
         sys.exit(f"no snapshot at {path}; refusing to revoke anything")
     for c in development_certs():
-        if c["id"] not in before and c["attributes"]["name"] == "Created via API":
+        # `name` is "Apple Development: Created via API"; the bare label is `displayName`.
+        if c["id"] not in before and c["attributes"].get("displayName") == "Created via API":
             call("DELETE", f"/v1/certificates/{c['id']}")
             print(f"revoked CI development certificate {c['id']}")
