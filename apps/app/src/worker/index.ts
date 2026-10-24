@@ -42,7 +42,8 @@ export default {
       pathname.startsWith("/.well-known/oauth-") || // RFC 9728 / RFC 8414 discovery
       pathname === "/widget.js" || // embeddable feedback widget (application/javascript)
       pathname.startsWith("/public/") || // public feedback board API (token-keyed, no session)
-      pathname.startsWith("/webhooks/polar"); // Polar webhook receiver (per-workspace, signed)
+      pathname.startsWith("/webhooks/polar") || // Polar webhook receiver (per-workspace, signed)
+      pathname === "/webhooks/atur-billing"; // Atur's own Polar subscriptions (signed)
     const isAuthApi = (pathname.startsWith("/auth/") && method !== "GET") || isOAuthNav;
 
     // Portal: the same /portal/:slug/... paths serve BOTH the customer-facing

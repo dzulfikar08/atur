@@ -9,6 +9,7 @@ import {
   primaryKey,
   type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
 export const users = sqliteTable(
   "users",
@@ -793,6 +794,30 @@ export const pushTokens = sqliteTable(
   (table) => [
     uniqueIndex("uq_push_tokens_token").on(table.token),
     index("idx_push_tokens_user").on(table.userId),
+  ],
+);
+
+// Atur Cloud plans (Solo / Team) mirrored from Polar subscription webhooks
+// (routes/billing.ts). Entitlement is derived in services/billing.ts.
+export const billingSubscriptions = sqliteTable(
+  "billing_subscriptions",
+  {
+    polarSubscriptionId: text("polar_subscription_id").primaryKey(),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    customerEmail: text("customer_email").notNull(),
+    customerExternalId: text("customer_external_id"),
+    plan: text("plan").notNull(),
+    status: text("status").notNull(),
+    currentPeriodEnd: text("current_period_end"),
+    cancelAtPeriodEnd: integer("cancel_at_period_end").notNull().default(0),
+    // Polar's modified_at of the last applied event; older events are dropped.
+    modifiedAt: text("modified_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("idx_billing_subscriptions_user").on(table.userId),
+    index("idx_billing_subscriptions_email").on(sql`lower(${table.customerEmail})`),
   ],
 );
 

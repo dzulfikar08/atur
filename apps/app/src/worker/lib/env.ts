@@ -39,4 +39,9 @@ export type Env = {
   // Optional Expo access token ("enhanced push security" in the Expo project
   // settings); sent as a bearer on push sends when set. Secret in prod.
   EXPO_ACCESS_TOKEN?: string;
+  // Standard Webhooks secret (`whsec_...`) of the Polar endpoint that reports
+  // Atur Cloud Solo/Team subscriptions (/webhooks/atur-billing). Absent → billing
+  // is not managed on this server (self-host): the plan gate is off and every
+  // user is entitled.
+  ATUR_BILLING_WEBHOOK_SECRET?: string;
 };

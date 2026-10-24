@@ -1,6 +1,6 @@
 import { SERVER_URL } from "@/lib/config";
 import { recordFailedRequest } from "@/lib/diagnostics";
-import { endSession, getToken } from "@/lib/session";
+import { endSession, getToken, queryClient } from "@/lib/session";
 
 // Wire shapes mirror apps/app/src/client/lib/api.ts. The worker snake_cases
 // every response key (middleware/snakecase.ts).
@@ -24,7 +24,17 @@ export interface Me {
   avatar: string | null;
   /** Platform owner flag: gates desktop Screen sharing (the server enforces it too). */
   is_superuser?: boolean;
+  /** Atur Cloud plan state; `entitled: false` means the app is locked for this account. */
+  billing?: Billing;
   workspaces: Workspace[];
+}
+
+export interface Billing {
+  plan: "solo" | "team" | null;
+  status: string | null;
+  entitled: boolean;
+  /** False on self-hosted servers: no plan is ever required. */
+  managed: boolean;
 }
 
 /** One row of GET /api/panes (herdr bridge wire format, proxied verbatim). */
@@ -293,7 +303,10 @@ export async function request<T>(
   init: { method?: string; body?: unknown; raw?: { data: ArrayBuffer; type: string } } = {},
 ): Promise<T> {
   const token = getToken();
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "X-Atur-Client": "native",
+  };
   if (token) headers.Authorization = `Bearer ${token}`;
   if (init.raw) headers["Content-Type"] = init.raw.type;
   else if (init.body !== undefined) headers["Content-Type"] = "application/json";
@@ -326,6 +339,11 @@ export async function request<T>(
     recordFailedRequest(init.method ?? "GET", path, res.status);
     // A dead token on an authed call means the session is over everywhere.
     if (res.status === 401 && token && path.startsWith("/api/")) void endSession();
+    // The plan lapsed (or never existed): re-read `me` so the root layout shows the gate.
+    const code = (data as { error?: unknown } | null)?.error;
+    if (res.status === 402 && code === "plan_required") {
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    }
     const body = data as { error?: unknown; message?: unknown } | null;
     const message =
       typeof body?.message === "string"

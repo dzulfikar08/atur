@@ -2,6 +2,14 @@ import { apiOrigin, authHeaders } from "./native";
 
 const API_BASE = apiOrigin ? `${apiOrigin}/api` : "/api";
 
+/** Atur Cloud plan state on GET /users/me. */
+export interface Billing {
+  plan: "solo" | "team" | null;
+  status: string | null;
+  entitled: boolean;
+  managed: boolean;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {

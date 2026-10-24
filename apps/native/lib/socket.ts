@@ -17,6 +17,7 @@ type RnWebSocket = new (
 /** Open an authenticated WebSocket to an Atur API path, e.g. `/api/panes/attach?pane=1`. */
 export function openAuthedSocket(path: string): WebSocket {
   const token = getToken();
-  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  const headers: Record<string, string> = { "X-Atur-Client": "native" };
+  if (token) headers.Authorization = `Bearer ${token}`;
   return new (WebSocket as unknown as RnWebSocket)(`${WS_ORIGIN}${path}`, undefined, { headers });
 }

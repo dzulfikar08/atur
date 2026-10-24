@@ -15,11 +15,12 @@ import { ThemeProvider } from "expo-router/build/react-navigation/core";
 import { DefaultTheme } from "expo-router/build/react-navigation/native/theming/DefaultTheme";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { UnistylesRuntime, useUnistyles } from "react-native-unistyles";
 
 import { AgentNotifications } from "@/components/agent-notifications";
+import { PlanGate } from "@/components/plan-gate";
 import { UpdateBanner } from "@/components/update-banner";
 import { installDiagnostics, setCurrentRoute } from "@/lib/diagnostics";
 import { loadThemePref } from "@/lib/theme-pref";
@@ -89,37 +90,44 @@ export default function RootLayout() {
       <ThemeProvider value={navTheme}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <StatusBar style={dark ? "light" : "dark"} />
-          <Stack
-            screenOptions={{
-              headerShadowVisible: false,
-              headerStyle: { backgroundColor: theme.colors.background },
-              headerTitleStyle: { color: theme.colors.foreground, fontFamily: theme.fonts.bold },
-              headerTintColor: theme.colors.foreground,
-              headerBackButtonDisplayMode: "minimal",
-            }}
-          >
-            <Stack.Protected guard={authed}>
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="project/[slug]/[projectId]" options={{ title: "" }} />
-              <Stack.Screen name="issue/[slug]/[projectId]/[issueId]" options={{ title: "" }} />
-              <Stack.Screen name="attachment" options={{ title: "" }} />
-              <Stack.Screen
-                name="new-issue"
-                options={{ title: "New issue", presentation: "modal" }}
-              />
-              <Stack.Screen name="search" options={{ title: "Search" }} />
-              <Stack.Screen name="my-issues" options={{ title: "My issues" }} />
-              <Stack.Screen name="pane/[paneId]" options={{ title: "" }} />
-              <Stack.Screen name="screen" options={{ headerShown: false, animation: "fade" }} />
-            </Stack.Protected>
-            <Stack.Protected guard={!authed}>
-              <Stack.Screen name="login" options={{ headerShown: false }} />
-            </Stack.Protected>
-          </Stack>
-          {authed ? <AgentNotifications /> : null}
+          <GateWhenAuthed authed={authed}>
+            <Stack
+              screenOptions={{
+                headerShadowVisible: false,
+                headerStyle: { backgroundColor: theme.colors.background },
+                headerTitleStyle: { color: theme.colors.foreground, fontFamily: theme.fonts.bold },
+                headerTintColor: theme.colors.foreground,
+                headerBackButtonDisplayMode: "minimal",
+              }}
+            >
+              <Stack.Protected guard={authed}>
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="project/[slug]/[projectId]" options={{ title: "" }} />
+                <Stack.Screen name="issue/[slug]/[projectId]/[issueId]" options={{ title: "" }} />
+                <Stack.Screen name="attachment" options={{ title: "" }} />
+                <Stack.Screen
+                  name="new-issue"
+                  options={{ title: "New issue", presentation: "modal" }}
+                />
+                <Stack.Screen name="search" options={{ title: "Search" }} />
+                <Stack.Screen name="my-issues" options={{ title: "My issues" }} />
+                <Stack.Screen name="pane/[paneId]" options={{ title: "" }} />
+                <Stack.Screen name="screen" options={{ headerShown: false, animation: "fade" }} />
+              </Stack.Protected>
+              <Stack.Protected guard={!authed}>
+                <Stack.Screen name="login" options={{ headerShown: false }} />
+              </Stack.Protected>
+            </Stack>
+            {authed ? <AgentNotifications /> : null}
+          </GateWhenAuthed>
           <UpdateBanner />
         </GestureHandlerRootView>
       </ThemeProvider>
     </QueryClientProvider>
   );
+}
+
+/** Signed-in users without an Atur Cloud plan see the plan screen instead of the app. */
+function GateWhenAuthed({ authed, children }: { authed: boolean; children: ReactNode }) {
+  return authed ? <PlanGate>{children}</PlanGate> : <>{children}</>;
 }

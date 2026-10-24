@@ -10,6 +10,7 @@ import { nowISO } from "../lib/pagination";
 import { HTTPException } from "hono/http-exception";
 import * as usersRepo from "../repositories/users";
 import * as accountService from "../services/account";
+import * as billingService from "../services/billing";
 import { deleteCookie } from "hono/cookie";
 import { sha256Hex } from "../lib/identify";
 
@@ -39,10 +40,13 @@ async function serveMe(c: Context<{ Bindings: Env }>) {
       and(eq(schema.workspaceMembers.memberId, userId), eq(schema.workspaceMembers.isActive, 1)),
     );
 
+  const billing = await billingService.billingFor(db, c.env, user);
+
   return c.json({
     id: user.id,
     email: user.email,
     username: user.username,
+    billing,
     display_name: user.displayName,
     avatar: user.avatar,
     user_timezone: user.userTimezone,

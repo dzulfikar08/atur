@@ -5,6 +5,7 @@ import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware, extractToken } from "../middleware/auth";
 import * as authService from "../services/auth";
+import * as billingService from "../services/billing";
 import * as usersRepo from "../repositories/users";
 import * as sessionsRepo from "../repositories/sessions";
 import * as appleAuthService from "../services/appleAuth";
@@ -193,7 +194,13 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const db = getDb(c.env.DB);
     const user = c.get("user");
     const profile = await authService.getProfile(db, user.sub);
-    return c.json(profile);
+    const me = await usersRepo.findById(db, user.sub);
+    const billing = await billingService.billingFor(db, c.env, {
+      id: profile.id,
+      email: profile.email,
+      isSuperuser: me?.isSuperuser,
+    });
+    return c.json({ ...profile, billing });
   })
   .get("/github", (c) => c.json({ url: "" }))
   .get("/github/callback", (c) => c.json({ error: "Not implemented" }, 501))

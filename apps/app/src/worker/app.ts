@@ -52,6 +52,8 @@ import { screenRoutes } from "./routes/screen";
 import { wsTicketRoutes } from "./routes/wsTickets";
 import { isWsTicketUpgrade } from "./lib/wsTicket";
 import { polarWebhookRoutes, polarRoutes } from "./routes/polar";
+import { billingWebhookRoutes } from "./routes/billing";
+import { requirePlanForNative } from "./middleware/planGate";
 import { meRoutes } from "./routes/me";
 // Personal notes — static /notes prefix must win over meRoutes' generic
 // /api/me sub-app, so mount it first (Hono resolves in mount order).
@@ -89,6 +91,8 @@ export function createApp(): Hono<{ Bindings: Env }> {
   // WebView, which cannot set headers). wsTicketAuth on that route redeems the
   // single-use ticket or 401s, so it never reaches the handler unauthenticated.
   app.use("/api/*", (c, next) => (isWsTicketUpgrade(c) ? next() : authMiddleware(c, next)));
+  // Native store app needs a paid Atur Cloud plan (402 plan_required otherwise).
+  app.use("/api/*", requirePlanForNative);
 
   app.route("/health", healthRoutes);
   app.route("/auth", authRoutes);
@@ -109,6 +113,8 @@ export function createApp(): Hono<{ Bindings: Env }> {
   // Polar webhook receiver — per-workspace URL (/webhooks/polar/:slug), each
   // workspace verifies with its own secret from polar_settings. Public.
   app.route("/webhooks/polar", polarWebhookRoutes);
+  // Atur Cloud plan webhook (Solo/Team subscriptions) — signature-verified, public.
+  app.route("/webhooks/atur-billing", billingWebhookRoutes);
 
   app.route("/api/users", userRoutes);
 
