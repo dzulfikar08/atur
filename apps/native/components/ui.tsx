@@ -64,6 +64,25 @@ export function Screen({
   edges?: ("top" | "bottom")[];
 }) {
   const { theme } = useUnistyles();
+  // Background polls refetch too; only a pull the user made shows the spinner
+  // (otherwise every poll drags the page down as if pulled).
+  const [pulled, setPulled] = useState(false);
+  const sawRefresh = useRef(false);
+  useEffect(() => {
+    if (!pulled) return;
+    if (refreshing) {
+      sawRefresh.current = true;
+      return;
+    }
+    if (sawRefresh.current) {
+      sawRefresh.current = false;
+      setPulled(false);
+      return;
+    }
+    // The refetch was deduped or instant and never reported: don't spin forever.
+    const timer = setTimeout(() => setPulled(false), 600);
+    return () => clearTimeout(timer);
+  }, [pulled, refreshing]);
   return (
     <SafeAreaView style={styles.screen} edges={edges}>
       {scroll ? (
@@ -73,8 +92,11 @@ export function Screen({
           refreshControl={
             onRefresh ? (
               <RefreshControl
-                refreshing={refreshing ?? false}
-                onRefresh={onRefresh}
+                refreshing={pulled && (refreshing ?? false)}
+                onRefresh={() => {
+                  setPulled(true);
+                  onRefresh();
+                }}
                 tintColor={theme.colors.mutedForeground}
               />
             ) : undefined
