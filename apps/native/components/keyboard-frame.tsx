@@ -1,13 +1,14 @@
-import type { ReactNode } from "react";
-import { KeyboardAvoidingView, Platform, View } from "react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Keyboard, Platform, View, type KeyboardEvent } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
 /**
- * Lifts its content above the soft keyboard on iOS and Android. Android used to
- * resize the window itself, but edge-to-edge (mandatory from targetSdk 35) no
- * longer does, so the keyboard would cover the bottom of the screen. On
- * react-native-web it is a plain View, since KeyboardAvoidingView drops flex
- * styles there.
+ * Keeps its content above the soft keyboard on iOS and Android by padding its
+ * bottom by exactly the part of it the keyboard covers. Android no longer
+ * resizes the window under edge-to-edge (mandatory from targetSdk 35), and
+ * KeyboardAvoidingView measures its frame relative to its parent, so below a
+ * header it under-lifts. Both the frame and the keyboard are measured here in
+ * window coordinates. On react-native-web it is a plain View.
  *
  * `fill` takes the remaining space of its parent; `dock` pins to the bottom
  * edge over sibling content (an accessory row floating above a full-bleed view).
@@ -19,13 +20,33 @@ export function KeyboardFrame({
   variant: "fill" | "dock";
   children: ReactNode;
 }) {
-  const style = variant === "fill" ? styles.fill : styles.dock;
-  return Platform.OS === "web" ? (
-    <View style={style}>{children}</View>
-  ) : (
-    <KeyboardAvoidingView behavior="padding" style={style}>
+  const frame = useRef<View>(null);
+  const [inset, setInset] = useState(0);
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    // Padding sits inside the frame, so its window rect does not move with it.
+    const show = (e: KeyboardEvent) =>
+      frame.current?.measureInWindow((_x, y, _w, height) =>
+        setInset(Math.max(0, Math.round(y + height - e.endCoordinates.screenY))),
+      );
+    const hide = () => setInset(0);
+    const ios = Platform.OS === "ios";
+    const subs = [
+      Keyboard.addListener(ios ? "keyboardWillShow" : "keyboardDidShow", show),
+      Keyboard.addListener(ios ? "keyboardWillChangeFrame" : "keyboardDidChangeFrame", show),
+      Keyboard.addListener(ios ? "keyboardWillHide" : "keyboardDidHide", hide),
+    ];
+    return () => subs.forEach((s) => s.remove());
+  }, []);
+
+  return (
+    <View
+      ref={frame}
+      style={[variant === "fill" ? styles.fill : styles.dock, { paddingBottom: inset }]}
+    >
       {children}
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
