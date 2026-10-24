@@ -72,68 +72,81 @@ export function PromptComposer({ paneId, enabled, onSend, onClaim }: PromptCompo
 
   return (
     <View style={styles.bar}>
-      <TextInput
-        value={text}
-        onChangeText={(next) => {
-          setText(next);
-          caret.current = next.length;
-        }}
-        onSelectionChange={(e) => {
-          caret.current = e.nativeEvent.selection.end;
-        }}
-        editable={enabled}
-        onPressIn={enabled ? undefined : onClaim}
-        multiline
-        placeholder={
-          enabled ? "Message the agent…" : onClaim ? "Tap to take the keyboard" : "Read-only"
-        }
-        placeholderTextColor={theme.colors.mutedForeground}
-        style={styles.input}
-        accessibilityLabel="Prompt"
-        autoCapitalize="sentences"
-      />
-      {uploading ? (
-        <View style={styles.spinner}>
-          <ActivityIndicator color={theme.colors.foreground} />
-        </View>
-      ) : (
-        <IconButton
-          icon="image-outline"
-          label="Paste image from clipboard"
-          onPress={() => void attachFromClipboard()}
+      <View style={styles.box}>
+        <TextInput
+          value={text}
+          onChangeText={(next) => {
+            setText(next);
+            caret.current = next.length;
+          }}
+          onSelectionChange={(e) => {
+            caret.current = e.nativeEvent.selection.end;
+          }}
+          editable={enabled}
+          onPressIn={enabled ? undefined : onClaim}
+          multiline
+          placeholder={
+            enabled ? "Message the agent…" : onClaim ? "Tap to take the keyboard" : "Read-only"
+          }
+          placeholderTextColor={theme.colors.mutedForeground}
+          style={styles.input}
+          accessibilityLabel="Prompt"
+          autoCapitalize="sentences"
         />
-      )}
-      <MicButton value={text} onChangeText={setText} disabled={!enabled} />
-      <IconButton icon="send" label="Send prompt" onPress={send} />
+        <View style={styles.toolbar}>
+          {uploading ? (
+            <View style={styles.spinner}>
+              <ActivityIndicator color={theme.colors.foreground} />
+            </View>
+          ) : (
+            <IconButton
+              icon="image-outline"
+              label="Paste image from clipboard"
+              onPress={() => void attachFromClipboard()}
+            />
+          )}
+          <MicButton value={text} onChangeText={setText} disabled={!enabled} />
+          <View style={styles.grow} />
+          <IconButton icon="send" label="Send prompt" onPress={send} />
+        </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
   bar: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: theme.spacing.xs,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: theme.colors.hairline,
     backgroundColor: theme.colors.background,
   },
-  input: {
-    flex: 1,
-    minHeight: 40,
-    maxHeight: 120,
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: 10,
-    paddingBottom: 10,
+  // The draft spans the full width; the actions sit on a slim row under it,
+  // so long prompts wrap at the screen edge instead of half of it.
+  box: {
     borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: theme.colors.hairline,
     backgroundColor: theme.colors.card,
+  },
+  input: {
+    minHeight: 40,
+    maxHeight: 160,
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: 10,
+    paddingBottom: 4,
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
     fontFamily: theme.fonts.regular,
   },
+  toolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.xs,
+    paddingBottom: theme.spacing.xs,
+  },
+  grow: { flex: 1 },
   spinner: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
 }));
