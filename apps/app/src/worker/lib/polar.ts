@@ -102,25 +102,24 @@ export async function verifyWebhookEvent(
     throw new Error("Webhook timestamp is stale");
   }
 
-  const secretKey = base64Decode(webhookSecret);
   const signedContent = `${id}.${timestamp}.${rawBody}`;
-  const expected = await hmacSha256Hex(secretKey, signedContent);
+  // Polar signs with one of two key derivations, both producing a base64
+  // HMAC-SHA256: secrets created from 2026-09-08 are Standard Webhooks (key =
+  // base64-decoded part after `whsec_`); older ones use the UTF-8 bytes of the
+  // whole secret string. Polar's SDKs try both, so do we.
+  const keys = [new TextEncoder().encode(webhookSecret.trim())];
+  const standardKey = standardWebhooksKey(webhookSecret);
+  if (standardKey) keys.unshift(standardKey);
+  const expected = await Promise.all(keys.map((key) => hmacSha256Base64(key, signedContent)));
 
-  // Standard Webhooks: the header is `v1,<hex>` — or several of those joined
-  // by commas (`v1,<hex>,v1,<hex>`), so after splitting on "," the tokens
-  // ALTERNATE version, hex, version, hex… (a token itself never contains a
-  // comma). Accept if any v1 signature matches.
-  const parts = signatureHeader
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const valid = parts.some((hex, i) => {
-    if (i % 2 === 1) return false; // signature slot — already checked at i-1
-    const version = parts[i];
-    const sig = parts[i + 1];
-    if (version !== "v1" || !sig) return false;
-    return timingSafeEqualHex(expected, sig);
-  });
+  // Standard Webhooks: the header is space-delimited `v1,<base64>` entries
+  // (one per active secret during rotation). Accept if any v1 entry matches.
+  const signatures = signatureHeader
+    .split(" ")
+    .map((entry) => entry.trim().split(","))
+    .filter(([version, sig]) => version === "v1" && Boolean(sig))
+    .map(([, sig]) => sig);
+  const valid = signatures.some((sig) => expected.some((exp) => timingSafeEqual(exp, sig)));
   if (!valid) throw new Error("Invalid webhook signature");
 
   try {
@@ -130,20 +129,23 @@ export async function verifyWebhookEvent(
   }
 }
 
-// Base64-decode the secret. Polar/Standard Webhooks secrets are
-// `whsec_<base64>` — strip the prefix before decoding (the `_` is not valid
-// base64 and would make atob throw on a pasted dashboard secret).
-function base64Decode(input: string): Uint8Array {
-  const b64 = input.replace(/\s+/g, "").replace(/^whsec_/, "");
+// Standard Webhooks secrets are `whsec_<base64>`: the key is the decoded
+// payload. Returns null when the remainder is not valid base64.
+function standardWebhooksKey(secret: string): Uint8Array | null {
+  const b64 = secret.replace(/\s+/g, "").replace(/^whsec_/, "");
   // Tolerate unpadded input (lenient atob implementations reject it).
   const padded = b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), "=");
-  const bin = atob(padded);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
+  try {
+    const bin = atob(padded);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
+  }
 }
 
-async function hmacSha256Hex(key: Uint8Array, message: string): Promise<string> {
+async function hmacSha256Base64(key: Uint8Array, message: string): Promise<string> {
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
     key as unknown as BufferSource,
@@ -151,13 +153,15 @@ async function hmacSha256Hex(key: Uint8Array, message: string): Promise<string> 
     false,
     ["sign"],
   );
-  const sig = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message));
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  const sig = new Uint8Array(
+    await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message)),
+  );
+  let bin = "";
+  for (const b of sig) bin += String.fromCharCode(b);
+  return btoa(bin);
 }
 
-function timingSafeEqualHex(a: string, b: string): boolean {
+function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
   for (let i = 0; i < a.length; i++) {

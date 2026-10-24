@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import { verifyWebhookEvent } from "../polar";
 
 // Reference signer matching the Standard Webhooks scheme Polar uses:
-// HMAC-SHA256(key, `${webhook-id}.${webhook-timestamp}.${body}`) where key is
-// the base64-decoded payload of the `whsec_…` secret. Signed with WebCrypto
-// (independent of the module's own helpers) as the oracle.
+// base64(HMAC-SHA256(key, `${webhook-id}.${webhook-timestamp}.${body}`)) where
+// key is the base64-decoded payload of the `whsec_…` secret. Signed with
+// WebCrypto (independent of the module's own helpers) as the oracle.
 const keyBytes = new TextEncoder().encode("test123");
 const rawB64Secret = btoa("test123");
 const whsecSecret = `whsec_${rawB64Secret}`;
 
-async function hmacHex(key: Uint8Array, message: string): Promise<string> {
+async function hmacBase64(key: Uint8Array, message: string): Promise<string> {
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
     key as unknown as BufferSource,
@@ -18,13 +18,11 @@ async function hmacHex(key: Uint8Array, message: string): Promise<string> {
     ["sign"],
   );
   const mac = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message));
-  return Array.from(new Uint8Array(mac))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return btoa(String.fromCharCode(...new Uint8Array(mac)));
 }
 
 function sign(id: string, ts: number, body: string, key: Uint8Array = keyBytes): Promise<string> {
-  return hmacHex(key, `${id}.${ts}.${body}`);
+  return hmacBase64(key, `${id}.${ts}.${body}`);
 }
 
 function makeHeaders(id: string, ts: number, signature: string) {
@@ -59,9 +57,19 @@ describe("verifyWebhookEvent", () => {
     const id = "msg_3";
     const ts = Math.floor(Date.now() / 1000);
     const good = await sign(id, ts, body);
-    const bad = "0".repeat(64);
-    // Real senders rotate keys: old + new signatures travel in one header.
-    const headers = makeHeaders(id, ts, `v1,${bad},v1,${good}`);
+    const bad = btoa("x".repeat(32));
+    // Real senders rotate keys: old + new signatures travel space-delimited.
+    const headers = makeHeaders(id, ts, `v1,${bad} v1,${good}`);
+    await expect(verifyWebhookEvent(whsecSecret, body, headers)).resolves.toMatchObject({
+      id: "evt_1",
+    });
+  });
+
+  it("accepts Polar's legacy signing (key = UTF-8 bytes of the whole secret)", async () => {
+    const id = "msg_legacy";
+    const ts = Math.floor(Date.now() / 1000);
+    const legacyKey = new TextEncoder().encode(whsecSecret);
+    const headers = makeHeaders(id, ts, `v1,${await sign(id, ts, body, legacyKey)}`);
     await expect(verifyWebhookEvent(whsecSecret, body, headers)).resolves.toMatchObject({
       id: "evt_1",
     });
@@ -70,7 +78,7 @@ describe("verifyWebhookEvent", () => {
   it("rejects a wrong signature", async () => {
     const id = "msg_4";
     const ts = Math.floor(Date.now() / 1000);
-    const headers = makeHeaders(id, ts, `v1,${"0".repeat(64)}`);
+    const headers = makeHeaders(id, ts, `v1,${btoa("x".repeat(32))}`);
     await expect(verifyWebhookEvent(whsecSecret, body, headers)).rejects.toThrow(
       "Invalid webhook signature",
     );
