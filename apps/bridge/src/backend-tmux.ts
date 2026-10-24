@@ -210,7 +210,12 @@ export class TmuxBackend implements PaneBackend {
   constructor(opts: TmuxOptions = {}) {
     this.bin = opts.bin ?? "tmux";
     const socket = opts.socket?.trim();
-    this.socketArgs = !socket ? [] : socket.includes("/") ? ["-S", socket] : ["-L", socket];
+    // `-u` forces UTF-8 mode: without a UTF-8 locale (systemd and launchd
+    // services often run with LANG unset) tmux escapes control characters,
+    // which would turn the 0x1f field separator into `_`, and mangles
+    // non-ASCII screen content.
+    const target = !socket ? [] : socket.includes("/") ? ["-S", socket] : ["-L", socket];
+    this.socketArgs = ["-u", ...target];
     this.timing = opts.timing;
   }
 

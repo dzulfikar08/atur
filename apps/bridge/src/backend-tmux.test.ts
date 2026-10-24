@@ -259,6 +259,22 @@ describe.skipIf(!hasTmux)("TmuxBackend against a real tmux server", () => {
     expect((await backend.getPane(paneId)).id).toBe(paneId);
   });
 
+  test("lists panes when the service runs without a UTF-8 locale", () => {
+    // systemd/launchd units often have no LANG; tmux then escapes control
+    // characters (the field separator) unless forced into UTF-8 mode. Run the
+    // backend in a child process whose environment has no locale at all.
+    const script = `import { TmuxBackend } from ${JSON.stringify(`${import.meta.dir}/backend-tmux.ts`)};
+const panes = await new TmuxBackend({ socket: ${JSON.stringify(socket)} }).listPanes();
+console.log(JSON.stringify(panes.map((p) => p.id)));`;
+    const out = Bun.spawnSync([process.execPath, "-e", script], {
+      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(out.stderr.toString()).toBe("");
+    expect(JSON.parse(out.stdout.toString())).toEqual([paneId]);
+  });
+
   test("visible screen is exactly the pane grid, and typing shows up", async () => {
     expect(await backend.geometry(paneId)).toEqual({ cols: 100, rows: 20 });
     await backend.sendText(paneId, "echo hello-$((20+1))");
