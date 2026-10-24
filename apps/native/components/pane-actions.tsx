@@ -1,16 +1,24 @@
 import "@/unistyles";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { useState, type ReactNode } from "react";
 import { View } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { Button, ErrorNote, ListRow, Sheet, Text } from "@/components/ui";
+import { Button, ErrorNote, ListRow, Sheet, Text, type IconName } from "@/components/ui";
 import { api, type SplitDirection } from "@/lib/api";
 
 export interface PaneRef {
   pane_id: string;
   title: string;
+}
+
+/** Optional view switcher shown at the top of the sheet (the pane screen's ⋯ menu). */
+export interface PaneViewChoice {
+  options: { value: string; label: string; icon: IconName }[];
+  current: string;
+  onChoose: (value: string) => void;
 }
 
 export function openPaneScreen(paneId: string) {
@@ -24,11 +32,13 @@ export function openPaneScreen(paneId: string) {
  * new pane; `onClosed` runs after a close (the pane screen uses it to leave).
  */
 export function usePaneActions({ onClosed }: { onClosed?: () => void } = {}): {
-  open: (pane: PaneRef) => void;
+  open: (pane: PaneRef, views?: PaneViewChoice) => void;
   sheet: ReactNode;
 } {
   const qc = useQueryClient();
+  const { theme } = useUnistyles();
   const [target, setTarget] = useState<PaneRef | null>(null);
+  const [views, setViews] = useState<PaneViewChoice | null>(null);
   const [confirming, setConfirming] = useState(false);
 
   const split = useMutation({
@@ -86,6 +96,28 @@ export function usePaneActions({ onClosed }: { onClosed?: () => void } = {}): {
         </View>
       ) : target ? (
         <View>
+          {views
+            ? views.options.map((v) => {
+                const on = v.value === views.current;
+                return (
+                  <ListRow
+                    key={v.value}
+                    icon={v.icon}
+                    title={`${v.label} view`}
+                    right={
+                      on ? (
+                        <Ionicons name="checkmark" size={18} color={theme.colors.foreground} />
+                      ) : undefined
+                    }
+                    onPress={() => {
+                      views.onChoose(v.value);
+                      dismiss();
+                    }}
+                  />
+                );
+              })
+            : null}
+          {views ? <View style={styles.divider} /> : null}
           <ListRow
             icon="arrow-forward-outline"
             title="Split right"
@@ -112,10 +144,11 @@ export function usePaneActions({ onClosed }: { onClosed?: () => void } = {}): {
   );
 
   return {
-    open: (pane) => {
+    open: (pane, viewChoice) => {
       split.reset();
       close.reset();
       setConfirming(false);
+      setViews(viewChoice ?? null);
       setTarget(pane);
     },
     sheet,
@@ -125,4 +158,9 @@ export function usePaneActions({ onClosed }: { onClosed?: () => void } = {}): {
 const styles = StyleSheet.create((theme) => ({
   confirm: { gap: theme.spacing.md, paddingBottom: theme.spacing.xs },
   confirmBody: { fontSize: theme.fontSize.sm, color: theme.colors.mutedForeground },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: theme.colors.hairline,
+    marginVertical: theme.spacing.xs,
+  },
 }));

@@ -119,42 +119,26 @@ export default function PaneView() {
               </Text>
             </View>
           ),
+          // One menu keeps the header clean: views, split and close all live in ⋯.
           headerRight: () => (
-            <View style={styles.headerRight}>
-              <View style={styles.views} accessibilityRole="tablist">
-                {VIEWS.map((v) => {
-                  const selected = view === v.value;
-                  return (
-                    <Pressable
-                      key={v.value}
-                      onPress={() => chooseView(v.value)}
-                      accessibilityRole="tab"
-                      accessibilityLabel={`${v.label} view`}
-                      accessibilityState={{ selected }}
-                      hitSlop={4}
-                      style={[styles.viewBtn, selected && styles.viewBtnOn]}
-                    >
-                      <Ionicons
-                        name={v.icon}
-                        size={17}
-                        color={selected ? theme.colors.foreground : theme.colors.mutedForeground}
-                      />
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <Pressable
-                onPress={() =>
-                  actions.open({ pane_id: paneId, title: pane ? paneTitle(pane) : paneId })
-                }
-                accessibilityRole="button"
-                accessibilityLabel="Pane actions"
-                hitSlop={8}
-                style={styles.menuBtn}
-              >
-                <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.foreground} />
-              </Pressable>
-            </View>
+            <Pressable
+              onPress={() =>
+                actions.open(
+                  { pane_id: paneId, title: pane ? paneTitle(pane) : paneId },
+                  {
+                    options: VIEWS,
+                    current: view,
+                    onChoose: (next) => chooseView(next as PaneView),
+                  },
+                )
+              }
+              accessibilityRole="button"
+              accessibilityLabel="Pane menu"
+              hitSlop={8}
+              style={styles.menuBtn}
+            >
+              <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.foreground} />
+            </Pressable>
           ),
         }}
       />
@@ -198,22 +182,6 @@ const styles = StyleSheet.create((theme) => ({
   dotLive: { backgroundColor: theme.colors.completed },
   dotWait: { backgroundColor: theme.colors.started },
   dotBad: { backgroundColor: theme.colors.destructive },
-  views: {
-    flexDirection: "row",
-    gap: 2,
-    padding: 2,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.muted,
-  },
-  viewBtn: {
-    width: 34,
-    height: 30,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: theme.radius.sm,
-  },
-  viewBtnOn: { backgroundColor: theme.colors.card },
-  headerRight: { flexDirection: "row", alignItems: "center", gap: theme.spacing.sm },
   menuBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   errorText: {
     fontSize: theme.fontSize.sm,
