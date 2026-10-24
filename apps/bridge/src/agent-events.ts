@@ -8,6 +8,7 @@
  */
 import { open } from "node:fs/promises";
 import type { AgentStatus, PaneBackend, PaneSummary } from "./backend";
+import { DEFAULT_ATUR_URL } from "./connect";
 
 export type { AgentStatus } from "./backend";
 export type EventStatus = "done" | "blocked";
@@ -35,7 +36,6 @@ export interface AgentEventsConfig {
   token: string;
 }
 
-const DEFAULT_URL = "https://app.diatur.com";
 const DETAIL_MAX = 180;
 const TAIL_BYTES = 256 * 1024;
 
@@ -44,7 +44,7 @@ export function agentEventsConfigFromEnv(
 ): AgentEventsConfig | null {
   const token = env.BRIDGE_TOKEN ?? "";
   if (!token) return null;
-  const url = (env.ATUR_URL || DEFAULT_URL).replace(/\/+$/, "");
+  const url = (env.ATUR_URL || DEFAULT_ATUR_URL).replace(/\/+$/, "");
   return { url, token };
 }
 
@@ -199,20 +199,32 @@ export async function readSessionDetail(path: string, status: EventStatus): Prom
   }
 }
 
+/** Delivery over the relay socket (see connect.ts) instead of HTTP. */
+export interface EventRelay {
+  sendEvent(event: unknown): boolean;
+}
+
 export class AgentEventWatcher {
   private readonly tracker: AgentStateTracker;
   private readonly pollMs: number;
+  private readonly relay: EventRelay | null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private inFlight = false;
   private pollFailing = false;
 
+  /**
+   * With `opts.relay` set, events travel as `event` frames over the relay
+   * socket and nothing is POSTed; otherwise they go to `config.url` over HTTP
+   * (the owner's tunnel setup).
+   */
   constructor(
-    private readonly config: AgentEventsConfig,
+    private readonly config: AgentEventsConfig | null,
     private readonly backend: PaneBackend,
-    opts: { pollMs?: number; settleMs?: number } = {},
+    opts: { pollMs?: number; settleMs?: number; relay?: EventRelay } = {},
   ) {
     this.tracker = new AgentStateTracker({ settleMs: opts.settleMs });
     this.pollMs = opts.pollMs ?? (Number(process.env.AGENT_POLL_MS) || 2000);
+    this.relay = opts.relay ?? null;
   }
 
   start(): void {
@@ -270,6 +282,14 @@ export class AgentEventWatcher {
       title: t.title,
       detail,
     };
+    if (this.relay) {
+      const sent = this.relay.sendEvent(body);
+      console.log(
+        `agent-events: ${t.pane_id} ${t.status} → relay${sent ? "" : " (queued, offline)"}`,
+      );
+      return;
+    }
+    if (!this.config) return;
     try {
       const res = await fetch(`${this.config.url}/api/bridge/agent-events`, {
         method: "POST",

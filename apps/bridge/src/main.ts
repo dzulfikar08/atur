@@ -1,262 +1,79 @@
 /**
- * atur-bridge: exposes the local terminal execution plane (herdr or tmux) to
- * the Atur web app and the phone app.
+ * atur-bridge entry point.
  *
- * Binds 127.0.0.1 only, holds no secrets. The Atur Worker is the front door:
- * browser → Worker (auth + audit) → Cloudflare Tunnel → this daemon.
- * Optional shared-secret for the tunnel leg: set BRIDGE_TOKEN; clients must
- * then present it via the `x-bridge-token` header (never a query param —
- * tokens in URLs leak into logs).
+ *   atur-bridge                 run the bridge (default)
+ *   atur-bridge connect <token> save a machine token to ~/.config/atur/bridge.env
+ *   atur-bridge hooks [dir]     write the agent hook scripts (default ~/.config/atur/hooks)
+ *   atur-bridge --version
  *
- * Routes:
- *   GET /health           → liveness
- *   GET /panes            → live pane list (workspace, agent, status, title)
- *   GET /pane-repo        → main repo path for a pane cwd (worktree-aware)
- *   GET /attach?pane=<id> → WebSocket upgrade: snapshot mirror + input
- *   GET /observe?pane=<id> → WebSocket upgrade: read-only structured transcript
- *   GET /screen/status    → desktop-sharing availability, running state, viewer count
- *   GET /screen           → WebSocket upgrade: raw RFB bytes to the loopback wayvnc
- *                           (text frames are the viewer's ping/pong, answered here)
- *
- * Outbound: a poller watches the backend's panes and POSTs agent "done"/"blocked"
- * events to ATUR_URL/api/bridge/agent-events (x-bridge-token = BRIDGE_TOKEN);
- * disabled when BRIDGE_TOKEN is unset.
+ * See server.ts for what running does and docs/bridge.md for setup.
  */
-import type { ServerWebSocket } from "bun";
-import { AgentEventWatcher, agentEventsConfigFromEnv } from "./agent-events";
-import { PaneHub, type BridgeMeta } from "./hub";
-import { ObserveHub } from "./observe";
-import { imageExtension, MAX_PASTE_BYTES, PasteError, pasteDirFromEnv, savePaste } from "./pastes";
-import { ScreenHub, screenConfigFromEnv, type ScreenMeta } from "./screen";
-import { createBackend } from "./select-backend";
+import {
+  connectNextSteps,
+  envFilePath,
+  hooksDir,
+  loadEnvFile,
+  UsageError,
+  writeConnectToken,
+} from "./cli";
+import { installHooks } from "./hooks";
+import { BRIDGE_VERSION } from "./version";
 
-const PORT = Number(process.env.BRIDGE_PORT ?? 7601);
-const TOKEN = process.env.BRIDGE_TOKEN ?? "";
+const USAGE = `atur-bridge ${BRIDGE_VERSION}
 
-function authorized(req: Request): boolean {
-  // Header-only by design: accepting the secret via ?token= would put it in
-  // URLs that tunnel/ingress components may log.
-  if (TOKEN === "") return true;
-  return req.headers.get("x-bridge-token") === TOKEN;
+Usage:
+  atur-bridge                  run the bridge
+  atur-bridge connect <token>  save the machine token from app.diatur.com
+  atur-bridge hooks [dir]      write the agent hook scripts to dir (default ~/.config/atur/hooks)
+  atur-bridge --version`;
+
+async function main(argv: string[]): Promise<void> {
+  const [cmd, arg] = argv;
+  switch (cmd) {
+    case undefined:
+    case "run": {
+      // Settings saved by `connect` (and the service's own env file) apply to foreground runs too; real env wins.
+      const path = envFilePath();
+      const applied = await loadEnvFile(path);
+      if (applied.length > 0) console.log(`loaded ${applied.join(", ")} from ${path}`);
+      await import("./server");
+      return;
+    }
+    case "--version":
+    case "-v":
+    case "version":
+      console.log(BRIDGE_VERSION);
+      return;
+    case "--help":
+    case "-h":
+    case "help":
+      console.log(USAGE);
+      return;
+    case "connect": {
+      if (!arg) throw new UsageError("usage: atur-bridge connect <token>");
+      const path = envFilePath();
+      await writeConnectToken(arg, path);
+      console.log(connectNextSteps(path));
+      return;
+    }
+    case "hooks": {
+      const paths = await installHooks(arg ?? hooksDir());
+      console.log(`Wrote ${paths.length} scripts:\n${paths.map((p) => `  ${p}`).join("\n")}`);
+      console.log(
+        "Point your agent's hooks at these paths, see docs/bridge.md (Agent state with tmux).",
+      );
+      return;
+    }
+    default:
+      throw new UsageError(`unknown command: ${cmd}\n\n${USAGE}`);
+  }
 }
 
-const backend = createBackend(process.env);
-console.log(`terminal backend: ${backend.kind}`);
-
-const hub = new PaneHub(backend);
-const observeHub = new ObserveHub(backend);
-const screenHub = new ScreenHub(screenConfigFromEnv(process.env));
-const pasteDir = pasteDirFromEnv(process.env);
-
-type Meta = BridgeMeta | ScreenMeta;
-
-function isScreen(ws: ServerWebSocket<Meta>): ws is ServerWebSocket<ScreenMeta> {
-  return "screen" in ws.data;
-}
-
-hub.start();
-
-Bun.serve<Meta>({
-  hostname: "127.0.0.1",
-  port: PORT,
-  async fetch(req, server): Promise<Response> {
-    if (!authorized(req)) {
-      return Response.json({ error: "unauthorized" }, { status: 401 });
-    }
-    const url = new URL(req.url);
-    if (url.pathname === "/health") {
-      return Response.json({ ok: true });
-    }
-    if (url.pathname === "/panes") {
-      try {
-        return Response.json(await hub.listPanes());
-      } catch (e) {
-        return Response.json(
-          { error: e instanceof Error ? e.message : String(e) },
-          { status: 502 },
-        );
-      }
-    }
-    if (url.pathname === "/pane-repo") {
-      // Main repository containing the pane's cwd (git-worktree-aware). The
-      // Worker uses it to bind a pane to the Atur workspace whose
-      // workspace_links.local_path matches — crew worktrees resolve to their
-      // parent repo, so they inherit its binding.
-      const paneId = url.searchParams.get("pane");
-      if (!paneId) {
-        return Response.json({ error: "missing pane param" }, { status: 400 });
-      }
-      try {
-        const path = await hub.mainRepoPath(paneId);
-        if (!path) {
-          return Response.json({ error: "no repo for pane cwd" }, { status: 404 });
-        }
-        return Response.json({ path });
-      } catch (e) {
-        return Response.json(
-          { error: e instanceof Error ? e.message : String(e) },
-          { status: 502 },
-        );
-      }
-    }
-    if (url.pathname === "/attach") {
-      const paneId = url.searchParams.get("pane");
-      if (!paneId) {
-        return Response.json({ error: "missing pane param" }, { status: 400 });
-      }
-      const upgraded = server.upgrade(req, { data: { paneId, joined: false } });
-      if (!upgraded) {
-        return Response.json({ error: "websocket upgrade failed" }, { status: 426 });
-      }
-      return undefined as unknown as Response; // upgraded — Bun ignores this
-    }
-    if (url.pathname === "/observe") {
-      const paneId = url.searchParams.get("pane");
-      if (!paneId) {
-        return Response.json({ error: "missing pane param" }, { status: 400 });
-      }
-      const upgraded = server.upgrade(req, { data: { paneId, joined: false, observe: true } });
-      if (!upgraded) {
-        return Response.json({ error: "websocket upgrade failed" }, { status: 426 });
-      }
-      return undefined as unknown as Response; // upgraded — Bun ignores this
-    }
-    if (url.pathname === "/panes/paste" && req.method === "POST") {
-      // Image pasted into a pane's prompt: saved here, its path goes into the prompt.
-      const image = new Uint8Array(await req.arrayBuffer());
-      try {
-        const saved = await savePaste(pasteDir, image);
-        console.log(
-          `paste: pane=${url.searchParams.get("pane") ?? "-"} ${saved.bytes} bytes → ${saved.path}`,
-        );
-        return Response.json(saved);
-      } catch (e) {
-        if (e instanceof PasteError)
-          return Response.json({ error: e.message }, { status: e.status });
-        return Response.json(
-          { error: e instanceof Error ? e.message : String(e) },
-          { status: 500 },
-        );
-      }
-    }
-    if (url.pathname === "/screen/clipboard" && req.method === "POST") {
-      const png = new Uint8Array(await req.arrayBuffer());
-      if (png.length > MAX_PASTE_BYTES) {
-        return Response.json({ error: "image too large" }, { status: 413 });
-      }
-      if (imageExtension(png) !== "png")
-        return Response.json({ error: "not a PNG" }, { status: 415 });
-      try {
-        await screenHub.setClipboardImage(png);
-        return Response.json({ ok: true });
-      } catch (e) {
-        return Response.json(
-          { error: e instanceof Error ? e.message : String(e) },
-          { status: 502 },
-        );
-      }
-    }
-    if (url.pathname === "/screen/status") {
-      return Response.json(screenHub.status());
-    }
-    if (url.pathname === "/screen") {
-      const upgraded = server.upgrade(req, { data: screenHub.newMeta() });
-      if (!upgraded) {
-        return Response.json({ error: "websocket upgrade failed" }, { status: 426 });
-      }
-      return undefined as unknown as Response; // upgraded — Bun ignores this
-    }
-    return Response.json({ error: "not found" }, { status: 404 });
-  },
-  websocket: {
-    open(ws): void {
-      if (isScreen(ws)) {
-        void screenHub.open(ws);
-        return;
-      }
-      const paneWs = ws as ServerWebSocket<BridgeMeta>;
-      if (paneWs.data.observe) {
-        void observeHub
-          .subscribe(paneWs, paneWs.data.paneId)
-          .then((ok) => {
-            if (!ok) {
-              paneWs.send(JSON.stringify({ type: "error", error: "unknown pane" }));
-              paneWs.close(1008, "pane not found");
-            }
-          })
-          .catch((e: unknown) => {
-            console.error("observe error:", e);
-            paneWs.send(
-              JSON.stringify({
-                type: "error",
-                error: e instanceof Error ? e.message : String(e),
-              }),
-            );
-            paneWs.close(1011, "observe error");
-          });
-        return;
-      }
-      hub.register(paneWs);
-      void hub
-        .handleUpgrade(paneWs)
-        .then((ok) => {
-          if (!ok) paneWs.close(1008, "pane not found");
-        })
-        .catch((e: unknown) => {
-          console.error("attach error:", e);
-          paneWs.close(1011, "attach error");
-        });
-    },
-    message(ws, _message): void {
-      if (isScreen(ws)) {
-        screenHub.message(ws, _message);
-        return;
-      }
-      const paneWs = ws as ServerWebSocket<BridgeMeta>;
-      // Read-only by protocol: client frames are never read or buffered —
-      // there is no input path from /observe to the pane, period.
-      if (paneWs.data.observe) {
-        paneWs.close(1008, "observe channel is read-only");
-        return;
-      }
-      if (typeof _message !== "string") return;
-      void hub.handleMessage(paneWs, _message);
-    },
-    drain(ws): void {
-      if (isScreen(ws)) screenHub.drain(ws);
-    },
-    close(ws, code, reason): void {
-      if (isScreen(ws)) {
-        screenHub.close(ws, code, reason);
-        return;
-      }
-      const paneWs = ws as ServerWebSocket<BridgeMeta>;
-      if (paneWs.data.observe) {
-        observeHub.detach(paneWs);
-        return;
-      }
-      hub.detach(paneWs);
-    },
-  },
+main(process.argv.slice(2)).catch((e: unknown) => {
+  if (e instanceof UsageError) {
+    console.error(e.message);
+    process.exit(2);
+  }
+  console.error(e instanceof Error ? e.message : e);
+  process.exit(1);
 });
-
-console.log(`atur-bridge listening on 127.0.0.1:${PORT}`);
-
-const agentEventsConfig = agentEventsConfigFromEnv(process.env);
-const agentEvents = agentEventsConfig ? new AgentEventWatcher(agentEventsConfig, backend) : null;
-if (agentEvents && agentEventsConfig) {
-  agentEvents.start();
-  console.log(`agent events → ${agentEventsConfig.url}/api/bridge/agent-events`);
-} else {
-  console.log("agent events disabled: BRIDGE_TOKEN unset");
-}
-
-for (const sig of ["SIGTERM", "SIGINT"] as const) {
-  process.on(sig, () => {
-    agentEvents?.stop();
-    // A tmux window resized for a phone must not stay phone-sized after we exit.
-    backend.stop();
-    // Stop wayvnc with the daemon so a restart never leaves an orphan listener.
-    void screenHub.shutdown().finally(() => process.exit(0));
-  });
-}

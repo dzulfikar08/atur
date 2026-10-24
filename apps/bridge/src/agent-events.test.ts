@@ -184,3 +184,50 @@ describe("readSessionDetail", () => {
     expect(await readSessionDetail("/nonexistent/agent-events.jsonl", "blocked")).toBeNull();
   });
 });
+
+describe("AgentEventWatcher delivery", () => {
+  test("with a relay, events go to it and nothing is POSTed", async () => {
+    const { AgentEventWatcher } = await import("./agent-events");
+    const sent: unknown[] = [];
+    let fetched = 0;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (() => {
+      fetched++;
+      return Promise.reject(new Error("no HTTP expected"));
+    }) as unknown as typeof fetch;
+    let status: "working" | "done" = "working";
+    const backend = {
+      pollPanes: async () => [
+        {
+          id: "p1",
+          workspaceId: "w",
+          workspaceLabel: "w",
+          tabId: "t",
+          cwd: "/repo",
+          title: "t",
+          agent: "claude",
+          agentStatus: status,
+          agentSessionPath: null,
+          revision: 0,
+        },
+      ],
+    } as unknown as import("./backend").PaneBackend;
+    const watcher = new AgentEventWatcher(null, backend, {
+      pollMs: 10,
+      settleMs: 0,
+      relay: { sendEvent: (e) => (sent.push(e), true) },
+    });
+    try {
+      watcher.start();
+      await Bun.sleep(60);
+      status = "done";
+      const end = Date.now() + 2_000;
+      while (sent.length === 0 && Date.now() < end) await Bun.sleep(10);
+    } finally {
+      watcher.stop();
+      globalThis.fetch = realFetch;
+    }
+    expect(fetched).toBe(0);
+    expect(sent[0]).toMatchObject({ pane_id: "p1", status: "done", agent: "claude", cwd: "/repo" });
+  });
+});

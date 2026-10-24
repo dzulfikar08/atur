@@ -1,13 +1,13 @@
 /**
  * /observe (DEV-33): parser heuristics, session identity, hub lifecycle, and
- * the live websocket surface of main.ts (read-only close, unknown pane,
+ * the live websocket surface of server.ts (read-only close, unknown pane,
  * attach unchanged). herdr rpc is stubbed with a mutable pane map — no
  * socket; poll waits use `until`, so tests stay deterministic in wall time.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 
 // ---------------------------------------------------------------------------
-// herdr stub — installed before any ./observe or ./main import (bun hoists
+// herdr stub — installed before any ./observe or ./server import (bun hoists
 // mock.module above static imports; same pattern as hub.test.ts).
 // ---------------------------------------------------------------------------
 const paneText = new Map<string, string>();
@@ -404,7 +404,7 @@ describe("observe hub", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Live surface: the real Bun.serve from main.ts on an ephemeral port
+// Live surface: the real Bun.serve from server.ts on an ephemeral port
 // ---------------------------------------------------------------------------
 const TOKEN = "e2e-observe-token";
 let port = 0;
@@ -452,10 +452,12 @@ describe("observe websocket surface", () => {
     process.env.BRIDGE_TOKEN = TOKEN;
     // herdr is stubbed above; auto-detection would otherwise pick tmux here.
     process.env.BRIDGE_BACKEND = "herdr";
-    // Dynamic import on purpose: main.ts reads BRIDGE_PORT/TOKEN at module
+    // The live surface test never dials the cloud, whatever the developer's shell has set.
+    delete process.env.ATUR_CONNECT_TOKEN;
+    // Dynamic import on purpose: server.ts reads BRIDGE_PORT/TOKEN at module
     // evaluation and binds the server there — a static import would evaluate
     // it before the test picked the port and token.
-    await import("./main");
+    await import("./server");
   });
 
   beforeEach(() => {

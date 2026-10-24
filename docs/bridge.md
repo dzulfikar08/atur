@@ -3,14 +3,62 @@
 `atur-bridge` (`apps/bridge`) is a small daemon that runs on the machine where your coding agents work. It lets the Atur web app and the phone app show your agents' terminal panes live, type into them, and push a notification when an agent finishes or needs you.
 
 ```
+Atur Cloud (customers):
+phone / browser -> Atur Worker (auth, audit) -> BridgeRelay Durable Object <== wss (the bridge dials out) == atur-bridge -> herdr or tmux
+
+Self-host / tunnel:
 phone / browser -> Atur Worker (auth, audit) -> tunnel -> atur-bridge (127.0.0.1:7601) -> herdr or tmux
                                                      atur-bridge -> POST /api/bridge/agent-events -> Worker -> push
 ```
 
-The bridge binds `127.0.0.1` only and holds no secrets. It drives one terminal multiplexer, called the backend:
+The bridge binds `127.0.0.1` only. It drives one terminal multiplexer, called the backend:
 
 - **tmux**: works with any agent running in a tmux pane (Claude Code, Codex, omp, anything else). No extra software.
 - **herdr**: herdr (a terminal multiplexer for agents) detects agents and their state by itself.
+
+## Connect a machine to Atur Cloud
+
+Needs an Atur plan (Solo or Team) and tmux (or herdr) on the machine. No tunnel, no open port, no Bun: the bridge is a single binary that dials out to `app.diatur.com`.
+
+1. In [app.diatur.com](https://app.diatur.com), open the **Machines** page and create a machine. Copy its install command. The token (`atb_...`) is shown once.
+2. Run it on the machine whose terminals you want to reach:
+
+   ```bash
+   curl -fsSL https://diatur.com/install-bridge.sh | sh -s -- atb_xxxxxxxx
+   ```
+
+3. Done. The machine turns **online** on the Machines page, and its tmux panes show up in the app. Every pane on the machine is listed and can be attached by you: for Cloud machines ownership of the machine is the only access check, and workspace bindings (which are paths on the owner's own machine) do not apply. Several machines can share one account: panes are prefixed with the machine, and each machine has its own token. Images pasted from the phone are limited to 10 MiB over the relay.
+
+The installer:
+
+- picks the binary for your OS and CPU (Linux or macOS, x64 or arm64) from the newest `bridge-v*` [GitHub Release](https://github.com/dzulfikar08/atur/releases), checks it against `SHA256SUMS` and installs `~/.local/bin/atur-bridge`;
+- runs `atur-bridge connect <token>`, which saves `ATUR_CONNECT_TOKEN` in `~/.config/atur/bridge.env` (mode 600, other keys in the file are kept);
+- writes the agent hook scripts to `~/.config/atur/hooks` (see [Agent state with tmux](#agent-state-with-tmux));
+- installs and starts a service that restarts on failure: a systemd user unit `atur-bridge.service` on Linux (it runs `loginctl enable-linger` so it survives logout), a launchd agent `com.diatur.atur-bridge` on macOS (log: `~/Library/Logs/atur-bridge.log`).
+
+Re-running it updates the binary and restarts the service; your settings stay. It refuses to run as root (the bridge must run as the user who owns the tmux server); set `ATUR_INSTALL_FORCE_ROOT=1` to override. `ATUR_INSTALL_DRY_RUN=1` prints what it would do and changes nothing. `ATUR_BRIDGE_VERSION=bridge-v0.1.0` pins a release.
+
+The bridge keeps one outbound WebSocket to `wss://app.diatur.com/api/bridge/connect`, authenticated with the machine token, and the cloud sends pane listing, attach/observe sockets and pasted images through it. Agent push events travel over the same socket (nothing is POSTed). If the connection drops it reconnects with a 1 to 30 second backoff. A revoked or wrong token (close 4401) stops it with a clear log line; an account without a plan (4402) is retried every 10 minutes.
+
+```bash
+atur-bridge                  # run in the foreground (the service does this)
+atur-bridge connect atb_...  # save or replace the machine token
+atur-bridge hooks [dir]      # write the agent hook scripts (default ~/.config/atur/hooks)
+atur-bridge --version
+journalctl --user -u atur-bridge -f    # Linux logs; the line to look for is "relay: connected"
+```
+
+Revoke a machine on the Machines page and its token stops working at once. The loopback server (`127.0.0.1:7601`) is still protected by a token: when `BRIDGE_TOKEN` is unset the bridge generates a random one at startup, so nothing on the machine can talk to it without that secret.
+
+### Building the binaries
+
+`apps/bridge/scripts/build-binaries.sh` runs `bun build --compile` for `linux-x64`, `linux-arm64`, `darwin-x64` and `darwin-arm64` (cross-compiled from any machine, needs network the first time) and writes `apps/bridge/dist/atur-bridge-<os>-<arch>` plus `dist/SHA256SUMS`. Pass target names to build only some. The binary embeds the hook scripts (they are not separate files in a release): `atur-bridge hooks` writes them out.
+
+To release: bump `version` in `apps/bridge/package.json`, then `git tag bridge-vX.Y.Z && git push origin bridge-vX.Y.Z`. `.github/workflows/release-bridge.yml` checks the tag against the version, runs the tests, builds the four binaries and attaches them with `SHA256SUMS` to a Release named after the tag.
+
+## Self-host: run it yourself behind a tunnel
+
+This is the path for your own Worker (`HERDR_BRIDGE_URL` / `HERDR_BRIDGE_TOKEN`, see [Reaching the bridge from the Worker](#reaching-the-bridge-from-the-worker)). It keeps working unchanged: without `ATUR_CONNECT_TOKEN` the bridge does not dial out, and it POSTs agent events to `ATUR_URL` as before.
 
 ## Requirements
 
@@ -35,20 +83,22 @@ curl -s -H "x-bridge-token: $BRIDGE_TOKEN" http://127.0.0.1:7601/panes
 
 Start your agents inside tmux (`tmux new -s work`, then `claude` or `codex`) and they show up in that list.
 
-A pane only appears in the app when its working directory is inside a checkout bound to an Atur workspace (`set_workspace_link` / the workspace link settings, `local_path`). Git worktrees resolve to their main repository, so crew worktrees inherit the binding. Panes in other directories stay invisible.
+On the self-host path, a pane only appears in the app when its working directory is inside a checkout bound to an Atur workspace (`set_workspace_link` / the workspace link settings, `local_path`). Git worktrees resolve to their main repository, so crew worktrees inherit the binding. Panes in other directories stay invisible.
 
 ### Environment
 
-| Variable         | Default                      | Meaning                                                                                                                                                                                                |
-| ---------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `BRIDGE_PORT`    | `7601`                       | Local port (always bound on `127.0.0.1`).                                                                                                                                                              |
-| `BRIDGE_TOKEN`   | empty                        | Shared secret. Clients must send it as `x-bridge-token`. Also the key for push events: **no token, no notifications.** Must equal the Worker's `HERDR_BRIDGE_TOKEN`.                                   |
-| `BRIDGE_BACKEND` | auto                         | `herdr`, `tmux` or `auto`. Auto picks herdr when its socket exists, otherwise tmux when the `tmux` binary is on `PATH`. Pin it in a service, so a herdr that is slow to start never flips you to tmux. |
-| `HERDR_SOCKET`   | `~/.config/herdr/herdr.sock` | herdr socket path.                                                                                                                                                                                     |
-| `TMUX_SOCKET`    | tmux default server          | Socket of the tmux server to drive. A value containing `/` is a path (`tmux -S`), a bare name is a socket name (`tmux -L`).                                                                            |
-| `ATUR_URL`       | `https://app.diatur.com`     | Server that receives agent events. Set it to your own server when self-hosting.                                                                                                                        |
-| `AGENT_POLL_MS`  | `2000`                       | How often the bridge looks at agent states for push events.                                                                                                                                            |
-| `ATUR_PASTE_DIR` | `~/.cache/atur/pastes`       | Where images pasted from the phone are saved before their path goes into the prompt.                                                                                                                   |
+| Variable             | Default                      | Meaning                                                                                                                                                                                                                                                                      |
+| -------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BRIDGE_PORT`        | `7601`                       | Local port (always bound on `127.0.0.1`).                                                                                                                                                                                                                                    |
+| `BRIDGE_TOKEN`       | random per run               | Shared secret. Clients must send it as `x-bridge-token`. Unset: a random one is generated at startup, so the loopback server is never open. For the tunnel setup also the key for push events: **no token, no notifications.** Must equal the Worker's `HERDR_BRIDGE_TOKEN`. |
+| `ATUR_CONNECT_TOKEN` | empty                        | Machine token (`atb_...`) from the Machines page. Set: the bridge dials out to Atur Cloud (see above) and sends agent events over that socket. `atur-bridge connect <token>` writes it to `~/.config/atur/bridge.env`.                                                       |
+| `ATUR_BRIDGE_ENV`    | `~/.config/atur/bridge.env`  | Settings file. On a foreground run the bridge reads it for every variable not already in the environment.                                                                                                                                                                    |
+| `BRIDGE_BACKEND`     | auto                         | `herdr`, `tmux` or `auto`. Auto picks herdr when its socket exists, otherwise tmux when the `tmux` binary is on `PATH`. Pin it in a service, so a herdr that is slow to start never flips you to tmux.                                                                       |
+| `HERDR_SOCKET`       | `~/.config/herdr/herdr.sock` | herdr socket path.                                                                                                                                                                                                                                                           |
+| `TMUX_SOCKET`        | tmux default server          | Socket of the tmux server to drive. A value containing `/` is a path (`tmux -S`), a bare name is a socket name (`tmux -L`).                                                                                                                                                  |
+| `ATUR_URL`           | `https://app.diatur.com`     | Atur server: the relay endpoint (`/api/bridge/connect`) and the target of agent events. Set it to your own server when self-hosting.                                                                                                                                         |
+| `AGENT_POLL_MS`      | `2000`                       | How often the bridge looks at agent states for push events.                                                                                                                                                                                                                  |
+| `ATUR_PASTE_DIR`     | `~/.cache/atur/pastes`       | Where images pasted from the phone are saved before their path goes into the prompt.                                                                                                                                                                                         |
 
 Desktop sharing (`/screen`) has its own `SCREEN_*` options, see [DEPLOY.md](DEPLOY.md#6-screen-desktop-sharing).
 
@@ -156,7 +206,7 @@ The app shows `working`, `blocked` (**Needs you**) and `done`. A push goes out w
 - `tmux-status.sh <agent> <idle|working|blocked|done|off>` sets (or with `off` clears) the options on `$TMUX_PANE`. Does nothing outside tmux, never prints, never fails the agent.
 - `claude-code-status.sh <state>` and `codex-status.sh <state>` are one-line wrappers that pass the agent name.
 
-Use absolute paths in the configs below (replace `/home/you/atur`) and keep the scripts executable.
+Use absolute paths in the configs below (replace `/home/you/atur/apps/bridge/hooks` with `~/.config/atur/hooks` expanded, if you installed the binary: `atur-bridge hooks` writes the scripts there, executable, and refreshes them on every run) and keep the scripts executable.
 
 You can try it by hand inside a tmux pane:
 
@@ -349,6 +399,8 @@ Any agent that can run a command on its own events can call `tmux-status.sh <nam
 
 ## Troubleshooting
 
+- The machine stays offline on the Machines page: read the log (`journalctl --user -u atur-bridge -f`). `relay: offline, ...; retrying` is a network problem (the line is printed once, not per retry). `the machine token was rejected` means the token was revoked or mistyped: create a new one and run `atur-bridge connect <token>`, then `systemctl --user restart atur-bridge`. `needs an active plan` means the account has no Solo or Team plan.
+- `replaced by another connection using this token`: two bridges are using the same machine token. Give each machine its own token.
 - `no terminal backend found`: neither a herdr socket nor the `tmux` binary was found. Install tmux or set `BRIDGE_BACKEND` and `HERDR_SOCKET`.
 - `/panes` is empty with tmux: the bridge talks to a different tmux server than your session. Compare `tmux display -p '#{socket_path}'` (run inside your session) with `TMUX_SOCKET`, and make sure both run as the same user.
 - A pane is not in the app: its working directory is not inside a bound workspace checkout (see above), or the Worker cannot reach the bridge (`curl` the tunnel hostname with the token).

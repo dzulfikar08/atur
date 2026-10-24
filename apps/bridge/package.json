@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "bun run src/main.ts",
     "start": "bun run src/main.ts",
+    "build:binaries": "sh scripts/build-binaries.sh",
     "typecheck": "bunx tsc --noEmit",
     "test": "bun test"
   },
