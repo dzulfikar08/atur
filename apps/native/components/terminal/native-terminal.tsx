@@ -74,13 +74,21 @@ export function NativeTerminal({
   const fit = fitFontSize(width, cols);
 
   // Ask for a pane exactly as big as this view, as Termius does by attaching at
-  // the phone's size. Re-sent on rotation, keyboard open/close, pinch and every
-  // (re)connect, since canType flips back to true then.
+  // the phone's size. Re-sent on rotation, pinch and every (re)connect, since
+  // canType flips back to true then. The height is the tallest seen at this
+  // width: the soft keyboard (and Android's suggestion strip coming and going)
+  // only shortens the view, and resizing the pane for it made the agent redraw
+  // its whole screen under the finger while scrolling. With the keyboard up the
+  // list simply shows the pane's bottom rows.
+  const fullHeight = useRef({ width: 0, height: 0 });
+  if (fullHeight.current.width !== box.width) fullHeight.current = { width: box.width, height: 0 };
+  fullHeight.current.height = Math.max(fullHeight.current.height, box.height);
+  const paneHeight = fullHeight.current.height;
   useEffect(() => {
-    if (!canType || box.width <= 0 || box.height <= 0) return;
-    const grid = gridForViewport(box.width, box.height, fontSize);
+    if (!canType || box.width <= 0 || paneHeight <= 0) return;
+    const grid = gridForViewport(box.width, paneHeight, fontSize);
     requestResize(grid.cols, grid.rows);
-  }, [canType, box.width, box.height, fontSize, requestResize]);
+  }, [canType, box.width, paneHeight, fontSize, requestResize]);
 
   // A phone-sized pane fits the screen exactly, so there is nothing to scroll
   // until scrollback is loaded: fetch it on every (re)connect, and again once
