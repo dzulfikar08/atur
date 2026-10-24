@@ -75,7 +75,7 @@
         {
           "photosPermission": "Atur opens your photo library only when you choose an image to attach to a comment.",
           "cameraPermission": "Atur uses the camera only when you take a photo to attach to a comment.",
-          "microphonePermission": false
+          "microphonePermission": "Atur uses the microphone only while you dictate into a text field. Audio is turned into text on your device and is never recorded or sent to Atur."
         }
       ],
       [
