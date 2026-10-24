@@ -32,6 +32,11 @@ const CHECKOUT_URL = "https://buy.polar.sh/polar_cl_bObfAZXGCAqKpziWXocIz32SyN3c
 const checkout = (productId: string) => `${CHECKOUT_URL}?product_id=${productId}&utm_source=diatur.com`;
 const SOLO_URL = checkout("c86b15e8-e91b-464e-a6d0-e5d3f70d7b83");
 const TEAM_URL = checkout("ddd252b0-6cf2-4a91-8757-2fd057f8bf51");
+// Paid checkout stays closed until the phone app can reach agents on a
+// customer's own machine; until then the paid plans collect a waitlist.
+// Keep in step with ATUR_CHECKOUT_OPEN on the Worker (the /billing page).
+const CHECKOUT_OPEN = false;
+const WAITLIST_ENDPOINT = `${APP_URL}/public/waitlist`;
 
 // The board's own workflow states. Each tint on this page is one of these
 // states, so a colour always means the same thing it means in the app.
@@ -109,9 +114,9 @@ const plans = [
     unit: "/ month",
     blurb: "For one person who wants the app on their phone.",
     items: ["iPhone and Android app for you", "Live agent panes, take the keyboard, dictation", "Push when an agent finishes or needs you", "Web app stays free for everyone"],
-    cta: "Get Solo",
-    href: SOLO_URL,
-    external: true,
+    cta: CHECKOUT_OPEN ? "Get Solo" : "Join the waitlist",
+    href: CHECKOUT_OPEN ? SOLO_URL : "#waitlist",
+    external: CHECKOUT_OPEN,
   },
   {
     key: "team",
@@ -120,9 +125,9 @@ const plans = [
     unit: "/ month",
     blurb: "For a team. Covers everyone in the workspaces you own, not per seat.",
     items: ["Everything in Solo", "The phone app for every member of your workspaces", "One subscriber pays, nobody else needs a plan", "Adding a person costs nothing"],
-    cta: "Get Team",
-    href: TEAM_URL,
-    external: true,
+    cta: CHECKOUT_OPEN ? "Get Team" : "Join the waitlist",
+    href: CHECKOUT_OPEN ? TEAM_URL : "#waitlist",
+    external: CHECKOUT_OPEN,
   },
 ];
 
@@ -473,13 +478,32 @@ const paneLines = [
               <ul>
                 {plan.items.map((item) => <li><Icon name="check" size={16} />{item}</li>)}
               </ul>
-              <a class={plan.key === "team" ? "lp-btn lp-btn-primary" : "lp-btn lp-btn-outline"} href={plan.href} target="_blank" rel="noopener" data-revklik-goal={plan.key === "selfhost" ? "selfhost_click" : "checkout_click"} data-revklik-goal-location={`pricing_${plan.key}`}>{plan.cta}</a>
+              <a class={plan.key === "team" ? "lp-btn lp-btn-primary" : "lp-btn lp-btn-outline"} href={plan.href} target={plan.external ? "_blank" : undefined} rel={plan.external ? "noopener" : undefined} data-plan={plan.key === "selfhost" ? undefined : plan.key} data-revklik-goal={plan.key === "selfhost" ? "selfhost_click" : CHECKOUT_OPEN ? "checkout_click" : "waitlist_click"} data-revklik-goal-location={`pricing_${plan.key}`}>{plan.cta}</a>
               {plan.key === "selfhost" && (
                 <p class="lp-plan-note">Setup steps are in <a class="lp-text-link" href={SELFHOST_DOCS_URL} target="_blank" rel="noopener">docs/self-host.md</a>.</p>
               )}
             </div>
           ))}
         </div>
+        {!CHECKOUT_OPEN && (
+          <form id="waitlist" class="lp-waitlist" data-endpoint={WAITLIST_ENDPOINT}>
+            <div class="lp-waitlist-copy">
+              <p class="lp-plan-name">Paid plans open soon</p>
+              <p class="lp-fine">We're finishing one-command setup so the phone app reaches the agents on your own machine. Leave your email and we'll write once, when Solo and Team open.</p>
+            </div>
+            <div class="lp-waitlist-fields">
+              <label class="sr-only" for="waitlist-email">Email</label>
+              <input id="waitlist-email" name="email" type="email" required autocomplete="email" placeholder="you@company.com" />
+              <label class="sr-only" for="waitlist-plan">Plan</label>
+              <select id="waitlist-plan" name="plan">
+                <option value="solo">Solo</option>
+                <option value="team">Team</option>
+              </select>
+              <button class="lp-btn lp-btn-primary" type="submit" data-revklik-goal="waitlist_submit" data-revklik-goal-location="pricing">Join the waitlist</button>
+            </div>
+            <p class="lp-waitlist-status" role="status" aria-live="polite"></p>
+          </form>
+        )}
       </section>
 
       <section id="phone" class="lp-wrap lp-section" style="padding-top:0">
@@ -653,4 +677,40 @@ const paneLines = [
   if (first) select(first);
   fromHash();
   window.addEventListener("hashchange", fromHash);
+
+  // Waitlist (paid plans not open yet): the plan buttons preselect the plan,
+  // the form posts to the Worker and reports inline.
+  const waitlist = document.querySelector<HTMLFormElement>("#waitlist");
+  if (waitlist) {
+    const plan = waitlist.querySelector<HTMLSelectElement>("select[name=plan]");
+    const email = waitlist.querySelector<HTMLInputElement>("input[name=email]");
+    const status = waitlist.querySelector<HTMLElement>(".lp-waitlist-status");
+    const submit = waitlist.querySelector<HTMLButtonElement>("button[type=submit]");
+    document.querySelectorAll<HTMLAnchorElement>("a[data-plan][href='#waitlist']").forEach((a) => {
+      a.addEventListener("click", () => {
+        if (plan) plan.value = a.dataset.plan ?? "solo";
+        setTimeout(() => email?.focus(), 0);
+      });
+    });
+    waitlist.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!email || !status || !submit) return;
+      submit.disabled = true;
+      status.textContent = "Joining...";
+      try {
+        const res = await fetch(waitlist.dataset.endpoint ?? "", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: email.value, plan: plan?.value, source: "diatur.com" }),
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        status.textContent = `You're on the list. We'll email ${email.value} when it opens.`;
+        waitlist.reset();
+      } catch {
+        status.textContent = "That didn't go through. Check the email and try again.";
+      } finally {
+        submit.disabled = false;
+      }
+    });
+  }
 </script>

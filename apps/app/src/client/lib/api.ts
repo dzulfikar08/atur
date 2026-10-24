@@ -8,6 +8,8 @@ export interface Billing {
   status: string | null;
   entitled: boolean;
   managed: boolean;
+  /** Paid checkout is open; otherwise new customers join the waitlist. */
+  checkout_open: boolean;
 }
 
 export class ApiError extends Error {

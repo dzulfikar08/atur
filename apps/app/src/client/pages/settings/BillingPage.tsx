@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { apiFetch, type Billing } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -145,15 +145,45 @@ export default function BillingPage() {
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
                   <p className="text-sm text-muted-foreground">{p.blurb}</p>
-                  <Button asChild>
-                    <a href={checkoutHref(p.key, me)}>Choose {p.name}</a>
-                  </Button>
+                  {billing.checkout_open ? (
+                    <Button asChild>
+                      <a href={checkoutHref(p.key, me)}>Choose {p.name}</a>
+                    </Button>
+                  ) : (
+                    <WaitlistButton plan={p.key} email={me.email} />
+                  )}
                 </CardContent>
               </Card>
             ))}
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// Paid checkout is closed until customers can connect their own machine: the
+// plan buttons put the signed-in email on the waitlist instead.
+function WaitlistButton({ plan, email }: { plan: keyof typeof PRODUCTS; email: string }) {
+  const join = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/public/waitlist", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, plan, source: "billing" }),
+      });
+      if (!res.ok) throw new Error("Could not join the waitlist. Try again in a minute.");
+    },
+  });
+  if (join.isSuccess) {
+    return <p className="text-sm">You're on the list. We'll email {email} when it opens.</p>;
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <Button onClick={() => join.mutate()} disabled={join.isPending}>
+        {join.isPending ? "Joining..." : "Join the waitlist"}
+      </Button>
+      {join.isError && <p className="text-sm text-destructive">{join.error.message}</p>}
     </div>
   );
 }

@@ -52,7 +52,7 @@ import { screenRoutes } from "./routes/screen";
 import { wsTicketRoutes } from "./routes/wsTickets";
 import { isWsTicketUpgrade } from "./lib/wsTicket";
 import { polarWebhookRoutes, polarRoutes } from "./routes/polar";
-import { billingWebhookRoutes } from "./routes/billing";
+import { billingWebhookRoutes, waitlistRoutes } from "./routes/billing";
 import { requirePlanForNative } from "./middleware/planGate";
 import { meRoutes } from "./routes/me";
 // Personal notes — static /notes prefix must win over meRoutes' generic
@@ -115,6 +115,8 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/webhooks/polar", polarWebhookRoutes);
   // Atur Cloud plan webhook (Solo/Team subscriptions) — signature-verified, public.
   app.route("/webhooks/atur-billing", billingWebhookRoutes);
+  // Atur Cloud waitlist signup (diatur.com + /billing) — public, rate-limited.
+  app.route("/public/waitlist", waitlistRoutes);
 
   app.route("/api/users", userRoutes);
 

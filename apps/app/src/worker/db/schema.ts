@@ -821,6 +821,16 @@ export const billingSubscriptions = sqliteTable(
   ],
 );
 
+// Atur Cloud waitlist: emails collected while checkout is closed
+// (ATUR_CHECKOUT_OPEN unset). One row per lower-cased email.
+export const waitlist = sqliteTable("waitlist", {
+  email: text("email").primaryKey(),
+  plan: text("plan"),
+  source: text("source"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const webhooks = sqliteTable("webhooks", {
   id: text("id").primaryKey(),
   url: text("url").notNull(),

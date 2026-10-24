@@ -44,4 +44,7 @@ export type Env = {
   // is not managed on this server (self-host): the plan gate is off and every
   // user is entitled.
   ATUR_BILLING_WEBHOOK_SECRET?: string;
+  // "1" opens paid checkout (Solo/Team). Unset → pricing pages collect emails
+  // into the waitlist instead (POST /public/waitlist).
+  ATUR_CHECKOUT_OPEN?: string;
 };

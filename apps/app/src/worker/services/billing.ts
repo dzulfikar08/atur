@@ -14,6 +14,8 @@ export interface Billing {
   status: string | null;
   entitled: boolean;
   managed: boolean;
+  /** Paid checkout is open; otherwise new customers join the waitlist. */
+  checkoutOpen: boolean;
 }
 
 export const BILLING_EVENT_TYPES = new Set([
@@ -123,11 +125,12 @@ const rank = (s: repo.BillingSubscriptionRow) =>
 
 export async function billingFor(
   db: DbClient,
-  env: Pick<Env, "ATUR_BILLING_WEBHOOK_SECRET">,
+  env: Pick<Env, "ATUR_BILLING_WEBHOOK_SECRET" | "ATUR_CHECKOUT_OPEN">,
   user: { id: string; email: string; isSuperuser?: boolean | number | null },
 ): Promise<Billing> {
+  const checkoutOpen = env.ATUR_CHECKOUT_OPEN === "1";
   if (!env.ATUR_BILLING_WEBHOOK_SECRET) {
-    return { plan: null, status: null, entitled: true, managed: false };
+    return { plan: null, status: null, entitled: true, managed: false, checkoutOpen };
   }
   const own = (await repo.listForUser(db, user.id, user.email)).sort((a, b) => rank(b) - rank(a));
   const best = own[0] ?? null;
@@ -135,6 +138,7 @@ export async function billingFor(
     plan: (best?.plan as Plan | undefined) ?? null,
     status: best?.status ?? null,
     managed: true,
+    checkoutOpen,
   };
 
   if (user.isSuperuser) return { ...base, entitled: true };

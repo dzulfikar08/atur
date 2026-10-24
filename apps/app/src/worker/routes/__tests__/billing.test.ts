@@ -108,6 +108,7 @@ describe.skipIf(!sqliteSupported)("atur billing", () => {
       status: "active",
       entitled: true,
       managed: true,
+      checkoutOpen: false,
     });
     expect((await billing("u3")).entitled).toBe(false);
   });
@@ -183,12 +184,13 @@ describe.skipIf(!sqliteSupported)("atur billing", () => {
 
   it("superusers are entitled; unmanaged servers entitle everyone", async () => {
     expect((await billing("admin")).entitled).toBe(true);
-    env = { DB: t.d1 };
+    env = { DB: t.d1, ATUR_CHECKOUT_OPEN: "1" };
     expect(await billing("u3")).toEqual({
       plan: null,
       status: null,
       entitled: true,
       managed: false,
+      checkoutOpen: true,
     });
   });
 

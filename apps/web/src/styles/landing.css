@@ -1297,6 +1297,51 @@
 .lp-plan-team {
   background: var(--lp-review-soft);
 }
+/* Waitlist shown under the plans while paid checkout is closed. */
+.lp-waitlist {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 28px;
+  border-radius: var(--lp-radius-lg);
+  background: var(--lp-card);
+  scroll-margin-top: 96px;
+}
+.lp-waitlist-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.lp-waitlist input,
+.lp-waitlist select {
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1.5px solid var(--lp-border);
+  border-radius: var(--lp-radius-sm);
+  background: var(--lp-bg);
+  color: var(--lp-fg);
+  font: inherit;
+}
+.lp-waitlist input {
+  flex: 1 1 240px;
+}
+.lp-waitlist input:focus-visible,
+.lp-waitlist select:focus-visible {
+  outline: 2px solid var(--lp-primary);
+  outline-offset: 2px;
+}
+.lp-waitlist-status:empty {
+  display: none;
+}
+@media (min-width: 900px) {
+  .lp-waitlist {
+    grid-template-columns: 1fr 1.2fr;
+    align-items: center;
+  }
+  .lp-waitlist-status {
+    grid-column: 1 / -1;
+  }
+}
 .lp-plan-name {
   font-weight: 800;
 }
