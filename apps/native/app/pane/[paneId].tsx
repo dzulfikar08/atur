@@ -12,6 +12,7 @@ import { usePaneActions } from "@/components/pane-actions";
 import { ClassicTerminal } from "@/components/terminal/classic-terminal";
 import { GoneOverlay } from "@/components/terminal/gone-overlay";
 import { NativeTerminal } from "@/components/terminal/native-terminal";
+import { SelectTextSheet } from "@/components/terminal/select-text";
 import { Transcript } from "@/components/terminal/transcript";
 import { Text, type IconName } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -70,6 +71,7 @@ export default function PaneView() {
 
   const [ownsKeyboard, setOwnsKeyboard] = useState(false);
   const [bridgeError, setBridgeError] = useState<string | null>(null);
+  const [selecting, setSelecting] = useState(false);
 
   // Frames land here once and feed whichever renderer is mounted.
   const screen = useMemo(() => new TerminalScreen(), [paneId]);
@@ -129,6 +131,18 @@ export default function PaneView() {
                     options: VIEWS,
                     current: view,
                     onChoose: (next) => chooseView(next as PaneView),
+                    actions: [
+                      {
+                        key: "select",
+                        icon: "text-outline",
+                        title: "Select text",
+                        onPress: () => {
+                          // Fill in scrollback first if none is loaded yet.
+                          if (screen.getState().history.length === 0) requestHistory(3000);
+                          setSelecting(true);
+                        },
+                      },
+                    ],
                   },
                 )
               }
@@ -169,6 +183,7 @@ export default function PaneView() {
         </View>
       </KeyboardFrame>
       {actions.sheet}
+      <SelectTextSheet visible={selecting} screen={screen} onClose={() => setSelecting(false)} />
     </View>
   );
 }

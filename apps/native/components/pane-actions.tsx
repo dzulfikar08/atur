@@ -19,6 +19,8 @@ export interface PaneViewChoice {
   options: { value: string; label: string; icon: IconName }[];
   current: string;
   onChoose: (value: string) => void;
+  /** Extra rows under the views (e.g. Select text); run after the sheet closes. */
+  actions?: { key: string; icon: IconName; title: string; onPress: () => void }[];
 }
 
 export function openPaneScreen(paneId: string) {
@@ -119,6 +121,18 @@ export function usePaneActions({ onClosed }: { onClosed?: () => void } = {}): {
                 );
               })
             : null}
+          {views?.actions?.map((a) => (
+            <ListRow
+              key={a.key}
+              icon={a.icon}
+              title={a.title}
+              onPress={() => {
+                dismiss();
+                // After the sheet's own modal is gone: iOS drops a modal opened over a dismissing one.
+                setTimeout(a.onPress, 350);
+              }}
+            />
+          ))}
           {views ? <View style={styles.divider} /> : null}
           <ListRow
             icon="arrow-forward-outline"
