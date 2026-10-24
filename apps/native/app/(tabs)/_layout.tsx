@@ -3,9 +3,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Tabs } from "expo-router";
 import { useEffect, useState } from "react";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useUnistyles } from "react-native-unistyles";
 
+import { FloatingTabBar } from "@/components/floating-tab-bar";
 import type { IconName } from "@/components/ui";
 import { api } from "@/lib/api";
 import { attentionCount } from "@/lib/pane-meta";
@@ -20,8 +19,6 @@ const TABS: { name: string; label: string; icon: IconName; outline: IconName }[]
 ];
 
 export default function TabLayout() {
-  const { theme } = useUnistyles();
-  const insets = useSafeAreaInsets();
   const { data: unread } = useQuery({
     queryKey: ["notifications", "unread"],
     queryFn: api.unreadCount,
@@ -46,21 +43,7 @@ export default function TabLayout() {
   const attention = panes ? attentionCount(panes, seen) : 0;
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: theme.colors.foreground,
-        tabBarInactiveTintColor: theme.colors.mutedForeground,
-        tabBarStyle: {
-          backgroundColor: theme.colors.card,
-          borderTopColor: theme.colors.hairline,
-          height: 66 + insets.bottom,
-          paddingTop: 6,
-          paddingBottom: 8 + insets.bottom,
-        },
-        tabBarLabelStyle: { fontSize: 11, fontFamily: theme.fonts.medium },
-      }}
-    >
+    <Tabs tabBar={(props) => <FloatingTabBar {...props} />} screenOptions={{ headerShown: false }}>
       {TABS.map((tab) => (
         <Tabs.Screen
           key={tab.name}
@@ -73,7 +56,6 @@ export default function TabLayout() {
                 : tab.name === "panes" && attention > 0
                   ? attention
                   : undefined,
-            tabBarBadgeStyle: { backgroundColor: theme.colors.urgent, fontSize: 10 },
             tabBarIcon: ({ focused, size, color }) => (
               <Ionicons name={focused ? tab.icon : tab.outline} size={size} color={color} />
             ),
