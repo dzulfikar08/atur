@@ -26,7 +26,7 @@ const ROW_ONE: KeyDef[] = [
   { kind: "send", label: "↓", data: KEY_DATA.down, a11y: "Down" },
   { kind: "send", label: "↑", data: KEY_DATA.up, a11y: "Up" },
   { kind: "send", label: "→", data: KEY_DATA.right, a11y: "Right" },
-  { kind: "send", label: "⏎", data: KEY_DATA.enter, a11y: "Enter" },
+  { kind: "send", label: "↵", data: KEY_DATA.enter, a11y: "Enter" },
 ];
 
 const ROW_TWO: KeyDef[] = [
@@ -51,7 +51,7 @@ const ROW_COMPACT: KeyDef[] = [
   { kind: "send", label: "↑", data: KEY_DATA.up, a11y: "Up" },
   { kind: "send", label: "→", data: KEY_DATA.right, a11y: "Right" },
   // Answers agent menus ("Enter to confirm") without opening the composer.
-  { kind: "send", label: "⏎", data: KEY_DATA.enter, a11y: "Enter" },
+  { kind: "send", label: "↵", data: KEY_DATA.enter, a11y: "Enter" },
   { kind: "mod", label: "Ctrl", mod: "ctrl" },
   { kind: "more" },
 ];
