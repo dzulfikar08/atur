@@ -160,7 +160,8 @@ describe("pane routes (DEV-32 per-pane authz)", () => {
     ];
     const res = await testApp().request("/api/panes", undefined, env);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ panes: [bridgePanes[0]] });
+    // The visible row carries the Atur workspace its folder is bound to.
+    expect(await res.json()).toEqual({ panes: [{ ...bridgePanes[0], workspace_slug: "acme" }] });
   });
 
   it("GET / hides panes of workspaces the viewer does not belong to", async () => {
