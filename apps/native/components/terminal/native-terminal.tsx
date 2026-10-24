@@ -82,6 +82,13 @@ export function NativeTerminal({
     requestResize(grid.cols, grid.rows);
   }, [canType, box.width, box.height, fontSize, requestResize]);
 
+  // A phone-sized pane fits the screen exactly, so there is nothing to scroll
+  // until scrollback is loaded: fetch it on every (re)connect, and again once
+  // the pane has been re-laid out at the phone's width.
+  useEffect(() => {
+    if (canType) requestHistory(HISTORY_LINES);
+  }, [canType, cols, requestHistory]);
+
   /** Send data with any armed Ctrl/Alt folded in, then disarm them. */
   const send = (data: string) => {
     sendInput(mods.ctrl || mods.alt ? applyModifiers(data, mods) : data);

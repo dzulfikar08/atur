@@ -68,6 +68,9 @@ class Watcher {
   private pumping = false;
   /** Poll fast briefly after a change so spinners animate, then settle. */
   private fastUntil = 0;
+  /** Last pane size told to viewers; checked about once a second while streaming. */
+  private geometry: { cols: number; rows: number } | null = null;
+  private geometryCheckedAt = 0;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   /** Current keyboard owner — daemon state, never client-declared. Null =
    *  everyone read-only. Claim may steal from the current owner. */
@@ -143,17 +146,11 @@ class Watcher {
       });
       let cols = 120;
       let rows = 32;
-      try {
-        const { layout } = await rpc<{ layout: { panes: PaneRect[] } }>("pane.layout", {
-          pane_id: this.paneId,
-        });
-        const rect = layout.panes.find((p) => p.pane_id === this.paneId)?.rect;
-        if (rect) {
-          cols = rect.width;
-          rows = rect.height;
-        }
-      } catch {
-        // geometry unavailable — keep defaults
+      const rect = await this.readGeometry();
+      if (rect) {
+        cols = rect.cols;
+        rows = rect.rows;
+        this.geometry = rect;
       }
       ws.send(
         JSON.stringify({
@@ -196,6 +193,36 @@ class Watcher {
     });
   }
 
+  private async readGeometry(): Promise<{ cols: number; rows: number } | null> {
+    try {
+      const { layout } = await rpc<{ layout: { panes: PaneRect[] } }>("pane.layout", {
+        pane_id: this.paneId,
+      });
+      const rect = layout.panes.find((p) => p.pane_id === this.paneId)?.rect;
+      return rect ? { cols: rect.width, rows: rect.height } : null;
+    } catch {
+      return null; // geometry unavailable — callers keep what they have
+    }
+  }
+
+  /**
+   * A resize (another client became active, or the phone sizer attached) keeps
+   * the row count when only the width changes, so diffs alone never tell the
+   * viewers. Rate-limited to one layout read per second.
+   */
+  private async checkGeometry(): Promise<void> {
+    const now = Date.now();
+    if (now - this.geometryCheckedAt < 1000) return;
+    this.geometryCheckedAt = now;
+    const next = await this.readGeometry();
+    if (!next) return;
+    const prev = this.geometry;
+    this.geometry = next;
+    if (prev && (prev.cols !== next.cols || prev.rows !== next.rows)) {
+      this.broadcast(JSON.stringify({ type: "geometry", ...next }));
+    }
+  }
+
   /** Line-level diff against the previous screen. The visible-screen dump is
    *  a flat \r\n-joined grid, so equal-height frames diff per row safely;
    *  anything else (first frame, height change, reconnect) falls back to a
@@ -235,6 +262,7 @@ class Watcher {
     this.pumping = true;
     try {
       const res = await this.readScreen();
+      await this.checkGeometry();
       // herdr's pane revision has proven unreliable across pane kinds — the
       // screen text is the source of truth for change detection.
       if (res.read.text === this.lastText) return;

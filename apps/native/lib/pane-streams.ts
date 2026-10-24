@@ -37,11 +37,13 @@ export interface PaneAttachHandlers {
   onDiff?: (rows: [number, string][]) => void;
   /** Reply to `requestHistory`: the pane's last rows including scrollback (ANSI, oldest first). */
   onHistory?: (rows: string[]) => void;
+  /** The pane was re-laid out (another client became active, or the phone sizer attached). */
+  onGeometry?: (size: { cols: number; rows: number }) => void;
   onError?: (message: string) => void;
 }
 
 /**
- * bridge → app: hello · keyboard · snapshot · diff · history · pong · error · exit
+ * bridge → app: hello · keyboard · snapshot · diff · geometry · history · pong · error · exit
  * app → bridge: input {data} · paste {text, submit} · claim · history {lines} · resize {cols, rows} · ping
  * A bridge `exit` means the pane died; reconnecting cannot revive it.
  */
@@ -168,6 +170,11 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
             if (rows.length > 0) h.onDiff?.(rows);
             break;
           }
+          case "geometry":
+            if (typeof msg.cols === "number" && typeof msg.rows === "number") {
+              h.onGeometry?.({ cols: msg.cols, rows: msg.rows });
+            }
+            break;
           case "history":
             if (Array.isArray(msg.rows)) {
               h.onHistory?.(

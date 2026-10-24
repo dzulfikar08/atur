@@ -83,6 +83,7 @@ export default function PaneView() {
       },
       onDiff: (rows) => screen.diff(rows),
       onHistory: (rows) => screen.setHistory(rows),
+      onGeometry: ({ cols, rows }) => screen.hello(cols, rows),
       onKeyboard: setOwnsKeyboard,
       onError: setBridgeError,
     });

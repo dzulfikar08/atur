@@ -34,9 +34,9 @@ interface TerminalViewProps {
  * The pane's screen as native text: one memoised row per terminal line in
  * JetBrains Mono, scrolled horizontally when the grid is wider than the phone
  * and vertically when taller. Pinch scales the font; the view follows the
- * bottom of the screen until the reader scrolls up. Scrolling up fetches the
- * pane's scrollback once and shows it above the live grid; returning to the
- * bottom drops it, so the next scroll-up gets a fresh copy.
+ * bottom of the screen until the reader scrolls up. Scrollback (loaded by the
+ * owner on connect) sits above the live grid; each scroll away from the
+ * bottom asks for a fresh copy, since output keeps scrolling into it.
  */
 export function TerminalView({
   screen,
@@ -118,7 +118,6 @@ export function TerminalView({
     const atBottom =
       e.contentOffset.y + e.layoutMeasurement.height >= e.contentSize.height - STICK_SLACK;
     if (stick.current && !atBottom) onScrollBack();
-    else if (!stick.current && atBottom) screen.clearHistory();
     stick.current = atBottom;
   };
 
