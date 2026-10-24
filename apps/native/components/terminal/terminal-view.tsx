@@ -170,6 +170,11 @@ export function TerminalView({
             onContentSizeChange={() => {
               if (stick.current) list.current?.scrollToEnd({ animated: false });
             }}
+            // The keyboard (or rotation) shrinks the view without changing the
+            // content, so onContentSizeChange stays quiet: keep the newest line visible.
+            onLayout={() => {
+              if (stick.current) list.current?.scrollToEnd({ animated: false });
+            }}
             ListEmptyComponent={<Text style={styles.waiting}>waiting for output…</Text>}
             contentContainerStyle={styles.content}
           />
