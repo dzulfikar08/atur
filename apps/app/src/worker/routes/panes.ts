@@ -35,6 +35,8 @@ export interface BridgePane {
   cwd: string | null;
   workspace_id?: string;
   workspace_label?: string;
+  /** Atur workspace the pane's cwd is bound to; set by the Worker on rows it returns. */
+  workspace_slug?: string;
 }
 
 async function fetchBridgePanes(
@@ -153,7 +155,8 @@ async function visibleLegacyPanes(
       member = await isMemberOfSlug(db, slug, userId);
       slugCache.set(slug, member);
     }
-    if (member) visible.push(pane);
+    // The bound Atur workspace travels with the row: the app shows its logo.
+    if (member) visible.push({ ...pane, workspace_slug: slug });
   }
   return visible;
 }

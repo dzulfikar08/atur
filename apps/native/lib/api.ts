@@ -50,6 +50,8 @@ export interface PaneListItem {
   revision: number;
   /** Set on panes of a customer machine (relay); absent on the dev box's own bridge. */
   machine?: PaneMachine;
+  /** The Atur workspace this pane's folder is bound to (dev-box bridge panes). */
+  workspace_slug?: string;
 }
 
 export interface PaneMachine {

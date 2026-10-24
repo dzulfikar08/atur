@@ -11,6 +11,7 @@ import { usePaneActions } from "@/components/pane-actions";
 import { usePaneCreate } from "@/components/pane-create";
 import { RowListSkeleton } from "@/components/skeletons";
 import {
+  Avatar,
   Button,
   Card,
   Chip,
@@ -46,10 +47,15 @@ function openPane(pane: PaneListItem) {
 
 function PaneRow({
   pane,
+  logo,
+  workspaceName,
   onLongPress,
   onClose,
 }: {
   pane: PaneListItem;
+  /** The bound Atur workspace's logo and name, when known. */
+  logo: string | null;
+  workspaceName: string;
   onLongPress: () => void;
   onClose: () => void;
 }) {
@@ -77,7 +83,11 @@ function PaneRow({
       delayLongPress={350}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
-      <View style={[styles.dot, { backgroundColor: dot }]} />
+      {/* The project at a glance; the corner dot keeps the state colour. */}
+      <View>
+        <Avatar name={workspaceName} uri={logo} size={32} square />
+        <View style={[styles.statusDot, { backgroundColor: dot }]} />
+      </View>
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={1}>
           {paneTitle(pane)}
@@ -144,6 +154,18 @@ export default function Panes() {
     refetchInterval: focused ? 5_000 : false,
   });
   const all = panes.data;
+  // Atur workspace per slug, for each row's logo.
+  const workspaces = new Map((me.data?.workspaces ?? []).map((w) => [w.slug, w]));
+  const rowProps = (pane: PaneListItem) => {
+    const ws = pane.workspace_slug ? workspaces.get(pane.workspace_slug) : undefined;
+    return {
+      pane,
+      logo: ws?.logo ?? null,
+      workspaceName: ws?.name ?? pane.machine?.name ?? pane.workspace_label ?? "?",
+      onLongPress: () => openActions(pane),
+      onClose: () => quickClose(pane),
+    };
+  };
   const unreachable = panes.error instanceof ApiError && panes.error.status === 502;
 
   // The workspace filter is remembered across launches. A workspace that has no
@@ -263,12 +285,7 @@ export default function Panes() {
           {agents.length > 0 ? (
             <ListGroup>
               {agents.map((pane) => (
-                <PaneRow
-                  key={pane.pane_id}
-                  pane={pane}
-                  onLongPress={() => openActions(pane)}
-                  onClose={() => quickClose(pane)}
-                />
+                <PaneRow key={pane.pane_id} {...rowProps(pane)} />
               ))}
             </ListGroup>
           ) : null}
@@ -276,14 +293,7 @@ export default function Panes() {
             <ListGroup>
               <ShellsHeader count={shells.length} open={shellsOpen} onToggle={toggleShells} />
               {shellsOpen
-                ? shells.map((pane) => (
-                    <PaneRow
-                      key={pane.pane_id}
-                      pane={pane}
-                      onLongPress={() => openActions(pane)}
-                      onClose={() => quickClose(pane)}
-                    />
-                  ))
+                ? shells.map((pane) => <PaneRow key={pane.pane_id} {...rowProps(pane)} />)
                 : null}
             </ListGroup>
           ) : null}
@@ -304,7 +314,16 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing.md,
   },
   pressed: { backgroundColor: theme.colors.surfaceHover },
-  dot: { width: 9, height: 9, borderRadius: 5 },
+  statusDot: {
+    position: "absolute",
+    right: -3,
+    bottom: -3,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: theme.colors.card,
+  },
   body: { flex: 1, gap: 2 },
   title: { fontSize: theme.fontSize.base, fontFamily: theme.fonts.bold },
   issue: {
