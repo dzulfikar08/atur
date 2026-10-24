@@ -895,6 +895,17 @@ export const api = {
     }
     return res.json();
   },
+  // ── Bridge machines (customer-run bridges; Machines page) ──
+  listMachines: () =>
+    apiFetch<{ machines: BridgeMachine[] }>("/me/machines").then((r) => r.machines),
+  /** The token is in this response only; the server keeps just its hash. */
+  createMachine: (name: string) =>
+    apiFetch<{ machine: BridgeMachine; token: string }>("/me/machines", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  revokeMachine: (id: string) =>
+    apiFetch<{ ok: true }>(`/me/machines/${encodeURIComponent(id)}`, { method: "DELETE" }),
   // ── Workspace links (DEV-29 control-plane bindings; /admin/bindings) ──
   listWorkspaceLinks: () => apiFetch<{ results: WorkspaceLink[] }>("/workspaces/links"),
   updateWorkspaceLink: (workspace: string, data: WorkspaceLinkPatch) =>
@@ -926,10 +937,24 @@ export interface PaneListItem {
   agent_status: string | null;
   title: string | null;
   revision: number;
+  /** Only on panes from a customer-run bridge; their ids read `<machine id>~<pane>`. */
+  machine?: { id: string; name: string };
 }
 
 export interface PanesListResponse {
   panes: PaneListItem[];
+}
+
+// ── Bridge machines (GET /api/me/machines; snake_case wire format) ──
+export interface BridgeMachine {
+  id: string;
+  name: string;
+  created_at: string;
+  last_seen_at: string | null;
+  online: boolean;
+  hostname: string | null;
+  backend: "herdr" | "tmux" | null;
+  version: string | null;
 }
 
 // ── Workspace link (DEV-29 control-plane binding; snake_case wire format) ──

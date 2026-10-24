@@ -7,6 +7,9 @@ import { getDb } from "./db/index";
 import { OAUTH_NAV_PATHS } from "./lib/oauth";
 import type { Env } from "./lib/env";
 
+// Durable Object classes are exported from the entry module; wrangler.toml binds them.
+export { BridgeRelay } from "./durable/bridgeRelay";
+
 const app = createApp();
 
 export default {

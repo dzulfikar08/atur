@@ -176,7 +176,9 @@ export default function PaneViewPage() {
         <div className="min-w-0 flex-1 basis-48">
           <h1 className="truncate text-lg font-semibold">{pane?.title ?? paneId}</h1>
           <p className="truncate text-xs text-muted-foreground">
-            {[pane?.workspace_label, pane?.agent, pane?.cwd].filter(Boolean).join(" · ") || paneId}
+            {[pane?.machine?.name, pane?.workspace_label, pane?.agent, pane?.cwd]
+              .filter(Boolean)
+              .join(" · ") || paneId}
           </p>
         </div>
         {ownsKeyboard ? (

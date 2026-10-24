@@ -1,3 +1,5 @@
+import type { BridgeRelay } from "../durable/bridgeRelay";
+
 export type Env = {
   DB: D1Database;
   R2: R2Bucket;
@@ -32,6 +34,11 @@ export type Env = {
   // Optional shared secret; when set, proxied requests carry the
   // x-bridge-token header the bridge validates. Never in wrangler vars.
   HERDR_BRIDGE_TOKEN?: string;
+  // Per-user relay of customer-run bridges (durable/bridgeRelay.ts). Customers
+  // run atur-bridge on their own machine; it dials out to /api/bridge/connect
+  // and this Durable Object muxes pane traffic. Absent (tests) → relay panes
+  // are unavailable and /api/bridge/connect answers 503.
+  BRIDGE_RELAY?: DurableObjectNamespace<BridgeRelay>;
   // Meta "ThreadsAPI" app (Threads app id + secret, not the Facebook app id).
   // Secrets in prod. Absent → the Threads inbox connect endpoint answers 503.
   THREADS_APP_ID?: string;

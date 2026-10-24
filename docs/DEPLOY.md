@@ -102,6 +102,24 @@ are needed. The signed webhook endpoint is
 `https://app.diatur.com/webhooks/polar/<workspace-slug>` — register it in Polar
 with the workspace's webhook secret.
 
+### Customer bridges (BridgeRelay Durable Object)
+
+Customers connect their own machine from **Machines** (user menu). The bridge
+dials out to `wss://app.diatur.com/api/bridge/connect` with a per-machine
+`atb_` token; one `BridgeRelay` Durable Object per user (`user:<userId>`)
+relays pane lists, attach/observe sockets, paste uploads and agent push events.
+No secrets are needed. First deploy of a version with this feature needs:
+
+1. D1 migration `apps/app/drizzle/0031_bridge_machines.sql` (the `bridge_machines`
+   table): `bun run db:migrate:remote` from `apps/app`.
+2. `wrangler deploy` applies the `BRIDGE_RELAY` binding and the `v1-bridge-relay`
+   migration (`new_sqlite_classes`) from `wrangler.toml`; nothing manual.
+
+The env-configured bridge (`HERDR_BRIDGE_URL`) keeps working unchanged next to
+it: unprefixed pane ids go to that bridge, `<machineId>~<paneId>` ids to the
+caller's own machine. Creating a machine needs a paid plan (402 otherwise).
+Revoking a machine from the page closes its live socket (close 4401).
+
 ## 2. Deploy the marketing site (diatur.com)
 
 ```bash

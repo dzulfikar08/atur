@@ -47,6 +47,7 @@ import { ingestRoutes } from "./routes/ingest";
 import { feedbackAdminRoutes } from "./routes/feedback_admin";
 import { widgetRoutes } from "./routes/widget";
 import { paneRoutes } from "./routes/panes";
+import { bridgeConnectRoutes } from "./routes/bridgeConnect";
 import { bridgeEventRoutes } from "./routes/bridgeEvents";
 import { screenRoutes } from "./routes/screen";
 import { wsTicketRoutes } from "./routes/wsTickets";
@@ -58,6 +59,7 @@ import { meRoutes } from "./routes/me";
 // Personal notes — static /notes prefix must win over meRoutes' generic
 // /api/me sub-app, so mount it first (Hono resolves in mount order).
 import { noteRoutes } from "./routes/notes";
+import { machineRoutes } from "./routes/machines";
 import { threadsRoutes } from "./routes/threads";
 import type { Env } from "./lib/env";
 
@@ -81,8 +83,10 @@ export function createApp(): Hono<{ Bindings: Env }> {
   // because the board token / ingest key in the path is their credential.
   app.route("/api/feedback/:token", feedbackRoutes);
   app.route("/api/ingest/:ingestKey", ingestRoutes);
-  // Bridge daemon → Worker agent notifications. Credential is the shared
-  // x-bridge-token, not a session, so it also mounts before the gate below.
+  // Bridge daemon endpoints, authenticated by their own credential rather than
+  // a session, so they mount before the gate below: /connect takes a per-machine
+  // `atb_` token (customer relay), /agent-events the shared x-bridge-token.
+  app.route("/api/bridge", bridgeConnectRoutes);
   app.route("/api/bridge", bridgeEventRoutes);
 
   // Every /api/* route requires an authenticated session (cookie or bearer).
@@ -154,6 +158,7 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/api/workspaces/:slug/search", searchRoutes);
   app.route("/api/workspaces/:slug/analytics", analyticsRoutes);
   app.route("/api/me/notes", noteRoutes);
+  app.route("/api/me/machines", machineRoutes);
   app.route("/api/me", meRoutes);
   app.route("/api/workspaces/:slug/timesheet", timesheetRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/issues/:issueId/comments", commentRoutes);

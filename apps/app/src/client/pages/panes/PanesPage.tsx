@@ -10,7 +10,7 @@ const LIVE_STATUS: Record<string, true> = { running: true, working: true, active
 
 function PaneCard({ pane }: { pane: PaneListItem }) {
   const live = pane.agent_status !== null && pane.agent_status in LIVE_STATUS;
-  const context = [pane.workspace_label, pane.cwd].filter(Boolean).join(" · ");
+  const context = [pane.machine?.name, pane.workspace_label, pane.cwd].filter(Boolean).join(" · ");
   return (
     <Link
       to={`/panes/${encodeURIComponent(pane.pane_id)}`}

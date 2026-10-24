@@ -4,7 +4,8 @@ import type { Env } from "../../lib/env";
 import * as schema from "../../db/schema";
 import { errorMiddleware } from "../../middleware/error";
 import { createTestDb, sqliteSupported, type TestDb } from "../../test/sqliteD1";
-import { agentPushMessage, bridgeEventRoutes, type AgentEvent } from "../bridgeEvents";
+import { bridgeEventRoutes } from "../bridgeEvents";
+import { agentPushMessage, type AgentEvent } from "../../services/agentPush";
 
 const TOKEN = "bridge-secret";
 const GOOD = "ExponentPushToken[good]";

@@ -1,12 +1,16 @@
 import { Hono } from "hono";
-import type { ExecutionContext } from "hono";
+import type { Context, ExecutionContext } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { eq } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import type { Env } from "../lib/env";
 import { getDb, type DbClient } from "../db/index";
 import * as schema from "../db/schema";
+import { relayStub } from "../lib/relay";
+import { prefixPanes, splitPaneId } from "../lib/relayProtocol";
+import type { RelayPane, RelayPaneList, RelayResponse } from "../lib/relayProtocol";
 import { isWorkspaceMember } from "../repositories/members";
+import * as machines from "../services/bridgeMachines";
 
 // Herdr execution-plane proxy (ATUR-2). The bridge daemon (apps/bridge) runs
 // on the dev box and owns the real terminal panes; these routes relay its JSON
@@ -113,36 +117,143 @@ export function bridgeHeaders(env: Env): Headers {
 }
 
 paneRoutes.get("/", async (c) => {
+  const db = getDb(c.env.DB);
+  const user = c.get("user");
+  const owned = await machines.listActive(db, user.sub);
   const bridge = await fetchBridgePanes(c.env);
-  if (!bridge.ok) return c.json({ error: "execution plane unreachable" }, 502);
+  // The env-configured bridge being down only fails the request when the
+  // caller has no relay machines to show instead.
+  if (!bridge.ok && owned.length === 0) {
+    return c.json({ error: "execution plane unreachable" }, 502);
+  }
+
   // Info-surface trim: only panes bound to workspaces the viewer belongs to.
   // herdr's pane.list ignores the workspace filter, so the bridge multiplies
   // panes once per workspace — dedupe by id.
-  const db = getDb(c.env.DB);
-  const user = c.get("user");
-  const links = await db
-    .select({
-      workspaceSlug: schema.workspaceLinks.workspaceSlug,
-      localPath: schema.workspaceLinks.localPath,
-    })
-    .from(schema.workspaceLinks);
-  const seen = new Set<string>();
-  const visible: BridgePane[] = [];
-  const slugCache = new Map<string, boolean>();
-  for (const pane of bridge.panes) {
-    if (seen.has(pane.pane_id)) continue;
-    seen.add(pane.pane_id);
-    const slug = pane.cwd ? matchWorkspaceSlug(links, pane.cwd) : null;
-    if (!slug) continue;
-    let member = slugCache.get(slug);
-    if (member === undefined) {
-      member = await isMemberOfSlug(db, slug, user.sub);
-      slugCache.set(slug, member);
+  const visible: unknown[] = [];
+  if (bridge.ok) {
+    const links = await db
+      .select({
+        workspaceSlug: schema.workspaceLinks.workspaceSlug,
+        localPath: schema.workspaceLinks.localPath,
+      })
+      .from(schema.workspaceLinks);
+    const seen = new Set<string>();
+    const slugCache = new Map<string, boolean>();
+    for (const pane of bridge.panes) {
+      if (seen.has(pane.pane_id)) continue;
+      seen.add(pane.pane_id);
+      const slug = pane.cwd ? matchWorkspaceSlug(links, pane.cwd) : null;
+      if (!slug) continue;
+      let member = slugCache.get(slug);
+      if (member === undefined) {
+        member = await isMemberOfSlug(db, slug, user.sub);
+        slugCache.set(slug, member);
+      }
+      if (member) visible.push(pane);
     }
-    if (member) visible.push(pane);
   }
+  visible.push(...(await fetchRelayPanes(c.env, user.sub, owned)));
   return c.json({ panes: visible });
 });
+
+// Panes of the caller's own connected machines, ids namespaced `<machine>~<pane>`.
+// Machine ownership is the whole authz: the relay DO is per user and the panes
+// are the caller's own terminals, so no workspace binding applies. A machine
+// that fails to answer is skipped, never fatal.
+async function fetchRelayPanes(env: Env, userId: string, owned: machines.BridgeMachine[]) {
+  const stub = owned.length > 0 ? relayStub(env, userId) : null;
+  if (!stub) return [];
+  let lists: RelayPaneList[];
+  try {
+    lists = await stub.listPanes();
+  } catch (err) {
+    console.error("relay pane list failed:", err);
+    return [];
+  }
+  const byId = new Map(owned.map((m) => [m.id, m]));
+  const panes: RelayPane[] = [];
+  for (const { machineId, body } of lists) {
+    const machine = byId.get(machineId);
+    if (!machine || body === null) continue;
+    try {
+      const parsed = JSON.parse(body) as { panes?: unknown };
+      panes.push(...prefixPanes({ id: machine.id, name: machine.name }, parsed.panes));
+    } catch {
+      /* malformed list from one machine: skip it */
+    }
+  }
+  return panes;
+}
+
+// WebSocket stream (attach / observe) to a pane on a customer's machine, relayed
+// through the owner's BridgeRelay DO. Frames are piped verbatim like the legacy
+// path; the DO stamps the pane_audit row when the stream ends.
+async function relayStream(
+  c: Context<{ Bindings: Env }>,
+  kind: "attach" | "observe",
+  pane: string,
+  target: { machineId: string; paneId: string },
+): Promise<Response> {
+  const user = c.get("user");
+  const db = getDb(c.env.DB);
+  if (!(await machines.findOwned(db, user.sub, target.machineId))) {
+    throw new HTTPException(403, { message: "not one of your machines" });
+  }
+  const stub = relayStub(c.env, user.sub);
+  if (!stub) return c.json({ error: "execution plane unreachable" }, 502);
+
+  // Audit before the response so the row exists even for instant disconnects
+  // (attach only: observe has no audit row, see the legacy /observe route).
+  let auditId: string | null = null;
+  if (kind === "attach") {
+    auditId = uuid();
+    try {
+      await db.insert(schema.paneAudit).values({
+        id: auditId,
+        userId: user.sub,
+        paneId: pane,
+        attachedAt: Date.now(),
+        detachedAt: null,
+      });
+    } catch (err) {
+      console.error("pane_audit insert failed:", err);
+      auditId = null;
+    }
+  }
+
+  const query = new URLSearchParams({
+    machine: target.machineId,
+    path: `/${kind}?pane=${encodeURIComponent(target.paneId)}`,
+  });
+  if (auditId) query.set("audit", auditId);
+  let upgrade: Response | null = null;
+  try {
+    upgrade = await stub.fetch(`https://relay/client?${query}`, {
+      headers: { Upgrade: "websocket" },
+    });
+  } catch {
+    /* handled below as unreachable */
+  }
+  // Rewrap: a stub's Response has immutable headers that cors would trip over.
+  if (upgrade?.status === 101 && upgrade.webSocket) {
+    return new Response(null, { status: 101, webSocket: upgrade.webSocket });
+  }
+
+  // No stream was opened (machine offline, relay down): close the audit row.
+  if (auditId) {
+    await db
+      .update(schema.paneAudit)
+      .set({ detachedAt: Date.now() })
+      .where(eq(schema.paneAudit.id, auditId))
+      .catch((err: unknown) => console.error("pane_audit detach stamp failed:", err));
+  }
+  if (!upgrade) return c.json({ error: "execution plane unreachable" }, 502);
+  return new Response(upgrade.body, {
+    status: upgrade.status,
+    headers: { "content-type": upgrade.headers.get("content-type") ?? "application/json" },
+  });
+}
 
 // Workspace slug → membership check (slug is the binding key; membership is
 // workspace-id scoped, so resolve through the workspaces table).
@@ -165,6 +276,8 @@ paneRoutes.get("/attach", async (c) => {
     throw new HTTPException(426, { message: "websocket upgrade required" });
   }
   const user = c.get("user");
+  const relayPane = splitPaneId(pane);
+  if (relayPane) return relayStream(c, "attach", pane, relayPane);
 
   // Per-pane authz (DEV-32) before any upgrade: the viewer must be a member
   // of the workspace the pane is bound to. Unbound panes are not observable.
@@ -271,23 +384,59 @@ paneRoutes.get("/attach", async (c) => {
 // as attach; the bridge saves it on the execution plane and returns the path,
 // which the client inserts into the prompt for the agent to read.
 const MAX_PASTE_BYTES = 20 * 1024 * 1024;
+// base64 inflates by a third and the frame must stay under the 16 MiB a bridge
+// accepts per WebSocket message.
+const MAX_RELAY_PASTE_BYTES = 10 * 1024 * 1024;
 
 paneRoutes.post("/paste", async (c) => {
   const pane = c.req.query("pane");
   if (!pane) throw new HTTPException(400, { message: "pane is required" });
   const user = c.get("user");
   const db = getDb(c.env.DB);
-  const slug = await paneWorkspaceSlug(db, c.env, pane);
-  if (!slug) throw new HTTPException(403, { message: "pane is not bound to an atur workspace" });
-  if (!(await isMemberOfSlug(db, slug, user.sub))) {
-    throw new HTTPException(403, { message: "not a member of the pane's workspace" });
+  const relayPane = splitPaneId(pane);
+  if (relayPane) {
+    // Machine ownership is the authz for a customer's own bridge (no workspace binding).
+    if (!(await machines.findOwned(db, user.sub, relayPane.machineId))) {
+      throw new HTTPException(403, { message: "not one of your machines" });
+    }
+  } else {
+    const slug = await paneWorkspaceSlug(db, c.env, pane);
+    if (!slug) throw new HTTPException(403, { message: "pane is not bound to an atur workspace" });
+    if (!(await isMemberOfSlug(db, slug, user.sub))) {
+      throw new HTTPException(403, { message: "not a member of the pane's workspace" });
+    }
   }
-  if (Number(c.req.header("content-length") ?? 0) > MAX_PASTE_BYTES) {
+  // The relay carries the image base64 inside one JSON frame, so it takes less.
+  const maxBytes = relayPane ? MAX_RELAY_PASTE_BYTES : MAX_PASTE_BYTES;
+  if (Number(c.req.header("content-length") ?? 0) > maxBytes) {
     return c.json({ error: "image too large" }, 413);
   }
   const image = new Uint8Array(await c.req.arrayBuffer());
   if (image.length === 0) return c.json({ error: "empty body" }, 400);
-  if (image.length > MAX_PASTE_BYTES) return c.json({ error: "image too large" }, 413);
+  if (image.length > maxBytes) return c.json({ error: "image too large" }, 413);
+
+  if (relayPane) {
+    const stub = relayStub(c.env, user.sub);
+    if (!stub) return c.json({ error: "execution plane unreachable" }, 502);
+    let relayed: RelayResponse;
+    try {
+      relayed = await stub.request(relayPane.machineId, {
+        method: "POST",
+        path: `/panes/paste?pane=${encodeURIComponent(relayPane.paneId)}`,
+        headers: { "content-type": "application/octet-stream" },
+        body: image,
+      });
+    } catch {
+      return c.json({ error: "execution plane unreachable" }, 502);
+    }
+    console.log(
+      `pane paste user=${user.sub} pane=${pane} bytes=${image.length} status=${relayed.status}`,
+    );
+    return new Response(relayed.body, {
+      status: relayed.status,
+      headers: { "content-type": relayed.headers["content-type"] ?? "application/json" },
+    });
+  }
 
   const base = bridgeBase(c.env);
   if (!base) return c.json({ error: "execution plane unreachable" }, 502);
@@ -321,6 +470,8 @@ paneRoutes.get("/observe", async (c) => {
     throw new HTTPException(426, { message: "websocket upgrade required" });
   }
   const user = c.get("user");
+  const relayPane = splitPaneId(pane);
+  if (relayPane) return relayStream(c, "observe", pane, relayPane);
 
   // Identical per-pane authz as /attach (DEV-32): the viewer must be a member
   // of the workspace the pane is bound to. Unbound panes are not observable.

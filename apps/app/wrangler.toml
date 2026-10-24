@@ -49,6 +49,19 @@ verified_address = "noreply@diatur.com"
 # notifications (503 when unset). EXPO_ACCESS_TOKEN is an optional secret: the
 # Expo push-security token, sent as a bearer when pushing to devices.
 
+# Customer-run bridges (Atur Cloud): atur-bridge on the customer's machine
+# dials out to /api/bridge/connect with a per-machine token and this Durable
+# Object (one per user, `user:<userId>`) relays pane listing, attach/observe
+# WebSockets, paste uploads and agent push events. The env-configured bridge
+# above keeps working unchanged (self-host / owner path).
+[[durable_objects.bindings]]
+name = "BRIDGE_RELAY"
+class_name = "BridgeRelay"
+
+[[migrations]]
+tag = "v1-bridge-relay"
+new_sqlite_classes = ["BridgeRelay"]
+
 [observability]
 enabled = true
 

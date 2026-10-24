@@ -23,6 +23,7 @@ const CycleDetailPage = lazy(() => import("@/pages/cycles/CycleDetailPage"));
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
 const ProfilePage = lazy(() => import("@/pages/settings/ProfilePage"));
 const BillingPage = lazy(() => import("@/pages/settings/BillingPage"));
+const MachinesPage = lazy(() => import("@/pages/settings/MachinesPage"));
 const MyIssuesPage = lazy(() => import("@/pages/issues/MyIssuesPage"));
 const NotesPage = lazy(() => import("@/pages/notes/NotesPage"));
 const PagesPage = lazy(() => import("@/pages/pages/PagesPage"));
@@ -167,6 +168,7 @@ export default function App() {
           {/* Threads OAuth redirect: one fixed URI, workspace rides in the signed state */}
           <Route path="/integrations/threads/callback" element={<ThreadsCallbackPage />} />
           <Route path="/billing" element={<BillingPage />} />
+          <Route path="/machines" element={<MachinesPage />} />
           <Route path="/panes" element={<PanesPage />} />
           <Route path="/panes/:paneId" element={<PaneViewPage />} />
           {/* Desktop sharing (noVNC) — superuser-only, gated again by the Worker */}

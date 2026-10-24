@@ -831,6 +831,29 @@ export const waitlist = sqliteTable("waitlist", {
   updatedAt: text("updated_at").notNull(),
 });
 
+// A customer's own machine running the atur-bridge, connected through the
+// BridgeRelay Durable Object (routes/bridgeConnect.ts). The machine token
+// (`atb_…`) is shown once at creation; only its SHA-256 is stored. Revoking
+// stamps revoked_at and drops the live socket; rows are kept for audit.
+export const bridgeMachines = sqliteTable(
+  "bridge_machines",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    createdAt: text("created_at").notNull(),
+    lastSeenAt: text("last_seen_at"),
+    revokedAt: text("revoked_at"),
+  },
+  (table) => [
+    uniqueIndex("uq_bridge_machines_token_hash").on(table.tokenHash),
+    index("idx_bridge_machines_user").on(table.userId),
+  ],
+);
+
 export const webhooks = sqliteTable("webhooks", {
   id: text("id").primaryKey(),
   url: text("url").notNull(),
