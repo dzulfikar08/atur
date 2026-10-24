@@ -30,6 +30,8 @@ interface NativeTerminalProps {
   sendPaste: (text: string, submit: boolean) => boolean;
   /** Ask the bridge for scrollback rows (the live stream has the visible grid only). */
   requestHistory: (lines: number) => void;
+  /** Take the keyboard back after another viewer took it; absent while disconnected. */
+  onClaimKeyboard?: () => void;
 }
 
 /**
@@ -44,6 +46,7 @@ export function NativeTerminal({
   sendInput,
   sendPaste,
   requestHistory,
+  onClaimKeyboard,
 }: NativeTerminalProps) {
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const [width, setWidth] = useState(0);
@@ -148,8 +151,16 @@ export function NativeTerminal({
         importantForAccessibility="no"
       />
 
-      {isAgent ? <PromptComposer paneId={paneId} enabled={canType} onSend={sendPrompt} /> : null}
+      {isAgent ? (
+        <PromptComposer
+          paneId={paneId}
+          enabled={canType}
+          onSend={sendPrompt}
+          onClaim={onClaimKeyboard}
+        />
+      ) : null}
       <KeyRow
+        compact={isAgent}
         enabled={canType}
         mods={mods}
         onToggleMod={(mod) => setMods((m) => ({ ...m, [mod]: !m[mod] }))}

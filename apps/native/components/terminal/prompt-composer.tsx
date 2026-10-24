@@ -14,6 +14,8 @@ interface PromptComposerProps {
   enabled: boolean;
   /** Deliver the prompt (text, then Enter); false when it could not be sent, so the draft stays. */
   onSend: (text: string) => boolean;
+  /** Present when another viewer holds the keyboard: tapping the field takes it back. */
+  onClaim?: () => void;
 }
 
 /**
@@ -23,7 +25,7 @@ interface PromptComposerProps {
  * machine and inserts its path, so the agent can open it (the web composer
  * does the same for pasted and dropped images).
  */
-export function PromptComposer({ paneId, enabled, onSend }: PromptComposerProps) {
+export function PromptComposer({ paneId, enabled, onSend, onClaim }: PromptComposerProps) {
   const { theme } = useUnistyles();
   const [text, setText] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -80,8 +82,11 @@ export function PromptComposer({ paneId, enabled, onSend }: PromptComposerProps)
           caret.current = e.nativeEvent.selection.end;
         }}
         editable={enabled}
+        onPressIn={enabled ? undefined : onClaim}
         multiline
-        placeholder={enabled ? "Message the agent…" : "Read-only"}
+        placeholder={
+          enabled ? "Message the agent…" : onClaim ? "Tap to take the keyboard" : "Read-only"
+        }
         placeholderTextColor={theme.colors.mutedForeground}
         style={styles.input}
         accessibilityLabel="Prompt"
@@ -108,16 +113,16 @@ const styles = StyleSheet.create((theme) => ({
   bar: {
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: theme.colors.hairline,
     backgroundColor: theme.colors.background,
   },
   input: {
     flex: 1,
-    minHeight: 42,
+    minHeight: 40,
     maxHeight: 120,
     paddingHorizontal: theme.spacing.md,
     paddingTop: 10,

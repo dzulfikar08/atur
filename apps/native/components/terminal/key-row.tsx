@@ -1,5 +1,5 @@
 import * as Haptics from "expo-haptics";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native-unistyles";
@@ -14,7 +14,8 @@ type KeyDef =
   | { kind: "mod"; label: string; mod: keyof Modifiers }
   | { kind: "send"; label: string; data: string; a11y?: string }
   | { kind: "paste" }
-  | { kind: "keyboard" };
+  | { kind: "keyboard" }
+  | { kind: "more" };
 
 const ROW_ONE: KeyDef[] = [
   { kind: "mod", label: "Ctrl", mod: "ctrl" },
@@ -40,8 +41,22 @@ const ROW_TWO: KeyDef[] = [
   { kind: "send", label: "~", data: "~", a11y: "Tilde" },
 ];
 
+/** Agent panes: one slim row of what an agent's TUI needs; ⋯ opens the rest. */
+const ROW_COMPACT: KeyDef[] = [
+  { kind: "send", label: "Esc", data: KEY_DATA.esc },
+  { kind: "send", label: "Tab", data: KEY_DATA.tab },
+  { kind: "send", label: "←", data: KEY_DATA.left, a11y: "Left" },
+  { kind: "send", label: "↓", data: KEY_DATA.down, a11y: "Down" },
+  { kind: "send", label: "↑", data: KEY_DATA.up, a11y: "Up" },
+  { kind: "send", label: "→", data: KEY_DATA.right, a11y: "Right" },
+  { kind: "mod", label: "Ctrl", mod: "ctrl" },
+  { kind: "more" },
+];
+
 interface KeyRowProps {
   enabled: boolean;
+  /** One slim row with a ⋯ toggle to the full two rows (agent panes). */
+  compact?: boolean;
   mods: Modifiers;
   onToggleMod: (mod: keyof Modifiers) => void;
   /** Raw key data (modifiers are applied by the owner). */
@@ -52,17 +67,19 @@ interface KeyRowProps {
 
 /**
  * Extra keys the soft keyboard lacks. Ctrl/Alt are sticky for one key. A
- * horizontal swipe anywhere across the two rows repeats ←/→ (one press per
+ * horizontal swipe anywhere across the rows repeats ←/→ (one press per
  * 16 px), so the cursor can be dragged along a command line.
  */
 export function KeyRow({
   enabled,
+  compact = false,
   mods,
   onToggleMod,
   onKey,
   onPaste,
   onToggleKeyboard,
 }: KeyRowProps) {
+  const [expanded, setExpanded] = useState(false);
   const emitted = useRef(0);
   const latest = useRef({ enabled, onKey });
   latest.current = { enabled, onKey };
@@ -123,14 +140,34 @@ export function KeyRow({
             onPress={press(onToggleKeyboard)}
           />
         );
+      case "more":
+        return (
+          <KeyButton
+            key="more"
+            label={expanded ? "×" : "⋯"}
+            a11y={expanded ? "Fewer keys" : "More keys"}
+            enabled
+            active={expanded}
+            onPress={press(() => setExpanded((e) => !e))}
+          />
+        );
     }
   };
+
+  const rows = !compact
+    ? [ROW_ONE, ROW_TWO]
+    : expanded
+      ? [ROW_COMPACT, [...ROW_ONE.filter((k) => k.kind === "mod" && k.mod === "alt"), ...ROW_TWO]]
+      : [ROW_COMPACT];
 
   return (
     <GestureDetector gesture={swipe}>
       <View style={styles.rows} accessibilityHint="Swipe sideways to move the cursor">
-        <View style={styles.row}>{ROW_ONE.map(render)}</View>
-        <View style={styles.row}>{ROW_TWO.map(render)}</View>
+        {rows.map((row, i) => (
+          <View key={i} style={styles.row}>
+            {row.map(render)}
+          </View>
+        ))}
       </View>
     </GestureDetector>
   );

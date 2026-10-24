@@ -15,7 +15,7 @@ herdr reports each agent pane's state (`idle`, `working`, `blocked`, `done`, `un
 
 ## Pane views
 
-The chip row picks the view; the choice is remembered (`atur.pane.view`, `lib/terminal-prefs.ts`). **Native is the default.**
+The header is one line: a status dot (green live, amber connecting, red gone) and the pane title, then three icon tabs on the right (terminal = Native, code = Classic, list = Transcript). The choice is remembered (`atur.pane.view`, `lib/terminal-prefs.ts`). **Native is the default.** The app takes the keyboard on every connect and reconnect; if another viewer takes it, the composer reads "Tap to take the keyboard" and a tap claims it back.
 
 | View       | What it is                                                                                                                                                                                                          |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -45,9 +45,10 @@ App → bridge: `input {data}` (what xterm.js `onData` would send; the bridge tu
 ### Input
 
 - A hidden `TextInput` owns the soft keyboard. It always holds a sentinel so Backspace has something to delete; each change is diffed against the sentinel (`diffInput`) and sent as `input` frames. Return sends `\r`.
-- **Key row** (two rows): Ctrl, Alt (sticky for one key), Esc, Tab, ← ↓ ↑ →; ⌨ (toggle keyboard), Home, End, PgUp, PgDn, Paste, `| / - ~`. Ctrl turns a letter into its control byte, Alt prefixes ESC (`lib/terminal-keys.ts`). A **horizontal swipe across the key rows repeats ←/→** (one press per 16 px); taps still press keys. Every key gives a light haptic.
+- **Key row.** Shell panes: two rows, Ctrl, Alt (sticky for one key), Esc, Tab, ← ↓ ↑ →; ⌨ (toggle keyboard), Home, End, PgUp, PgDn, Paste, `| / - ~`. Agent panes: one slim row (Esc, Tab, ← ↓ ↑ →, Ctrl, ⋯) so the chat gets the room; ⋯ adds a second row with Alt and the rest. Ctrl turns a letter into its control byte, Alt prefixes ESC (`lib/terminal-keys.ts`). A **horizontal swipe across the key rows repeats ←/→** (one press per 16 px); taps still press keys. Every key gives a light haptic.
 - **Paste** sends clipboard text; multi-line text asks first and goes as one `paste` frame, never as typed Enters.
-- **Prompt composer** (agent panes only, i.e. when the pane list reports an `agent`): a multiline draft with a mic button and Send. Send types the text and presses Enter: a single line is `input` with a trailing `\r`; multi-line text is a `paste` frame with `submit`. The draft is kept if the socket was not open. Typing needs the keyboard (Take keyboard); the composer is disabled while Read-only.
+- **Prompt composer** (agent panes only, i.e. when the pane list reports an `agent`): a multiline draft with a mic button and Send. Send types the text and presses Enter: a single line is `input` with a trailing `\r`; multi-line text is a `paste` frame with `submit`. The draft is kept if the socket was not open.
+- **Keyboard.** `KeyboardFrame` pads its bottom by exactly the part of it the soft keyboard covers, measured in window coordinates (`measureInWindow` against the keyboard's `screenY`). Android stopped resizing the window under edge-to-edge, and `KeyboardAvoidingView` measures relative to its parent, so below the header it lifted too little.
 - **Images in prompts** (Termius-style). The composer's image button takes an image from the phone clipboard and uploads it to `POST /api/panes/paste?pane=<id>` (same per-pane workspace check as attach, at most 20 MiB). The bridge (`apps/bridge/src/pastes.ts`) checks the magic bytes (PNG, JPEG, GIF, WebP), saves it as `~/.cache/atur/pastes/paste-<time>-<random>.<ext>` (directory 0700, file 0600, name chosen by the bridge, files older than 7 days swept on each save; `ATUR_PASTE_DIR` overrides) and returns the path, which goes into the draft at the caret. The agent reads the image from that path.
 
 ## Web pane view

@@ -1,17 +1,18 @@
 import "@/unistyles";
+import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StyleSheet } from "react-native-unistyles";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { KeyboardFrame } from "@/components/keyboard-frame";
 import { ClassicTerminal } from "@/components/terminal/classic-terminal";
 import { GoneOverlay } from "@/components/terminal/gone-overlay";
 import { NativeTerminal } from "@/components/terminal/native-terminal";
 import { Transcript } from "@/components/terminal/transcript";
-import { Chip, Text } from "@/components/ui";
+import { Text, type IconName } from "@/components/ui";
 import { api } from "@/lib/api";
 import { paneAttention, paneTitle } from "@/lib/pane-meta";
 import { acknowledgePane } from "@/lib/pane-seen";
@@ -20,21 +21,22 @@ import { loadPaneView, savePaneView, type PaneView } from "@/lib/terminal-prefs"
 import { TerminalScreen } from "@/lib/terminal-screen";
 
 const STATUS_LABEL: Record<PaneAttachStatus, string> = {
-  connecting: "Connecting…",
+  connecting: "Connecting",
   connected: "Live",
-  reconnecting: "Reconnecting…",
+  reconnecting: "Reconnecting",
   unreachable: "Unreachable",
   exited: "Exited",
 };
 
-const VIEWS: { value: PaneView; label: string }[] = [
-  { value: "native", label: "Native" },
-  { value: "classic", label: "Classic" },
-  { value: "transcript", label: "Transcript" },
+const VIEWS: { value: PaneView; label: string; icon: IconName }[] = [
+  { value: "native", label: "Native", icon: "terminal-outline" },
+  { value: "classic", label: "Classic", icon: "code-slash-outline" },
+  { value: "transcript", label: "Transcript", icon: "list-outline" },
 ];
 
 export default function PaneView() {
   const insets = useSafeAreaInsets();
+  const { theme } = useUnistyles();
   const { paneId } = useLocalSearchParams<{ paneId: string }>();
   const panes = useQuery({ queryKey: ["panes"], queryFn: api.panes });
   const pane = panes.data?.find((p) => p.pane_id === paneId);
@@ -72,6 +74,8 @@ export default function PaneView() {
       // hello carries the real pane geometry — the grid is authoritative.
       onHello: ({ cols, rows, keyboard }) => {
         setOwnsKeyboard(keyboard);
+        // Opening a pane means using it: take the keyboard on every (re)connect.
+        if (!keyboard) claimKeyboard();
         screen.hello(cols, rows);
       },
       onSnapshot: (ansi) => {
@@ -94,44 +98,49 @@ export default function PaneView() {
   return (
     <View style={[styles.screen, { paddingBottom: insets.bottom }]}>
       <Stack.Screen
-        options={{ title: pane ? paneTitle(pane) : paneId, headerBackTitle: "Panes" }}
+        options={{
+          headerBackTitle: "Panes",
+          headerTitle: () => (
+            <View style={styles.titleRow} accessibilityRole="header">
+              <View
+                style={[
+                  styles.dot,
+                  status === "connected" ? styles.dotLive : gone ? styles.dotBad : styles.dotWait,
+                ]}
+                accessibilityLabel={STATUS_LABEL[status]}
+              />
+              <Text style={styles.title} numberOfLines={1}>
+                {pane ? paneTitle(pane) : paneId}
+              </Text>
+            </View>
+          ),
+          headerRight: () => (
+            <View style={styles.views} accessibilityRole="tablist">
+              {VIEWS.map((v) => {
+                const selected = view === v.value;
+                return (
+                  <Pressable
+                    key={v.value}
+                    onPress={() => chooseView(v.value)}
+                    accessibilityRole="tab"
+                    accessibilityLabel={`${v.label} view`}
+                    accessibilityState={{ selected }}
+                    hitSlop={4}
+                    style={[styles.viewBtn, selected && styles.viewBtnOn]}
+                  >
+                    <Ionicons
+                      name={v.icon}
+                      size={17}
+                      color={selected ? theme.colors.foreground : theme.colors.mutedForeground}
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
+          ),
+        }}
       />
       <KeyboardFrame variant="fill">
-        <View style={styles.toolbar}>
-          {VIEWS.map((v) => (
-            <Chip
-              key={v.value}
-              label={v.label}
-              selected={view === v.value}
-              onPress={() => chooseView(v.value)}
-            />
-          ))}
-          <View style={styles.flex} />
-          <Text
-            style={[
-              styles.status,
-              status === "connected" && styles.statusLive,
-              gone && styles.statusBad,
-            ]}
-          >
-            {STATUS_LABEL[status]}
-          </Text>
-        </View>
-
-        <View style={styles.keyboardBar}>
-          <Text style={styles.muted}>{ownsKeyboard ? "Keyboard: yours" : "Read-only"}</Text>
-          {!ownsKeyboard && status === "connected" ? (
-            <Pressable
-              onPress={claimKeyboard}
-              accessibilityRole="button"
-              accessibilityLabel="Take keyboard"
-              style={styles.take}
-            >
-              <Text style={styles.takeText}>Take keyboard</Text>
-            </Pressable>
-          ) : null}
-        </View>
-
         {bridgeError ? <Text style={styles.errorText}>Bridge error: {bridgeError}</Text> : null}
 
         <View style={styles.flex}>
@@ -144,6 +153,7 @@ export default function PaneView() {
               sendInput={sendInput}
               sendPaste={sendPaste}
               requestHistory={requestHistory}
+              onClaimKeyboard={status === "connected" ? claimKeyboard : undefined}
             />
           ) : null}
           {view === "classic" ? (
@@ -162,37 +172,27 @@ export default function PaneView() {
 const styles = StyleSheet.create((theme) => ({
   screen: { flex: 1, backgroundColor: theme.colors.background },
   flex: { flex: 1 },
-  toolbar: {
+  titleRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.sm, maxWidth: 210 },
+  title: { fontSize: theme.fontSize.base, fontFamily: theme.fonts.bold, flexShrink: 1 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  dotLive: { backgroundColor: theme.colors.completed },
+  dotWait: { backgroundColor: theme.colors.started },
+  dotBad: { backgroundColor: theme.colors.destructive },
+  views: {
     flexDirection: "row",
+    gap: 2,
+    padding: 2,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.muted,
+  },
+  viewBtn: {
+    width: 34,
+    height: 30,
     alignItems: "center",
-    gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm,
+    justifyContent: "center",
+    borderRadius: theme.radius.sm,
   },
-  status: {
-    fontSize: theme.fontSize.xs,
-    fontFamily: theme.fonts.mono,
-    color: theme.colors.mutedForeground,
-  },
-  statusLive: { color: theme.colors.completed },
-  statusBad: { color: theme.colors.destructive },
-  keyboardBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.sm,
-  },
-  take: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 5,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    borderColor: theme.colors.hairline,
-    backgroundColor: theme.colors.card,
-  },
-  takeText: { fontSize: theme.fontSize.sm, fontFamily: theme.fonts.bold },
-  muted: { fontSize: theme.fontSize.sm, color: theme.colors.mutedForeground },
+  viewBtnOn: { backgroundColor: theme.colors.card },
   errorText: {
     fontSize: theme.fontSize.sm,
     color: theme.colors.destructive,
