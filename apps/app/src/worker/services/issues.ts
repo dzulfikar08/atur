@@ -543,7 +543,6 @@ export async function enrichIssues<T extends EnrichableIssue>(db: DbClient, issu
 
   const issueIds = issueList.map((i) => i.id);
   const stateIds = [...new Set(issueList.map((i) => i.stateId).filter(Boolean) as string[])];
-  const workspaceIds = [...new Set(issueList.map((i) => i.workspaceId))];
 
   // Independent lookups: run every chunked query concurrently.
   const stateQueries = chunk(stateIds, ENRICH_CHUNK).map((ids) =>
@@ -573,24 +572,24 @@ export async function enrichIssues<T extends EnrichableIssue>(db: DbClient, issu
         workspaceId: schema.workspaceMembers.workspaceId,
       })
       .from(schema.issueAssignees)
+      .innerJoin(schema.issues, eq(schema.issueAssignees.issueId, schema.issues.id))
       .innerJoin(schema.users, eq(schema.issueAssignees.assigneeId, schema.users.id))
       // Belt-and-braces (DEV-21): an assignee only renders when they are an
-      // active member of the OWNING issue's workspace. The member row carries
-      // its workspace; rows for other workspaces drop out below.
+      // active member of the OWNING issue's workspace. Joined on the issue's
+      // own workspace (not an IN list of every workspace): with many
+      // workspaces the list plus a chunk of issue ids exceeded D1's 100
+      // bound-parameter limit and 500'd cross-workspace views like Today.
       .innerJoin(
         schema.workspaceMembers,
         and(
           eq(schema.workspaceMembers.memberId, schema.users.id),
+          eq(schema.workspaceMembers.workspaceId, schema.issues.workspaceId),
           eq(schema.workspaceMembers.isActive, 1),
           isNull(schema.workspaceMembers.deletedAt),
         ),
       )
       .where(
-        and(
-          inArray(schema.issueAssignees.issueId, ids),
-          isNull(schema.issueAssignees.deletedAt),
-          inArray(schema.workspaceMembers.workspaceId, workspaceIds),
-        ),
+        and(inArray(schema.issueAssignees.issueId, ids), isNull(schema.issueAssignees.deletedAt)),
       ),
   );
 
