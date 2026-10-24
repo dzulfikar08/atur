@@ -2,12 +2,13 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { Directory, File, Paths } from "expo-file-system";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { MicButton } from "@/components/mic-button";
-import { ErrorNote, IconButton, Input } from "@/components/ui";
+import { ErrorNote, IconButton, Input, OptionSheet } from "@/components/ui";
 import { api } from "@/lib/api";
 import { SERVER_URL } from "@/lib/config";
 import { textToHtml } from "@/lib/format";
@@ -44,39 +45,79 @@ export function CommentComposer({
   const [text, setText] = useState("");
   const [images, setImages] = useState<Attached[]>([]);
   const [attaching, setAttaching] = useState(false);
+  const [choosing, setChoosing] = useState(false);
 
-  const attachFromClipboard = async () => {
-    if (attaching) return;
-    const image = (await Clipboard.hasImageAsync().catch(() => false))
-      ? await Clipboard.getImageAsync({ format: "png" }).catch(() => null)
-      : null;
-    const base64 = image?.data.slice(image.data.indexOf(",") + 1);
-    if (!base64) {
-      Alert.alert(
-        "No image to attach",
-        "Copy a screenshot or photo first, then tap the image button.",
-      );
-      return;
-    }
+  /** Upload local files and add them as thumbnails; each failure is reported once. */
+  const upload = async (files: { uri: string; name: string; type: string }[]) => {
     setAttaching(true);
     try {
-      const dir = new Directory(Paths.cache, "comment-images");
-      dir.create({ intermediates: true, idempotent: true });
-      const file = new File(dir, `image-${Date.now()}.png`);
-      file.create();
-      file.write(base64, { encoding: "base64" });
-      const uploaded = await api.uploadAsset({
-        uri: file.uri,
-        name: "image.png",
-        type: "image/png",
-      });
-      setImages((list) => [...list, { url: uploaded.url, preview: file.uri }]);
+      for (const file of files) {
+        const uploaded = await api.uploadAsset(file);
+        setImages((list) => [...list, { url: uploaded.url, preview: file.uri }]);
+      }
       void Haptics.selectionAsync().catch(() => {});
     } catch (e) {
       Alert.alert("Couldn't attach the image", e instanceof Error ? e.message : undefined);
     } finally {
       setAttaching(false);
     }
+  };
+
+  const fromClipboard = async () => {
+    const image = (await Clipboard.hasImageAsync().catch(() => false))
+      ? await Clipboard.getImageAsync({ format: "png" }).catch(() => null)
+      : null;
+    const base64 = image?.data.slice(image.data.indexOf(",") + 1);
+    if (!base64) {
+      Alert.alert("No image to paste", "Copy a screenshot or photo first.");
+      return;
+    }
+    const dir = new Directory(Paths.cache, "comment-images");
+    dir.create({ intermediates: true, idempotent: true });
+    const file = new File(dir, `image-${Date.now()}.png`);
+    file.create();
+    file.write(base64, { encoding: "base64" });
+    await upload([{ uri: file.uri, name: "image.png", type: "image/png" }]);
+  };
+
+  const fromPicker = async (source: "library" | "camera") => {
+    const permission =
+      source === "camera"
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        source === "camera" ? "Camera access is off" : "Photo access is off",
+        "Turn it on for Atur in Settings to attach images.",
+      );
+      return;
+    }
+    const options: ImagePicker.ImagePickerOptions = {
+      mediaTypes: ["images"],
+      quality: 0.85,
+      allowsMultipleSelection: source === "library",
+      selectionLimit: 6,
+    };
+    const result =
+      source === "camera"
+        ? await ImagePicker.launchCameraAsync(options)
+        : await ImagePicker.launchImageLibraryAsync(options);
+    if (result.canceled) return;
+    await upload(
+      result.assets.map((a, i) => ({
+        uri: a.uri,
+        name: a.fileName ?? `photo-${Date.now()}-${i}.jpg`,
+        type: a.mimeType ?? "image/jpeg",
+      })),
+    );
+  };
+
+  const choose = (key: string) => {
+    // Let the sheet finish closing first: iOS drops a picker presented over a dismissing modal.
+    setTimeout(() => {
+      if (key === "clipboard") void fromClipboard();
+      else void fromPicker(key === "camera" ? "camera" : "library");
+    }, 350);
   };
 
   const canSend = !sending && !attaching && (text.trim().length > 0 || images.length > 0);
@@ -133,11 +174,7 @@ export function CommentComposer({
             <ActivityIndicator color={theme.colors.foreground} />
           </View>
         ) : (
-          <IconButton
-            icon="image-outline"
-            label="Attach image from clipboard"
-            onPress={() => void attachFromClipboard()}
-          />
+          <IconButton icon="image-outline" label="Attach image" onPress={() => setChoosing(true)} />
         )}
         <MicButton value={text} onChangeText={setText} />
         <IconButton
@@ -151,6 +188,17 @@ export function CommentComposer({
           <ErrorNote error={error} />
         </View>
       ) : null}
+      <OptionSheet
+        visible={choosing}
+        title="Attach image"
+        onClose={() => setChoosing(false)}
+        onSelect={choose}
+        options={[
+          { key: "library", label: "Photo library" },
+          { key: "camera", label: "Take photo" },
+          { key: "clipboard", label: "Paste from clipboard" },
+        ]}
+      />
     </View>
   );
 }

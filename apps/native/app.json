@@ -2,7 +2,7 @@
   "expo": {
     "name": "Atur",
     "slug": "atur",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "atur",
@@ -68,6 +68,14 @@
           "microphonePermission": "Atur uses the microphone only while you dictate into a text field. Audio is turned into text on your device and is never recorded or sent to Atur.",
           "speechRecognitionPermission": "Atur uses speech recognition to turn what you say into text in comments, issues and feedback. It runs on your device when your phone supports it.",
           "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Atur opens your photo library only when you choose an image to attach to a comment.",
+          "cameraPermission": "Atur uses the camera only when you take a photo to attach to a comment.",
+          "microphonePermission": false
         }
       ],
       [
