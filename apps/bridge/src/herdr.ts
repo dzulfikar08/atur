@@ -13,8 +13,9 @@
  * polls `pane.read` (see Watcher in hub.ts).
  */
 import net from "node:net";
+import { herdrSocketPath } from "./backend";
 
-const SOCKET_PATH = process.env.HERDR_SOCKET ?? `${process.env.HOME}/.config/herdr/herdr.sock`;
+const SOCKET_PATH = herdrSocketPath();
 
 let nextId = 0;
 

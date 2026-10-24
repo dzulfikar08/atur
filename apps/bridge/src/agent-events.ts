@@ -7,9 +7,9 @@
  * testable; AgentEventWatcher owns polling and delivery.
  */
 import { open } from "node:fs/promises";
-import { rpc } from "./herdr";
+import type { AgentStatus, PaneBackend, PaneSummary } from "./backend";
 
-export type AgentStatus = "idle" | "working" | "blocked" | "done" | "unknown";
+export type { AgentStatus } from "./backend";
 export type EventStatus = "done" | "blocked";
 
 export interface TrackedPane {
@@ -199,16 +199,6 @@ export async function readSessionDetail(path: string, status: EventStatus): Prom
   }
 }
 
-interface HerdrPane {
-  pane_id: string;
-  cwd?: string | null;
-  agent?: string | null;
-  agent_status?: AgentStatus;
-  agent_session?: { kind?: string; value?: string } | null;
-  terminal_title?: string | null;
-  terminal_title_stripped?: string | null;
-}
-
 export class AgentEventWatcher {
   private readonly tracker: AgentStateTracker;
   private readonly pollMs: number;
@@ -218,6 +208,7 @@ export class AgentEventWatcher {
 
   constructor(
     private readonly config: AgentEventsConfig,
+    private readonly backend: PaneBackend,
     opts: { pollMs?: number; settleMs?: number } = {},
   ) {
     this.tracker = new AgentStateTracker({ settleMs: opts.settleMs });
@@ -238,25 +229,24 @@ export class AgentEventWatcher {
     if (this.inFlight) return;
     this.inFlight = true;
     try {
-      let result: { panes?: HerdrPane[] };
+      let panes: PaneSummary[];
       try {
-        result = await rpc<{ panes?: HerdrPane[] }>("pane.list", {});
+        panes = await this.backend.pollPanes();
         this.pollFailing = false;
       } catch (e) {
-        if (!this.pollFailing) console.error("agent-events: pane.list failed:", e);
+        if (!this.pollFailing) console.error("agent-events: pane list failed:", e);
         this.pollFailing = true;
         return;
       }
       const byId = new Map<string, TrackedPane>();
-      for (const p of result.panes ?? []) {
-        const session = p.agent_session;
-        byId.set(p.pane_id, {
-          pane_id: p.pane_id,
-          agent: p.agent ?? null,
-          agent_status: p.agent_status ?? "unknown",
-          cwd: p.cwd ?? null,
-          title: cleanAgentTitle(p.terminal_title_stripped ?? p.terminal_title ?? null),
-          session_path: session?.kind === "path" && session.value ? session.value : null,
+      for (const p of panes) {
+        byId.set(p.id, {
+          pane_id: p.id,
+          agent: p.agent,
+          agent_status: p.agentStatus ?? "unknown",
+          cwd: p.cwd,
+          title: cleanAgentTitle(p.title),
+          session_path: p.agentSessionPath,
         });
       }
       for (const t of this.tracker.observe([...byId.values()], Date.now())) {

@@ -10,8 +10,8 @@
  *                    {type:"ping"}
  */
 import type { ServerWebSocket } from "bun";
-import { HerdrError, rpc } from "./herdr";
-import { clampGrid, PaneSizer } from "./sizer";
+import { PaneGoneError, type PaneBackend, type PaneSummary } from "./backend";
+import { clampGrid } from "./sizer";
 
 export interface BridgeMeta {
   paneId: string;
@@ -23,33 +23,42 @@ export interface BridgeMeta {
 
 type Ws = ServerWebSocket<BridgeMeta>;
 
-interface PaneInfo {
+export interface PaneListItem {
   pane_id: string;
   workspace_id: string;
+  workspace_label: string;
   tab_id: string;
-  cwd?: string | null;
-  agent?: string | null;
-  agent_status?: string | null;
-  terminal_title?: string | null;
-  terminal_title_stripped?: string | null;
+  cwd: string | null;
+  agent: string | null;
+  agent_status: string | null;
+  title: string | null;
   revision: number;
 }
 
-interface PaneRect {
-  pane_id: string;
-  rect: { width: number; height: number };
+export interface PaneListResponse {
+  panes: PaneListItem[];
 }
 
-interface PaneReadPayload {
-  read: { pane_id: string; text: string; revision: number; truncated: boolean };
+function listItem(pane: PaneSummary): PaneListItem {
+  return {
+    pane_id: pane.id,
+    workspace_id: pane.workspaceId,
+    workspace_label: pane.workspaceLabel,
+    tab_id: pane.tabId,
+    cwd: pane.cwd,
+    agent: pane.agent,
+    agent_status: pane.agentStatus,
+    title: pane.title,
+    revision: pane.revision,
+  };
 }
 
-/** Live mirroring polls `pane.read`. Protocol 20 (herdr 0.8.2) publishes no
- *  output events for plain shell panes — `pane.updated` covers agent state
- *  only, and `pane.output_matched` fires once at subscribe time — so polling
- *  with per-row screen diffing is the mechanism. Cadence is adaptive: after
- *  a change the watcher polls fast for a burst (spinner animation), then
- *  settles back to the idle rate. */
+/** Live mirroring polls the visible screen. herdr protocol 20 (0.8.2) publishes no
+ *  output events for plain shell panes (`pane.updated` covers agent state
+ *  only, and `pane.output_matched` fires once at subscribe time) and tmux has
+ *  none at all, so polling with per-row screen diffing is the mechanism.
+ *  Cadence is adaptive: after a change the watcher polls fast for a burst
+ *  (spinner animation), then settles back to the idle rate. */
 const IDLE_POLL_MS = 400;
 const FAST_POLL_MS = 100;
 const ACTIVITY_BURST_MS = 1_500;
@@ -78,6 +87,7 @@ class Watcher {
 
   constructor(
     readonly paneId: string,
+    private readonly backend: PaneBackend,
     private readonly onIdle: (watcher: Watcher) => void,
   ) {
     this.scheduleNext();
@@ -141,12 +151,10 @@ class Watcher {
    *  then an immediate snapshot. */
   async greet(ws: Ws): Promise<void> {
     try {
-      const { pane } = await rpc<{ pane: PaneInfo }>("pane.get", {
-        pane_id: this.paneId,
-      });
+      const pane = await this.backend.getPane(this.paneId);
       let cols = 120;
       let rows = 32;
-      const rect = await this.readGeometry();
+      const rect = await this.backend.geometry(this.paneId);
       if (rect) {
         cols = rect.cols;
         rows = rect.rows;
@@ -155,22 +163,22 @@ class Watcher {
       ws.send(
         JSON.stringify({
           type: "hello",
-          pane: { ...pane, cols, rows },
+          pane: { ...(pane.raw ?? listItem(pane)), cols, rows },
           keyboard: this.hasKeyboard(ws),
         }),
       );
       // Initial snapshot goes straight to the newcomer: a broadcast pump
       // would filter them out (not yet "joined") and skip if the screen
       // content hasn't changed since the last watcher read.
-      const res = await this.readScreen();
-      this.lastText = res.read.text;
-      this.lastLines = res.read.text.split("\r\n");
-      this.lastRevision = res.read.revision;
+      const res = await this.backend.readVisible(this.paneId);
+      this.lastText = res.text;
+      this.lastLines = res.text.split("\r\n");
+      this.lastRevision = res.revision;
       ws.send(
         JSON.stringify({
           type: "snapshot",
-          revision: res.read.revision,
-          ansi: res.read.text,
+          revision: res.revision,
+          ansi: res.text,
         }),
       );
     } catch (e) {
@@ -184,27 +192,6 @@ class Watcher {
     }
   }
 
-  private readScreen(): Promise<PaneReadPayload> {
-    return rpc<PaneReadPayload>("pane.read", {
-      pane_id: this.paneId,
-      source: "visible",
-      format: "ansi",
-      strip_ansi: false,
-    });
-  }
-
-  private async readGeometry(): Promise<{ cols: number; rows: number } | null> {
-    try {
-      const { layout } = await rpc<{ layout: { panes: PaneRect[] } }>("pane.layout", {
-        pane_id: this.paneId,
-      });
-      const rect = layout.panes.find((p) => p.pane_id === this.paneId)?.rect;
-      return rect ? { cols: rect.width, rows: rect.height } : null;
-    } catch {
-      return null; // geometry unavailable — callers keep what they have
-    }
-  }
-
   /**
    * A resize (another client became active, or the phone sizer attached) keeps
    * the row count when only the width changes, so diffs alone never tell the
@@ -214,7 +201,7 @@ class Watcher {
     const now = Date.now();
     if (now - this.geometryCheckedAt < 1000) return;
     this.geometryCheckedAt = now;
-    const next = await this.readGeometry();
+    const next = await this.backend.geometry(this.paneId);
     if (!next) return;
     const prev = this.geometry;
     this.geometry = next;
@@ -261,25 +248,24 @@ class Watcher {
     if (this.isEmpty) return;
     this.pumping = true;
     try {
-      const res = await this.readScreen();
+      const res = await this.backend.readVisible(this.paneId);
       await this.checkGeometry();
       // herdr's pane revision has proven unreliable across pane kinds — the
       // screen text is the source of truth for change detection.
-      if (res.read.text === this.lastText) return;
-      const frame = this.buildFrame(res.read.text, res.read.revision);
-      this.lastText = res.read.text;
-      this.lastLines = res.read.text.split("\r\n");
-      this.lastRevision = res.read.revision;
+      if (res.text === this.lastText) return;
+      const frame = this.buildFrame(res.text, res.revision);
+      this.lastText = res.text;
+      this.lastLines = res.text.split("\r\n");
+      this.lastRevision = res.revision;
       if (frame !== "") {
         this.broadcast(frame);
         this.fastUntil = Date.now() + ACTIVITY_BURST_MS;
       }
     } catch (e) {
       // Only a missing pane is terminal (agent exited, tab closed). Transient
-      // herdr hiccups (restart, socket timeout) must not kill the watcher and
+      // backend hiccups (restart, socket timeout) must not kill the watcher and
       // flag live panes as exited — the next tick retries.
-      const gone = e instanceof HerdrError && /not_found|no such/i.test(e.code + " " + e.message);
-      if (!gone) {
+      if (!(e instanceof PaneGoneError)) {
         console.error(`pane.read ${this.paneId} failed (transient, will retry):`, e);
         return;
       }
@@ -429,30 +415,15 @@ export function pasteSegments(text: string, submit: boolean): InputSegment[] {
   return segments;
 }
 
-export interface PaneListItem {
-  pane_id: string;
-  workspace_id: string;
-  workspace_label: string;
-  tab_id: string;
-  cwd: string | null;
-  agent: string | null;
-  agent_status: string | null;
-  title: string | null;
-  revision: number;
-}
-
-export interface PaneListResponse {
-  panes: PaneListItem[];
-}
-
 export class PaneHub {
   private watchers = new Map<string, Watcher>();
   private clients = new Map<Ws, BridgeMeta>();
-  /** Per-connection FIFO: every herdr RPC opens its own unix connection, so
-   *  concurrent input frames would race and scramble keystroke order. */
+  /** Per-connection FIFO: herdr opens one unix connection per RPC and tmux one
+   *  process per command, so concurrent input frames would race and scramble
+   *  keystroke order. */
   private inputQueues = new Map<Ws, Promise<void>>();
-  /** Lays panes out at the keyboard owner's phone size (see sizer.ts). */
-  private readonly sizer = new PaneSizer();
+
+  constructor(private readonly backend: PaneBackend) {}
 
   start(): void {
     // No global state needed: watchers own their poll intervals.
@@ -461,35 +432,11 @@ export class PaneHub {
   stop(): void {
     for (const watcher of this.watchers.values()) watcher.dispose();
     this.watchers.clear();
-    this.sizer.stop();
+    this.backend.stop();
   }
 
   async listPanes(): Promise<PaneListResponse> {
-    const { workspaces } = await rpc<{
-      workspaces: { workspace_id: string; label: string }[];
-    }>("workspace.list");
-    const perWorkspace = await Promise.all(
-      workspaces.map(async (workspace): Promise<PaneListItem[]> => {
-        const res = await rpc<{ panes: PaneInfo[] }>("pane.list", {
-          workspace: workspace.workspace_id,
-        });
-        return res.panes.map((pane): PaneListItem => {
-          const title = pane.terminal_title_stripped ?? pane.terminal_title ?? null;
-          return {
-            pane_id: pane.pane_id,
-            workspace_id: pane.workspace_id,
-            workspace_label: workspace.label,
-            tab_id: pane.tab_id,
-            cwd: pane.cwd ?? null,
-            agent: pane.agent ?? null,
-            agent_status: pane.agent_status ?? null,
-            title,
-            revision: pane.revision,
-          };
-        });
-      }),
-    );
-    return { panes: perWorkspace.flat() };
+    return { panes: (await this.backend.listPanes()).map(listItem) };
   }
 
   /** Synchronous registration in the websocket open handler, before any
@@ -502,14 +449,14 @@ export class PaneHub {
   async handleUpgrade(ws: Ws): Promise<boolean> {
     const paneId = ws.data.paneId;
     try {
-      await rpc("pane.get", { pane_id: paneId }, 4000);
+      await this.backend.getPane(paneId, 4000);
     } catch (e) {
       console.error(`pane.get ${paneId} failed:`, e);
       return false;
     }
     let watcher = this.watchers.get(paneId);
     if (!watcher) {
-      watcher = new Watcher(paneId, (idle) => {
+      watcher = new Watcher(paneId, this.backend, (idle) => {
         if (idle.isEmpty) {
           idle.dispose();
           this.watchers.delete(idle.paneId);
@@ -556,7 +503,13 @@ export class PaneHub {
     if (msg.type === "resize") {
       // Only the keyboard owner sizes panes, so two viewers never fight over it.
       const size = clampGrid(msg.cols, msg.rows);
-      if (size && this.watchers.get(client.paneId)?.hasKeyboard(ws)) this.sizer.request(ws, size);
+      if (size && this.watchers.get(client.paneId)?.hasKeyboard(ws)) {
+        await this.backend.resize(ws, client.paneId, size).catch((e: unknown) => {
+          console.error(`resize ${client.paneId} failed:`, e);
+        });
+        // The viewer may have left while the backend looked the pane up.
+        if (!this.clients.has(ws)) this.backend.release(ws);
+      }
       return;
     }
     if (msg.type === "history") {
@@ -564,14 +517,7 @@ export class PaneHub {
       // including host scrollback (the live stream carries the visible grid only).
       const lines = Math.min(Math.max(Math.trunc(Number(msg.lines)) || 0, 1), MAX_HISTORY_LINES);
       try {
-        const res = await rpc<PaneReadPayload>("pane.read", {
-          pane_id: client.paneId,
-          source: "recent",
-          lines,
-          format: "ansi",
-          strip_ansi: false,
-        });
-        const rows = res.read.text.split("\n").map((row) => row.replace(/\r$/, ""));
+        const rows = await this.backend.readHistory(client.paneId, lines);
         ws.send(JSON.stringify({ type: "history", rows }));
       } catch (e) {
         ws.send(
@@ -606,7 +552,11 @@ export class PaneHub {
       const next = prev
         .then(async () => {
           for (const segment of segments) {
-            await rpc("pane.send_input", { pane_id: client.paneId, ...segment });
+            if (segment.text !== undefined) {
+              await this.backend.sendText(client.paneId, segment.text);
+            } else if (segment.keys) {
+              await this.backend.sendKeys(client.paneId, segment.keys);
+            }
           }
         })
         .catch((e: unknown) => {
@@ -632,7 +582,7 @@ export class PaneHub {
     this.clients.delete(ws);
     this.inputQueues.delete(ws);
     if (client) this.watchers.get(client.paneId)?.detach(ws);
-    this.sizer.drop(ws);
+    this.backend.release(ws);
   }
 
   /** Main repository for a pane's cwd, resolving through git worktrees so a
@@ -641,10 +591,7 @@ export class PaneHub {
   private repoCache = new Map<string, string | null>();
 
   async mainRepoPath(paneId: string): Promise<string | null> {
-    const { pane } = await rpc<{ pane: { cwd?: string | null } }>("pane.get", {
-      pane_id: paneId,
-    });
-    const cwd = pane.cwd;
+    const { cwd } = await this.backend.getPane(paneId);
     if (!cwd) return null;
     const cached = this.repoCache.get(cwd);
     if (cached !== undefined) return cached;

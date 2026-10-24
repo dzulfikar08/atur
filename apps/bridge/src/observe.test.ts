@@ -63,6 +63,7 @@ mock.module("./herdr", () => ({
   },
 }));
 
+import { HerdrBackend } from "./backend-herdr";
 import { ObserveHub, SessionParser } from "./observe";
 import type { ObserveClient } from "./observe";
 
@@ -137,7 +138,7 @@ function frames(sent: string[]): Record<string, unknown>[] {
 }
 
 const parser = new SessionParser();
-const observeHub = new ObserveHub();
+const observeHub = new ObserveHub(new HerdrBackend());
 
 afterEach(() => {
   paneText.clear();
@@ -449,6 +450,8 @@ describe("observe websocket surface", () => {
     probe.stop(true);
     process.env.BRIDGE_PORT = String(port);
     process.env.BRIDGE_TOKEN = TOKEN;
+    // herdr is stubbed above; auto-detection would otherwise pick tmux here.
+    process.env.BRIDGE_BACKEND = "herdr";
     // Dynamic import on purpose: main.ts reads BRIDGE_PORT/TOKEN at module
     // evaluation and binds the server there — a static import would evaluate
     // it before the test picked the port and token.

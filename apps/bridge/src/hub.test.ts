@@ -32,6 +32,7 @@ mock.module("./herdr", () => ({
   },
 }));
 
+import { HerdrBackend } from "./backend-herdr";
 import { PaneHub, translateInput } from "./hub";
 
 interface FakeWs {
@@ -66,7 +67,7 @@ async function attach(paneId: string): Promise<TestWs> {
   return ws;
 }
 
-const hub = new PaneHub();
+const hub = new PaneHub(new HerdrBackend());
 
 afterEach(() => {
   rpcCalls.length = 0;

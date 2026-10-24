@@ -41,13 +41,32 @@ function clientEnv(): Record<string, string> {
   return env;
 }
 
-export class PaneSizer {
+export interface SizeActions {
+  /** Lay out at `size` (called after the debounce; repeated per request). */
+  apply(size: GridSize): void;
+  /** Give the size back (called once nobody holds one for the grace period, and on stop). */
+  restore(): void;
+}
+
+export interface SizeTiming {
+  debounceMs: number;
+  graceMs: number;
+}
+
+/**
+ * Holder bookkeeping shared by every backend: phone viewers (keyed by socket)
+ * ask for a size, requests are debounced into one `apply`, and the size is
+ * given back `graceMs` after the last holder leaves.
+ */
+export class SizeHolders {
   private holders = new Map<unknown, GridSize>();
-  private proc: Subprocess | null = null;
   private debounce: ReturnType<typeof setTimeout> | undefined;
   private release: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(private readonly command: string[] = ["herdr"]) {}
+  constructor(
+    private readonly actions: SizeActions,
+    private readonly timing: SizeTiming = { debounceMs: DEBOUNCE_MS, graceMs: RELEASE_GRACE_MS },
+  ) {}
 
   /** A phone viewer (keyed by its socket) wants panes laid out at `size`. */
   request(holder: unknown, size: GridSize): void {
@@ -55,21 +74,54 @@ export class PaneSizer {
     clearTimeout(this.release);
     this.release = undefined;
     clearTimeout(this.debounce);
-    this.debounce = setTimeout(() => this.attach(size), DEBOUNCE_MS);
+    this.debounce = setTimeout(() => this.actions.apply(size), this.timing.debounceMs);
   }
 
-  /** The viewer left or stopped asking; detach once nobody holds a size. */
+  /** The viewer left or stopped asking; restore once nobody holds a size. */
   drop(holder: unknown): void {
     if (!this.holders.delete(holder) || this.holders.size > 0) return;
     clearTimeout(this.debounce);
     clearTimeout(this.release);
-    this.release = setTimeout(() => this.detach(), RELEASE_GRACE_MS);
+    this.release = setTimeout(() => this.actions.restore(), this.timing.graceMs);
+  }
+
+  has(holder: unknown): boolean {
+    return this.holders.has(holder);
+  }
+
+  get isEmpty(): boolean {
+    return this.holders.size === 0;
   }
 
   stop(): void {
     clearTimeout(this.debounce);
     clearTimeout(this.release);
-    this.detach();
+    this.holders.clear();
+    this.actions.restore();
+  }
+}
+
+export class PaneSizer {
+  private proc: Subprocess | null = null;
+  private readonly holders = new SizeHolders({
+    apply: (size) => this.attach(size),
+    restore: () => this.detach(),
+  });
+
+  constructor(private readonly command: string[] = ["herdr"]) {}
+
+  /** A phone viewer (keyed by its socket) wants panes laid out at `size`. */
+  request(holder: unknown, size: GridSize): void {
+    this.holders.request(holder, size);
+  }
+
+  /** The viewer left or stopped asking; detach once nobody holds a size. */
+  drop(holder: unknown): void {
+    this.holders.drop(holder);
+  }
+
+  stop(): void {
+    this.holders.stop();
   }
 
   private attach(size: GridSize): void {

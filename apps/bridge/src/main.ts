@@ -1,5 +1,6 @@
 /**
- * atur-bridge: exposes the local herdr execution plane to the Atur web app.
+ * atur-bridge: exposes the local terminal execution plane (herdr or tmux) to
+ * the Atur web app and the phone app.
  *
  * Binds 127.0.0.1 only, holds no secrets. The Atur Worker is the front door:
  * browser → Worker (auth + audit) → Cloudflare Tunnel → this daemon.
@@ -17,7 +18,7 @@
  *   GET /screen           → WebSocket upgrade: raw RFB bytes to the loopback wayvnc
  *                           (text frames are the viewer's ping/pong, answered here)
  *
- * Outbound: a poller watches herdr panes and POSTs agent "done"/"blocked"
+ * Outbound: a poller watches the backend's panes and POSTs agent "done"/"blocked"
  * events to ATUR_URL/api/bridge/agent-events (x-bridge-token = BRIDGE_TOKEN);
  * disabled when BRIDGE_TOKEN is unset.
  */
@@ -27,6 +28,7 @@ import { PaneHub, type BridgeMeta } from "./hub";
 import { ObserveHub } from "./observe";
 import { imageExtension, MAX_PASTE_BYTES, PasteError, pasteDirFromEnv, savePaste } from "./pastes";
 import { ScreenHub, screenConfigFromEnv, type ScreenMeta } from "./screen";
+import { createBackend } from "./select-backend";
 
 const PORT = Number(process.env.BRIDGE_PORT ?? 7601);
 const TOKEN = process.env.BRIDGE_TOKEN ?? "";
@@ -38,8 +40,11 @@ function authorized(req: Request): boolean {
   return req.headers.get("x-bridge-token") === TOKEN;
 }
 
-const hub = new PaneHub();
-const observeHub = new ObserveHub();
+const backend = createBackend(process.env);
+console.log(`terminal backend: ${backend.kind}`);
+
+const hub = new PaneHub(backend);
+const observeHub = new ObserveHub(backend);
 const screenHub = new ScreenHub(screenConfigFromEnv(process.env));
 const pasteDir = pasteDirFromEnv(process.env);
 
@@ -238,7 +243,7 @@ Bun.serve<Meta>({
 console.log(`atur-bridge listening on 127.0.0.1:${PORT}`);
 
 const agentEventsConfig = agentEventsConfigFromEnv(process.env);
-const agentEvents = agentEventsConfig ? new AgentEventWatcher(agentEventsConfig) : null;
+const agentEvents = agentEventsConfig ? new AgentEventWatcher(agentEventsConfig, backend) : null;
 if (agentEvents && agentEventsConfig) {
   agentEvents.start();
   console.log(`agent events → ${agentEventsConfig.url}/api/bridge/agent-events`);
@@ -249,6 +254,8 @@ if (agentEvents && agentEventsConfig) {
 for (const sig of ["SIGTERM", "SIGINT"] as const) {
   process.on(sig, () => {
     agentEvents?.stop();
+    // A tmux window resized for a phone must not stay phone-sized after we exit.
+    backend.stop();
     // Stop wayvnc with the daemon so a restart never leaves an orphan listener.
     void screenHub.shutdown().finally(() => process.exit(0));
   });

@@ -28,7 +28,7 @@
  * Anything that does not fit degrades to mode:"raw" — parsing never throws,
  * and a drifting omp format can never blank the client.
  */
-import { HerdrError, rpc } from "./herdr";
+import { PaneGoneError, type PaneBackend } from "./backend";
 
 export type ObserveBlockKind = "tool" | "output" | "model" | "error";
 
@@ -334,10 +334,6 @@ const ACTIVITY_BURST_MS = 1_500;
  *  make skips lossless. */
 const MAX_BUFFERED_BYTES = 1_000_000;
 
-interface PaneReadPayload {
-  read: { pane_id: string; text: string; revision: number; truncated: boolean };
-}
-
 class ObserveSession {
   readonly observers = new Set<ObserveClient>();
   private lastRaw: string | null = null;
@@ -348,6 +344,7 @@ class ObserveSession {
 
   constructor(
     readonly paneId: string,
+    private readonly backend: PaneBackend,
     private readonly onIdle: (session: ObserveSession) => void,
   ) {
     this.scheduleNext();
@@ -368,26 +365,17 @@ class ObserveSession {
     }, ms);
   }
 
-  private readScreen(): Promise<PaneReadPayload> {
-    return rpc<PaneReadPayload>("pane.read", {
-      pane_id: this.paneId,
-      source: "visible",
-      format: "ansi",
-      strip_ansi: false,
-    });
-  }
-
   /** First message(s) for a fresh observer: snapshot always, plus the raw
    *  text frame when the parser found no structure. The observer joins only
    *  after its snapshot is in flight, so broadcasts can never overtake it. */
   async snapshot(ws: ObserveClient): Promise<void> {
-    const res = await this.readScreen();
+    const res = await this.backend.readVisible(this.paneId);
     // The client may have disconnected during the subscribe awaits; its
     // close handler's detach was a no-op (not yet an observer). Adopting a
     // dead socket here would pin the 400ms poller until the pane dies.
     if (ws.readyState !== 1) return;
-    this.lastRaw = res.read.text;
-    const parsed = this.parser.parse(res.read.text);
+    this.lastRaw = res.text;
+    const parsed = this.parser.parse(res.text);
     ws.send(
       JSON.stringify({
         type: "snapshot",
@@ -407,10 +395,10 @@ class ObserveSession {
     if (this.observers.size === 0) return;
     this.pumping = true;
     try {
-      const res = await this.readScreen();
-      if (res.read.text === this.lastRaw) return;
-      this.lastRaw = res.read.text;
-      const parsed = this.parser.parse(res.read.text);
+      const res = await this.backend.readVisible(this.paneId);
+      if (res.text === this.lastRaw) return;
+      this.lastRaw = res.text;
+      const parsed = this.parser.parse(res.text);
       const payload =
         parsed.mode === "structured"
           ? JSON.stringify({ type: "blocks", mode: "structured", blocks: parsed.blocks })
@@ -422,8 +410,8 @@ class ObserveSession {
       this.fastUntil = Date.now() + ACTIVITY_BURST_MS;
     } catch (e) {
       // Same contract as the attach watcher: only a missing pane is terminal;
-      // herdr hiccups are retried on the next tick.
-      const gone = e instanceof HerdrError && /not_found|no such/i.test(e.code + " " + e.message);
+      // backend hiccups are retried on the next tick.
+      const gone = e instanceof PaneGoneError;
       if (!gone) {
         console.error(`observe pane.read ${this.paneId} failed (transient, will retry):`, e);
         return;
@@ -445,6 +433,8 @@ class ObserveSession {
 export class ObserveHub {
   private sessions = new Map<string, ObserveSession>();
 
+  constructor(private readonly backend: PaneBackend) {}
+
   stop(): void {
     for (const session of this.sessions.values()) session.dispose();
     this.sessions.clear();
@@ -454,13 +444,13 @@ export class ObserveHub {
    *  snapshot. False = unknown pane (caller sends the error frame + close). */
   async subscribe(ws: ObserveClient, paneId: string): Promise<boolean> {
     try {
-      await rpc("pane.get", { pane_id: paneId }, 4000);
+      await this.backend.getPane(paneId, 4000);
     } catch {
       return false;
     }
     let session = this.sessions.get(paneId);
     if (!session) {
-      session = new ObserveSession(paneId, (idle) => {
+      session = new ObserveSession(paneId, this.backend, (idle) => {
         if (idle.observers.size === 0) {
           idle.dispose();
           this.sessions.delete(idle.paneId);
