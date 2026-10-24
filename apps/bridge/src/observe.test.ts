@@ -5,6 +5,9 @@
  * socket; poll waits use `until`, so tests stay deterministic in wall time.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // ---------------------------------------------------------------------------
 // herdr stub — installed before any ./observe or ./server import (bun hoists
@@ -14,6 +17,8 @@ const paneText = new Map<string, string>();
 let readFailure: { code: string; message: string } | null = null;
 let getFailure: { code: string; message: string } | null = null;
 const readCalls: string[] = [];
+/** pane.get reports this as the pane's agent session log (herdr `agent_session`). */
+const paneSession = new Map<string, string>();
 /** Fired inside the pane.read stub before resolving — lets a test mutate
  *  fixture state mid-subscribe (e.g. simulate a disconnect during the await). */
 let readHook: (() => void) | null = null;
@@ -39,7 +44,16 @@ mock.module("./herdr", () => ({
             new StubHerdrError("pane.get", getFailure.code, getFailure.message),
           );
         }
-        return Promise.resolve({ pane: { pane_id: p.pane_id, cwd: "/srv/acme" } });
+        return Promise.resolve({
+          pane: {
+            pane_id: p.pane_id,
+            cwd: "/srv/acme",
+            agent: "omp",
+            ...(paneSession.has(p.pane_id ?? "")
+              ? { agent_session: { kind: "path", value: paneSession.get(p.pane_id ?? "") } }
+              : {}),
+          },
+        });
       case "pane.read": {
         readCalls.push(p.pane_id ?? "");
         readHook?.();
@@ -496,7 +510,7 @@ describe("observe websocket surface", () => {
     expect(closed.code).toBe(1008);
   });
 
-  test("observe delivers a structured snapshot; any client frame closes 1008", async () => {
+  test("observe delivers a structured snapshot; any other client frame closes 1008", async () => {
     const h = await connect("/observe?pane=live");
     const snap = await until(() => h.messages.find((m) => m.type === "snapshot"));
     expect(snap).toMatchObject({ type: "snapshot", paneId: "live", mode: "structured" });
@@ -507,6 +521,74 @@ describe("observe websocket surface", () => {
     const closed = await h.closeInfo;
     expect(closed.code).toBe(1008);
     expect(closed.reason).toBe("observe channel is read-only");
+  });
+
+  test("input-shaped frames are still refused", async () => {
+    for (const frame of [
+      JSON.stringify({ type: "input", data: "rm -rf /" }),
+      JSON.stringify({ type: "paste", text: "x" }),
+      JSON.stringify([1]),
+      "null",
+    ]) {
+      const h = await connect("/observe?pane=live");
+      await until(() => h.messages.find((m) => m.type === "snapshot"));
+      h.ws.send(frame);
+      expect((await h.closeInfo).code).toBe(1008);
+    }
+  });
+
+  test("transcript opt-in without a session log answers unavailable and keeps the screen feed", async () => {
+    const h = await connect("/observe?pane=live");
+    await until(() => h.messages.find((m) => m.type === "snapshot"));
+    h.ws.send(JSON.stringify({ type: "transcript" }));
+    await until(() => h.messages.find((m) => m.type === "transcript-unavailable"));
+    paneText.set("live", `${TOOL_BOX}\r\n${MODEL_BADGE_LINE}\r\nmore`);
+    await until(() => h.messages.find((m) => m.type === "blocks" || m.type === "raw"));
+    h.ws.close(1000, "bye");
+  });
+
+  test("transcript opt-in with a session log streams the conversation, pages and follows", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "observe-transcript-"));
+    const file = join(dir, "s.jsonl");
+    const line = (text: string) =>
+      JSON.stringify({
+        type: "message",
+        timestamp: "2026-10-24T10:00:00.000Z",
+        message: { role: "user", content: [{ type: "text", text }], attribution: "user" },
+      });
+    const body =
+      Array.from({ length: 900 }, (_, i) => line(`m${i} ${"x".repeat(400)}`)).join("\n") + "\n";
+    await writeFile(file, body);
+    paneSession.set("live", file);
+    try {
+      const h = await connect("/observe?pane=live");
+      await until(() => h.messages.find((m) => m.type === "snapshot"));
+      h.ws.send(JSON.stringify({ type: "transcript" }));
+      const first = await until(() => h.messages.find((m) => m.type === "transcript"));
+      const entries = first.entries as { text: string }[];
+      expect(entries.length).toBeGreaterThanOrEqual(300);
+      expect(entries.at(-1)!.text.startsWith("m899 ")).toBe(true);
+      expect(first.hasMore).toBe(true);
+
+      h.ws.send(JSON.stringify({ type: "older", before: first.cursor }));
+      const older = await until(() => h.messages.find((m) => m.type === "older"));
+      expect(older.before).toBe(first.cursor);
+      expect((older.entries as unknown[]).length).toBeGreaterThan(0);
+
+      await appendFile(file, line("live one") + "\n");
+      const appended = await until(() => h.messages.find((m) => m.type === "append"), 4000);
+      expect((appended.entries as { text: string }[])[0]!.text).toBe("live one");
+
+      // Fed from the log now: the screen poller has no observer left to serve.
+      // Real wait on purpose: it must outlast one idle poll tick (400 ms).
+      const reads = readCalls.length;
+      await Bun.sleep(600);
+      expect(readCalls.length).toBe(reads);
+      h.ws.close(1000, "bye");
+    } finally {
+      paneSession.delete("live");
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   test("/attach protocol is unchanged", async () => {

@@ -51,9 +51,38 @@ The header is one line: a status dot (green live, amber connecting, red gone) an
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Native     | The visible screen drawn as React Native text (`components/terminal/*`). Fast, selectable per row, scrolls, pinch-zooms, has its own key row and (agent panes) a prompt composer.                                   |
 | Classic    | The original xterm.js WebView (`components/terminal/classic-terminal.tsx`, `webview/terminal.ts`). Mounts mid-stream, so it first replays the current screen (`TerminalScreen.replay()`), then follows live frames. |
-| Transcript | Structured blocks from `/api/panes/observe` (`components/terminal/transcript.tsx`), unchanged.                                                                                                                      |
+| Transcript | The agent's session log as a scrollable chat from `/api/panes/observe` (`components/terminal/transcript.tsx`, see below); panes without a session log show the parsed screen blocks.                                |
 
 One `usePaneAttach` socket feeds a `TerminalScreen` (`lib/terminal-screen.ts`); whichever renderer is mounted subscribes to it, so switching views never reconnects.
+
+### Transcript: the session log as a chat
+
+The screen parser only sees the visible terminal, so history scrolled away and the view could not scroll back. The Transcript view now reads the agent's own session log instead: omp `~/.omp/agent/sessions/**.jsonl` and Claude Code `~/.claude/projects/**.jsonl` (the format is detected per line). herdr reports the file as the pane's `agent_session` (`kind: "path"`); tmux panes use the `@atur_session` pane option. Both reach the bridge as `PaneSummary.agentSessionPath`, and only an absolute `*.jsonl` path is read. Panes without one (plain shells, other agents) keep the old parsed-screen blocks.
+
+The view is an inverted `FlatList` (newest at the bottom, scroll up to load older pages through `onEndReached`):
+
+- **You**: right-aligned muted bubble.
+- **Agent text**: markdown (bold, code spans, fenced code in a horizontally scrollable monospace block, lists, tables), selectable.
+- **Tool calls**: one compact row, icon + `Read` + `src/x.ts` (or `Bash` + the command). A running call shows a spinner, a failed one a red mark. Tap a row with a result to expand it (the bridge clips results to 40 lines).
+- **Ask**: a card; the newest unanswered ask is outlined and labelled **Needs you**, an answered one shows the answer under the question.
+- Failed or interrupted turns show their error text in red. Thinking, system reminders and bookkeeping lines are dropped.
+
+Protocol (additive on `/observe`, implemented in `apps/bridge/src/session-transcript.ts`, client in `lib/pane-streams.ts` + `lib/transcript.ts`). It is opt-in so the web client and older apps see exactly the old frames:
+
+| Direction    | Frame                                                     | Meaning                                                                                                                          |
+| ------------ | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| app → bridge | `{type:"transcript"}`                                     | Opt in. Sent after the first `snapshot`.                                                                                         |
+| bridge → app | `{type:"transcript", agent, entries, hasMore, cursor}`    | The newest ~300 entries (bounded by size too). Replaces the list. The bridge stops sending screen `blocks`/`raw` to this client. |
+| bridge → app | `{type:"append", entries}`                                | Lines written since, in batches of 200. A tool result arrives as an update of the call's entry id.                               |
+| app → bridge | `{type:"older", before}`                                  | Page back; `before` is the last `cursor`.                                                                                        |
+| bridge → app | `{type:"older", before, entries, hasMore, cursor, busy?}` | The page before `before`. `busy` = declined (two requests already in flight), nothing changed.                                   |
+| bridge → app | `{type:"transcript-unavailable", reason}`                 | No readable session log; the screen frames continue.                                                                             |
+
+Any other client frame still closes the socket 1008: there is no input path from `/observe` to the pane.
+
+An entry is `{id, seq, role: "user"|"assistant"|"tool"|"ask", text, at, error?, tool?: {name, summary, status: "running"|"done"|"error", result?}}`. `seq` is the source line's byte offset times 1024 plus the part index, so entries have a total order and `cursor` is exactly a line start: older pages are read backwards in 256 KB chunks, never the whole file (session files reach tens of MB). A tool call and its result share one id (the tool call id); both sides fold updates with the same merge (`mergeEntries`: an orphan result and its call join whichever page arrives second, and a finished call never goes back to "running").
+
+Following: the bridge polls the file size every second while a client is attached, parses only complete new lines, and a client that joins mid-write gets its first page up to the exact offset the follower had, with later lines queued behind it, so nothing is missed or doubled. A file that shrinks resets every client with a fresh first page; a pane that starts a new agent session (new `agent_session` path, checked every 3 s) switches the client to the new file. Over the relay, `append`/`older` frames are never dropped under backpressure (only screen `blocks`/`raw` replacements are, `connect.ts`).
 
 ### Frames and the screen model
 
@@ -98,7 +127,7 @@ App → bridge: `input {data}` (what xterm.js `onData` would send; the bridge tu
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Panes list | `request()` with `Authorization: Bearer`.                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | Terminal   | Native app opens `/api/panes/attach` itself with `Authorization: Bearer` on the WebSocket handshake (React Native's `WebSocket` accepts headers). The Classic view's xterm.js runs in a WebView that has **no network** (CSP `connect-src 'none'`); frames are passed in/out with `postMessage`. The Native view needs no WebView.                                                                                                                                     |
-| Transcript | Rendered natively from `/api/panes/observe` (same frames as the web).                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Transcript | Rendered natively from `/api/panes/observe`: the agent's session log as a chat (opt-in frames below), or the parsed screen blocks (same frames as the web) when the pane has no session log.                                                                                                                                                                                                                                                                           |
 | Screen     | A WebView cannot set WS headers and a native bridge for binary RFB is overkill, so the app mints a **one-time ticket**: `POST /api/ws-tickets {scope:"screen"}` (bearer, superuser only) → `?ticket=` on `/api/screen/ws`. The ticket is 256-bit random, stored as SHA-256, single use (atomic `UPDATE … WHERE used_at IS NULL`), TTL 60 s, scope-bound; `requireSuperuser` still runs after redemption. Only `/api/screen/ws` upgrades accept it (`lib/wsTicket.ts`). |
 
 WebViews load bundled HTML from memory (`lib/webview/*.generated.ts`, built by `bun run webviews` from `webview/*.ts` + `@xterm/xterm` + `@novnc/novnc`), may only navigate to the API origin, and keep no cookies/storage/file access (`components/html-view.tsx`). The screen page's CSP `connect-src` is the API origin only.
@@ -156,6 +185,8 @@ A floating bar at the top (drag it sideways; the chevron tucks it into a status 
 
 `bun test apps/native/lib` (also `bun run test` from the root): `ansi.test.ts` (SGR parsing, colour resolution, wide chars), `terminal-screen.test.ts` (snapshot/diff model, replay, link detection), `terminal-keys.test.ts` (modifiers, swipe steps, font sizing), `dictation-text.test.ts` (locale choice, transcript merging), `screen-gestures.test.ts` (both mouse modes: deferred tap, double click, double-tap-drag, hold, multi-finger taps, scroll vs pinch, mode switch releasing a held button), `screen-view.test.ts` (fit, pan clamping, zoom anchoring, pointer follow, acceleration), `screen-session.test.ts` (backoff, which closes retry). Bridge: `apps/bridge/src/hub.test.ts` (Ctrl letters, `paste`), `apps/bridge/src/screen.test.ts` (ping/pong off the RFB stream, liveness timeout, replace-oldest).
 
+Transcript: `apps/bridge/src/session-transcript.test.ts` (omp and Claude Code line parsing, tool call/result folding, backwards paging over multi-chunk files and a line longer than a chunk, follow, join-mid-write, truncation reset, session switch), `apps/bridge/src/observe.test.ts` (opt-in over the real socket, input-shaped frames still closed 1008), `apps/native/lib/transcript.test.ts` (frame reducer, merge, helpers).
+
 Pane management: `apps/native/lib/pane-workspaces.test.ts` (chip grouping, selection fallback, newest pane, new-workspace targets, custom path), `apps/app/src/worker/routes/__tests__/panes.test.ts` and `panes_relay.test.ts` (authz, routing by pane-id prefix, audit rows, old bridge), `apps/app/src/worker/lib/__tests__/panePaths.test.ts`, `apps/bridge/src/manage.test.ts`.
 
 ## Release note
@@ -163,3 +194,5 @@ Pane management: `apps/native/lib/pane-workspaces.test.ts` (chip grouping, selec
 New native modules (`react-native-webview`, `expo-clipboard`, `expo-screen-orientation`, `expo-speech-recognition`) and `orientation: default` change the native fingerprint: this needs a **new store build**; OTA alone will not deliver it. Dictation additionally adds the microphone and speech-recognition permissions, so the store privacy answers in `docs/app-store.md` / `docs/play-store.md` must match before submitting. The Screen rework (mouse modes, pointer, reconnect) is JS and bundled HTML only and ships over EAS Update to builds that already have the WebView.
 
 Pane management (workspace chips, new workspace/pane, split, close) is JS only and ships over EAS Update. It needs the Worker deployed and, for the new routes and the workspace-label fix, the bridge restarted: `systemctl --user restart atur-bridge.service` for the dev box, an updated `atur-bridge` on customer machines (older ones answer "too old to manage panes"). Chips from an old bridge still work but show the first workspace's label on every pane.
+
+The session-log Transcript is JS only (EAS Update) plus a bridge release: the bridge must be restarted (dev box) or updated (customer machines, new release tag) before the chat appears. No Worker change: the opt-in and paging frames ride the existing `/api/panes/observe` socket and the relay already forwards client frames. An old bridge keeps working: the app's opt-in is refused (close 1008), which it remembers, and it falls back to the parsed-screen blocks.

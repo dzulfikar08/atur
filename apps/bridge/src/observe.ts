@@ -2,10 +2,11 @@
  * /observe: read-only structured transcript channel (DEV-33).
  *
  * The hub's /attach mirrors the raw terminal grid and carries an input path.
- * /observe is the opposite trade: no input ever — the server does not read
- * client frames at all (any frame is closed 1008) — and the pane text is
- * parsed into renderable blocks so a dashboard can show what an agent is
- * doing without embedding a terminal.
+ * /observe is the opposite trade: no input ever reaches the pane. The server
+ * accepts exactly two client frames (the transcript opt-in and `older`
+ * paging, see session-transcript.ts) and closes 1008 on anything else; the
+ * pane text is parsed into renderable blocks so a dashboard can show what an
+ * agent is doing without embedding a terminal.
  *
  * Server → client (JSON text frames only):
  *   {type:"snapshot", paneId, mode:"structured", blocks:[Block]}  first message
@@ -13,6 +14,9 @@
  *   {type:"raw", mode:"raw", paneId, text}                        full pane text (raw mode)
  *   {type:"blocks", mode, blocks:[Block]}                         full replacement on change
  *   {type:"error", error}                                         bridge-level failure
+ * A client that opts in (after its first snapshot) and whose pane has an agent
+ * session log is switched to the conversation feed in session-transcript.ts
+ * and receives no more blocks/raw frames.
  *
  * Block: {id, kind:"tool"|"output"|"model"|"error", title, model,
  *         startedAt, endedAt, text, lineCount}
@@ -29,6 +33,7 @@
  * and a drifting omp format can never blank the client.
  */
 import { PaneGoneError, type PaneBackend } from "./backend";
+import { TranscriptHub } from "./session-transcript";
 
 export type ObserveBlockKind = "tool" | "output" | "model" | "error";
 
@@ -432,12 +437,47 @@ class ObserveSession {
 
 export class ObserveHub {
   private sessions = new Map<string, ObserveSession>();
+  private transcripts: TranscriptHub;
 
-  constructor(private readonly backend: PaneBackend) {}
+  constructor(private readonly backend: PaneBackend) {
+    this.transcripts = new TranscriptHub(backend);
+  }
 
   stop(): void {
     for (const session of this.sessions.values()) session.dispose();
     this.sessions.clear();
+    this.transcripts.stop();
+  }
+
+  /**
+   * A client frame. The channel never reaches the pane; the only frames it
+   * accepts are the transcript opt-in and paging requests (session-transcript.ts).
+   * False = anything else: the caller closes the socket 1008.
+   */
+  message(ws: ObserveClient, paneId: string, raw: string): boolean {
+    let msg: unknown;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return false;
+    }
+    if (typeof msg !== "object" || msg === null) return false;
+    const frame = msg as { type?: unknown; before?: unknown };
+    if (frame.type === "transcript") {
+      void this.transcripts
+        .subscribe(ws, paneId)
+        .then((fed) => {
+          // Fed from the session log: the screen parser has nothing left to add.
+          if (fed) this.leaveScreen(ws);
+        })
+        .catch((e: unknown) => console.error(`transcript subscribe ${paneId} failed:`, e));
+      return true;
+    }
+    if (frame.type === "older") {
+      void this.transcripts.older(ws, frame.before);
+      return true;
+    }
+    return false;
   }
 
   /** Validate the pane exists, then attach the observer and deliver its
@@ -479,6 +519,11 @@ export class ObserveHub {
   }
 
   detach(ws: ObserveClient): void {
+    this.transcripts.detach(ws);
+    this.leaveScreen(ws);
+  }
+
+  private leaveScreen(ws: ObserveClient): void {
     for (const session of this.sessions.values()) {
       if (!session.observers.delete(ws)) continue;
       if (session.observers.size === 0) {

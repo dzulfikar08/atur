@@ -32,6 +32,16 @@ const MAX_PENDING_EVENTS = 20;
 /** The "connected" line is logged only after the socket has stayed up this long. */
 const ANNOUNCE_AFTER_MS = 1_500;
 
+/**
+ * Whether a text frame may be dropped under backpressure. Attach frames are
+ * full-state. On /observe only the screen-parser `blocks`/`raw` replacements
+ * are: transcript frames (`append`, `older`, ...) are deltas and must arrive.
+ */
+function skippableFrame(pathname: string, text: string): boolean {
+  if (pathname !== "/observe") return true;
+  return text.startsWith('{"type":"blocks"') || text.startsWith('{"type":"raw"');
+}
+
 const STRIP_REQ_HEADERS = new Set([
   "host",
   "connection",
@@ -549,7 +559,12 @@ export class RelayConnector {
       if (!ws) return;
       if (typeof ev.data === "string") {
         // Full-state frames: skipping while the cloud link is congested is what the hubs do for slow clients.
-        if (stream.skippable && ws.bufferedAmount > MAX_BUFFERED_BYTES) return;
+        if (
+          stream.skippable &&
+          ws.bufferedAmount > MAX_BUFFERED_BYTES &&
+          skippableFrame(pathname, ev.data)
+        )
+          return;
         this.sendFrame({ t: "data", sid, text: ev.data });
       } else {
         this.sendFrame({

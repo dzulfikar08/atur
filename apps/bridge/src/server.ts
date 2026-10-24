@@ -22,7 +22,7 @@
  *   POST /panes/close     → close a pane {pane}; 204
  *   GET /pane-repo        → main repo path for a pane cwd (worktree-aware)
  *   GET /attach?pane=<id> → WebSocket upgrade: snapshot mirror + input
- *   GET /observe?pane=<id> → WebSocket upgrade: read-only structured transcript
+ *   GET /observe?pane=<id> → WebSocket upgrade: read-only structured transcript (+ opt-in session-log chat feed)
  *   GET /screen/status    → desktop-sharing availability, running state, viewer count
  *   GET /screen           → WebSocket upgrade: raw RFB bytes to the loopback wayvnc
  *                           (text frames are the viewer's ping/pong, answered here)
@@ -237,10 +237,16 @@ Bun.serve<Meta>({
         return;
       }
       const paneWs = ws as ServerWebSocket<BridgeMeta>;
-      // Read-only by protocol: client frames are never read or buffered —
-      // there is no input path from /observe to the pane, period.
+      // Read-only by protocol: there is no input path from /observe to the
+      // pane. The only client frames honoured are the transcript opt-in and
+      // paging (they read the agent's session log); anything else closes.
       if (paneWs.data.observe) {
-        paneWs.close(1008, "observe channel is read-only");
+        if (
+          typeof _message !== "string" ||
+          !observeHub.message(paneWs, paneWs.data.paneId, _message)
+        ) {
+          paneWs.close(1008, "observe channel is read-only");
+        }
         return;
       }
       if (typeof _message !== "string") return;

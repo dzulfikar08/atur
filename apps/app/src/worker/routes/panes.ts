@@ -538,10 +538,10 @@ paneRoutes.get("/observe", async (c) => {
   const server = pair[1]; // browser side of the relay
   server.accept();
 
-  // Text frames only, verbatim bridge → client. The observe channel is
-  // read-only: the daemon closes (1008) any client frame, and the app client
-  // never sends after open — the client→bridge relay below only ever forwards
-  // frames that would tear the channel down either way.
+  // Text frames only, verbatim both ways. The observe channel is read-only
+  // for the pane (no input path): the daemon honours exactly two client frames,
+  // the session-transcript opt-in and `older` paging, and closes (1008) on
+  // anything else. Only the native app sends them; the web client never does.
   origin.addEventListener("message", (event) => {
     if (typeof event.data === "string") server.send(event.data);
   });

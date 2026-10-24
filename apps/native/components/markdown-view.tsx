@@ -235,11 +235,16 @@ function Blocks({ tokens }: { tokens: Token[] }) {
   );
 }
 
-export function MarkdownView({ source }: { source: string }) {
+/** Markdown as inline blocks, for hosting inside another scroller (chat rows). */
+export function MarkdownBody({ source }: { source: string }) {
   const tokens = useMemo(() => lexer(source), [source]);
+  return <Blocks tokens={tokens} />;
+}
+
+export function MarkdownView({ source }: { source: string }) {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Blocks tokens={tokens} />
+      <MarkdownBody source={source} />
     </ScrollView>
   );
 }

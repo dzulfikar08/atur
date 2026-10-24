@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { openAuthedSocket } from "@/lib/socket";
+import { applyChatFrame, type ChatState } from "@/lib/transcript";
 
 // Native ports of the web's usePaneAttach / usePaneObserve
 // (apps/app/src/client/hooks). Same frames, same reconnect policy; the only
@@ -256,6 +257,13 @@ export interface PaneObserve {
   rawText: string;
   error: string | null;
   retry: () => void;
+  /** Session-log conversation; null until the bridge sends one (or when it has none). */
+  chat: ChatState | null;
+  /** Opted in to the chat; the bridge has not said yet whether it has a session log. */
+  awaitingChat: boolean;
+  loadingOlder: boolean;
+  /** Request the next older page of `chat`. */
+  loadOlder: () => void;
 }
 
 const BLOCK_KINDS: Record<string, true> = { tool: true, output: true, model: true, error: true };
@@ -290,10 +298,19 @@ function resolveMode(value: unknown): (prev: ObserveMode) => ObserveMode {
 }
 
 /**
- * Read-only stream (the daemon closes any client frame, so nothing is ever
- * sent): snapshot · blocks · raw · error. `enabled` gates the connection so it
- * only runs while the Transcript view is open. `attempts` deliberately spans
- * the whole cycle (not reset on open): the daemon's standard rejection is
+ * Observe stream: snapshot · blocks · raw · error, plus the opt-in session-log
+ * chat (transcript · append · older · transcript-unavailable, see
+ * apps/bridge/src/session-transcript.ts). `enabled` gates the connection so it
+ * only runs while the Transcript view is open.
+ *
+ * Chat opt-in: after the first `snapshot` the client sends `{type:"transcript"}`.
+ * A bridge that has a session log answers with a `transcript` page and stops
+ * the screen frames; one without answers `transcript-unavailable` and the screen
+ * blocks keep flowing. A bridge older than this feature closes 1008 on any client
+ * frame: that is remembered (`legacy`) and the reconnect skips the opt-in.
+ *
+ * `attempts` spans the whole cycle and resets only once the bridge proves the
+ * pane is observable (a `snapshot`): the daemon's standard rejection is
  * accept-then-error, which would otherwise hot-loop on an unobservable pane.
  */
 export function usePaneObserve(paneId: string, enabled: boolean): PaneObserve {
@@ -302,13 +319,42 @@ export function usePaneObserve(paneId: string, enabled: boolean): PaneObserve {
   const [blocks, setBlocks] = useState<ObserveBlock[]>([]);
   const [rawText, setRawText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [chat, setChat] = useState<ChatState | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [awaitingChat, setAwaitingChat] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const wsRef = useRef<WebSocket | null>(null);
+  const chatRef = useRef<ChatState | null>(null);
+  chatRef.current = chat;
+  const loadingRef = useRef(false);
+  const olderTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const retry = useCallback(() => {
     setStatus("connecting");
     setError(null);
     setRetryKey((k) => k + 1);
   }, []);
+
+  const finishOlder = useCallback(() => {
+    clearTimeout(olderTimer.current);
+    loadingRef.current = false;
+    setLoadingOlder(false);
+  }, []);
+
+  /** Page back through the session log; a no-op without more history or an open socket. */
+  const loadOlder = useCallback(() => {
+    const ws = wsRef.current;
+    const state = chatRef.current;
+    if (!ws || ws.readyState !== 1 || !state?.hasMore || loadingRef.current) return;
+    loadingRef.current = true;
+    setLoadingOlder(true);
+    // A reply lost to a reconnect must not wedge paging.
+    olderTimer.current = setTimeout(finishOlder, 10_000);
+    ws.send(JSON.stringify({ type: "older", before: state.cursor }));
+  }, [finishOlder]);
+
+  // The bridge predates the chat feed; learned once, kept across reconnects.
+  const legacy = useRef(false);
 
   useEffect(() => {
     if (!enabled || !paneId) {
@@ -325,6 +371,9 @@ export function usePaneObserve(paneId: string, enabled: boolean): PaneObserve {
       setStatus(attempts === 0 ? "connecting" : "reconnecting");
       const socket = openAuthedSocket(`/api/panes/observe?pane=${encodeURIComponent(paneId)}`);
       ws = socket;
+      wsRef.current = socket;
+      let optedIn = false;
+      let chatFed = false;
 
       socket.onopen = () => {
         if (disposed) {
@@ -344,12 +393,18 @@ export function usePaneObserve(paneId: string, enabled: boolean): PaneObserve {
         }
         switch (msg.type) {
           case "snapshot": {
+            attempts = 0;
             const next: ObserveMode = msg.mode === "raw" ? "raw" : "structured";
             setMode(next);
             if (next === "raw") {
               if (typeof msg.text === "string") setRawText(msg.text);
             } else {
               setBlocks(parseBlocks(msg.blocks));
+            }
+            if (!optedIn && !legacy.current) {
+              optedIn = true;
+              setAwaitingChat(true);
+              socket.send(JSON.stringify({ type: "transcript" }));
             }
             break;
           }
@@ -363,14 +418,41 @@ export function usePaneObserve(paneId: string, enabled: boolean): PaneObserve {
             setMode(resolveMode(msg.mode));
             if (typeof msg.text === "string") setRawText(msg.text);
             break;
+          case "transcript":
+            chatFed = true;
+            finishOlder();
+            setChat((prev) => applyChatFrame(prev, msg));
+            setAwaitingChat(false);
+            break;
+          case "append":
+            setChat((prev) => applyChatFrame(prev, msg));
+            break;
+          case "older":
+            finishOlder();
+            setChat((prev) => applyChatFrame(prev, msg));
+            break;
+          // No session log for this pane: the screen blocks are the transcript.
+          case "transcript-unavailable":
+            if (!chatFed) setChat(null);
+            setAwaitingChat(false);
+            break;
           case "error":
             setError(typeof msg.error === "string" ? msg.error : "unknown bridge error");
             break;
         }
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         if (disposed) return;
+        if (wsRef.current === socket) wsRef.current = null;
+        finishOlder();
+        setAwaitingChat(false);
+        if (optedIn && !chatFed && event.code === 1008) {
+          // Old bridge: it closes on any client frame. Reconnect without the opt-in.
+          legacy.current = true;
+          reconnectTimer = setTimeout(connect, 0);
+          return;
+        }
         if (attempts + 1 >= MAX_ATTEMPTS) {
           setStatus("unreachable");
           return;
@@ -387,9 +469,23 @@ export function usePaneObserve(paneId: string, enabled: boolean): PaneObserve {
     return () => {
       disposed = true;
       clearTimeout(reconnectTimer);
+      clearTimeout(olderTimer.current);
+      loadingRef.current = false;
+      wsRef.current = null;
       ws?.close(1000, "unmount");
     };
-  }, [paneId, enabled, retryKey]);
+  }, [paneId, enabled, retryKey, finishOlder]);
 
-  return { status, mode, blocks, rawText, error, retry };
+  return {
+    status,
+    mode,
+    blocks,
+    rawText,
+    error,
+    retry,
+    chat,
+    awaitingChat,
+    loadingOlder,
+    loadOlder,
+  };
 }
