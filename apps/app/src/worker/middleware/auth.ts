@@ -7,6 +7,8 @@ import type { AuthUser } from "../lib/token";
 import { getDb, type DbClient } from "../db/index";
 import * as schema from "../db/schema";
 import * as usersRepo from "../repositories/users";
+import * as sessionsRepo from "../repositories/sessions";
+import { sha256Hex } from "../lib/identify";
 import {
   SESSION_TTL_SECONDS,
   SESSION_REFRESH_THRESHOLD_SECONDS,
@@ -17,14 +19,6 @@ declare module "hono" {
   interface ContextVariableMap {
     user: AuthUser;
   }
-}
-
-async function sha256Hex(input: string): Promise<string> {
-  const data = new TextEncoder().encode(input);
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
 }
 
 export function extractToken(c: Context<{ Bindings: Env }>): string | null {
@@ -47,6 +41,9 @@ type ResolvedUser = {
   isActive: number | null;
   deletedAt?: string | null;
   sessionExpiresAt?: string | null;
+  // Set when the token matched a user_sessions row; absent for API keys and
+  // legacy users.token sessions.
+  sessionId?: string;
 };
 
 // A session is expired when its stamp is in the past. A NULL stamp (legacy
@@ -66,27 +63,29 @@ function isSessionExpired(expiresAt: string | null | undefined): boolean {
 // response returns. A failed write never fails the request.
 function refreshSessionIfNeeded(
   db: DbClient,
-  userId: string,
+  user: ResolvedUser,
   token: string,
-  expiresAt: string | null | undefined,
   ctx?: ExecutionContext,
 ): string | null {
-  if (!expiresAt) return null;
-  const expires = Date.parse(expiresAt);
+  if (!user.sessionExpiresAt) return null;
+  const expires = Date.parse(user.sessionExpiresAt);
   if (Number.isNaN(expires)) return null;
   const now = Date.now();
   const refreshAt = expires - SESSION_REFRESH_THRESHOLD_SECONDS * 1000;
   if (now < refreshAt) return null; // still in the front half — no extension needed
 
   const nextExpiry = sessionExpiryISO();
-  const updatePromise = db
-    .update(schema.users)
-    .set({ sessionExpiresAt: nextExpiry, updatedAt: new Date().toISOString() })
-    .where(and(eq(schema.users.id, userId), eq(schema.users.token, token)))
-    .catch(() => {});
+  const updatePromise = (
+    user.sessionId
+      ? sessionsRepo.renew(db, user.sessionId, nextExpiry)
+      : db
+          .update(schema.users)
+          .set({ sessionExpiresAt: nextExpiry, updatedAt: new Date().toISOString() })
+          .where(and(eq(schema.users.id, user.id), eq(schema.users.token, token)))
+  ).catch(() => {});
   // Register the write with the Workers event context so it survives past the
   // response. Without waitUntil the runtime freezes/cancels this promise when
-  // the response returns, so sessionExpiresAt never actually advances and an
+  // the response returns, so the expiry never actually advances and an
   // active user gets logged out 24h after their last login. fire-and-forget
   // after the response keeps the request fast (zero added latency) while the
   // write still persists — active sessions slide, idle ones expire.
@@ -94,10 +93,13 @@ function refreshSessionIfNeeded(
   return nextExpiry;
 }
 
-// Resolve a raw token to a user. Two paths:
+// Resolve a raw token to a user. Paths:
 //  1. pk_live_* API key → sha256-hashed lookup against api_keys. Long-lived,
 //     minted via POST /me/api-keys. Active, non-expired, non-deleted only.
-//  2. anything else → opaque session token stored on users.token.
+//  2. per-device session → sha256-hashed lookup against user_sessions (live
+//     rows only).
+//  3. legacy opaque token on users.token — sessions minted before
+//     user_sessions existed; expires through users.session_expires_at.
 async function resolveUserByToken(db: DbClient, token: string): Promise<ResolvedUser | null> {
   if (token.startsWith("pk_live_")) {
     const keyHash = await sha256Hex(token);
@@ -128,6 +130,8 @@ async function resolveUserByToken(db: DbClient, token: string): Promise<Resolved
       .catch(() => {});
     return user;
   }
+  const session = await sessionsRepo.findByToken(db, token);
+  if (session) return session;
   return usersRepo.findByToken(db, token);
 }
 
@@ -175,7 +179,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     } catch {
       /* no Workers execution context — session extension skipped */
     }
-    const nextExpiry = refreshSessionIfNeeded(db, user.id, token, user.sessionExpiresAt, execCtx);
+    const nextExpiry = refreshSessionIfNeeded(db, user, token, execCtx);
     if (nextExpiry) {
       const isHttps = c.req.url.startsWith("https://");
       c.header(

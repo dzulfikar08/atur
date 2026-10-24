@@ -11,14 +11,7 @@ import { HTTPException } from "hono/http-exception";
 import * as usersRepo from "../repositories/users";
 import * as accountService from "../services/account";
 import { deleteCookie } from "hono/cookie";
-
-async function sha256Hex(input: string): Promise<string> {
-  const data = new TextEncoder().encode(input);
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+import { sha256Hex } from "../lib/identify";
 
 async function serveMe(c: Context<{ Bindings: Env }>) {
   const db = getDb(c.env.DB);

@@ -1,4 +1,5 @@
-// Session lifetime constants + helpers for users.token (main-app sessions).
+// Session lifetime constants + helpers for main-app sessions (user_sessions
+// rows, and legacy users.token sessions until they expire).
 // The session is a SLIDING window: any authenticated request that lands in the
 // back half of the TTL extends the session back to a full SESSION_TTL_SECONDS.
 // authMiddleware performs the check + extension; auth flows (login/register/

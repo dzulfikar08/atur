@@ -6,6 +6,7 @@ import { getDb } from "../db/index";
 import { authMiddleware, extractToken } from "../middleware/auth";
 import * as authService from "../services/auth";
 import * as usersRepo from "../repositories/users";
+import * as sessionsRepo from "../repositories/sessions";
 import * as appleAuthService from "../services/appleAuth";
 import {
   AppleAuthError,
@@ -32,6 +33,10 @@ const SESSION_COOKIE = "plane-session";
 const SESSION_MAX_AGE = SESSION_TTL_SECONDS;
 
 type C = Context<{ Bindings: Env }>;
+
+function userAgentOf(c: C): string | null {
+  return c.req.header("User-Agent") ?? null;
+}
 
 // Browsers reject Secure cookies over plain HTTP, which would silently drop the
 // session on local dev (http://localhost). Only mark Secure when really on HTTPS.
@@ -128,14 +133,14 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .post("/register", async (c) => {
     const db = getDb(c.env.DB);
     const body = authService.registerSchema.parse(await c.req.json());
-    const result = await authService.register(db, body);
+    const result = await authService.register(db, body, userAgentOf(c));
     setSessionCookie(c, result.token);
     return c.json({ session_token: result.token, user: result.user });
   })
   .post("/sign-in", async (c) => {
     const db = getDb(c.env.DB);
     const body = authService.loginSchema.parse(await c.req.json());
-    const result = await authService.login(db, body);
+    const result = await authService.login(db, body, userAgentOf(c));
     setSessionCookie(c, result.token);
     return c.json({ session_token: result.token, user: result.user });
   })
@@ -144,10 +149,13 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     // Native clients hold no cookie — accept Authorization: Bearer /
     // X-API-Key too (extractToken falls back to the cookie).
     const token = extractToken(c);
-    // API keys (pk_live_*) live in api_keys, not users.token — clearToken
-    // would never match them anyway, but never present them to it.
+    // API keys (pk_live_*) live in api_keys, not user_sessions — never present
+    // them to the session paths. Sign-out ends THIS device's session only; a
+    // token that isn't a session row is a legacy users.token and is cleared the
+    // old way.
     if (token && !token.startsWith("pk_live_")) {
-      await usersRepo.clearToken(db, token);
+      const removed = await sessionsRepo.deleteByToken(db, token);
+      if (!removed) await usersRepo.clearToken(db, token);
     }
     clearSessionCookie(c);
     return c.json({ message: "Signed out" });
@@ -174,7 +182,7 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     if (!kv) throw new HTTPException(500, { message: "KV namespace not configured" });
     const db = getDb(c.env.DB);
     const body = authService.verifyOtpSchema.parse(await c.req.json());
-    const result = await authService.verifyLoginOtp(db, kv, body);
+    const result = await authService.verifyLoginOtp(db, kv, body, userAgentOf(c));
     setSessionCookie(c, result.token);
     return c.json({ session_token: result.token, user: result.user });
   })
@@ -286,11 +294,15 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
         verifier,
       });
       const profile = await googleAuth.fetchProfile(tokens.accessToken);
-      const result = await googleAuth.signInWithGoogle(db, {
-        ...profile,
-        accessToken: tokens.accessToken,
-        idToken: tokens.idToken,
-      });
+      const result = await googleAuth.signInWithGoogle(
+        db,
+        {
+          ...profile,
+          accessToken: tokens.accessToken,
+          idToken: tokens.idToken,
+        },
+        userAgentOf(c),
+      );
       if (!isNative) {
         setSessionCookie(c, result.token);
         // Same-origin hop: the browser carries the fresh cookie to the SPA page,
@@ -338,8 +350,11 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       return c.json({ error: "verifier_mismatch", message: "PKCE verifier does not match" }, 400);
     }
     // Same user shape as /auth/sign-in — resolve the freshly minted session
-    // token back to its owner.
-    const user = await usersRepo.findByToken(getDb(c.env.DB), stored.token);
+    // token back to its owner (per-device session, legacy users.token fallback).
+    const exchangeDb = getDb(c.env.DB);
+    const user =
+      (await sessionsRepo.findByToken(exchangeDb, stored.token)) ??
+      (await usersRepo.findByToken(exchangeDb, stored.token));
     if (!user) {
       return c.json({ error: "invalid_code", message: "Session no longer valid" }, 400);
     }
@@ -398,6 +413,7 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const result = await appleAuthService.signInWithApple(getDb(c.env.DB), identity, {
       fullName: parsed.data.full_name,
       refreshToken,
+      userAgent: userAgentOf(c),
     });
     return c.json({ session_token: result.token, user: result.user });
   })
@@ -406,7 +422,7 @@ export const authRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .post("/login", async (c) => {
     const db = getDb(c.env.DB);
     const body = authService.loginSchema.parse(await c.req.json());
-    const result = await authService.login(db, body);
+    const result = await authService.login(db, body, userAgentOf(c));
     setSessionCookie(c, result.token);
     return c.json(result);
   });

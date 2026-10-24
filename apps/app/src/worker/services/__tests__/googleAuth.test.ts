@@ -22,6 +22,7 @@ import {
 import * as googleAuth from "../googleAuth";
 import { authRoutes } from "../../routes/auth";
 import * as usersRepo from "../../repositories/users";
+import * as sessionsRepo from "../../repositories/sessions";
 
 // Thenable that also chains like a drizzle query builder (same pattern as
 // dev8_authz.test.ts). Each select() call consumes the next fixture.
@@ -321,7 +322,7 @@ describe("signInWithGoogle", () => {
     expect(result.user.username).toBe("user"); // usernameFromEmail local part
     expect(result.token).toBeTruthy();
 
-    expect(inserts).toHaveLength(2); // the users row + the accounts link row
+    expect(inserts).toHaveLength(3); // the users row + the accounts link row + the session row
     const userInsert = inserts.find((i) => i.email);
     expect(userInsert).toMatchObject({
       email: "user@example.com",
@@ -331,8 +332,12 @@ describe("signInWithGoogle", () => {
       passwordHash: null,
       // Google verified the address — the new account must not look unverified.
       isEmailVerified: 1,
-      sessionExpiresAt: expect.any(String),
     });
+    // Per-device session: users.token is never written for a new login.
+    expect(userInsert).not.toHaveProperty("token");
+    const sessionInsert = inserts.find((i) => i.tokenHash);
+    expect(sessionInsert).toMatchObject({ userId: "u-new", tokenHash: expect.any(String) });
+    expect(sessionInsert.tokenHash).not.toBe(result.token);
     expect(typeof result.token).toBe("string");
     const accountInsert = inserts.find((i) => i.provider);
     expect(accountInsert).toMatchObject({
@@ -362,9 +367,10 @@ describe("signInWithGoogle", () => {
       email: "User@Example.com",
       username: "existing",
     });
-    expect(inserts).toHaveLength(1); // the accounts link row only
+    expect(inserts).toHaveLength(2); // the accounts link row + the session row
     const userPatch = updates.find((u) => u.isEmailVerified === 1);
-    expect(userPatch?.token).toBeTruthy();
+    expect(userPatch).toBeDefined();
+    expect(userPatch).not.toHaveProperty("token");
   });
 
   it("already-linked google sub → straight to session, no insert", async () => {
@@ -380,7 +386,7 @@ describe("signInWithGoogle", () => {
     const result = await signInWithGoogle(db, base);
 
     expect(result.user.id).toBe("u1");
-    expect(inserts).toHaveLength(0);
+    expect(inserts).toHaveLength(1); // the new session row only
     // updateTokens refresh runs best-effort on the link row.
     expect(updates.some((u) => "accessToken" in u || "updatedAt" in u)).toBe(true);
   });
@@ -566,6 +572,7 @@ describe("native google flow (routes)", () => {
     // The stored challenge must be the hash of the verifier, as the route computes it.
     const challenge = await challengeOf(verifier);
     await saveNativeCode(kv, "nc-x", { token: "sess-1", challenge });
+    vi.spyOn(sessionsRepo, "findByToken").mockResolvedValue(null as never);
     vi.spyOn(usersRepo, "findByToken").mockResolvedValue({
       id: "u1",
       email: "user@example.com",
@@ -648,6 +655,7 @@ describe("native google flow (routes)", () => {
   });
 
   it("POST /sign-out with Bearer session token clears it; pk_live_ key untouched", async () => {
+    vi.spyOn(sessionsRepo, "deleteByToken").mockResolvedValue(false);
     const clearToken = vi.spyOn(usersRepo, "clearToken").mockResolvedValue(undefined);
     const sessionRes = await authRoutes.request(
       "/sign-out",

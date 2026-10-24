@@ -146,6 +146,7 @@ export async function listUsers(db: DbClient, filter: UserFilter): Promise<Platf
           WHERE t.user_id = u.id AND t.deleted_at IS NULL AND t.source = 'agent') AS agent_tokens,
         MAX(
           COALESCE(strftime('%Y-%m-%dT%H:%M:%fZ', u.session_expires_at, '-1 day'), ''),
+          COALESCE((SELECT MAX(s.last_used_at) FROM user_sessions s WHERE s.user_id = u.id), ''),
           COALESCE((SELECT MAX(k.last_used_at) FROM api_keys k WHERE k.user_id = u.id), ''),
           COALESCE((SELECT MAX(a.created_at) FROM issue_activities a WHERE a.actor_id = u.id), '')
         ) AS last_seen_at
@@ -175,7 +176,11 @@ export async function getUser(db: DbClient, id: string) {
     session_expires_at: string | null;
   }>(sql`
     SELECT id, email, username, display_name, avatar, is_superuser, is_active, is_bot, is_customer,
-      is_email_verified, user_timezone, created_at, session_expires_at
+      is_email_verified, user_timezone, created_at,
+      NULLIF(MAX(
+        COALESCE(session_expires_at, ''),
+        COALESCE((SELECT MAX(s.expires_at) FROM user_sessions s WHERE s.user_id = users.id), '')
+      ), '') AS session_expires_at
     FROM users WHERE id = ${id} AND deleted_at IS NULL
   `);
   if (!user) return null;

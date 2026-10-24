@@ -19,11 +19,12 @@ export const users = sqliteTable(
     displayName: text("display_name"),
     passwordHash: text("password_hash"),
     avatar: text("avatar"),
+    // LEGACY single-session credential: only sessions minted before
+    // user_sessions existed live here. New sign-ins never write these columns;
+    // authMiddleware falls back to them when no user_sessions row matches.
+    // session_expires_at is when users.token stops being accepted (NULL =
+    // always valid, from before the column existed).
     token: text("token"),
-    // Session validity: ISO instant when users.token stops being accepted.
-    // Set to now+SESSION_TTL_SECONDS on login/register/OTP; a sliding window is
-    // enforced by authMiddleware (extends on activity). NULL = treat as always
-    // valid (legacy rows from before this column existed).
     sessionExpiresAt: text("session_expires_at"),
     userTimezone: text("user_timezone").default("UTC"),
     isActive: integer("is_active").notNull().default(1),
@@ -39,6 +40,28 @@ export const users = sqliteTable(
     index("idx_users_email").on(table.email),
     index("idx_users_token").on(table.token),
     index("idx_users_deleted_at").on(table.deletedAt),
+  ],
+);
+
+// One row per signed-in device. The raw session token is never stored — only
+// its SHA-256 hex. users.token / users.session_expires_at remain solely for
+// sessions minted before this table existed (legacy fallback in authMiddleware).
+export const userSessions = sqliteTable(
+  "user_sessions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    createdAt: text("created_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    lastUsedAt: text("last_used_at"),
+    userAgent: text("user_agent"),
+  },
+  (table) => [
+    uniqueIndex("uq_user_sessions_token_hash").on(table.tokenHash),
+    index("idx_user_sessions_user").on(table.userId),
   ],
 );
 

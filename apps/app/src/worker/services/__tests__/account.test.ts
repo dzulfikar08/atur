@@ -10,6 +10,7 @@ import { userRoutes } from "../../routes/users";
 import { siwaEnv } from "../../test/appleKeys";
 import { createTestDb, sqliteSupported, type TestDb } from "../../test/sqliteD1";
 import * as authService from "../auth";
+import * as sessionsRepo from "../../repositories/sessions";
 import { deleteAccount, deletedEmail, pickSuccessor } from "../account";
 import { signInWithApple } from "../appleAuth";
 import { signInWithGoogle } from "../googleAuth";
@@ -166,6 +167,23 @@ describe.skipIf(!sqliteSupported)("deleteAccount", () => {
     ]) {
       expect(await db.select().from(table)).toHaveLength(0);
     }
+  });
+
+  it("removes every per-device session row of the user, and only theirs", async () => {
+    await addUser("u1");
+    await addUser("u2");
+    const t1 = await sessionsRepo.createSession(db, "u1", "iPhone");
+    const t2 = await sessionsRepo.createSession(db, "u1", "Android");
+    const t3 = await sessionsRepo.createSession(db, "u2", "Web");
+    expect(await resolveRequestUser(db, t1)).not.toBeNull();
+
+    await deleteAccount(db, "u1");
+
+    const rows = await db.select().from(schema.userSessions);
+    expect(rows.map((r) => r.userId)).toEqual(["u2"]);
+    expect(await resolveRequestUser(db, t1)).toBeNull();
+    expect(await resolveRequestUser(db, t2)).toBeNull();
+    expect(await resolveRequestUser(db, t3)).not.toBeNull();
   });
 
   it("no longer authenticates by session, API key, password, or provider identity", async () => {

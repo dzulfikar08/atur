@@ -2,7 +2,7 @@
 
 **Backend**: `apps/app/` — Hono on Cloudflare Workers (worker `atur-hono`), deployed at **https://app.diatur.com**. The marketing site (`apps/web/`, Astro) lives at https://diatur.com. MCP endpoint: **https://app.diatur.com/mcp**.
 
-**Auth**: send `X-API-Key: pk_live_<key>`. Keys are SHA-256-hashed in the `api_keys` table; mint via the UI (`POST /api/users/me/api-keys`) or directly in D1 (see Registration). Session tokens (`users.token` / `plane-session` cookie) also authenticate via the same header.
+**Auth**: send `X-API-Key: pk_live_<key>`. Keys are SHA-256-hashed in the `api_keys` table; mint via the UI (`POST /api/users/me/api-keys`) or directly in D1 (see Registration). Session tokens (`plane-session` cookie or bearer) also authenticate via the same header: one row per signed-in device in `user_sessions` (SHA-256-hashed, sliding 24h); `users.token` is a legacy fallback only.
 
 **Local dev**: `cd apps/app && bun run dev` (vite dev server — worker + SPA on one origin). **Deploy**: `cd apps/app && bun run deploy`. **D1 remote**: `bunx wrangler d1 execute atur-db --remote --command "..."`. **Typecheck**: `bun run typecheck` from the repo root.
 

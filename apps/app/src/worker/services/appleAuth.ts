@@ -2,11 +2,10 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { DbClient } from "../db/index";
 import type { AppleIdentity } from "../lib/appleAuth";
-import { generateToken } from "../lib/token";
-import { sessionExpiryISO } from "../lib/session";
 import * as usersRepo from "../repositories/users";
 import * as accountsRepo from "../repositories/accounts";
-import { usernameFromEmail, rotateSession } from "./auth";
+import * as sessionsRepo from "../repositories/sessions";
+import { usernameFromEmail, startSession } from "./auth";
 
 const PROVIDER = "apple";
 
@@ -56,7 +55,11 @@ const metadataJson = (identity: AppleIdentity) =>
 export async function signInWithApple(
   db: DbClient,
   identity: AppleIdentity,
-  extra: { fullName?: AppleNativeBody["full_name"]; refreshToken?: string | null } = {},
+  extra: {
+    fullName?: AppleNativeBody["full_name"];
+    refreshToken?: string | null;
+    userAgent?: string | null;
+  } = {},
 ): Promise<AppleAuthResult> {
   const refreshToken = extra.refreshToken ?? null;
   const linked = await accountsRepo.findByProvider(db, PROVIDER, identity.sub);
@@ -70,7 +73,7 @@ export async function signInWithApple(
         .updateTokens(db, linked.id, { refreshToken, metadata: metadataJson(identity) })
         .catch(() => {});
     }
-    return mintSession(db, user, {});
+    return mintSession(db, user, {}, extra.userAgent);
   }
 
   const existing = identity.email
@@ -86,7 +89,7 @@ export async function signInWithApple(
       metadata: metadataJson(identity),
     });
     // Apple verified the address, so the account's email is now verified too.
-    return mintSession(db, existing, { isEmailVerified: 1 });
+    return mintSession(db, existing, { isEmailVerified: 1 }, extra.userAgent);
   }
 
   // Brand-new user. Apple always puts a verified email in the token, but
@@ -94,13 +97,10 @@ export async function signInWithApple(
   // account we may not link to (unverified claim), synthesize one instead of
   // colliding.
   const email = identity.email && !existing ? identity.email : `${identity.sub}@appleid.invalid`;
-  const token = generateToken();
   const created = await usersRepo.createUser(db, {
     email,
     username: await usernameFromEmail(db, email),
     passwordHash: null,
-    token,
-    sessionExpiresAt: sessionExpiryISO(),
     displayName: fullNameOf(extra.fullName),
     avatar: null,
     isEmailVerified: email === identity.email && identity.emailVerified ? 1 : 0,
@@ -113,6 +113,7 @@ export async function signInWithApple(
     refreshToken,
     metadata: metadataJson(identity),
   });
+  const token = await sessionsRepo.createSession(db, created.id, extra.userAgent);
   return {
     user: { id: created.id, email: created.email, username: created.username },
     token,
@@ -122,8 +123,9 @@ export async function signInWithApple(
 async function mintSession(
   db: DbClient,
   user: { id: string; email: string; username: string },
-  extra: Parameters<typeof rotateSession>[2],
+  extra: Parameters<typeof startSession>[2],
+  userAgent?: string | null,
 ): Promise<AppleAuthResult> {
-  const token = await rotateSession(db, user.id, extra);
+  const token = await startSession(db, user.id, extra, userAgent);
   return { user: { id: user.id, email: user.email, username: user.username }, token };
 }

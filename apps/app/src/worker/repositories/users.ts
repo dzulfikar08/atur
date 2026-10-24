@@ -35,7 +35,9 @@ export async function findById(db: DbClient, id: string) {
   return user;
 }
 
-// Opaque-token lookup: token = ? AND is_active AND deleted_at IS NULL.
+// Legacy opaque-token lookup (sessions minted before user_sessions existed):
+// token = ? AND is_active AND deleted_at IS NULL. New sessions live in
+// repositories/sessions.ts.
 export async function findByToken(db: DbClient, token: string) {
   const [user] = await db
     .select({
@@ -59,8 +61,6 @@ export async function createUser(
     email: string;
     username: string;
     passwordHash: string | null;
-    token: string;
-    sessionExpiresAt?: string | null;
     displayName?: string | null;
     avatar?: string | null;
     isEmailVerified?: 0 | 1;
@@ -73,8 +73,6 @@ export async function createUser(
     email: data.email,
     username: data.username,
     passwordHash: data.passwordHash,
-    token: data.token,
-    sessionExpiresAt: data.sessionExpiresAt ?? null,
     displayName: data.displayName ?? null,
     avatar: data.avatar ?? null,
     userTimezone: "UTC",

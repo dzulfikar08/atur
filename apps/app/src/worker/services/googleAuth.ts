@@ -5,11 +5,10 @@ import {
   GOOGLE_USERINFO_ENDPOINT,
   OAUTH_STATE_TTL_SECONDS,
 } from "../lib/oauth";
-import { generateToken } from "../lib/token";
 import * as usersRepo from "../repositories/users";
 import * as accountsRepo from "../repositories/accounts";
-import { usernameFromEmail, rotateSession } from "./auth";
-import { sessionExpiryISO } from "../lib/session";
+import * as sessionsRepo from "../repositories/sessions";
+import { usernameFromEmail, startSession } from "./auth";
 
 const PROVIDER = "google";
 
@@ -203,6 +202,7 @@ export async function fetchProfile(accessToken: string): Promise<GoogleProfile> 
 export async function signInWithGoogle(
   db: DbClient,
   rawProfile: GoogleSignInProfile,
+  userAgent?: string | null,
 ): Promise<GoogleAuthResult> {
   // Normalize once at the boundary so lookups, the created row and the stored
   // metadata all agree on casing (fetchProfile already lowercases; this also
@@ -226,7 +226,7 @@ export async function signInWithGoogle(
         metadata: metadataJson(profile),
       })
       .catch(() => {});
-    return mintSession(db, user.id, user.email, user.username);
+    return mintSession(db, user.id, user.email, user.username, userAgent);
   }
 
   if (!profile.emailVerified) {
@@ -248,18 +248,15 @@ export async function signInWithGoogle(
       idToken: profile.idToken,
       metadata: metadataJson(profile),
     });
-    return mintSession(db, existing.id, existing.email, existing.username);
+    return mintSession(db, existing.id, existing.email, existing.username, userAgent);
   }
 
   // Brand-new user: passwordless, email pre-verified by Google.
   const username = await usernameFromEmail(db, profile.email);
-  const token = generateToken();
   const created = await usersRepo.createUser(db, {
     email: profile.email,
     username,
     passwordHash: null,
-    token,
-    sessionExpiresAt: sessionExpiryISO(),
     displayName: profile.name,
     avatar: profile.picture,
     isEmailVerified: 1,
@@ -273,22 +270,24 @@ export async function signInWithGoogle(
     idToken: profile.idToken,
     metadata: metadataJson(profile),
   });
+  const token = await sessionsRepo.createSession(db, created.id, userAgent);
   return {
     user: { id: created.id, email: created.email, username: created.username },
     token,
   };
 }
 
-// Every successful path funnels here for existing users: fresh opaque token +
-// 24h sliding window — the shared rotateSession invariant, same as login/OTP.
+// Every successful path funnels here for existing users: a new per-device
+// session (the shared startSession invariant, same as login/OTP).
 // isEmailVerified is stamped 1 — Google already verified the address.
 async function mintSession(
   db: DbClient,
   userId: string,
   email: string,
   username: string,
+  userAgent?: string | null,
 ): Promise<GoogleAuthResult> {
-  const token = await rotateSession(db, userId, { isEmailVerified: 1 });
+  const token = await startSession(db, userId, { isEmailVerified: 1 }, userAgent);
   return { user: { id: userId, email, username }, token };
 }
 

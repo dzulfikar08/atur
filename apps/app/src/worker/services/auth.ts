@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { DbClient } from "../db/index";
 import { hashPassword, comparePassword } from "../lib/password";
-import { generateToken } from "../lib/token";
 import { rateLimit } from "../lib/rateLimit";
 import type { Env } from "../lib/env";
 import {
@@ -13,7 +12,7 @@ import {
   OTP_RATE_MAX,
 } from "./email";
 import * as usersRepo from "../repositories/users";
-import { sessionExpiryISO } from "../lib/session";
+import * as sessionsRepo from "../repositories/sessions";
 import { HTTPException } from "hono/http-exception";
 
 export const registerSchema = z.object({
@@ -27,25 +26,31 @@ export const loginSchema = z.object({
   password: z.string(),
 });
 
-export async function register(db: DbClient, data: z.infer<typeof registerSchema>) {
+export async function register(
+  db: DbClient,
+  data: z.infer<typeof registerSchema>,
+  userAgent?: string | null,
+) {
   const existing = await usersRepo.findByEmail(db, data.email);
   if (existing) {
     throw new HTTPException(409, { message: "Email already registered" });
   }
   const passwordHash = await hashPassword(data.password);
-  const token = generateToken();
   const user = await usersRepo.createUser(db, {
     email: data.email,
     username: data.username,
     passwordHash,
-    token,
-    sessionExpiresAt: sessionExpiryISO(),
   });
   if (!user) throw new HTTPException(500, { message: "Failed to create user" });
+  const token = await sessionsRepo.createSession(db, user.id, userAgent);
   return { user: { id: user.id, email: user.email, username: user.username }, token };
 }
 
-export async function login(db: DbClient, data: z.infer<typeof loginSchema>) {
+export async function login(
+  db: DbClient,
+  data: z.infer<typeof loginSchema>,
+  userAgent?: string | null,
+) {
   const user = await usersRepo.findByEmail(db, data.email);
   if (!user || !user.passwordHash || !user.isActive || user.deletedAt) {
     throw new HTTPException(401, { message: "Invalid email or password" });
@@ -54,26 +59,23 @@ export async function login(db: DbClient, data: z.infer<typeof loginSchema>) {
   if (!valid) {
     throw new HTTPException(401, { message: "Invalid email or password" });
   }
-  const token = await rotateSession(db, user.id);
+  const token = await startSession(db, user.id, {}, userAgent);
   return { user: { id: user.id, email: user.email, username: user.username }, token };
 }
 
-// The session-mint invariant in one place: fresh opaque token + 24h sliding
-// expiry (see lib/session.ts). Every login path (password, OTP, Google) funnels
-// through here so session semantics can't drift between them; extra columns
-// (e.g. isEmailVerified) ride along on the same write.
-export async function rotateSession(
+// The session-mint invariant in one place: a NEW per-device session row (see
+// repositories/sessions.ts) — never users.token, so signing in here doesn't
+// sign out the user's other devices. Every login path (password, OTP, Google,
+// Apple) funnels through here; extra user columns (e.g. isEmailVerified) are
+// written separately with updateUser.
+export async function startSession(
   db: DbClient,
   userId: string,
   extra: Parameters<typeof usersRepo.updateUser>[2] = {},
+  userAgent?: string | null,
 ): Promise<string> {
-  const token = generateToken();
-  await usersRepo.updateUser(db, userId, {
-    token,
-    sessionExpiresAt: sessionExpiryISO(),
-    ...extra,
-  });
-  return token;
+  if (Object.keys(extra).length > 0) await usersRepo.updateUser(db, userId, extra);
+  return sessionsRepo.createSession(db, userId, userAgent);
 }
 
 export async function getProfile(db: DbClient, userId: string) {
@@ -171,6 +173,7 @@ export async function verifyLoginOtp(
   db: DbClient,
   kv: KVNamespace,
   data: z.infer<typeof verifyOtpSchema>,
+  userAgent?: string | null,
 ): Promise<{ user: { id: string; email: string; username: string }; token: string }> {
   const stored = await kv.get(otpStorageKey(data.email));
   if (!stored) {
@@ -197,13 +200,11 @@ export async function verifyLoginOtp(
       email: data.email,
       username,
       passwordHash: null,
-      token: generateToken(),
-      sessionExpiresAt: sessionExpiryISO(),
     });
     if (!created) throw new HTTPException(500, { message: "Failed to create user" });
     userId = created.id;
   }
 
-  const token = await rotateSession(db, userId, { isEmailVerified: 1 });
+  const token = await startSession(db, userId, { isEmailVerified: 1 }, userAgent);
   return { user: { id: userId, email: data.email, username }, token };
 }

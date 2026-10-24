@@ -6,6 +6,7 @@ import * as schema from "../db/schema";
 import { appleSiwaConfig, revokeAppleRefreshToken, type AppleSiwaEnv } from "../lib/appleAuth";
 import { nowISO } from "../lib/pagination";
 import * as accountsRepo from "../repositories/accounts";
+import * as sessionsRepo from "../repositories/sessions";
 import * as usersRepo from "../repositories/users";
 import * as workspaceRepo from "../repositories/workspaces";
 
@@ -95,6 +96,7 @@ export async function deleteAccount(
   await revokeAppleGrants(db, userId, env);
   await accountsRepo.deleteByUser(db, userId);
 
+  await sessionsRepo.deleteByUser(db, userId);
   await db
     .update(schema.apiKeys)
     .set({ isActive: 0, ...gone })

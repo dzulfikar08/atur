@@ -1,6 +1,7 @@
 // Opaque session token utilities.
-// Tokens are random 32-byte base64 (standard, no pad) strings persisted in
-// users.token and looked up per-request.
+// Tokens are random 32-byte base64 (standard, no pad) strings. Only their
+// SHA-256 is persisted (user_sessions.token_hash); legacy sessions kept the raw
+// value in users.token.
 
 export interface AuthUser {
   sub: string;

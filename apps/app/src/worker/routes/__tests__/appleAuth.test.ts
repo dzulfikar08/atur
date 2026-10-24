@@ -106,8 +106,9 @@ describe.skipIf(!sqliteSupported)("POST /auth/apple/native", () => {
     expect(second.user.id).toBe(first.user.id);
     expect(second.session_token).not.toBe(first.session_token);
     expect(await allUsers()).toHaveLength(1);
-    // Rotating the session invalidates the previous one, same as every sign-in.
-    expect(await resolveRequestUser(db, first.session_token)).toBeNull();
+    // Per-device sessions: a second sign-in does not sign out the first device.
+    expect((await resolveRequestUser(db, first.session_token))?.id).toBe(first.user.id);
+    expect((await resolveRequestUser(db, second.session_token))?.id).toBe(first.user.id);
   });
 
   it("links to an existing account with the same verified email", async () => {
