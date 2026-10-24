@@ -332,7 +332,13 @@ export class ApiError extends Error {
 
 export async function request<T>(
   path: string,
-  init: { method?: string; body?: unknown; raw?: { data: ArrayBuffer; type: string } } = {},
+  init: {
+    method?: string;
+    body?: unknown;
+    raw?: { data: ArrayBuffer; type: string };
+    /** Multipart body; fetch sets the boundary Content-Type itself. */
+    form?: FormData;
+  } = {},
 ): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -341,18 +347,20 @@ export async function request<T>(
   };
   if (token) headers.Authorization = `Bearer ${token}`;
   if (init.raw) headers["Content-Type"] = init.raw.type;
-  else if (init.body !== undefined) headers["Content-Type"] = "application/json";
+  else if (init.body !== undefined && !init.form) headers["Content-Type"] = "application/json";
 
   let res: Response;
   try {
     res = await fetch(`${SERVER_URL}${path}`, {
       method: init.method ?? "GET",
       headers,
-      body: init.raw
-        ? init.raw.data
-        : init.body === undefined
-          ? undefined
-          : JSON.stringify(init.body),
+      body: init.form
+        ? init.form
+        : init.raw
+          ? init.raw.data
+          : init.body === undefined
+            ? undefined
+            : JSON.stringify(init.body),
     });
   } catch {
     recordFailedRequest(init.method ?? "GET", path, 0);
@@ -557,6 +565,19 @@ export const api = {
     request<Issue>(`${issueBase(slug, projectId)}/`, { method: "POST", body }),
   updateIssue: (slug: string, projectId: string, issueId: string, body: IssuePatch) =>
     request<Issue>(`${issueBase(slug, projectId)}/${issueId}`, { method: "PATCH", body }),
+  /**
+   * Upload a local file (file:// URI) as an Atur asset. Returns the
+   * auth-checked `/api/assets/<id>` path the web editor embeds as <img src>.
+   */
+  uploadAsset: (file: { uri: string; name: string; type: string }) => {
+    const form = new FormData();
+    // React Native's FormData streams a { uri, name, type } part from disk.
+    form.append("file", file as unknown as Blob);
+    return request<{ id: string; url: string; size: number }>("/api/assets/upload/", {
+      method: "POST",
+      form,
+    });
+  },
   addComment: (slug: string, projectId: string, issueId: string, commentHtml: string) =>
     request<Comment>(`${issueBase(slug, projectId)}/${issueId}/comments/`, {
       method: "POST",

@@ -4,13 +4,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { AttachmentList } from "@/components/attachment/attachment-list";
 import { DateSheet } from "@/components/date-sheet";
-import { MicButton } from "@/components/mic-button";
+import { CommentComposer } from "@/components/comment-composer";
+import { KeyboardFrame } from "@/components/keyboard-frame";
 import { RichText } from "@/components/rich-text";
 import { IssueDetailSkeleton } from "@/components/skeletons";
 import {
@@ -43,7 +44,6 @@ import {
   formatDay,
   formatDuration,
   htmlToBlocks,
-  textToHtml,
   timeAgo,
 } from "@/lib/format";
 import { compareStates } from "@/lib/issue-query";
@@ -166,7 +166,6 @@ export default function IssueDetail() {
 
   const [sheet, setSheet] = useState<SheetKind>(null);
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
-  const [comment, setComment] = useState("");
   const [tab, setTab] = useState<Tab>("comments");
 
   const refreshLists = () => {
@@ -272,11 +271,8 @@ export default function IssueDetail() {
   });
 
   const addComment = useMutation({
-    mutationFn: () => api.addComment(slug, projectId, issueId, textToHtml(comment)),
-    onSuccess: () => {
-      setComment("");
-      void qc.invalidateQueries({ queryKey: issueKey });
-    },
+    mutationFn: (html: string) => api.addComment(slug, projectId, issueId, html),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: issueKey }),
   });
 
   const data = issue.data;
@@ -341,11 +337,8 @@ export default function IssueDetail() {
           ),
         }}
       />
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={90}
-      >
+      {/* Pads by the part of the keyboard over this screen (Android no longer resizes). */}
+      <KeyboardFrame variant="fill">
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={styles.keyRow}>
             <Mono>{`${key} · ${data.project_detail.name}`}</Mono>
@@ -606,31 +599,17 @@ export default function IssueDetail() {
             : null}
         </ScrollView>
 
-        <View style={styles.composer}>
-          <View style={styles.flex}>
-            <Input
-              value={comment}
-              onChangeText={setComment}
-              placeholder="Add a comment…"
-              multiline
-              style={styles.composerInput}
-            />
-          </View>
-          <MicButton value={comment} onChangeText={setComment} />
-          <IconButton
-            icon={addComment.isPending ? "hourglass-outline" : "send"}
-            label="Send comment"
-            onPress={() => {
-              if (comment.trim() && !addComment.isPending) addComment.mutate();
-            }}
-          />
-        </View>
-        {addComment.error ? (
-          <View style={styles.pad}>
-            <ErrorNote error={addComment.error} />
-          </View>
-        ) : null}
-      </KeyboardAvoidingView>
+        <CommentComposer
+          sending={addComment.isPending}
+          error={addComment.error}
+          onSend={(html) =>
+            addComment.mutateAsync(html).then(
+              () => true,
+              () => false,
+            )
+          }
+        />
+      </KeyboardFrame>
 
       <OptionSheet
         visible={sheet === "state"}
@@ -837,16 +816,5 @@ const styles = StyleSheet.create((theme) => ({
   },
   relatedName: { flex: 1, fontSize: theme.fontSize.base, fontFamily: theme.fonts.medium },
   relationType: { fontSize: theme.fontSize.xs, fontFamily: theme.fonts.bold, minWidth: 74 },
-  composer: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.hairline,
-    backgroundColor: theme.colors.background,
-  },
-  composerInput: { minHeight: 42, maxHeight: 120, paddingTop: 10 },
   labelDot: { width: 10, height: 10, borderRadius: 5 },
 }));
