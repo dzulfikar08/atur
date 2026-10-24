@@ -1,14 +1,17 @@
 // Visible-screen state for a pane, built from the bridge's `hello` / `snapshot`
-// / `diff` frames. The bridge keeps no scrollback: a snapshot is the whole
-// visible grid (rows joined by "\r\n"), a diff replaces individual rows by
-// index. One instance per open pane, shared by the native renderer and the
-// classic WebView renderer (which replays the same frames).
+// / `diff` frames. The live stream carries only the visible grid: a snapshot is
+// the whole grid (rows joined by "\r\n"), a diff replaces individual rows by
+// index. Scrollback arrives separately, on request (`history`), as a static
+// block shown above the live grid. One instance per open pane, shared by the
+// native renderer and the classic WebView renderer (which replays the same frames).
 
 export interface ScreenState {
   cols: number;
   rows: number;
   /** One raw ANSI string per row; replaced (never mutated) on every change. */
   lines: readonly string[];
+  /** Scrollback rows above the visible grid, oldest first; empty until requested. */
+  history: readonly string[];
 }
 
 /** The frames a renderer must be able to replay, in the WebView page's vocabulary. */
@@ -21,7 +24,7 @@ export type ScreenFrame =
 const MAX_ROWS = 1000;
 
 export class TerminalScreen {
-  private state: ScreenState = { cols: 80, rows: 24, lines: [] };
+  private state: ScreenState = { cols: 80, rows: 24, lines: [], history: [] };
   private readonly stateListeners = new Set<() => void>();
   private readonly frameListeners = new Set<(frame: ScreenFrame) => void>();
   private helloSeen = false;
@@ -78,6 +81,19 @@ export class TerminalScreen {
     if (!changed) return;
     this.set({ ...this.state, lines });
     this.emit({ t: "diff", rows });
+  }
+
+  /**
+   * Bridge `history` reply: the pane's last rows, which end with the visible
+   * grid. Those trailing rows are dropped; the live grid already shows them.
+   */
+  setHistory(rows: readonly string[]): void {
+    const grid = Math.max(this.state.rows, this.state.lines.length);
+    this.set({ ...this.state, history: rows.slice(0, Math.max(0, rows.length - grid)) });
+  }
+
+  clearHistory(): void {
+    if (this.state.history.length > 0) this.set({ ...this.state, history: [] });
   }
 
   private set(next: ScreenState): void {

@@ -66,20 +66,24 @@ export default function PaneView() {
   // Frames land here once and feed whichever renderer is mounted.
   const screen = useMemo(() => new TerminalScreen(), [paneId]);
 
-  const { status, sendInput, sendPaste, retry, claimKeyboard } = usePaneAttach(paneId ?? "", {
-    // hello carries the real pane geometry — the grid is authoritative.
-    onHello: ({ cols, rows, keyboard }) => {
-      setOwnsKeyboard(keyboard);
-      screen.hello(cols, rows);
+  const { status, sendInput, sendPaste, retry, claimKeyboard, requestHistory } = usePaneAttach(
+    paneId ?? "",
+    {
+      // hello carries the real pane geometry — the grid is authoritative.
+      onHello: ({ cols, rows, keyboard }) => {
+        setOwnsKeyboard(keyboard);
+        screen.hello(cols, rows);
+      },
+      onSnapshot: (ansi) => {
+        setBridgeError(null);
+        screen.snapshot(ansi);
+      },
+      onDiff: (rows) => screen.diff(rows),
+      onHistory: (rows) => screen.setHistory(rows),
+      onKeyboard: setOwnsKeyboard,
+      onError: setBridgeError,
     },
-    onSnapshot: (ansi) => {
-      setBridgeError(null);
-      screen.snapshot(ansi);
-    },
-    onDiff: (rows) => screen.diff(rows),
-    onKeyboard: setOwnsKeyboard,
-    onError: setBridgeError,
-  });
+  );
   const observe = usePaneObserve(paneId ?? "", view === "transcript");
 
   if (!paneId) return null;
@@ -139,6 +143,7 @@ export default function PaneView() {
               isAgent={Boolean(pane?.agent)}
               sendInput={sendInput}
               sendPaste={sendPaste}
+              requestHistory={requestHistory}
             />
           ) : null}
           {view === "classic" ? (

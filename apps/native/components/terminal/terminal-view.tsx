@@ -1,7 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { FlatList, ScrollView, View, type NativeScrollEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native-unistyles";
@@ -26,15 +26,17 @@ interface TerminalViewProps {
   onFontSizeCommit: (size: number) => void;
   /** Tap on plain text (not a link): the owner usually opens the keyboard. */
   onTapText: () => void;
+  /** The reader left the bottom: fetch scrollback to show above the live grid. */
+  onScrollBack: () => void;
 }
 
-const keyOf = (_: string, index: number) => String(index);
-
 /**
- * The pane's visible screen as native text: one memoised row per terminal line
- * in JetBrains Mono, scrolled horizontally when the grid is wider than the
- * phone and vertically when taller. Pinch scales the font; the view follows the
- * bottom of the screen until the reader scrolls up.
+ * The pane's screen as native text: one memoised row per terminal line in
+ * JetBrains Mono, scrolled horizontally when the grid is wider than the phone
+ * and vertically when taller. Pinch scales the font; the view follows the
+ * bottom of the screen until the reader scrolls up. Scrolling up fetches the
+ * pane's scrollback once and shows it above the live grid; returning to the
+ * bottom drops it, so the next scroll-up gets a fresh copy.
  */
 export function TerminalView({
   screen,
@@ -42,8 +44,13 @@ export function TerminalView({
   onFontSize,
   onFontSizeCommit,
   onTapText,
+  onScrollBack,
 }: TerminalViewProps) {
-  const { cols, lines } = useSyncExternalStore(screen.subscribe, screen.getState);
+  const { cols, lines, history } = useSyncExternalStore(screen.subscribe, screen.getState);
+  const rows = useMemo(
+    () => (history.length > 0 ? [...history, ...lines] : (lines as string[])),
+    [history, lines],
+  );
   const list = useRef<FlatList<string>>(null);
   const stick = useRef(true);
   const [viewportWidth, setViewportWidth] = useState(0);
@@ -108,8 +115,11 @@ export function TerminalView({
     .onEnd(() => latest.current.onFontSizeCommit(lastSize.current));
 
   const onScroll = ({ nativeEvent: e }: { nativeEvent: NativeScrollEvent }) => {
-    stick.current =
+    const atBottom =
       e.contentOffset.y + e.layoutMeasurement.height >= e.contentSize.height - STICK_SLACK;
+    if (stick.current && !atBottom) onScrollBack();
+    else if (!stick.current && atBottom) screen.clearHistory();
+    stick.current = atBottom;
   };
 
   return (
@@ -127,8 +137,11 @@ export function TerminalView({
           <FlatList
             ref={list}
             style={{ width: contentWidth }}
-            data={lines as string[]}
-            keyExtractor={keyOf}
+            data={rows}
+            // Distinct key spaces: prepended scrollback must not take over the live rows' keys.
+            keyExtractor={(_, index) =>
+              index < history.length ? `h${index}` : `l${index - history.length}`
+            }
             extraData={fontSize}
             renderItem={({ item }) => (
               <TerminalRow
@@ -151,6 +164,8 @@ export function TerminalView({
             removeClippedSubviews
             nestedScrollEnabled
             keyboardShouldPersistTaps="always"
+            // Scrollback arrives above the rows being read: keep them in place.
+            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
             onScroll={onScroll}
             scrollEventThrottle={32}
             onContentSizeChange={() => {

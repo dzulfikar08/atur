@@ -35,12 +35,14 @@ export interface PaneAttachHandlers {
   onSnapshot?: (ansi: string) => void;
   /** Per-row repaint: [0-based row, full row content]. */
   onDiff?: (rows: [number, string][]) => void;
+  /** Reply to `requestHistory`: the pane's last rows including scrollback (ANSI, oldest first). */
+  onHistory?: (rows: string[]) => void;
   onError?: (message: string) => void;
 }
 
 /**
- * bridge → app: hello · keyboard · snapshot · diff · pong · error · exit
- * app → bridge: input {data} · paste {text, submit} · claim · ping
+ * bridge → app: hello · keyboard · snapshot · diff · history · pong · error · exit
+ * app → bridge: input {data} · paste {text, submit} · claim · history {lines} · ping
  * A bridge `exit` means the pane died; reconnecting cannot revive it.
  */
 export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
@@ -78,6 +80,12 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
   const claimKeyboard = useCallback(() => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "claim" }));
+  }, []);
+
+  /** Ask for the last `lines` rows including scrollback; answered by `onHistory`. Read-only. */
+  const requestHistory = useCallback((lines: number) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "history", lines }));
   }, []);
 
   useEffect(() => {
@@ -152,6 +160,13 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
             if (rows.length > 0) h.onDiff?.(rows);
             break;
           }
+          case "history":
+            if (Array.isArray(msg.rows)) {
+              h.onHistory?.(
+                msg.rows.filter((row: unknown): row is string => typeof row === "string"),
+              );
+            }
+            break;
           case "error":
             h.onError?.(typeof msg.message === "string" ? msg.message : "unknown bridge error");
             break;
@@ -189,7 +204,7 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
     };
   }, [paneId, retryKey]);
 
-  return { status, sendInput, sendPaste, retry, claimKeyboard };
+  return { status, sendInput, sendPaste, retry, claimKeyboard, requestHistory };
 }
 
 // --- observe: structured transcript ------------------------------------------

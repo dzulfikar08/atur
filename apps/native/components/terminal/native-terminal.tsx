@@ -16,6 +16,8 @@ import type { TerminalScreen } from "@/lib/terminal-screen";
 // The soft keyboard's hidden input always holds this sentinel so Backspace has
 // something to delete (Android fires no change on an empty field).
 const SENTINEL = "\u200b\u200b";
+/** Rows of scrollback fetched when the reader scrolls up (the bridge caps it at 3000). */
+const HISTORY_LINES = 2000;
 
 interface NativeTerminalProps {
   paneId: string;
@@ -26,6 +28,8 @@ interface NativeTerminalProps {
   isAgent: boolean;
   sendInput: (data: string) => boolean;
   sendPaste: (text: string, submit: boolean) => boolean;
+  /** Ask the bridge for scrollback rows (the live stream has the visible grid only). */
+  requestHistory: (lines: number) => void;
 }
 
 /**
@@ -39,6 +43,7 @@ export function NativeTerminal({
   isAgent,
   sendInput,
   sendPaste,
+  requestHistory,
 }: NativeTerminalProps) {
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const [width, setWidth] = useState(0);
@@ -103,6 +108,7 @@ export function NativeTerminal({
     <View style={styles.fill}>
       <View style={styles.fill} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
         <TerminalView
+          onScrollBack={() => requestHistory(HISTORY_LINES)}
           screen={screen}
           fontSize={fontSize}
           onFontSize={resize}

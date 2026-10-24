@@ -56,6 +56,8 @@ const ACTIVITY_BURST_MS = 1_500;
 /** Fan-out backpressure cap: a client whose socket buffer exceeds this is
  *  skipped until it drains (full-state snapshots make skips lossless). */
 const MAX_BUFFERED_BYTES = 1_000_000;
+/** Upper bound on one `history` request (rows of scrollback). */
+const MAX_HISTORY_LINES = 3000;
 
 class Watcher {
   readonly clients = new Map<Ws, BridgeMeta>();
@@ -495,7 +497,7 @@ export class PaneHub {
   }
 
   async handleMessage(ws: Ws, raw: string): Promise<void> {
-    let msg: { type?: unknown; data?: unknown; text?: unknown; submit?: unknown };
+    let msg: { type?: unknown; data?: unknown; text?: unknown; submit?: unknown; lines?: unknown };
     try {
       msg = JSON.parse(raw) as typeof msg;
     } catch {
@@ -509,6 +511,30 @@ export class PaneHub {
     }
     if (msg.type === "claim") {
       this.watchers.get(client.paneId)?.claim(ws);
+      return;
+    }
+    if (msg.type === "history") {
+      // Read-only, so any viewer may ask: the last `lines` rows of the pane
+      // including host scrollback (the live stream carries the visible grid only).
+      const lines = Math.min(Math.max(Math.trunc(Number(msg.lines)) || 0, 1), MAX_HISTORY_LINES);
+      try {
+        const res = await rpc<PaneReadPayload>("pane.read", {
+          pane_id: client.paneId,
+          source: "recent",
+          lines,
+          format: "ansi",
+          strip_ansi: false,
+        });
+        const rows = res.read.text.split("\n").map((row) => row.replace(/\r$/, ""));
+        ws.send(JSON.stringify({ type: "history", rows }));
+      } catch (e) {
+        ws.send(
+          JSON.stringify({
+            type: "error",
+            message: `history: ${e instanceof Error ? e.message : String(e)}`,
+          }),
+        );
+      }
       return;
     }
     const segments =

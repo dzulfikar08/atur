@@ -27,9 +27,9 @@ One `usePaneAttach` socket feeds a `TerminalScreen` (`lib/terminal-screen.ts`); 
 
 ### Frames and the screen model
 
-Bridge → app: `hello` (cols, rows, keyboard), `snapshot` (the whole visible grid as ANSI, rows joined by `\r\n`), `diff` (`[row, content]` pairs), `keyboard`, `pong`, `error`, `exit`. The bridge keeps **no scrollback**: the app sees only the visible grid, so "scroll back" is not possible and the pane's cols × rows are authoritative. `TerminalScreen` keeps `lines: string[]` (snapshot replaces all, diff replaces rows by index, absurd indices are ignored) and publishes a new immutable state per change (`useSyncExternalStore`).
+Bridge → app: `hello` (cols, rows, keyboard), `snapshot` (the whole visible grid as ANSI, rows joined by `\r\n`), `diff` (`[row, content]` pairs), `history` (`rows`: the pane's last rows including host scrollback, oldest first, sent only on request), `keyboard`, `pong`, `error`, `exit`. The live stream carries the visible grid only, so the pane's cols × rows are authoritative. `TerminalScreen` keeps `lines: string[]` (snapshot replaces all, diff replaces rows by index, absurd indices are ignored) plus `history: string[]` (the `history` reply minus its trailing grid rows) and publishes a new immutable state per change (`useSyncExternalStore`).
 
-App → bridge: `input {data}` (what xterm.js `onData` would send; the bridge turns it into herdr key presses, `translateInput` in `apps/bridge/src/hub.ts`), `paste {text, submit}` (one literal text paste; newlines stay newlines; `submit` presses Enter after), `claim`, `ping`.
+App → bridge: `input {data}` (what xterm.js `onData` would send; the bridge turns it into herdr key presses, `translateInput` in `apps/bridge/src/hub.ts`), `paste {text, submit}` (one literal text paste; newlines stay newlines; `submit` presses Enter after), `claim`, `history {lines}` (read-only, any viewer; herdr `pane.read` source `recent`, at most 3000 asked, herdr returns up to 1000), `ping`.
 
 > **Bridge restart needed.** `paste` and Ctrl+A…Z (anything beyond the old Ctrl+C/D/Z/\) are new in the bridge. Against an older bridge, multi-line composer sends/pastes and most Ctrl combos are silently ignored; restart the bridge from this commit. Single-line prompts and everything else work on the old bridge.
 
@@ -39,7 +39,7 @@ App → bridge: `input {data}` (what xterm.js `onData` would send; the bridge tu
 - **Colours.** `components/terminal/palette.ts` mirrors the Classic view: `#0a0a0a` background, `#e5e5e5` foreground and xterm.js's default 16 colours; bold promotes colours 0-7 to bright, as xterm.js does. Dark in both app themes.
 - **Font.** JetBrains Mono (500, and 700 for bold), cell width 0.6 em, line height 1.35 em. Default 11 pt. **Pinch** to resize (6–24 pt in half-point steps); the size is saved (`atur.pane.fontSize`) and reapplied. "Fit width" appears when the current size differs from the size that fits the pane's columns exactly.
 - **Wide characters.** Width is approximated (`charWidth` in `lib/ansi.ts`: CJK, Hangul, fullwidth and common emoji = 2 cells, combining marks = 0). Rows that contain a double-width glyph render each chunk in a box of exactly its cell width, so columns stay aligned even though the fallback font's glyph is not exactly two cells.
-- **Follow.** The view sticks to the bottom (the prompt) until you scroll up, and resumes when you scroll back near the bottom.
+- **Follow and scrollback.** The view sticks to the bottom (the prompt) until you scroll up. Leaving the bottom asks the bridge for 2000 rows of scrollback, which appear above the live grid without moving what you are reading (`maintainVisibleContentPosition`). Back at the bottom the scrollback is dropped and following resumes; the next scroll-up fetches a fresh copy. Needs a bridge from this commit; an older one ignores the request (no scrollback, as before).
 - **Copy and links.** Long-press a row copies its text (toast, haptic). Tap a URL (`https?://…`, trailing punctuation trimmed) to open it in the in-app browser; a tap elsewhere opens the keyboard.
 
 ### Input

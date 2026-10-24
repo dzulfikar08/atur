@@ -8,7 +8,32 @@ describe("TerminalScreen", () => {
     const screen = new TerminalScreen();
     screen.hello(100, 3);
     screen.snapshot("one\r\ntwo\r\nthree");
-    expect(screen.getState()).toEqual({ cols: 100, rows: 3, lines: ["one", "two", "three"] });
+    expect(screen.getState()).toEqual({
+      cols: 100,
+      rows: 3,
+      lines: ["one", "two", "three"],
+      history: [],
+    });
+  });
+
+  test("history keeps the scrollback above the grid and drops the rows the grid already shows", () => {
+    const screen = new TerminalScreen();
+    screen.hello(80, 2);
+    screen.snapshot("live1\r\nlive2");
+    screen.setHistory(["old1", "old2", "old3", "live1", "live2"]);
+    expect(screen.getState().history).toEqual(["old1", "old2", "old3"]);
+    expect(screen.getState().lines).toEqual(["live1", "live2"]);
+  });
+
+  test("history shorter than the grid leaves nothing above it; clearHistory empties it", () => {
+    const screen = new TerminalScreen();
+    screen.hello(80, 3);
+    screen.snapshot("a\r\nb\r\nc");
+    screen.setHistory(["b", "c"]);
+    expect(screen.getState().history).toEqual([]);
+    screen.setHistory(["x", "a", "b", "c"]);
+    screen.clearHistory();
+    expect(screen.getState().history).toEqual([]);
   });
 
   test("diff replaces rows by index and leaves the others", () => {
