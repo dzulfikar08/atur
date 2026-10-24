@@ -1,12 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { Image, View } from "react-native";
+import { View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+import { AuthedImage } from "@/components/authed-image";
 import { KIND_ICON } from "@/components/attachment/kind-icon";
 import { ErrorNote, ListGroup, ListRow, SectionTitle, Skeleton } from "@/components/ui";
-import { api, assetSource, type IssueAttachment } from "@/lib/api";
+import { api, type IssueAttachment } from "@/lib/api";
 import { fileKind, formatBytes } from "@/lib/file-kind";
 
 function AttachmentIcon({ attachment }: { attachment: IssueAttachment & { url: string } }) {
@@ -15,8 +16,8 @@ function AttachmentIcon({ attachment }: { attachment: IssueAttachment & { url: s
   return (
     <View style={styles.thumb}>
       {kind === "image" ? (
-        <Image
-          source={assetSource(attachment.url)}
+        <AuthedImage
+          src={attachment.url}
           accessibilityIgnoresInvertColors
           resizeMode="cover"
           style={styles.thumbImage}

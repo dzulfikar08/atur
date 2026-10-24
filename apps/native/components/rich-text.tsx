@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Image, View, type TextStyle } from "react-native";
+import { View, type TextStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
+import { AuthedImage } from "@/components/authed-image";
 import { Text } from "@/components/ui";
-import { assetSource } from "@/lib/api";
 import { htmlToBlocks } from "@/lib/format";
 
 /** Full-width image that keeps its aspect ratio once the size is known. */
@@ -12,8 +12,8 @@ export function InlineImage({ src }: { src: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) return <Text style={styles.broken}>Image unavailable</Text>;
   return (
-    <Image
-      source={assetSource(src)}
+    <AuthedImage
+      src={src}
       accessibilityIgnoresInvertColors
       resizeMode="contain"
       onLoad={(e) => {

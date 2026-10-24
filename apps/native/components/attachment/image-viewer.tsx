@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { ActivityIndicator, Image, ScrollView, View } from "react-native";
+import { ActivityIndicator, ScrollView, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+import { AuthedImage } from "@/components/authed-image";
 import { Text } from "@/components/ui";
-import { assetSource } from "@/lib/api";
 import type { AttachmentRef } from "@/lib/attachment-file";
 
 /**
@@ -28,8 +28,8 @@ export function ImageViewer({ att }: { att: AttachmentRef }) {
         showsVerticalScrollIndicator={false}
       >
         {box.width > 0 ? (
-          <Image
-            source={assetSource(att.url)}
+          <AuthedImage
+            src={att.url}
             accessibilityLabel={att.name}
             accessibilityIgnoresInvertColors
             resizeMode="contain"

@@ -3,7 +3,6 @@ import React, { Fragment, useEffect, useRef, useState, type ComponentProps } fro
 import {
   ActivityIndicator,
   Animated,
-  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -22,8 +21,9 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+import { AuthedImage } from "@/components/authed-image";
 import { useTabBarInset } from "@/components/floating-tab-bar";
-import { assetSource, type Priority } from "@/lib/api";
+import { type Priority } from "@/lib/api";
 import { productColor } from "@/lib/product";
 import { stateColor } from "@/theme";
 
@@ -648,8 +648,8 @@ export function Avatar({
     >
       <Text style={[styles.avatarText, { fontSize: size * 0.42 }]}>{initial}</Text>
       {uri && !failed ? (
-        <Image
-          source={assetSource(uri)}
+        <AuthedImage
+          src={uri}
           onError={() => setFailed(true)}
           style={[RNStyleSheet.absoluteFill, { borderRadius: radius }]}
         />
