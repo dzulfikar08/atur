@@ -34,6 +34,8 @@ interface NativeTerminalProps {
   onClaimKeyboard?: () => void;
   /** Lay the pane out at this grid (sent while we hold the keyboard). */
   requestResize: (cols: number, rows: number) => void;
+  /** Long-press on the text: open the text selector. */
+  onSelectText: () => void;
 }
 
 /**
@@ -50,6 +52,7 @@ export function NativeTerminal({
   requestHistory,
   onClaimKeyboard,
   requestResize,
+  onSelectText,
 }: NativeTerminalProps) {
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const [box, setBox] = useState({ width: 0, height: 0 });
@@ -146,6 +149,7 @@ export function NativeTerminal({
       >
         <TerminalView
           onScrollBack={() => requestHistory(HISTORY_LINES)}
+          onSelectText={onSelectText}
           screen={screen}
           fontSize={fontSize}
           onFontSize={resize}

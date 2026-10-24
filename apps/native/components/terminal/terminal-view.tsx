@@ -1,7 +1,6 @@
-import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { FlatList, ScrollView, View, type NativeScrollEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native-unistyles";
@@ -28,6 +27,8 @@ interface TerminalViewProps {
   onTapText: () => void;
   /** The reader left the bottom: fetch scrollback to show above the live grid. */
   onScrollBack: () => void;
+  /** Long-press on the text: the owner opens the text selector. */
+  onSelectText: () => void;
 }
 
 /**
@@ -45,6 +46,7 @@ export function TerminalView({
   onFontSizeCommit,
   onTapText,
   onScrollBack,
+  onSelectText,
 }: TerminalViewProps) {
   const { cols, lines, history } = useSyncExternalStore(screen.subscribe, screen.getState);
   const rows = useMemo(
@@ -54,31 +56,16 @@ export function TerminalView({
   const list = useRef<FlatList<string>>(null);
   const stick = useRef(true);
   const [viewportWidth, setViewportWidth] = useState(0);
-  const [toast, setToast] = useState<string | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const lineHeight = Math.round(fontSize * LINE_HEIGHT_EM);
   const cellWidth = fontSize * CELL_WIDTH_EM;
   // A little slack: fallback fonts and rounding can make a row a hair wider than cols cells.
   const contentWidth = Math.max(viewportWidth, Math.ceil(cols * cellWidth * 1.03) + 12);
 
-  useEffect(() => () => clearTimeout(toastTimer.current), []);
-
-  const showToast = useCallback((message: string) => {
-    setToast(message);
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 1400);
-  }, []);
-
-  const onCopy = useCallback(
-    (text: string) => {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      void Clipboard.setStringAsync(text).then(() =>
-        showToast(text ? "Copied row" : "Copied empty row"),
-      );
-    },
-    [showToast],
-  );
+  const onLongPress = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    onSelectText();
+  }, [onSelectText]);
 
   const onTap = useCallback(
     (url: string | null) => {
@@ -149,7 +136,7 @@ export function TerminalView({
                 lineHeight={lineHeight}
                 cellWidth={cellWidth}
                 onTap={onTap}
-                onCopy={onCopy}
+                onLongPress={onLongPress}
               />
             )}
             getItemLayout={(_, index) => ({
@@ -179,11 +166,6 @@ export function TerminalView({
             contentContainerStyle={styles.content}
           />
         </ScrollView>
-        {toast ? (
-          <View pointerEvents="none" style={styles.toast}>
-            <Text style={styles.toastText}>{toast}</Text>
-          </View>
-        ) : null}
       </View>
     </GestureDetector>
   );
@@ -197,19 +179,5 @@ const styles = StyleSheet.create((theme) => ({
     fontFamily: theme.fonts.mono,
     fontSize: theme.fontSize.sm,
     padding: theme.spacing.md,
-  },
-  toast: {
-    position: "absolute",
-    top: theme.spacing.md,
-    alignSelf: "center",
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 6,
-    borderRadius: theme.radius.pill,
-    backgroundColor: "rgba(255,255,255,0.92)",
-  },
-  toastText: {
-    fontSize: theme.fontSize.sm,
-    fontFamily: theme.fonts.bold,
-    color: "#0a0a0a",
   },
 }));

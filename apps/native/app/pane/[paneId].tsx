@@ -72,6 +72,12 @@ export default function PaneView() {
   const [ownsKeyboard, setOwnsKeyboard] = useState(false);
   const [bridgeError, setBridgeError] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
+  // Text selector: long-press on the terminal, or ⋯ → Select text.
+  const openSelector = () => {
+    // Fill in scrollback first if none is loaded yet.
+    if (screen.getState().history.length === 0) requestHistory(3000);
+    setSelecting(true);
+  };
 
   // Frames land here once and feed whichever renderer is mounted.
   const screen = useMemo(() => new TerminalScreen(), [paneId]);
@@ -136,11 +142,7 @@ export default function PaneView() {
                         key: "select",
                         icon: "text-outline",
                         title: "Select text",
-                        onPress: () => {
-                          // Fill in scrollback first if none is loaded yet.
-                          if (screen.getState().history.length === 0) requestHistory(3000);
-                          setSelecting(true);
-                        },
+                        onPress: openSelector,
                       },
                     ],
                   },
@@ -171,6 +173,7 @@ export default function PaneView() {
               requestHistory={requestHistory}
               onClaimKeyboard={status === "connected" ? claimKeyboard : undefined}
               requestResize={requestResize}
+              onSelectText={openSelector}
             />
           ) : null}
           {view === "classic" ? (

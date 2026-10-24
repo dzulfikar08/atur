@@ -20,8 +20,8 @@ interface TerminalRowProps extends RowMetrics {
   line: string;
   /** Tap: `url` is the link under the finger, or null for plain text. */
   onTap: (url: string | null) => void;
-  /** Long-press: the row's plain text (trailing blanks trimmed). */
-  onCopy: (text: string) => void;
+  /** Long-press: open the text selector. */
+  onLongPress: () => void;
 }
 
 function spanStyle(span: Span, metrics: RowMetrics) {
@@ -51,7 +51,7 @@ export const TerminalRow = memo(function TerminalRow({
   lineHeight,
   cellWidth,
   onTap,
-  onCopy,
+  onLongPress,
 }: TerminalRowProps) {
   const row = useMemo(() => parseRow(line), [line]);
   const metrics = { fontSize, lineHeight, cellWidth };
@@ -66,7 +66,7 @@ export const TerminalRow = memo(function TerminalRow({
   return (
     <Pressable
       onPress={press}
-      onLongPress={() => onCopy(rowText(row).trimEnd())}
+      onLongPress={onLongPress}
       delayLongPress={450}
       style={{ height: lineHeight }}
     >
