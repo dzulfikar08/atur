@@ -44,7 +44,15 @@ function openPane(pane: PaneListItem) {
   router.push({ pathname: "/pane/[paneId]", params: { paneId: pane.pane_id } });
 }
 
-function PaneRow({ pane, onLongPress }: { pane: PaneListItem; onLongPress: () => void }) {
+function PaneRow({
+  pane,
+  onLongPress,
+  onClose,
+}: {
+  pane: PaneListItem;
+  onLongPress: () => void;
+  onClose: () => void;
+}) {
   const { theme } = useUnistyles();
   const attention = paneAttention(pane);
   const issue = paneIssueKey(pane);
@@ -82,6 +90,16 @@ function PaneRow({ pane, onLongPress }: { pane: PaneListItem; onLongPress: () =>
         ) : null}
       </View>
       {status ? <Text style={[styles.status, loud && { color: dot }]}>{status}</Text> : null}
+      {/* Quick close: confirms in a sheet, no need to open the pane. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Close pane ${pane.pane_id}`}
+        hitSlop={10}
+        onPress={onClose}
+        style={({ pressed }) => [styles.close, pressed && styles.pressed]}
+      >
+        <Ionicons name="close" size={18} color={theme.colors.mutedForeground} />
+      </Pressable>
     </Pressable>
   );
 }
@@ -166,8 +184,9 @@ export default function Panes() {
     selectedLabel: chips.find((chip) => chip.key === workspace)?.label ?? null,
     onWorkspaceCreated: selectWorkspace,
   });
-  const openActions = (pane: PaneListItem) =>
-    actions.open({ pane_id: pane.pane_id, title: paneTitle(pane) });
+  const ref = (pane: PaneListItem) => ({ pane_id: pane.pane_id, title: paneTitle(pane) });
+  const openActions = (pane: PaneListItem) => actions.open(ref(pane));
+  const quickClose = (pane: PaneListItem) => actions.confirmClose(ref(pane));
 
   return (
     <Screen
@@ -244,7 +263,12 @@ export default function Panes() {
           {agents.length > 0 ? (
             <ListGroup>
               {agents.map((pane) => (
-                <PaneRow key={pane.pane_id} pane={pane} onLongPress={() => openActions(pane)} />
+                <PaneRow
+                  key={pane.pane_id}
+                  pane={pane}
+                  onLongPress={() => openActions(pane)}
+                  onClose={() => quickClose(pane)}
+                />
               ))}
             </ListGroup>
           ) : null}
@@ -253,7 +277,12 @@ export default function Panes() {
               <ShellsHeader count={shells.length} open={shellsOpen} onToggle={toggleShells} />
               {shellsOpen
                 ? shells.map((pane) => (
-                    <PaneRow key={pane.pane_id} pane={pane} onLongPress={() => openActions(pane)} />
+                    <PaneRow
+                      key={pane.pane_id}
+                      pane={pane}
+                      onLongPress={() => openActions(pane)}
+                      onClose={() => quickClose(pane)}
+                    />
                   ))
                 : null}
             </ListGroup>
@@ -291,6 +320,14 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.xs,
     fontFamily: theme.fonts.mono,
     color: theme.colors.mutedForeground,
+  },
+  close: {
+    width: 32,
+    height: 32,
+    marginRight: -6,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
   shellsTitle: {
     flex: 1,

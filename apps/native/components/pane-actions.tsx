@@ -33,6 +33,8 @@ export function openPaneScreen(paneId: string) {
  */
 export function usePaneActions({ onClosed }: { onClosed?: () => void } = {}): {
   open: (pane: PaneRef, views?: PaneViewChoice) => void;
+  /** Straight to the close confirmation (the list's quick × button). */
+  confirmClose: (pane: PaneRef) => void;
   sheet: ReactNode;
 } {
   const qc = useQueryClient();
@@ -149,6 +151,13 @@ export function usePaneActions({ onClosed }: { onClosed?: () => void } = {}): {
       close.reset();
       setConfirming(false);
       setViews(viewChoice ?? null);
+      setTarget(pane);
+    },
+    confirmClose: (pane) => {
+      split.reset();
+      close.reset();
+      setViews(null);
+      setConfirming(true);
       setTarget(pane);
     },
     sheet,
