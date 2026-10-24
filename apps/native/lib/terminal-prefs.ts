@@ -34,3 +34,14 @@ export async function loadShellsOpen(): Promise<boolean> {
 export async function saveShellsOpen(open: boolean): Promise<void> {
   await setItem(SHELLS_OPEN_KEY, open ? "1" : "0");
 }
+
+const WORKSPACE_KEY = "atur.panes.workspace";
+
+/** The herdr workspace the Panes tab is filtered to (see pane-workspaces.ts keys); null shows all. */
+export async function loadPaneWorkspace(): Promise<string | null> {
+  return (await getItem(WORKSPACE_KEY)) || null;
+}
+
+export async function savePaneWorkspace(key: string | null): Promise<void> {
+  await setItem(WORKSPACE_KEY, key ?? "");
+}

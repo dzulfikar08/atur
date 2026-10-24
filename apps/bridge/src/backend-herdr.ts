@@ -6,9 +6,11 @@
 import {
   PaneGoneError,
   type AgentStatus,
+  type CreatedWorkspace,
   type PaneBackend,
   type PaneSummary,
   type ScreenRead,
+  type SplitDirection,
 } from "./backend";
 import { HerdrError, rpc } from "./herdr";
 import { PaneSizer, type GridSize } from "./sizer";
@@ -63,18 +65,15 @@ export class HerdrBackend implements PaneBackend {
   private readonly sizer = new PaneSizer();
 
   async listPanes(): Promise<PaneSummary[]> {
-    const { workspaces } = await rpc<{
-      workspaces: { workspace_id: string; label: string }[];
-    }>("workspace.list");
-    const perWorkspace = await Promise.all(
-      workspaces.map(async (workspace): Promise<PaneSummary[]> => {
-        const res = await rpc<{ panes: HerdrPane[] }>("pane.list", {
-          workspace: workspace.workspace_id,
-        });
-        return res.panes.map((pane) => summarize(pane, workspace.label));
-      }),
-    );
-    return perWorkspace.flat();
+    const [{ workspaces }, { panes }] = await Promise.all([
+      rpc<{ workspaces: { workspace_id: string; label: string }[] }>("workspace.list"),
+      rpc<{ panes?: HerdrPane[] }>("pane.list", {}),
+    ]);
+    // One unfiltered list: the workspace filter is `workspace_id`, and an
+    // unknown key (the old `workspace`) is silently ignored, which returned
+    // every pane once per workspace, each time under that workspace's label.
+    const labels = new Map(workspaces.map((w) => [w.workspace_id, w.label]));
+    return (panes ?? []).map((pane) => summarize(pane, labels.get(pane.workspace_id) ?? ""));
   }
 
   async pollPanes(): Promise<PaneSummary[]> {
@@ -138,6 +137,57 @@ export class HerdrBackend implements PaneBackend {
 
   async sendKeys(id: string, keys: string[]): Promise<void> {
     await rpc("pane.send_input", { pane_id: id, keys });
+  }
+
+  async createWorkspace(opts: { cwd: string; label?: string }): Promise<CreatedWorkspace> {
+    // focus:false: a phone request must not yank the desktop herdr onto the new workspace.
+    const res = await rpc<{
+      workspace: { workspace_id: string; label: string };
+      root_pane: HerdrPane;
+    }>("workspace.create", { cwd: opts.cwd, label: opts.label ?? null, focus: false });
+    const pane = summarize(res.root_pane, res.workspace.label);
+    return {
+      workspace: {
+        id: res.workspace.workspace_id,
+        label: res.workspace.label,
+        cwd: pane.cwd ?? opts.cwd,
+        paneCount: 1,
+      },
+      pane,
+    };
+  }
+
+  async splitPane(id: string, direction: SplitDirection, cwd?: string): Promise<PaneSummary> {
+    let pane: HerdrPane;
+    try {
+      // Resolved here rather than left to herdr's cwd policy: the contract is "starts
+      // where the source pane is", and the lookup doubles as the not-found check.
+      const source = await this.getPane(id);
+      ({ pane } = await rpc<{ pane: HerdrPane }>("pane.split", {
+        target_pane_id: id,
+        direction,
+        cwd: cwd ?? source.cwd,
+        focus: false,
+      }));
+    } catch (e) {
+      throw asPaneGone(e);
+    }
+    // The pane exists now: a failed label lookup must not turn the split into an error.
+    const label = await rpc<{ workspace: { label: string } }>("workspace.get", {
+      workspace_id: pane.workspace_id,
+    }).then(
+      (r) => r.workspace.label,
+      () => "",
+    );
+    return summarize(pane, label);
+  }
+
+  async closePane(id: string): Promise<void> {
+    try {
+      await rpc("pane.close", { pane_id: id });
+    } catch (e) {
+      throw asPaneGone(e);
+    }
   }
 
   // herdr sizes every pane for its one active client, so the pane id is irrelevant.

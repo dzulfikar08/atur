@@ -48,6 +48,38 @@ export interface PaneListItem {
   agent_status: string | null;
   title: string | null;
   revision: number;
+  /** Set on panes of a customer machine (relay); absent on the dev box's own bridge. */
+  machine?: PaneMachine;
+}
+
+export interface PaneMachine {
+  id: string;
+  name: string;
+}
+
+export type SplitDirection = "right" | "down";
+
+/** A herdr workspace / tmux session as `POST /api/panes/workspaces` answers it. */
+export interface PaneWorkspace {
+  id: string;
+  label: string;
+  cwd: string | null;
+  pane_count: number;
+  machine?: PaneMachine;
+}
+
+/** GET /api/panes/workspaces: where panes and workspaces can be created. */
+export interface PaneTargets {
+  workspaces: PaneWorkspace[];
+  machines: PaneMachine[];
+  /** Repo folders on the dev box where the caller may open a workspace. */
+  roots: { path: string; label: string }[];
+}
+
+export interface CreatedPaneWorkspace {
+  workspace: PaneWorkspace;
+  /** The workspace's first pane; open it to land in the new workspace. */
+  pane: PaneListItem;
 }
 
 /** GET /api/screen/status: desktop sharing side of the bridge. */
@@ -418,6 +450,23 @@ export const api = {
 
   me: () => request<Me>("/api/users/me"),
   panes: () => request<{ panes: PaneListItem[] }>("/api/panes").then((r) => r.panes),
+  /** What the caller can target when managing panes (see PaneTargets). */
+  paneTargets: () => request<PaneTargets>("/api/panes/workspaces"),
+  /** Split a pane; the new pane starts in the source pane's cwd. */
+  splitPane: (paneId: string, direction: SplitDirection) =>
+    request<{ pane: PaneListItem }>("/api/panes/split", {
+      method: "POST",
+      body: { pane: paneId, direction },
+    }).then((r) => r.pane),
+  /** Close a pane; whatever runs in it stops. */
+  closePane: (paneId: string) =>
+    request<null>("/api/panes/close", { method: "POST", body: { pane: paneId } }),
+  /** Open a workspace at `cwd` on the dev box (no machine_id) or on one of the caller's machines. */
+  createPaneWorkspace: (body: { cwd: string; label?: string; machine_id?: string }) =>
+    request<CreatedPaneWorkspace>("/api/panes/workspaces", {
+      method: "POST",
+      body,
+    }),
   screenStatus: () => request<ScreenStatus>("/api/screen/status"),
   /** Save an image on the pane's machine; returns the path to put in the prompt. */
   panePasteImage: (paneId: string, image: ArrayBuffer, type: string) =>

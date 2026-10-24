@@ -39,7 +39,7 @@ export interface PaneListResponse {
   panes: PaneListItem[];
 }
 
-function listItem(pane: PaneSummary): PaneListItem {
+export function listItem(pane: PaneSummary): PaneListItem {
   return {
     pane_id: pane.id,
     workspace_id: pane.workspaceId,

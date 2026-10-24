@@ -2,6 +2,36 @@
 
 Panes tab (`app/(tabs)/panes.tsx`) lists `GET /api/panes` (only panes bound to a workspace the user belongs to). Agent panes come first, ordered by attention (**Needs you** > **Done** > **Working** > **Idle**); plain shells sit in a collapsed "Shells (n)" group (the toggle is remembered). Tap → `app/pane/[paneId].tsx`: the pane in one of three views (**Native**, **Classic**, **Transcript**). The Screen button on the Panes header only renders when `/api/users/me` says `is_superuser`; `app/screen.tsx` is the full-screen (landscape-capable) noVNC view. The server enforces both rules (per-pane workspace membership; `requireSuperuser`).
 
+## Managing panes
+
+The owner can open workspaces, split panes and close panes from the phone, not only watch them.
+
+- **Workspace chips.** A strip under the Panes header: **All** plus one chip per herdr workspace (built from the pane rows; workspaces with the same label on different machines get the machine name appended). Tapping one filters the list, and the choice is remembered (`atur.panes.workspace`, `lib/terminal-prefs.ts`); a workspace that no longer has panes falls back to All without forgetting the choice (`lib/pane-workspaces.ts`).
+- **+ button** (Panes header, and on the empty state). With a workspace selected the sheet offers **New pane in `<workspace>`**: it splits that workspace's most recent pane (highest `revision`) to the right and opens the new pane. **New workspace** opens a form: where (the dev box, or one of your machines, when there is more than one), the folder, and an optional name. Folders are the repo paths bound to Atur workspaces you own or administer (`roots` of `GET /api/panes/workspaces`), or for a machine the folders its workspaces already sit in, plus **Custom path** (an absolute path typed by hand). Creating selects the new workspace's chip and opens its pane.
+- **Pane screen.** The **⋯** button next to the view tabs, and a **long-press on a list row**, open the same sheet: **Split right**, **Split down** (the new pane starts in the same folder and opens right away) and **Close pane**. Close asks "Close this pane? Anything running in it stops." inside the sheet (an Alert raised while a Modal is dismissing is dropped on iOS), then the app goes back and the pane list refreshes.
+
+Worker routes (`apps/app/src/worker/routes/panes.ts`). The pane id decides where a call goes, as for attach and paste: `<machineId>~<paneId>` goes through the caller's own BridgeRelay Durable Object to that machine; anything else goes to the env-configured bridge.
+
+| Route                        | Body                         | Answer                                                                                                                                                 |
+| ---------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/panes/workspaces`  | none                         | `{workspaces, machines, roots}`: the visible workspaces (`id`, `label`, `cwd`, `pane_count`, `machine?`), the caller's machines and the bindable roots |
+| `POST /api/panes/workspaces` | `{cwd, label?, machine_id?}` | `201 {workspace, pane}`; no `machine_id` means the env-configured bridge                                                                               |
+| `POST /api/panes/split`      | `{pane, direction}`          | `201 {pane}` (`right` or `down`)                                                                                                                       |
+| `POST /api/panes/close`      | `{pane}`                     | `204`                                                                                                                                                  |
+
+Relay replies carry the same namespaced ids as the list: `pane.pane_id` is `<machineId>~<paneId>` and rows carry `machine`. Errors pass through from the bridge (`404` unknown pane, `400` bad folder), a down machine is `502`, and a bridge that predates the routes is `501`.
+
+**Authorisation.**
+
+| Call                                  | Allowed when                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Split, close (env-configured bridge)  | The pane is bound to an Atur workspace the caller belongs to: exactly attach's check. No extra role; a member who can attach can already type `exit` or open a shell.                                                                                                                                                     |
+| Split, close (machine)                | The caller owns the machine (live, not revoked).                                                                                                                                                                                                                                                                          |
+| New workspace (env-configured bridge) | The cwd (normalised: `..` and `.` resolved) lies inside a `workspace_links.local_path` whose workspace the caller owns or administers (role 20 or more, active). The platform superuser flag is **not** enough: a workspace outside every binding would be hidden from `GET /api/panes` for everyone, the owner included. |
+| New workspace (machine)               | The caller owns the machine; any absolute path (the bridge checks that it exists).                                                                                                                                                                                                                                        |
+
+Every allowed call writes a `pane_audit` row before it is forwarded (`paneId` = `pane.split:<pane>`, `pane.close:<pane>` or `workspace.create:<machine or bridge>:<cwd>`, attached and detached at the same instant); refused calls write nothing. The routes sit under `/api`, so the native plan gate applies.
+
 ## Agent attention and alerts
 
 herdr reports each agent pane's state (`idle`, `working`, `blocked`, `done`, `unknown`; the omp integration drives it from omp's lifecycle hooks). The app maps it in `lib/pane-meta.ts`: `blocked` → **Needs you** (an `ask` question, a tool approval, or a retryable provider failure), `done` → **Done** (finished, not yet seen in a herdr client), `working` → **Working**.
@@ -124,6 +154,10 @@ A floating bar at the top (drag it sideways; the chevron tucks it into a status 
 
 `bun test apps/native/lib` (also `bun run test` from the root): `ansi.test.ts` (SGR parsing, colour resolution, wide chars), `terminal-screen.test.ts` (snapshot/diff model, replay, link detection), `terminal-keys.test.ts` (modifiers, swipe steps, font sizing), `dictation-text.test.ts` (locale choice, transcript merging), `screen-gestures.test.ts` (both mouse modes: deferred tap, double click, double-tap-drag, hold, multi-finger taps, scroll vs pinch, mode switch releasing a held button), `screen-view.test.ts` (fit, pan clamping, zoom anchoring, pointer follow, acceleration), `screen-session.test.ts` (backoff, which closes retry). Bridge: `apps/bridge/src/hub.test.ts` (Ctrl letters, `paste`), `apps/bridge/src/screen.test.ts` (ping/pong off the RFB stream, liveness timeout, replace-oldest).
 
+Pane management: `apps/native/lib/pane-workspaces.test.ts` (chip grouping, selection fallback, newest pane, new-workspace targets, custom path), `apps/app/src/worker/routes/__tests__/panes.test.ts` and `panes_relay.test.ts` (authz, routing by pane-id prefix, audit rows, old bridge), `apps/app/src/worker/lib/__tests__/panePaths.test.ts`, `apps/bridge/src/manage.test.ts`.
+
 ## Release note
 
 New native modules (`react-native-webview`, `expo-clipboard`, `expo-screen-orientation`, `expo-speech-recognition`) and `orientation: default` change the native fingerprint: this needs a **new store build**; OTA alone will not deliver it. Dictation additionally adds the microphone and speech-recognition permissions, so the store privacy answers in `docs/app-store.md` / `docs/play-store.md` must match before submitting. The Screen rework (mouse modes, pointer, reconnect) is JS and bundled HTML only and ships over EAS Update to builds that already have the WebView.
+
+Pane management (workspace chips, new workspace/pane, split, close) is JS only and ships over EAS Update. It needs the Worker deployed and, for the new routes and the workspace-label fix, the bridge restarted: `systemctl --user restart atur-bridge.service` for the dev box, an updated `atur-bridge` on customer machines (older ones answer "too old to manage panes"). Chips from an old bridge still work but show the first workspace's label on every pane.

@@ -3,14 +3,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { router, useIsFocused } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { AgentAlertsCard } from "@/components/agent-alerts";
+import { usePaneActions } from "@/components/pane-actions";
+import { usePaneCreate } from "@/components/pane-create";
 import { RowListSkeleton } from "@/components/skeletons";
 import {
   Button,
   Card,
+  Chip,
   EmptyState,
   IconButton,
   ListGroup,
@@ -29,13 +32,19 @@ import {
   shortCwd,
   sortPanesByAttention,
 } from "@/lib/pane-meta";
-import { loadShellsOpen, saveShellsOpen } from "@/lib/terminal-prefs";
+import { activeWorkspace, filterByWorkspace, workspaceChips } from "@/lib/pane-workspaces";
+import {
+  loadPaneWorkspace,
+  loadShellsOpen,
+  savePaneWorkspace,
+  saveShellsOpen,
+} from "@/lib/terminal-prefs";
 
 function openPane(pane: PaneListItem) {
   router.push({ pathname: "/pane/[paneId]", params: { paneId: pane.pane_id } });
 }
 
-function PaneRow({ pane }: { pane: PaneListItem }) {
+function PaneRow({ pane, onLongPress }: { pane: PaneListItem; onLongPress: () => void }) {
   const { theme } = useUnistyles();
   const attention = paneAttention(pane);
   const issue = paneIssueKey(pane);
@@ -54,7 +63,10 @@ function PaneRow({ pane }: { pane: PaneListItem }) {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Open pane ${pane.pane_id}, ${paneTitle(pane)}${status ? `, ${status}` : ""}`}
+      accessibilityHint="Long press to split or close"
       onPress={() => openPane(pane)}
+      onLongPress={onLongPress}
+      delayLongPress={350}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
       <View style={[styles.dot, { backgroundColor: dot }]} />
@@ -113,15 +125,30 @@ export default function Panes() {
     // The tab layout keeps the badge fresh at 10 s; poll faster while on screen.
     refetchInterval: focused ? 5_000 : false,
   });
-  const list = panes.data ?? [];
+  const all = panes.data;
+  const unreachable = panes.error instanceof ApiError && panes.error.status === 502;
+
+  // The workspace filter is remembered across launches. A workspace that has no
+  // panes any more falls back to All without forgetting the choice.
+  const [savedWorkspace, setSavedWorkspace] = useState<string | null>(null);
+  useEffect(() => {
+    void loadPaneWorkspace().then(setSavedWorkspace);
+  }, []);
+  const chips = useMemo(() => workspaceChips(all ?? []), [all]);
+  const workspace = activeWorkspace(chips, savedWorkspace);
+  const selectWorkspace = (key: string | null) => {
+    setSavedWorkspace(key);
+    void savePaneWorkspace(key);
+  };
+
+  const list = useMemo(() => filterByWorkspace(all ?? [], workspace), [all, workspace]);
   const { agents, shells } = useMemo(() => {
-    const sorted = sortPanesByAttention(panes.data ?? []);
+    const sorted = sortPanesByAttention(list);
     return {
       agents: sorted.filter((p) => paneAttention(p) !== "shell"),
       shells: sorted.filter((p) => paneAttention(p) === "shell"),
     };
-  }, [panes.data]);
-  const unreachable = panes.error instanceof ApiError && panes.error.status === 502;
+  }, [list]);
 
   const [shellsOpen, setShellsOpen] = useState(false);
   useEffect(() => {
@@ -131,6 +158,16 @@ export default function Panes() {
     setShellsOpen(!shellsOpen);
     void saveShellsOpen(!shellsOpen);
   };
+
+  const actions = usePaneActions();
+  const create = usePaneCreate({
+    panes: all ?? [],
+    selected: workspace,
+    selectedLabel: chips.find((chip) => chip.key === workspace)?.label ?? null,
+    onWorkspaceCreated: selectWorkspace,
+  });
+  const openActions = (pane: PaneListItem) =>
+    actions.open({ pane_id: pane.pane_id, title: paneTitle(pane) });
 
   return (
     <Screen
@@ -142,18 +179,41 @@ export default function Panes() {
     >
       <PageHeader
         title="Panes"
-        caption={panes.data ? paneSummary(list) : undefined}
+        caption={all ? paneSummary(list) : undefined}
         right={
-          // Owner-only: the server refuses everyone else (403), so don't offer it.
-          me.data?.is_superuser ? (
-            <IconButton
-              icon="desktop-outline"
-              label="Open desktop screen"
-              onPress={() => router.push("/screen")}
-            />
-          ) : undefined
+          <View style={styles.headerActions}>
+            {/* Owner-only: the server refuses everyone else (403), so don't offer it. */}
+            {me.data?.is_superuser ? (
+              <IconButton
+                icon="desktop-outline"
+                label="Open desktop screen"
+                onPress={() => router.push("/screen")}
+              />
+            ) : null}
+            <IconButton icon="add" label="New pane or workspace" onPress={create.open} />
+          </View>
         }
       />
+
+      {chips.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chips}
+          style={styles.chipStrip}
+          accessibilityLabel="Workspaces"
+        >
+          <Chip label="All" selected={workspace === null} onPress={() => selectWorkspace(null)} />
+          {chips.map((chip) => (
+            <Chip
+              key={chip.key}
+              label={chip.label}
+              selected={workspace === chip.key}
+              onPress={() => selectWorkspace(chip.key)}
+            />
+          ))}
+        </ScrollView>
+      ) : null}
 
       <AgentAlertsCard />
 
@@ -177,24 +237,31 @@ export default function Panes() {
           icon="terminal-outline"
           title="No panes online"
           body="Panes appear here once the execution plane has open terminals in your workspaces."
+          action={{ label: "New workspace", onPress: create.open }}
         />
       ) : (
         <>
           {agents.length > 0 ? (
             <ListGroup>
               {agents.map((pane) => (
-                <PaneRow key={pane.pane_id} pane={pane} />
+                <PaneRow key={pane.pane_id} pane={pane} onLongPress={() => openActions(pane)} />
               ))}
             </ListGroup>
           ) : null}
           {shells.length > 0 ? (
             <ListGroup>
               <ShellsHeader count={shells.length} open={shellsOpen} onToggle={toggleShells} />
-              {shellsOpen ? shells.map((pane) => <PaneRow key={pane.pane_id} pane={pane} />) : null}
+              {shellsOpen
+                ? shells.map((pane) => (
+                    <PaneRow key={pane.pane_id} pane={pane} onLongPress={() => openActions(pane)} />
+                  ))
+                : null}
             </ListGroup>
           ) : null}
         </>
       )}
+      {actions.sheet}
+      {create.sheet}
     </Screen>
   );
 }
@@ -232,4 +299,7 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.mutedForeground,
   },
   errorCard: { padding: theme.spacing.lg, gap: theme.spacing.md },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: theme.spacing.sm },
+  chipStrip: { marginHorizontal: -theme.spacing.lg, flexGrow: 0 },
+  chips: { gap: theme.spacing.sm, paddingHorizontal: theme.spacing.lg },
 }));

@@ -40,6 +40,49 @@ export class PaneGoneError extends Error {
   }
 }
 
+/** The request clashes with existing state (e.g. a tmux session of that name already exists). */
+export class ConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConflictError";
+  }
+}
+
+export type SplitDirection = "right" | "down";
+
+/** A herdr workspace / tmux session, folded from its panes. */
+export interface WorkspaceSummary {
+  id: string;
+  label: string;
+  /** cwd of the workspace's first pane. */
+  cwd: string | null;
+  paneCount: number;
+}
+
+export interface CreatedWorkspace {
+  workspace: WorkspaceSummary;
+  /** The workspace's first (root) pane. */
+  pane: PaneSummary;
+}
+
+/** Workspaces in first-seen pane order; a workspace always has at least one pane. */
+export function workspacesOf(panes: readonly PaneSummary[]): WorkspaceSummary[] {
+  const byId = new Map<string, WorkspaceSummary>();
+  for (const pane of panes) {
+    const known = byId.get(pane.workspaceId);
+    if (known) known.paneCount += 1;
+    else {
+      byId.set(pane.workspaceId, {
+        id: pane.workspaceId,
+        label: pane.workspaceLabel,
+        cwd: pane.cwd,
+        paneCount: 1,
+      });
+    }
+  }
+  return [...byId.values()];
+}
+
 export interface PaneBackend {
   readonly kind: "herdr" | "tmux";
   /** Every pane with its workspace label, for `GET /panes`. */
@@ -59,6 +102,12 @@ export interface PaneBackend {
   sendKeys(id: string, keys: string[]): Promise<void>;
   /** A phone viewer (keyed by its socket) wants the pane laid out at `size`. */
   resize(holder: unknown, id: string, size: GridSize): Promise<void>;
+  /** New workspace (tmux: detached session) whose first pane starts in `cwd`; `cwd` is already validated. */
+  createWorkspace(opts: { cwd: string; label?: string }): Promise<CreatedWorkspace>;
+  /** Split `id`; the new pane starts in `cwd`, default the source pane's cwd. Throws PaneGoneError when `id` is gone. */
+  splitPane(id: string, direction: SplitDirection, cwd?: string): Promise<PaneSummary>;
+  /** Close the pane and stop whatever runs in it. Throws PaneGoneError when it is already gone. */
+  closePane(id: string): Promise<void>;
   /** The viewer left or stopped asking; sizes are restored once nobody holds one. */
   release(holder: unknown): void;
   /** Daemon shutdown: give every borrowed size back. */

@@ -279,4 +279,185 @@ describe.skipIf(!sqliteSupported)("relay pane routes", () => {
       expect(res.status).toBe(502);
     });
   });
+
+  describe("split / close / new workspace", () => {
+    const json = (status: number, body: unknown) => ({
+      status,
+      headers: { "content-type": "application/json" },
+      body: new TextEncoder().encode(JSON.stringify(body)),
+    });
+    const post = (path: string, body: unknown) =>
+      call(`/api/panes${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const sent = (i = 0) => {
+      const { machineId, req } = relay.requests[i]!;
+      return { machineId, ...req, body: JSON.parse(new TextDecoder().decode(req.body)) as unknown };
+    };
+
+    it("splits through the owner's relay with the machine-local id and namespaces the new pane", async () => {
+      relay.respond = () =>
+        json(201, { pane: { pane_id: "w1:p3", workspace_id: "w1", cwd: "/a" } });
+      const res = await post("/split", { pane: `${mine.id}~w1:p2`, direction: "down" });
+      expect(res.status).toBe(201);
+      expect(await res.json()).toEqual({
+        pane: {
+          pane_id: `${mine.id}~w1:p3`,
+          workspace_id: "w1",
+          cwd: "/a",
+          machine: { id: mine.id, name: "Laptop" },
+        },
+      });
+      expect(sent()).toEqual({
+        machineId: mine.id,
+        method: "POST",
+        path: "/panes/split",
+        headers: { "content-type": "application/json" },
+        body: { pane: "w1:p2", direction: "down" },
+      });
+      expect(relay.names).toEqual(["user:me"]);
+      expect(await audit()).toMatchObject([
+        { userId: "me", paneId: `pane.split:${mine.id}~w1:p2` },
+      ]);
+    });
+
+    it("closes through the relay: 204 passes through with an empty body", async () => {
+      relay.respond = () => ({ status: 204, headers: {}, body: new Uint8Array(0) });
+      const res = await post("/close", { pane: `${mine.id}~w1:p2` });
+      expect(res.status).toBe(204);
+      expect(await res.text()).toBe("");
+      expect(sent()).toMatchObject({
+        machineId: mine.id,
+        path: "/panes/close",
+        body: { pane: "w1:p2" },
+      });
+      expect(await audit()).toMatchObject([
+        { userId: "me", paneId: `pane.close:${mine.id}~w1:p2` },
+      ]);
+    });
+
+    it("403s another user's, an unknown and a revoked machine before relaying or auditing", async () => {
+      const { machine: gone } = await machines.createMachine(t.db, "me", "Gone");
+      await machines.revoke(t.db, "me", gone.id);
+      for (const id of [theirs.id, "mzzzzz", gone.id]) {
+        expect((await post("/close", { pane: `${id}~p1` })).status).toBe(403);
+        expect((await post("/split", { pane: `${id}~p1`, direction: "right" })).status).toBe(403);
+        expect((await post("/workspaces", { cwd: "/home/x", machine_id: id })).status).toBe(403);
+      }
+      expect(relay.requests).toHaveLength(0);
+      expect(await audit()).toHaveLength(0);
+    });
+
+    it("passes machine errors through, flags an old bridge, and 502s when the relay throws", async () => {
+      relay.respond = () => json(404, { error: "pane not found" });
+      let res = await post("/close", { pane: `${mine.id}~p1` });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "pane not found" });
+
+      relay.respond = () => json(502, { error: "machine offline" });
+      res = await post("/split", { pane: `${mine.id}~p1`, direction: "right" });
+      expect(res.status).toBe(502);
+      expect(await res.json()).toEqual({ error: "machine offline" });
+
+      relay.respond = () => json(404, { error: "not found" });
+      res = await post("/close", { pane: `${mine.id}~p1` });
+      expect(res.status).toBe(501);
+      expect(((await res.json()) as { error: string }).error).toMatch(/update atur-bridge/);
+
+      relay.stubOverride = {
+        request: async () => {
+          throw new Error("relay down");
+        },
+      };
+      expect((await post("/close", { pane: `${mine.id}~p1` })).status).toBe(502);
+    });
+
+    it("keeps legacy pane ids off the relay", async () => {
+      expect((await post("/close", { pane: "w1:p2" })).status).toBe(403);
+      expect((await post("/split", { pane: "w1:p2", direction: "right" })).status).toBe(403);
+      expect(relay.requests).toHaveLength(0);
+      expect(relay.names).toEqual([]);
+    });
+
+    it("opens a workspace on the caller's machine at any absolute path, with a normalised cwd", async () => {
+      relay.respond = () =>
+        json(201, {
+          workspace: { id: "w2", label: "scratch", cwd: "/home/me/scratch", pane_count: 1 },
+          pane: { pane_id: "w2:p1", workspace_id: "w2", cwd: "/home/me/scratch" },
+        });
+      const res = await post("/workspaces", {
+        cwd: "/home/me/other/../scratch/",
+        label: "scratch",
+        machine_id: mine.id,
+      });
+      expect(res.status).toBe(201);
+      expect(await res.json()).toEqual({
+        workspace: {
+          id: "w2",
+          label: "scratch",
+          cwd: "/home/me/scratch",
+          pane_count: 1,
+          machine: { id: mine.id, name: "Laptop" },
+        },
+        pane: {
+          pane_id: `${mine.id}~w2:p1`,
+          workspace_id: "w2",
+          cwd: "/home/me/scratch",
+          machine: { id: mine.id, name: "Laptop" },
+        },
+      });
+      expect(sent()).toMatchObject({
+        machineId: mine.id,
+        path: "/workspaces",
+        body: { cwd: "/home/me/scratch", label: "scratch" },
+      });
+      expect(await audit()).toMatchObject([
+        { userId: "me", paneId: `workspace.create:${mine.id}:/home/me/scratch` },
+      ]);
+    });
+
+    it("without machine_id a workspace targets the legacy bridge, which needs a bound repo", async () => {
+      const res = await post("/workspaces", { cwd: "/home/me/scratch" });
+      expect(res.status).toBe(403);
+      expect(relay.requests).toHaveLength(0);
+    });
+
+    it("GET /workspaces groups each machine's panes on their own and lists the caller's machines", async () => {
+      const { machine: second } = await machines.createMachine(t.db, "me", "Desktop");
+      const panes = (rows: unknown[]) => JSON.stringify({ panes: rows });
+      relay.panes = [
+        {
+          machineId: mine.id,
+          body: panes([
+            { pane_id: "a", workspace_id: "w1", workspace_label: "alpha", cwd: "/a" },
+            { pane_id: "b", workspace_id: "w1", workspace_label: "alpha", cwd: "/a/b" },
+          ]),
+        },
+        {
+          machineId: second.id,
+          body: panes([{ pane_id: "a", workspace_id: "w1", workspace_label: "other", cwd: "/z" }]),
+        },
+        { machineId: theirs.id, body: panes([{ pane_id: "x", workspace_id: "w9" }]) },
+      ];
+      const res = await call("/api/panes/workspaces");
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        workspaces: { id: string; label: string; pane_count: number; machine: { id: string } }[];
+        machines: { id: string; name: string }[];
+        roots: unknown[];
+      };
+      expect(
+        body.workspaces.map((w) => [w.machine.id, w.id, w.label, w.pane_count]).sort(),
+      ).toEqual(
+        [
+          [mine.id, "w1", "alpha", 2],
+          [second.id, "w1", "other", 1],
+        ].sort(),
+      );
+      expect(body.machines.map((m) => m.name).sort()).toEqual(["Desktop", "Laptop"]);
+      expect(body.roots).toEqual([]);
+    });
+  });
 });

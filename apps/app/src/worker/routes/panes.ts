@@ -8,8 +8,14 @@ import { getDb, type DbClient } from "../db/index";
 import * as schema from "../db/schema";
 import { relayStub } from "../lib/relay";
 import { prefixPanes, splitPaneId } from "../lib/relayProtocol";
-import type { RelayPane, RelayPaneList, RelayResponse } from "../lib/relayProtocol";
-import { isWorkspaceMember } from "../repositories/members";
+import type {
+  RelayPane,
+  RelayPaneList,
+  RelayPaneMachine,
+  RelayResponse,
+} from "../lib/relayProtocol";
+import { isWorkspaceMember, findMembership } from "../repositories/members";
+import { normalizeAbsolutePath } from "../lib/panePaths";
 import * as machines from "../services/bridgeMachines";
 
 // Herdr execution-plane proxy (ATUR-2). The bridge daemon (apps/bridge) runs
@@ -27,6 +33,8 @@ export const paneRoutes = new Hono<{ Bindings: Env }>({ strict: false });
 export interface BridgePane {
   pane_id: string;
   cwd: string | null;
+  workspace_id?: string;
+  workspace_label?: string;
 }
 
 async function fetchBridgePanes(
@@ -116,43 +124,53 @@ export function bridgeHeaders(env: Env): Headers {
   return headers;
 }
 
+// Panes of the env-configured bridge the caller may see: bound to an Atur
+// workspace they belong to. Bridges that predate the pane.list fix repeat
+// panes once per workspace, so dedupe by id. Null = bridge down.
+async function visibleLegacyPanes(
+  db: DbClient,
+  env: Env,
+  userId: string,
+): Promise<BridgePane[] | null> {
+  const bridge = await fetchBridgePanes(env);
+  if (!bridge.ok) return null;
+  const links = await db
+    .select({
+      workspaceSlug: schema.workspaceLinks.workspaceSlug,
+      localPath: schema.workspaceLinks.localPath,
+    })
+    .from(schema.workspaceLinks);
+  const visible: BridgePane[] = [];
+  const seen = new Set<string>();
+  const slugCache = new Map<string, boolean>();
+  for (const pane of bridge.panes) {
+    if (seen.has(pane.pane_id)) continue;
+    seen.add(pane.pane_id);
+    const slug = pane.cwd ? matchWorkspaceSlug(links, pane.cwd) : null;
+    if (!slug) continue;
+    let member = slugCache.get(slug);
+    if (member === undefined) {
+      member = await isMemberOfSlug(db, slug, userId);
+      slugCache.set(slug, member);
+    }
+    if (member) visible.push(pane);
+  }
+  return visible;
+}
+
 paneRoutes.get("/", async (c) => {
   const db = getDb(c.env.DB);
   const user = c.get("user");
   const owned = await machines.listActive(db, user.sub);
-  const bridge = await fetchBridgePanes(c.env);
+  const legacy = await visibleLegacyPanes(db, c.env, user.sub);
   // The env-configured bridge being down only fails the request when the
   // caller has no relay machines to show instead.
-  if (!bridge.ok && owned.length === 0) {
+  if (!legacy && owned.length === 0) {
     return c.json({ error: "execution plane unreachable" }, 502);
   }
 
   // Info-surface trim: only panes bound to workspaces the viewer belongs to.
-  // herdr's pane.list ignores the workspace filter, so the bridge multiplies
-  // panes once per workspace — dedupe by id.
-  const visible: unknown[] = [];
-  if (bridge.ok) {
-    const links = await db
-      .select({
-        workspaceSlug: schema.workspaceLinks.workspaceSlug,
-        localPath: schema.workspaceLinks.localPath,
-      })
-      .from(schema.workspaceLinks);
-    const seen = new Set<string>();
-    const slugCache = new Map<string, boolean>();
-    for (const pane of bridge.panes) {
-      if (seen.has(pane.pane_id)) continue;
-      seen.add(pane.pane_id);
-      const slug = pane.cwd ? matchWorkspaceSlug(links, pane.cwd) : null;
-      if (!slug) continue;
-      let member = slugCache.get(slug);
-      if (member === undefined) {
-        member = await isMemberOfSlug(db, slug, user.sub);
-        slugCache.set(slug, member);
-      }
-      if (member) visible.push(pane);
-    }
-  }
+  const visible: unknown[] = [...(legacy ?? [])];
   visible.push(...(await fetchRelayPanes(c.env, user.sub, owned)));
   return c.json({ panes: visible });
 });
@@ -548,4 +566,360 @@ paneRoutes.get("/observe", async (c) => {
   server.addEventListener("error", detach);
 
   return new Response(null, { status: 101, webSocket: pair[0] });
+});
+
+// --- Pane management: workspaces, split, close --------------------------------
+//
+// The bridge owns the terminals; these routes authorise the caller and forward
+// one JSON call to the right bridge (the env-configured one, or the caller's
+// own machine through their BridgeRelay DO, exactly like attach / paste).
+//
+// Authz (see docs/native-panes-screen.md):
+//  - split / close: whatever attach needs for that pane. Legacy bridge: member
+//    of the Atur workspace the pane is bound to. Relay: the machine's owner.
+//    No extra role: a member who can attach can already type `exit` or open a
+//    shell, so a role gate here would only be theatre.
+//  - new workspace, legacy bridge: the cwd must lie inside the local_path
+//    bound to an Atur workspace the caller owns or administers (role >= 20).
+//    Platform superuser alone is NOT enough: a workspace outside every binding
+//    would be hidden from GET /api/panes for everyone, the owner included.
+//  - new workspace, relay: the machine's owner, any absolute path.
+// Every allowed call writes a pane_audit row (paneId = `<action>:<target>`,
+// attached = detached = now) before it is forwarded, like attach does.
+
+const MAX_LABEL_CHARS = 64;
+
+function jsonBody(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? Object.fromEntries(Object.entries(value))
+    : null;
+}
+
+async function readJsonBody(c: Context<{ Bindings: Env }>): Promise<Record<string, unknown>> {
+  const body = jsonBody(await c.req.json().catch(() => null));
+  if (!body) throw new HTTPException(400, { message: "JSON body required" });
+  return body;
+}
+
+function requiredString(body: Record<string, unknown>, key: string): string {
+  const value = body[key];
+  if (typeof value !== "string" || value === "") {
+    throw new HTTPException(400, { message: `${key} is required` });
+  }
+  return value;
+}
+
+function optionalString(body: Record<string, unknown>, key: string): string | undefined {
+  const value = body[key];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string")
+    throw new HTTPException(400, { message: `${key} must be a string` });
+  return value;
+}
+
+async function auditAction(db: DbClient, userId: string, action: string): Promise<void> {
+  const now = Date.now();
+  try {
+    await db.insert(schema.paneAudit).values({
+      id: uuid(),
+      userId,
+      paneId: action,
+      attachedAt: now,
+      detachedAt: now,
+    });
+  } catch (err) {
+    console.error("pane_audit insert failed:", err);
+  }
+}
+
+// The Atur workspace's name when the caller owns it or is an active admin of it.
+async function adminWorkspaceName(
+  db: DbClient,
+  slug: string,
+  userId: string,
+): Promise<string | null> {
+  const [ws] = await db
+    .select({
+      id: schema.workspaces.id,
+      name: schema.workspaces.name,
+      ownerId: schema.workspaces.ownerId,
+    })
+    .from(schema.workspaces)
+    .where(eq(schema.workspaces.slug, slug))
+    .limit(1);
+  if (!ws) return null;
+  if (ws.ownerId === userId) return ws.name;
+  const membership = await findMembership(db, ws.id, userId);
+  return membership && membership.isActive === 1 && membership.role >= 20 ? ws.name : null;
+}
+
+interface BridgeReply {
+  status: number;
+  text: string;
+}
+
+// One JSON POST to a bridge: the caller's machine via the relay, else the
+// env-configured bridge. Null = unreachable.
+async function callBridge(
+  c: Context<{ Bindings: Env }>,
+  machineId: string | null,
+  path: string,
+  body: Record<string, unknown>,
+): Promise<BridgeReply | null> {
+  const payload = JSON.stringify(body);
+  if (machineId) {
+    const stub = relayStub(c.env, c.get("user").sub);
+    if (!stub) return null;
+    try {
+      const res = await stub.request(machineId, {
+        method: "POST",
+        path,
+        headers: { "content-type": "application/json" },
+        body: new TextEncoder().encode(payload),
+      });
+      return { status: res.status, text: new TextDecoder().decode(res.body) };
+    } catch {
+      return null;
+    }
+  }
+  const base = bridgeBase(c.env);
+  if (!base) return null;
+  const headers = bridgeHeaders(c.env);
+  headers.set("content-type", "application/json");
+  try {
+    const res = await fetch(`${base}${path}`, { method: "POST", headers, body: payload });
+    return { status: res.status, text: await res.text() };
+  } catch {
+    return null;
+  }
+}
+
+// A bridge that predates these routes answers its generic 404; a missing pane
+// answers "pane not found". Tell the user to update instead of "not found".
+const OLD_BRIDGE_ERROR = "this bridge is too old to manage panes; update atur-bridge";
+
+// Forward a bridge reply. `rewrite` maps a successful JSON body (relay replies
+// carry machine-local pane ids that must be namespaced for the client).
+function bridgeReply(
+  c: Context<{ Bindings: Env }>,
+  reply: BridgeReply | null,
+  rewrite?: (body: Record<string, unknown>) => unknown,
+): Response {
+  if (!reply) return c.json({ error: "execution plane unreachable" }, 502);
+  const parsed = jsonBody(safeParse(reply.text));
+  if (reply.status === 404 && parsed?.error === "not found") {
+    return c.json({ error: OLD_BRIDGE_ERROR }, 501);
+  }
+  if (reply.status === 204) return c.body(null, 204);
+  if (reply.status >= 200 && reply.status < 300 && rewrite && parsed) {
+    return c.json(rewrite(parsed), reply.status as 200);
+  }
+  return new Response(reply.text, {
+    status: reply.status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function safeParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+// Namespace a machine-local pane row for clients (`<machine>~<pane>` + machine tag).
+function relayPaneRow(machine: machines.BridgeMachine, pane: unknown): unknown {
+  return prefixPanes({ id: machine.id, name: machine.name }, [pane])[0] ?? null;
+}
+
+// Authorise an existing pane for split / close and resolve where it lives.
+async function authorizePane(
+  c: Context<{ Bindings: Env }>,
+  pane: string,
+): Promise<{ machine: machines.BridgeMachine | null; localId: string }> {
+  const user = c.get("user");
+  const db = getDb(c.env.DB);
+  const relayPane = splitPaneId(pane);
+  if (relayPane) {
+    const machine = await machines.findOwned(db, user.sub, relayPane.machineId);
+    if (!machine) throw new HTTPException(403, { message: "not one of your machines" });
+    return { machine, localId: relayPane.paneId };
+  }
+  const slug = await paneWorkspaceSlug(db, c.env, pane);
+  if (!slug) throw new HTTPException(403, { message: "pane is not bound to an atur workspace" });
+  if (!(await isMemberOfSlug(db, slug, user.sub))) {
+    throw new HTTPException(403, { message: "not a member of the pane's workspace" });
+  }
+  return { machine: null, localId: pane };
+}
+
+paneRoutes.post("/split", async (c) => {
+  const body = await readJsonBody(c);
+  const pane = requiredString(body, "pane");
+  const direction = body.direction;
+  if (direction !== "right" && direction !== "down") {
+    throw new HTTPException(400, { message: "direction must be right or down" });
+  }
+  const { machine, localId } = await authorizePane(c, pane);
+  const user = c.get("user");
+  await auditAction(getDb(c.env.DB), user.sub, `pane.split:${pane}`);
+  const reply = await callBridge(c, machine?.id ?? null, "/panes/split", {
+    pane: localId,
+    direction,
+  });
+  console.log(`pane split user=${user.sub} pane=${pane} ${direction} status=${reply?.status ?? 0}`);
+  return bridgeReply(c, reply, (res) => ({
+    pane: machine ? relayPaneRow(machine, res.pane) : res.pane,
+  }));
+});
+
+paneRoutes.post("/close", async (c) => {
+  const pane = requiredString(await readJsonBody(c), "pane");
+  const { machine, localId } = await authorizePane(c, pane);
+  const user = c.get("user");
+  await auditAction(getDb(c.env.DB), user.sub, `pane.close:${pane}`);
+  const reply = await callBridge(c, machine?.id ?? null, "/panes/close", { pane: localId });
+  console.log(`pane close user=${user.sub} pane=${pane} status=${reply?.status ?? 0}`);
+  return bridgeReply(c, reply);
+});
+
+paneRoutes.post("/workspaces", async (c) => {
+  const body = await readJsonBody(c);
+  const cwd = normalizeAbsolutePath(requiredString(body, "cwd"));
+  if (!cwd) throw new HTTPException(400, { message: "cwd must be an absolute path" });
+  const label = optionalString(body, "label");
+  if (label !== undefined && label.length > MAX_LABEL_CHARS) {
+    throw new HTTPException(400, { message: `label is longer than ${MAX_LABEL_CHARS} characters` });
+  }
+  const machineId = optionalString(body, "machine_id") ?? null;
+  const user = c.get("user");
+  const db = getDb(c.env.DB);
+
+  let machine: machines.BridgeMachine | null = null;
+  if (machineId) {
+    machine = await machines.findOwned(db, user.sub, machineId);
+    if (!machine) throw new HTTPException(403, { message: "not one of your machines" });
+  } else {
+    const links = await db
+      .select({
+        workspaceSlug: schema.workspaceLinks.workspaceSlug,
+        localPath: schema.workspaceLinks.localPath,
+      })
+      .from(schema.workspaceLinks);
+    const slug = matchWorkspaceSlug(links, cwd);
+    if (!slug) {
+      throw new HTTPException(403, {
+        message: "cwd is not inside a repo bound to an atur workspace",
+      });
+    }
+    if (!(await adminWorkspaceName(db, slug, user.sub))) {
+      throw new HTTPException(403, {
+        message: "only the workspace owner or an admin can open workspaces there",
+      });
+    }
+  }
+
+  await auditAction(db, user.sub, `workspace.create:${machineId ?? "bridge"}:${cwd}`);
+  const reply = await callBridge(c, machine?.id ?? null, "/workspaces", {
+    cwd,
+    ...(label === undefined ? {} : { label }),
+  });
+  console.log(
+    `workspace create user=${user.sub} machine=${machineId ?? "-"} cwd=${cwd} status=${reply?.status ?? 0}`,
+  );
+  return bridgeReply(c, reply, (res) =>
+    machine
+      ? {
+          workspace: {
+            ...jsonBody(res.workspace),
+            machine: { id: machine.id, name: machine.name },
+          },
+          pane: relayPaneRow(machine, res.pane),
+        }
+      : res,
+  );
+});
+
+interface WorkspaceRow {
+  id: string;
+  label: string;
+  cwd: string | null;
+  pane_count: number;
+  machine?: { id: string; name: string };
+}
+
+// Fold pane rows into one row per workspace (first-seen order, first pane's cwd).
+// Built from /panes rather than the bridge's /workspaces so it also works for
+// bridges that predate that route and honours the caller's pane visibility.
+function groupWorkspaces(panes: readonly unknown[], machine?: RelayPaneMachine): WorkspaceRow[] {
+  const rows = new Map<string, WorkspaceRow>();
+  for (const raw of panes) {
+    const pane = jsonBody(raw);
+    if (!pane || typeof pane.workspace_id !== "string") continue;
+    const known = rows.get(pane.workspace_id);
+    if (known) {
+      known.pane_count += 1;
+      continue;
+    }
+    rows.set(pane.workspace_id, {
+      id: pane.workspace_id,
+      label: typeof pane.workspace_label === "string" ? pane.workspace_label : "",
+      cwd: typeof pane.cwd === "string" ? pane.cwd : null,
+      pane_count: 1,
+      ...(machine ? { machine } : {}),
+    });
+  }
+  return [...rows.values()];
+}
+
+// What the caller can target: the workspaces they can see, the machines they
+// own, and the repo paths (`roots`) where they may open a new workspace on the
+// env-configured bridge. The Panes tab uses it to build the "new workspace" form.
+paneRoutes.get("/workspaces", async (c) => {
+  const db = getDb(c.env.DB);
+  const user = c.get("user");
+  const owned = await machines.listActive(db, user.sub);
+  const legacy = await visibleLegacyPanes(db, c.env, user.sub);
+  if (!legacy && owned.length === 0) {
+    return c.json({ error: "execution plane unreachable" }, 502);
+  }
+
+  const workspaces = groupWorkspaces(legacy ?? []);
+  // Workspace ids are machine-local, so each machine's panes are grouped on their own.
+  const relayPanes = await fetchRelayPanes(c.env, user.sub, owned);
+  for (const machine of owned) {
+    const tag = { id: machine.id, name: machine.name };
+    workspaces.push(
+      ...groupWorkspaces(
+        relayPanes.filter((p) => p.machine.id === machine.id),
+        tag,
+      ),
+    );
+  }
+
+  const roots: { path: string; label: string }[] = [];
+  if (legacy) {
+    const links = await db
+      .select({
+        workspaceSlug: schema.workspaceLinks.workspaceSlug,
+        localPath: schema.workspaceLinks.localPath,
+      })
+      .from(schema.workspaceLinks);
+    const rooted = await Promise.all(
+      links.map(async (link) => {
+        const path = link.localPath ? normalizeAbsolutePath(link.localPath) : null;
+        const name = path ? await adminWorkspaceName(db, link.workspaceSlug, user.sub) : null;
+        return path && name ? { path, label: name } : null;
+      }),
+    );
+    for (const root of rooted) if (root) roots.push(root);
+    roots.sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  return c.json({
+    workspaces,
+    machines: owned.map((m) => ({ id: m.id, name: m.name })),
+    roots,
+  });
 });

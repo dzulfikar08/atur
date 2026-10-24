@@ -4,8 +4,10 @@
  * is skipped when tmux is not installed.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
-import { PaneGoneError } from "./backend";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
+import { ConflictError, PaneGoneError, workspacesOf } from "./backend";
 import {
   captureToRows,
   captureToText,
@@ -369,5 +371,57 @@ console.log(JSON.stringify(panes.map((p) => p.id)));`;
     const nowhere = new TmuxBackend({ socket: `atur-test-none-${process.pid}` });
     expect(await nowhere.listPanes()).toEqual([]);
     await expect(nowhere.readVisible("%0")).rejects.toBeInstanceOf(PaneGoneError);
+  });
+
+  test("creates a workspace, splits its pane in the source cwd, and closes the split", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "atur-ws-"));
+    try {
+      const created = await backend.createWorkspace({ cwd: dir, label: "scratch" });
+      expect(created.workspace).toMatchObject({ label: "scratch", paneCount: 1 });
+      expect(created.pane.workspaceLabel).toBe("scratch");
+      expect(created.pane.cwd).toBe(realpathSync(dir));
+      expect(workspacesOf(await backend.listPanes()).map((w) => w.label)).toContain("scratch");
+
+      // A second workspace with the same label is a conflict, not a silent attach.
+      await expect(backend.createWorkspace({ cwd: dir, label: "scratch" })).rejects.toBeInstanceOf(
+        ConflictError,
+      );
+
+      const split = await backend.splitPane(created.pane.id, "right");
+      expect(split.id).not.toBe(created.pane.id);
+      expect(split.cwd).toBe(created.pane.cwd);
+      expect(split.workspaceId).toBe(created.workspace.id);
+      const down = await backend.splitPane(created.pane.id, "down", "/tmp");
+      expect(down.cwd).toBe(realpathSync("/tmp"));
+      expect(
+        workspacesOf(await backend.listPanes()).find((w) => w.label === "scratch"),
+      ).toMatchObject({ paneCount: 3 });
+
+      await backend.closePane(split.id);
+      await backend.closePane(down.id);
+      await expect(backend.getPane(split.id)).rejects.toBeInstanceOf(PaneGoneError);
+      await expect(backend.closePane(split.id)).rejects.toBeInstanceOf(PaneGoneError);
+      await expect(backend.splitPane(split.id, "right")).rejects.toBeInstanceOf(PaneGoneError);
+      // The original pane and the workspace the test started with are untouched.
+      expect((await backend.getPane(created.pane.id)).id).toBe(created.pane.id);
+      expect((await backend.getPane(paneId)).id).toBe(paneId);
+
+      // Closing the last pane takes the (detached) workspace with it.
+      await backend.closePane(created.pane.id);
+      expect((await backend.listPanes()).map((p) => p.workspaceLabel)).not.toContain("scratch");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a workspace without a label is named after its directory", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "atur-named-"));
+    try {
+      const created = await backend.createWorkspace({ cwd: dir });
+      expect(created.workspace.label).toBe(basename(dir).replace(/[.:]/g, "_"));
+      await backend.closePane(created.pane.id);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

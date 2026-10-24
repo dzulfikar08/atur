@@ -188,8 +188,32 @@ The Worker holds one bridge URL, so one Worker talks to one bridge (one machine)
 | Phone-sized panes                | an invisible herdr client attaches at phone size | the pane's window is resized to the phone grid (`window-size manual`) while the phone is open     |
 | Workspace / tab                  | herdr workspace / tab                            | tmux session / window                                                                             |
 | Pane id                          | `wR:p2`                                          | `%3`                                                                                              |
+| New workspace / split / close    | `workspace.create`, `pane.split`, `pane.close`   | `new-session -d`, `split-window`, `kill-pane`                                                     |
 
 With tmux the resize is visible on the desktop: a terminal attached to that window shows it at phone size while the phone is open. The bridge puts the window back (and your own `window-size` setting, if you had one) 15 seconds after the last phone viewer leaves, or when the bridge stops.
+
+## Managing panes
+
+Besides watching panes, the phone app can open a workspace, split a pane and close one. The bridge serves four more routes (all behind `x-bridge-token` like the rest; code in `apps/bridge/src/manage.ts`):
+
+| Route               | Body                                         | Answer                                                    |
+| ------------------- | -------------------------------------------- | --------------------------------------------------------- |
+| `GET /workspaces`   | none                                         | `{workspaces: [{id, label, cwd, pane_count}]}`            |
+| `POST /workspaces`  | `{cwd, label?}`                              | `201 {workspace, pane}`: the workspace and its first pane |
+| `POST /panes/split` | `{pane, direction: "right" \| "down", cwd?}` | `201 {pane}`: the new pane                                |
+| `POST /panes/close` | `{pane}`                                     | `204`                                                     |
+
+`pane` objects have the same shape as the rows of `GET /panes`. Errors are `{error}` with `400` (bad input), `404` (unknown pane), `409` (tmux: a session of that name exists) or `502` (the backend failed).
+
+- **Input checks.** `cwd` must be an absolute path to an existing directory (it is `stat`ed; control characters and more than 4096 characters are refused). `label` is optional, at most 64 characters, no control characters. The body is JSON, at most 8 KiB.
+- **Where the new pane starts.** A split starts in the source pane's current directory unless `cwd` is given. A workspace's first pane starts in `cwd`.
+- **No focus change.** The new workspace or pane does not take focus on the desktop (herdr `focus: false`, tmux `-d`).
+- **herdr.** `workspace.create`, `pane.split` and `pane.close` over the socket. Closing the last pane of a workspace closes the workspace (herdr's rule).
+- **tmux.** A workspace is a detached session (`new-session -d -s <label> -c <cwd>`; the label defaults to the folder name, and tmux turns `.` and `:` into `_`). A split is `split-window -d -h` (right) or `-v` (down); close is `kill-pane`. Closing a session's last pane ends the session.
+- **Over the relay** these are ordinary `req` frames to the machine's bridge, so no relay protocol change was needed. A bridge that predates these routes answers its generic `404 {"error":"not found"}`; the Worker turns that into `501` "this bridge is too old to manage panes; update atur-bridge".
+- There is no route to close a whole workspace: close its panes, or use `herdr workspace close`.
+
+`GET /panes` now asks herdr for one unfiltered pane list. It used to send `workspace` (herdr's filter is `workspace_id`, and an unknown key is ignored), so every pane came back once per workspace under that workspace's label and the first label won. Workspace labels in the app were wrong before this fix; restart the bridge to get the fix.
 
 ## Agent state with tmux
 
@@ -403,6 +427,7 @@ Any agent that can run a command on its own events can call `tmux-status.sh <nam
 - `replaced by another connection using this token`: two bridges are using the same machine token. Give each machine its own token.
 - `no terminal backend found`: neither a herdr socket nor the `tmux` binary was found. Install tmux or set `BRIDGE_BACKEND` and `HERDR_SOCKET`.
 - `/panes` is empty with tmux: the bridge talks to a different tmux server than your session. Compare `tmux display -p '#{socket_path}'` (run inside your session) with `TMUX_SOCKET`, and make sure both run as the same user.
+- Creating, splitting or closing from the app fails with "too old to manage panes": the machine runs a bridge from before these routes. Update it (re-run the install command, or `git pull` and restart `atur-bridge.service`).
 - A pane is not in the app: its working directory is not inside a bound workspace checkout (see above), or the Worker cannot reach the bridge (`curl` the tunnel hostname with the token).
 - No pushes: `BRIDGE_TOKEN` is empty, differs from the Worker's `HERDR_BRIDGE_TOKEN`, or the agent has no hooks (state stays "unknown"). The bridge logs each event it sends (`agent-events: <pane> done -> 200`).
 - Hooks do nothing: run the script by hand inside the pane and read the options back with `tmux display -p '#{@atur_status}'`. For Claude Code run `/hooks` to see what is loaded; for Codex, trust the hooks in `/hooks`.
@@ -414,3 +439,5 @@ cd apps/bridge
 bun test          # the tmux integration test starts its own isolated tmux server, skipped when tmux is not installed
 bun run typecheck
 ```
+
+`manage.test.ts` runs the pane management routes over a fake backend (validation, status codes, wire shapes); `backend-tmux.test.ts` creates a workspace, splits and closes on that tmux server and checks the name conflict.

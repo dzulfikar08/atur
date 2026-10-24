@@ -16,6 +16,10 @@
  * Routes:
  *   GET /health           → liveness
  *   GET /panes            → live pane list (workspace, agent, status, title)
+ *   GET /workspaces       → herdr workspaces / tmux sessions with their pane counts
+ *   POST /workspaces      → create a workspace {cwd,label?}; answers {workspace, pane}
+ *   POST /panes/split     → split a pane {pane,direction,cwd?}; answers {pane}
+ *   POST /panes/close     → close a pane {pane}; 204
  *   GET /pane-repo        → main repo path for a pane cwd (worktree-aware)
  *   GET /attach?pane=<id> → WebSocket upgrade: snapshot mirror + input
  *   GET /observe?pane=<id> → WebSocket upgrade: read-only structured transcript
@@ -34,6 +38,7 @@ import type { ServerWebSocket } from "bun";
 import { AgentEventWatcher, agentEventsConfigFromEnv } from "./agent-events";
 import { DEFAULT_ATUR_URL, RelayConnector } from "./connect";
 import { PaneHub, type BridgeMeta } from "./hub";
+import { handleManage } from "./manage";
 import { ObserveHub } from "./observe";
 import { imageExtension, MAX_PASTE_BYTES, PasteError, pasteDirFromEnv, savePaste } from "./pastes";
 import { ScreenHub, screenConfigFromEnv, type ScreenMeta } from "./screen";
@@ -183,6 +188,8 @@ Bun.serve<Meta>({
       }
       return undefined as unknown as Response; // upgraded — Bun ignores this
     }
+    const managed = await handleManage(req, url, backend);
+    if (managed) return managed;
     return Response.json({ error: "not found" }, { status: 404 });
   },
   websocket: {

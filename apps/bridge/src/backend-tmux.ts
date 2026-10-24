@@ -8,12 +8,16 @@
  * and optionally `@atur_session` (see apps/bridge/hooks and docs/bridge.md).
  */
 import { hostname } from "node:os";
+import { basename } from "node:path";
 import {
+  ConflictError,
   PaneGoneError,
   type AgentStatus,
+  type CreatedWorkspace,
   type PaneBackend,
   type PaneSummary,
   type ScreenRead,
+  type SplitDirection,
 } from "./backend";
 import { SizeHolders, type GridSize, type SizeTiming } from "./sizer";
 
@@ -346,6 +350,56 @@ export class TmuxBackend implements PaneBackend {
     if (keys.length === 0) return;
     const names = keys.map(tmuxKeyName);
     await this.paneRun(id, ["send-keys", "-t", id, ...names]);
+  }
+
+  async createWorkspace(opts: { cwd: string; label?: string }): Promise<CreatedWorkspace> {
+    // A tmux workspace is a detached session. tmux itself turns "." and ":" in a name into "_".
+    const name = opts.label ?? (basename(opts.cwd) || "shell");
+    const res = await this.run([
+      "new-session",
+      "-d",
+      "-s",
+      name,
+      "-c",
+      opts.cwd,
+      "-P",
+      "-F",
+      "#{pane_id}",
+    ]);
+    if (res.code !== 0) {
+      if (/duplicate session/i.test(res.stderr)) {
+        throw new ConflictError(`a workspace named "${name}" already exists`);
+      }
+      throw new Error(`tmux new-session: ${res.stderr.trim() || "failed"}`);
+    }
+    const pane = await this.getPane(res.stdout.trim());
+    return {
+      workspace: { id: pane.workspaceId, label: pane.workspaceLabel, cwd: pane.cwd, paneCount: 1 },
+      pane,
+    };
+  }
+
+  async splitPane(id: string, direction: SplitDirection, cwd?: string): Promise<PaneSummary> {
+    const source = await this.getPane(id);
+    const start = cwd ?? source.cwd;
+    // -d keeps the active pane where it is: a phone request must not move the desktop focus.
+    const out = await this.paneRun(id, [
+      "split-window",
+      "-d",
+      "-t",
+      id,
+      direction === "right" ? "-h" : "-v",
+      ...(start ? ["-c", start] : []),
+      "-P",
+      "-F",
+      "#{pane_id}",
+    ]);
+    return this.getPane(out.trim());
+  }
+
+  async closePane(id: string): Promise<void> {
+    await this.paneRun(id, ["kill-pane", "-t", id]);
+    this.lastScreen.delete(id);
   }
 
   private async windowOf(id: string): Promise<string> {

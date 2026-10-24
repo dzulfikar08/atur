@@ -1,13 +1,14 @@
 import "@/unistyles";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { KeyboardFrame } from "@/components/keyboard-frame";
+import { usePaneActions } from "@/components/pane-actions";
 import { ClassicTerminal } from "@/components/terminal/classic-terminal";
 import { GoneOverlay } from "@/components/terminal/gone-overlay";
 import { NativeTerminal } from "@/components/terminal/native-terminal";
@@ -62,6 +63,11 @@ export default function PaneView() {
     void savePaneView(next);
   };
 
+  // Split opens the new pane; closing this one leaves the screen (the pane is gone).
+  const actions = usePaneActions({
+    onClosed: () => (router.canGoBack() ? router.back() : router.replace("/panes")),
+  });
+
   const [ownsKeyboard, setOwnsKeyboard] = useState(false);
   const [bridgeError, setBridgeError] = useState<string | null>(null);
 
@@ -114,27 +120,40 @@ export default function PaneView() {
             </View>
           ),
           headerRight: () => (
-            <View style={styles.views} accessibilityRole="tablist">
-              {VIEWS.map((v) => {
-                const selected = view === v.value;
-                return (
-                  <Pressable
-                    key={v.value}
-                    onPress={() => chooseView(v.value)}
-                    accessibilityRole="tab"
-                    accessibilityLabel={`${v.label} view`}
-                    accessibilityState={{ selected }}
-                    hitSlop={4}
-                    style={[styles.viewBtn, selected && styles.viewBtnOn]}
-                  >
-                    <Ionicons
-                      name={v.icon}
-                      size={17}
-                      color={selected ? theme.colors.foreground : theme.colors.mutedForeground}
-                    />
-                  </Pressable>
-                );
-              })}
+            <View style={styles.headerRight}>
+              <View style={styles.views} accessibilityRole="tablist">
+                {VIEWS.map((v) => {
+                  const selected = view === v.value;
+                  return (
+                    <Pressable
+                      key={v.value}
+                      onPress={() => chooseView(v.value)}
+                      accessibilityRole="tab"
+                      accessibilityLabel={`${v.label} view`}
+                      accessibilityState={{ selected }}
+                      hitSlop={4}
+                      style={[styles.viewBtn, selected && styles.viewBtnOn]}
+                    >
+                      <Ionicons
+                        name={v.icon}
+                        size={17}
+                        color={selected ? theme.colors.foreground : theme.colors.mutedForeground}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Pressable
+                onPress={() =>
+                  actions.open({ pane_id: paneId, title: pane ? paneTitle(pane) : paneId })
+                }
+                accessibilityRole="button"
+                accessibilityLabel="Pane actions"
+                hitSlop={8}
+                style={styles.menuBtn}
+              >
+                <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.foreground} />
+              </Pressable>
             </View>
           ),
         }}
@@ -165,6 +184,7 @@ export default function PaneView() {
           ) : null}
         </View>
       </KeyboardFrame>
+      {actions.sheet}
     </View>
   );
 }
@@ -172,7 +192,7 @@ export default function PaneView() {
 const styles = StyleSheet.create((theme) => ({
   screen: { flex: 1, backgroundColor: theme.colors.background },
   flex: { flex: 1 },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.sm, maxWidth: 210 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.sm, maxWidth: 180 },
   title: { fontSize: theme.fontSize.base, fontFamily: theme.fonts.bold, flexShrink: 1 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   dotLive: { backgroundColor: theme.colors.completed },
@@ -193,6 +213,8 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.radius.sm,
   },
   viewBtnOn: { backgroundColor: theme.colors.card },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: theme.spacing.sm },
+  menuBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   errorText: {
     fontSize: theme.fontSize.sm,
     color: theme.colors.destructive,
