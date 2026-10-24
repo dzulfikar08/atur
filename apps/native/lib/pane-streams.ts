@@ -42,7 +42,7 @@ export interface PaneAttachHandlers {
 
 /**
  * bridge → app: hello · keyboard · snapshot · diff · history · pong · error · exit
- * app → bridge: input {data} · paste {text, submit} · claim · history {lines} · ping
+ * app → bridge: input {data} · paste {text, submit} · claim · history {lines} · resize {cols, rows} · ping
  * A bridge `exit` means the pane died; reconnecting cannot revive it.
  */
 export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
@@ -86,6 +86,14 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
   const requestHistory = useCallback((lines: number) => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "history", lines }));
+  }, []);
+
+  /** Lay the pane out at this grid (keyboard owner only; the bridge attaches a phone-sized herdr client). */
+  const requestResize = useCallback((cols: number, rows: number) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "resize", cols, rows }));
+    }
   }, []);
 
   useEffect(() => {
@@ -204,7 +212,7 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
     };
   }, [paneId, retryKey]);
 
-  return { status, sendInput, sendPaste, retry, claimKeyboard, requestHistory };
+  return { status, sendInput, sendPaste, retry, claimKeyboard, requestHistory, requestResize };
 }
 
 // --- observe: structured transcript ------------------------------------------

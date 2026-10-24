@@ -16,3 +16,26 @@ export function fitFontSize(width: number, cols: number): number {
   if (!(width > 0) || !(cols > 0)) return DEFAULT_FONT_SIZE;
   return clampFontSize(Math.floor((width / (cols * CELL_WIDTH_EM)) * 2) / 2);
 }
+
+/** TerminalView's list padding: 6 px each side, 4 px top and bottom. */
+const PAD_X = 12;
+const PAD_Y = 8;
+/** TerminalView sizes rows 3% wider than the grid (fallback glyph slack). */
+const WIDTH_SLACK = 1.03;
+
+/**
+ * The terminal grid that fills a `width` × `height` view at `fontSize` with no
+ * horizontal scrolling: what the pane is resized to on a phone.
+ */
+export function gridForViewport(
+  width: number,
+  height: number,
+  fontSize: number,
+): { cols: number; rows: number } {
+  const cell = fontSize * CELL_WIDTH_EM * WIDTH_SLACK;
+  const line = Math.round(fontSize * LINE_HEIGHT_EM);
+  return {
+    cols: Math.max(0, Math.floor((width - PAD_X) / cell)),
+    rows: Math.max(0, Math.floor((height - PAD_Y) / line)),
+  };
+}

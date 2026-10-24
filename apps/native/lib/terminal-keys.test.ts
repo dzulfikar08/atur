@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { applyModifiers, controlChar, insertPath, KEY_DATA, swipeSteps } from "./terminal-keys";
-import { clampFontSize, DEFAULT_FONT_SIZE, fitFontSize } from "./terminal-metrics";
+import { clampFontSize, DEFAULT_FONT_SIZE, fitFontSize, gridForViewport } from "./terminal-metrics";
 
 const none = { ctrl: false, alt: false };
 
@@ -87,5 +87,15 @@ describe("font size", () => {
     // 156 cols would need ~4px: clamped to the minimum.
     expect(fitFontSize(390, 156)).toBe(6);
     expect(fitFontSize(0, 80)).toBe(DEFAULT_FONT_SIZE);
+  });
+
+  test("gridForViewport is the largest grid that fits without horizontal scroll", () => {
+    // 11pt: cell 6.6 * 1.03 = 6.798px, line round(14.85) = 15px.
+    // (393 - 12) / 6.798 = 56.05 -> 56 cols; (600 - 8) / 15 = 39.47 -> 39 rows.
+    const grid = gridForViewport(393, 600, 11);
+    expect(grid).toEqual({ cols: 56, rows: 39 });
+    // The rendered row width TerminalView uses must not exceed the view.
+    expect(Math.ceil(grid.cols * 11 * 0.6 * 1.03) + 12).toBeLessThanOrEqual(393);
+    expect(gridForViewport(0, 0, 11)).toEqual({ cols: 0, rows: 0 });
   });
 });

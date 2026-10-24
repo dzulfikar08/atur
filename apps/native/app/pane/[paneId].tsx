@@ -68,9 +68,8 @@ export default function PaneView() {
   // Frames land here once and feed whichever renderer is mounted.
   const screen = useMemo(() => new TerminalScreen(), [paneId]);
 
-  const { status, sendInput, sendPaste, retry, claimKeyboard, requestHistory } = usePaneAttach(
-    paneId ?? "",
-    {
+  const { status, sendInput, sendPaste, retry, claimKeyboard, requestHistory, requestResize } =
+    usePaneAttach(paneId ?? "", {
       // hello carries the real pane geometry — the grid is authoritative.
       onHello: ({ cols, rows, keyboard }) => {
         setOwnsKeyboard(keyboard);
@@ -86,8 +85,7 @@ export default function PaneView() {
       onHistory: (rows) => screen.setHistory(rows),
       onKeyboard: setOwnsKeyboard,
       onError: setBridgeError,
-    },
-  );
+    });
   const observe = usePaneObserve(paneId ?? "", view === "transcript");
 
   if (!paneId) return null;
@@ -154,6 +152,7 @@ export default function PaneView() {
               sendPaste={sendPaste}
               requestHistory={requestHistory}
               onClaimKeyboard={status === "connected" ? claimKeyboard : undefined}
+              requestResize={requestResize}
             />
           ) : null}
           {view === "classic" ? (

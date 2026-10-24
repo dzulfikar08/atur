@@ -11,6 +11,7 @@
  */
 import type { ServerWebSocket } from "bun";
 import { HerdrError, rpc } from "./herdr";
+import { clampGrid, PaneSizer } from "./sizer";
 
 export interface BridgeMeta {
   paneId: string;
@@ -422,6 +423,8 @@ export class PaneHub {
   /** Per-connection FIFO: every herdr RPC opens its own unix connection, so
    *  concurrent input frames would race and scramble keystroke order. */
   private inputQueues = new Map<Ws, Promise<void>>();
+  /** Lays panes out at the keyboard owner's phone size (see sizer.ts). */
+  private readonly sizer = new PaneSizer();
 
   start(): void {
     // No global state needed: watchers own their poll intervals.
@@ -430,6 +433,7 @@ export class PaneHub {
   stop(): void {
     for (const watcher of this.watchers.values()) watcher.dispose();
     this.watchers.clear();
+    this.sizer.stop();
   }
 
   async listPanes(): Promise<PaneListResponse> {
@@ -497,7 +501,15 @@ export class PaneHub {
   }
 
   async handleMessage(ws: Ws, raw: string): Promise<void> {
-    let msg: { type?: unknown; data?: unknown; text?: unknown; submit?: unknown; lines?: unknown };
+    let msg: {
+      type?: unknown;
+      data?: unknown;
+      text?: unknown;
+      submit?: unknown;
+      lines?: unknown;
+      cols?: unknown;
+      rows?: unknown;
+    };
     try {
       msg = JSON.parse(raw) as typeof msg;
     } catch {
@@ -511,6 +523,12 @@ export class PaneHub {
     }
     if (msg.type === "claim") {
       this.watchers.get(client.paneId)?.claim(ws);
+      return;
+    }
+    if (msg.type === "resize") {
+      // Only the keyboard owner sizes panes, so two viewers never fight over it.
+      const size = clampGrid(msg.cols, msg.rows);
+      if (size && this.watchers.get(client.paneId)?.hasKeyboard(ws)) this.sizer.request(ws, size);
       return;
     }
     if (msg.type === "history") {
@@ -586,6 +604,7 @@ export class PaneHub {
     this.clients.delete(ws);
     this.inputQueues.delete(ws);
     if (client) this.watchers.get(client.paneId)?.detach(ws);
+    this.sizer.drop(ws);
   }
 
   /** Main repository for a pane's cwd, resolving through git worktrees so a

@@ -9,7 +9,7 @@ import { TerminalView } from "@/components/terminal/terminal-view";
 import { Text } from "@/components/ui";
 import { diffInput } from "@/lib/screen-keys";
 import { applyModifiers, KEY_DATA, type Modifiers } from "@/lib/terminal-keys";
-import { DEFAULT_FONT_SIZE, fitFontSize } from "@/lib/terminal-metrics";
+import { DEFAULT_FONT_SIZE, fitFontSize, gridForViewport } from "@/lib/terminal-metrics";
 import { loadFontSize, saveFontSize } from "@/lib/terminal-prefs";
 import type { TerminalScreen } from "@/lib/terminal-screen";
 
@@ -32,6 +32,8 @@ interface NativeTerminalProps {
   requestHistory: (lines: number) => void;
   /** Take the keyboard back after another viewer took it; absent while disconnected. */
   onClaimKeyboard?: () => void;
+  /** Lay the pane out at this grid (sent while we hold the keyboard). */
+  requestResize: (cols: number, rows: number) => void;
 }
 
 /**
@@ -47,9 +49,11 @@ export function NativeTerminal({
   sendPaste,
   requestHistory,
   onClaimKeyboard,
+  requestResize,
 }: NativeTerminalProps) {
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
-  const [width, setWidth] = useState(0);
+  const [box, setBox] = useState({ width: 0, height: 0 });
+  const width = box.width;
   const { cols } = useSyncExternalStore(screen.subscribe, screen.getState);
   const [mods, setMods] = useState<Modifiers>({ ctrl: false, alt: false });
   const input = useRef<TextInput>(null);
@@ -68,6 +72,15 @@ export function NativeTerminal({
   }, []);
 
   const fit = fitFontSize(width, cols);
+
+  // Ask for a pane exactly as big as this view, as Termius does by attaching at
+  // the phone's size. Re-sent on rotation, keyboard open/close, pinch and every
+  // (re)connect, since canType flips back to true then.
+  useEffect(() => {
+    if (!canType || box.width <= 0 || box.height <= 0) return;
+    const grid = gridForViewport(box.width, box.height, fontSize);
+    requestResize(grid.cols, grid.rows);
+  }, [canType, box.width, box.height, fontSize, requestResize]);
 
   /** Send data with any armed Ctrl/Alt folded in, then disarm them. */
   const send = (data: string) => {
@@ -109,7 +122,13 @@ export function NativeTerminal({
 
   return (
     <View style={styles.fill}>
-      <View style={styles.fill} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+      <View
+        style={styles.fill}
+        onLayout={(event) => {
+          const { width: w, height: h } = event.nativeEvent.layout;
+          setBox({ width: w, height: h });
+        }}
+      >
         <TerminalView
           onScrollBack={() => requestHistory(HISTORY_LINES)}
           screen={screen}
