@@ -157,11 +157,19 @@ export function useDictation(value: string, onChangeText: (text: string) => void
         return;
       }
       base.current = valueRef.current;
+      // On device whenever this language's offline pack is installed; otherwise the OS recogniser.
+      // Forcing on-device without the pack makes Android prompt for a download and then fail.
+      const onDevice =
+        ExpoSpeechRecognitionModule.supportsOnDeviceRecognition() &&
+        (await ExpoSpeechRecognitionModule.getSupportedLocales({})
+          .then(({ installedLocales }) =>
+            installedLocales.some((l) => l.toLowerCase() === lang.toLowerCase()),
+          )
+          .catch(() => false));
       ExpoSpeechRecognitionModule.start({
         lang,
         interimResults: true,
-        // Never fall back to a server recogniser when the OS can do it locally.
-        requiresOnDeviceRecognition: ExpoSpeechRecognitionModule.supportsOnDeviceRecognition(),
+        requiresOnDeviceRecognition: onDevice,
         addsPunctuation: true,
         androidIntentOptions: {
           EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: SILENCE_MS,
