@@ -16,8 +16,6 @@ import type { TerminalScreen } from "@/lib/terminal-screen";
 // The soft keyboard's hidden input always holds this sentinel so Backspace has
 // something to delete (Android fires no change on an empty field).
 const SENTINEL = "\u200b\u200b";
-/** Rows of scrollback fetched when the reader scrolls up (the bridge caps it at 3000). */
-const HISTORY_LINES = 2000;
 
 interface NativeTerminalProps {
   paneId: string;
@@ -28,8 +26,6 @@ interface NativeTerminalProps {
   isAgent: boolean;
   sendInput: (data: string) => boolean;
   sendPaste: (text: string, submit: boolean) => boolean;
-  /** Ask the bridge for scrollback rows (the live stream has the visible grid only). */
-  requestHistory: (lines: number) => void;
   /** Take the keyboard back after another viewer took it; absent while disconnected. */
   onClaimKeyboard?: () => void;
   /** Lay the pane out at this grid (sent while we hold the keyboard). */
@@ -49,7 +45,6 @@ export function NativeTerminal({
   isAgent,
   sendInput,
   sendPaste,
-  requestHistory,
   onClaimKeyboard,
   requestResize,
   onSelectText,
@@ -93,12 +88,7 @@ export function NativeTerminal({
     requestResize(grid.cols, grid.rows);
   }, [canType, box.width, paneHeight, fontSize, requestResize]);
 
-  // A phone-sized pane fits the screen exactly, so there is nothing to scroll
-  // until scrollback is loaded: fetch it on every (re)connect, and again once
-  // the pane has been re-laid out at the phone's width.
-  useEffect(() => {
-    if (canType) requestHistory(HISTORY_LINES);
-  }, [canType, cols, requestHistory]);
+  const loadMoreHistory = useCallback(() => screen.loadHistory(), [screen]);
 
   /** Send data with any armed Ctrl/Alt folded in, then disarm them. */
   const send = (data: string) => {
@@ -148,7 +138,7 @@ export function NativeTerminal({
         }}
       >
         <TerminalView
-          onScrollBack={() => requestHistory(HISTORY_LINES)}
+          onScrollBack={loadMoreHistory}
           onSelectText={onSelectText}
           screen={screen}
           fontSize={fontSize}

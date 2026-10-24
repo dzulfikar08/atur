@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
-import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { FlatList, ScrollView, View, type NativeScrollEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native-unistyles";
@@ -48,7 +48,10 @@ export function TerminalView({
   onScrollBack,
   onSelectText,
 }: TerminalViewProps) {
-  const { cols, lines, history } = useSyncExternalStore(screen.subscribe, screen.getState);
+  const { cols, lines, history, historyBase } = useSyncExternalStore(
+    screen.subscribe,
+    screen.getState,
+  );
   const rows = useMemo(
     () => (history.length > 0 ? [...history, ...lines] : (lines as string[])),
     [history, lines],
@@ -108,6 +111,13 @@ export function TerminalView({
     stick.current = atBottom;
   };
 
+  // Output while the reader is scrolled up pushes rows off the top of the live
+  // grid into scrollback: top it up (the screen throttles) so they appear in
+  // place, below what is being read, instead of leaving a gap.
+  useEffect(() => {
+    if (!stick.current) onScrollBack();
+  }, [lines, onScrollBack]);
+
   return (
     <GestureDetector gesture={pinch}>
       <View
@@ -124,9 +134,11 @@ export function TerminalView({
             ref={list}
             style={{ width: contentWidth }}
             data={rows}
-            // Distinct key spaces: prepended scrollback must not take over the live rows' keys.
+            // A scrollback row keeps its identity (historyBase + index) while rows
+            // are appended below it, so the rows being read never shift; live rows
+            // are keyed by grid row.
             keyExtractor={(_, index) =>
-              index < history.length ? `h${index}` : `l${index - history.length}`
+              index < history.length ? `h${historyBase + index}` : `l${index - history.length}`
             }
             extraData={fontSize}
             renderItem={({ item }) => (
@@ -147,7 +159,8 @@ export function TerminalView({
             initialNumToRender={60}
             windowSize={9}
             maxToRenderPerBatch={30}
-            removeClippedSubviews
+            // Off: on Android it blanked rows inside the nested horizontal ScrollView.
+            removeClippedSubviews={false}
             nestedScrollEnabled
             keyboardShouldPersistTaps="always"
             // Scrollback arrives above the rows being read: keep them in place.

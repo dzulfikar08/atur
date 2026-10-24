@@ -35,8 +35,12 @@ export interface PaneAttachHandlers {
   onSnapshot?: (ansi: string) => void;
   /** Per-row repaint: [0-based row, full row content]. */
   onDiff?: (rows: [number, string][]) => void;
-  /** Reply to `requestHistory`: the pane's last rows including scrollback (ANSI, oldest first). */
-  onHistory?: (rows: string[]) => void;
+  /**
+   * Reply to `requestHistory`: the pane's last rows including scrollback (ANSI,
+   * oldest first); `visible` = how many trailing rows are the visible grid
+   * (absent from older bridges).
+   */
+  onHistory?: (rows: string[], visible?: number) => void;
   /** The pane was re-laid out (another client became active, or the phone sizer attached). */
   onGeometry?: (size: { cols: number; rows: number }) => void;
   onError?: (message: string) => void;
@@ -179,6 +183,7 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
             if (Array.isArray(msg.rows)) {
               h.onHistory?.(
                 msg.rows.filter((row: unknown): row is string => typeof row === "string"),
+                typeof msg.visible === "number" ? msg.visible : undefined,
               );
             }
             break;

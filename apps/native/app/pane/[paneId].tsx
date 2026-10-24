@@ -74,8 +74,7 @@ export default function PaneView() {
   const [selecting, setSelecting] = useState(false);
   // Text selector: long-press on the terminal, or ⋯ → Select text.
   const openSelector = () => {
-    // Fill in scrollback first if none is loaded yet.
-    if (screen.getState().history.length === 0) requestHistory(3000);
+    screen.loadHistory(); // top up (or load) scrollback so the selector has it
     setSelecting(true);
   };
 
@@ -89,15 +88,25 @@ export default function PaneView() {
         setOwnsKeyboard(keyboard);
         // Opening a pane means using it: take the keyboard on every (re)connect.
         if (!keyboard) claimKeyboard();
+        const reflowed = screen.getState().cols !== cols;
         screen.hello(cols, rows);
+        // A (re)connect: scrollback requests go to this socket. A full read
+        // still appends when it overlaps, so a reconnect never moves the rows
+        // being read; a new width rewraps every row, so that one replaces.
+        screen.setHistorySource(requestHistory);
+        screen.loadHistory(reflowed ? "replace" : "full");
       },
       onSnapshot: (ansi) => {
         setBridgeError(null);
         screen.snapshot(ansi);
       },
       onDiff: (rows) => screen.diff(rows),
-      onHistory: (rows) => screen.setHistory(rows),
-      onGeometry: ({ cols, rows }) => screen.hello(cols, rows),
+      onHistory: (rows, visible) => screen.setHistory(rows, visible),
+      onGeometry: ({ cols, rows }) => {
+        const reflowed = screen.getState().cols !== cols;
+        screen.hello(cols, rows);
+        if (reflowed) screen.loadHistory("replace");
+      },
       onKeyboard: setOwnsKeyboard,
       onError: setBridgeError,
     });
@@ -170,7 +179,6 @@ export default function PaneView() {
               isAgent={Boolean(pane?.agent)}
               sendInput={sendInput}
               sendPaste={sendPaste}
-              requestHistory={requestHistory}
               onClaimKeyboard={status === "connected" ? claimKeyboard : undefined}
               requestResize={requestResize}
               onSelectText={openSelector}

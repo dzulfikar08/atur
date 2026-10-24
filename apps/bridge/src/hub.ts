@@ -64,7 +64,8 @@ const FAST_POLL_MS = 100;
 const ACTIVITY_BURST_MS = 1_500;
 
 /** Fan-out backpressure cap: a client whose socket buffer exceeds this is
- *  skipped until it drains (full-state snapshots make skips lossless). */
+ *  skipped until it drains. Each client is diffed against the screen it was
+ *  last sent, so a skip only delays it: the next send carries every row it missed. */
 const MAX_BUFFERED_BYTES = 1_000_000;
 /** Upper bound on one `history` request (rows of scrollback). */
 const MAX_HISTORY_LINES = 3000;
@@ -74,6 +75,10 @@ class Watcher {
   private lastText: string | null = null;
   private lastLines: string[] | null = null;
   private lastRevision = 0;
+  /** Per client, the grid it was last sent (snapshot or diff applied). Diffing
+   *  against each client's own copy keeps every viewer exact: a skipped (slow)
+   *  client and one that joined between polls never apply a diff to the wrong base. */
+  private readonly sent = new Map<Ws, string[]>();
   private pumping = false;
   /** Poll fast briefly after a change so spinners animate, then settle. */
   private fastUntil = 0;
@@ -124,6 +129,7 @@ class Watcher {
 
   detach(ws: Ws): void {
     this.clients.delete(ws);
+    this.sent.delete(ws);
     // A departing owner frees the keyboard; remaining viewers are told.
     if (this.owner === ws) {
       this.owner = null;
@@ -168,12 +174,11 @@ class Watcher {
         }),
       );
       // Initial snapshot goes straight to the newcomer: a broadcast pump
-      // would filter them out (not yet "joined") and skip if the screen
-      // content hasn't changed since the last watcher read.
+      // would filter them out (not yet "joined"). It becomes this client's
+      // diff base; the shared poll state is left alone so the other viewers'
+      // next diff still covers everything that changed since their last frame.
       const res = await this.backend.readVisible(this.paneId);
-      this.lastText = res.text;
-      this.lastLines = res.text.split("\r\n");
-      this.lastRevision = res.revision;
+      this.sent.set(ws, res.text.split("\r\n"));
       ws.send(
         JSON.stringify({
           type: "snapshot",
@@ -210,33 +215,48 @@ class Watcher {
     }
   }
 
-  /** Line-level diff against the previous screen. The visible-screen dump is
-   *  a flat \r\n-joined grid, so equal-height frames diff per row safely;
-   *  anything else (first frame, height change, reconnect) falls back to a
-   *  full snapshot. */
-  private buildFrame(text: string, revision: number): string {
-    const lines = text.split("\r\n");
-    const prev = this.lastLines;
+  /** Line-level diff from what a client has to the current screen. The
+   *  visible-screen dump is a flat \r\n-joined grid, so equal-height frames
+   *  diff per row safely; anything else (height change) is a full snapshot.
+   *  "" when the client is already up to date. */
+  private frameFor(prev: string[] | undefined, lines: string[], text: string): string {
     if (prev && prev.length === lines.length) {
       const rows: [number, string][] = [];
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (line !== undefined && line !== prev[i]) rows.push([i, line]);
       }
-      if (rows.length > 0) {
-        return JSON.stringify({ type: "diff", revision, rows });
-      }
-      // Identical lines with differing raw text (normalization noise) —
-      // nothing to repaint.
-      return "";
+      return rows.length > 0
+        ? JSON.stringify({ type: "diff", revision: this.lastRevision, rows })
+        : "";
     }
-    return JSON.stringify({ type: "snapshot", revision, ansi: text });
+    return JSON.stringify({ type: "snapshot", revision: this.lastRevision, ansi: text });
+  }
+
+  /** Bring every joined client to the current screen; a backed-up client is
+   *  retried on the next tick. Returns whether anything was sent. */
+  private flush(): boolean {
+    const lines = this.lastLines;
+    const text = this.lastText;
+    if (!lines || text === null) return false;
+    let sentAny = false;
+    for (const [ws, client] of this.clients) {
+      if (!client.joined) continue;
+      const base = this.sent.get(ws);
+      if (base === lines) continue;
+      if (ws.getBufferedAmount() > MAX_BUFFERED_BYTES) continue;
+      const frame = this.frameFor(base, lines, text);
+      if (frame !== "") {
+        ws.send(frame);
+        sentAny = true;
+      }
+      this.sent.set(ws, lines);
+    }
+    return sentAny;
   }
 
   private broadcast(payload: string): void {
     for (const [ws, client] of this.clients) {
-      // Snapshots are full-state, so skipping a slow client is lossless —
-      // its next change supersedes anything we would send now.
       if (!client.joined) continue;
       if (ws.getBufferedAmount() > MAX_BUFFERED_BYTES) continue;
       ws.send(payload);
@@ -252,15 +272,14 @@ class Watcher {
       await this.checkGeometry();
       // herdr's pane revision has proven unreliable across pane kinds — the
       // screen text is the source of truth for change detection.
-      if (res.text === this.lastText) return;
-      const frame = this.buildFrame(res.text, res.revision);
-      this.lastText = res.text;
-      this.lastLines = res.text.split("\r\n");
-      this.lastRevision = res.revision;
-      if (frame !== "") {
-        this.broadcast(frame);
-        this.fastUntil = Date.now() + ACTIVITY_BURST_MS;
+      if (res.text !== this.lastText) {
+        this.lastText = res.text;
+        this.lastLines = res.text.split("\r\n");
+        this.lastRevision = res.revision;
       }
+      // Also on an unchanged screen: catches up a client that was backed up
+      // or joined since the last change.
+      if (this.flush()) this.fastUntil = Date.now() + ACTIVITY_BURST_MS;
     } catch (e) {
       // Only a missing pane is terminal (agent exited, tab closed). Transient
       // backend hiccups (restart, socket timeout) must not kill the watcher and
@@ -518,7 +537,14 @@ export class PaneHub {
       const lines = Math.min(Math.max(Math.trunc(Number(msg.lines)) || 0, 1), MAX_HISTORY_LINES);
       try {
         const rows = await this.backend.readHistory(client.paneId, lines);
-        ws.send(JSON.stringify({ type: "history", rows }));
+        // How many trailing rows are the visible grid, read right after: herdr
+        // trims trailing blank rows from both reads, so the grid height would
+        // cut real scrollback. The app drops exactly these from the end.
+        const visible = await this.backend
+          .readVisible(client.paneId)
+          .then((v) => Math.min(v.text.split("\r\n").length, rows.length))
+          .catch(() => undefined);
+        ws.send(JSON.stringify({ type: "history", rows, visible }));
       } catch (e) {
         ws.send(
           JSON.stringify({
