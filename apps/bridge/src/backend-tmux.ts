@@ -17,8 +17,14 @@ import {
 } from "./backend";
 import { SizeHolders, type GridSize, type SizeTiming } from "./sizer";
 
-/** US (0x1f): printable-safe for tmux's -F output, never part of a path or title. */
-const SEP = "\x1f";
+/**
+ * Field separator for `-F` output. Printable ASCII on purpose: tmux escapes
+ * control characters in format output (always on older releases such as the
+ * 3.4 in Ubuntu 24.04, and without a UTF-8 locale on newer ones), which turned
+ * the former 0x1f separator into `_` and emptied the pane list. Long and odd
+ * enough never to appear in a pane path or title.
+ */
+export const SEP = "|:atur:|";
 
 const LIST_FORMAT = [
   "#{pane_id}",
@@ -211,9 +217,7 @@ export class TmuxBackend implements PaneBackend {
     this.bin = opts.bin ?? "tmux";
     const socket = opts.socket?.trim();
     // `-u` forces UTF-8 mode: without a UTF-8 locale (systemd and launchd
-    // services often run with LANG unset) tmux escapes control characters,
-    // which would turn the 0x1f field separator into `_`, and mangles
-    // non-ASCII screen content.
+    // services often run with LANG unset) tmux mangles non-ASCII screen content.
     const target = !socket ? [] : socket.includes("/") ? ["-S", socket] : ["-L", socket];
     this.socketArgs = ["-u", ...target];
     this.timing = opts.timing;

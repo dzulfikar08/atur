@@ -10,12 +10,11 @@ import {
   captureToRows,
   captureToText,
   parsePaneList,
+  SEP,
   TmuxBackend,
   tmuxKeyName,
 } from "./backend-tmux";
 import { chooseBackendKind } from "./select-backend";
-
-const US = "\x1f";
 
 function row(fields: Partial<Record<string, string>> = {}): string {
   const f = {
@@ -44,7 +43,7 @@ function row(fields: Partial<Record<string, string>> = {}): string {
     f.status,
     f.agent,
     f.session,
-  ].join(US);
+  ].join(SEP);
 }
 
 describe("tmuxKeyName", () => {
