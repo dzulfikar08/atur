@@ -52,11 +52,19 @@ export function TerminalView({
     screen.subscribe,
     screen.getState,
   );
-  const rows = useMemo(
-    () => (history.length > 0 ? [...history, ...lines] : (lines as string[])),
-    [history, lines],
-  );
-  const list = useRef<FlatList<string>>(null);
+  // Newest row first, for an inverted list: offset 0 is the bottom of the pane,
+  // so rows changing, appearing or going at the bottom while an agent streams
+  // need no scroll correction at all. Keys: a scrollback row keeps
+  // historyBase + index (appends below it never shift it); live rows are keyed
+  // by grid row.
+  const rows = useMemo(() => {
+    const items: { key: string; line: string }[] = [];
+    for (let i = lines.length - 1; i >= 0; i--) items.push({ key: `l${i}`, line: lines[i]! });
+    for (let j = history.length - 1; j >= 0; j--) {
+      items.push({ key: `h${historyBase + j}`, line: history[j]! });
+    }
+    return items;
+  }, [history, historyBase, lines]);
   const stick = useRef(true);
   const [viewportWidth, setViewportWidth] = useState(0);
 
@@ -105,8 +113,8 @@ export function TerminalView({
     .onEnd(() => latest.current.onFontSizeCommit(lastSize.current));
 
   const onScroll = ({ nativeEvent: e }: { nativeEvent: NativeScrollEvent }) => {
-    const atBottom =
-      e.contentOffset.y + e.layoutMeasurement.height >= e.contentSize.height - STICK_SLACK;
+    // Inverted: offset 0 is the bottom.
+    const atBottom = e.contentOffset.y <= STICK_SLACK;
     if (stick.current && !atBottom) onScrollBack();
     stick.current = atBottom;
   };
@@ -131,19 +139,14 @@ export function TerminalView({
           contentContainerStyle={{ width: contentWidth }}
         >
           <FlatList
-            ref={list}
             style={{ width: contentWidth }}
+            inverted
             data={rows}
-            // A scrollback row keeps its identity (historyBase + index) while rows
-            // are appended below it, so the rows being read never shift; live rows
-            // are keyed by grid row.
-            keyExtractor={(_, index) =>
-              index < history.length ? `h${historyBase + index}` : `l${index - history.length}`
-            }
+            keyExtractor={(item) => item.key}
             extraData={fontSize}
             renderItem={({ item }) => (
               <TerminalRow
-                line={item}
+                line={item.line}
                 fontSize={fontSize}
                 lineHeight={lineHeight}
                 cellWidth={cellWidth}
@@ -163,18 +166,14 @@ export function TerminalView({
             removeClippedSubviews={false}
             nestedScrollEnabled
             keyboardShouldPersistTaps="always"
-            // Scrollback arrives above the rows being read: keep them in place.
-            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+            // Rows inserted below the reader (live grid growing, scrollback appended)
+            // keep what is being read in place; at the bottom, new rows stay in view.
+            maintainVisibleContentPosition={{
+              minIndexForVisible: 0,
+              autoscrollToTopThreshold: STICK_SLACK,
+            }}
             onScroll={onScroll}
             scrollEventThrottle={32}
-            onContentSizeChange={() => {
-              if (stick.current) list.current?.scrollToEnd({ animated: false });
-            }}
-            // The keyboard (or rotation) shrinks the view without changing the
-            // content, so onContentSizeChange stays quiet: keep the newest line visible.
-            onLayout={() => {
-              if (stick.current) list.current?.scrollToEnd({ animated: false });
-            }}
             ListEmptyComponent={<Text style={styles.waiting}>waiting for output…</Text>}
             contentContainerStyle={styles.content}
           />
