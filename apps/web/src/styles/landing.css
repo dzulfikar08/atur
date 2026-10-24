@@ -1339,16 +1339,25 @@
 .lp-plan-team .lp-plan-price span {
   color: var(--lp-review-ink);
 }
-@media (min-width: 700px) {
-  .lp-plans {
-    grid-template-columns: 1fr 1fr;
-  }
+.lp-plan-free {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--lp-border, currentColor);
 }
-@media (min-width: 1000px) {
-  .lp-pricing {
-    grid-template-columns: 0.9fr 1.3fr;
-    align-items: start;
-    gap: 56px;
+.lp-plan-free .lp-btn {
+  align-self: flex-start;
+}
+.lp-plan-note {
+  margin-top: 12px;
+  font-size: 0.8125rem;
+  color: var(--lp-muted-fg);
+}
+.lp-plan .lp-btn {
+  justify-content: center;
+}
+/* Three tiers need the full width, so the heading sits above them. */
+@media (min-width: 900px) {
+  .lp-plans {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 

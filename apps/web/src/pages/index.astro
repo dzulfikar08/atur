@@ -26,6 +26,13 @@ const iosSteps = [
 
 const MCP_CMD = `claude mcp add atur --transport http https://app.diatur.com/mcp -H "X-API-Key: <your-key>"`;
 
+const GITHUB_URL = "https://github.com/dzulfikar08/atur";
+const SELFHOST_DOCS_URL = `${GITHUB_URL}/blob/master/docs/self-host.md`;
+const CHECKOUT_URL = "https://buy.polar.sh/polar_cl_bObfAZXGCAqKpziWXocIz32SyN3crYmadyYq700u26t";
+const checkout = (productId: string) => `${CHECKOUT_URL}?product_id=${productId}&utm_source=diatur.com`;
+const SOLO_URL = checkout("c86b15e8-e91b-464e-a6d0-e5d3f70d7b83");
+const TEAM_URL = checkout("ddd252b0-6cf2-4a91-8757-2fd057f8bf51");
+
 // The board's own workflow states. Each tint on this page is one of these
 // states, so a colour always means the same thing it means in the app.
 const loop = [
@@ -57,8 +64,8 @@ const loop = [
 
 const facts = [
   ["70+", "MCP tools for Claude, Codex, Cursor and any MCP client"],
-  ["$29/mo", "Team plan, for the whole team, not per seat"],
-  ["Web + phone", "iPhone and Android apps in public testing"],
+  ["Free", "Self-host under AGPL-3.0, or use the web app at app.diatur.com"],
+  ["$9 or $29", "A Solo or Team plan unlocks the iPhone and Android app"],
   ["Need Review", "where every agent task stops for you"],
 ];
 
@@ -79,26 +86,43 @@ const extras = [
 
 const promises = [
   ["gitPullRequest", "Agents do not merge", "By default an agent's work ends at a branch or a PR. You choose when it ships."],
-  ["userMultiple", "One price for the team", "Team is $29 a month for everyone in the workspace. Adding a person costs nothing."],
+  ["userMultiple", "One price for the team", "Team is $29 a month for everyone in the workspaces you own. Adding a person costs nothing."],
   ["trash", "Leave with your data", "Delete a workspace or your whole account from settings, on the web or in the app."],
 ];
 
 const plans = [
   {
-    name: "Starter",
-    price: "$9",
-    blurb: "For individuals and small teams building a calmer operating system.",
-    items: ["Projects, issues, and cycles", "Support portal and feedback", "CRM contacts and pipeline", "Pages and knowledge graph", "Time tracking", "AI agents via MCP"],
-    cta: "Start with Starter",
-    team: false,
+    key: "selfhost",
+    name: "Self-host",
+    price: "Free",
+    unit: "AGPL-3.0",
+    blurb: "Run Atur on your own Cloudflare account. The code is on GitHub.",
+    items: ["The whole workspace: issues, pages, CRM, time", "MCP server and agent usage tracking", "Everyone is entitled, billing is off", "Build the phone app yourself, pointed at your server"],
+    cta: "View on GitHub",
+    href: GITHUB_URL,
+    external: true,
   },
   {
-    name: "Team",
+    key: "solo",
+    name: "Cloud Solo",
+    price: "$9",
+    unit: "/ month",
+    blurb: "For one person who wants the app on their phone.",
+    items: ["iPhone and Android app for you", "Live agent panes, take the keyboard, dictation", "Push when an agent finishes or needs you", "Web app stays free for everyone"],
+    cta: "Get Solo",
+    href: SOLO_URL,
+    external: true,
+  },
+  {
+    key: "team",
+    name: "Cloud Team",
     price: "$29",
-    blurb: "For growing teams bringing delivery and customer work together.",
-    items: ["Everything in Starter", "Flat price: the whole team, not per seat", "Custom domain", "Daily automatic backups", "Priority support", "Onboarding assistance"],
-    cta: "Start with Team",
-    team: true,
+    unit: "/ month",
+    blurb: "For a team. Covers everyone in the workspaces you own, not per seat.",
+    items: ["Everything in Solo", "The phone app for every member of your workspaces", "One subscriber pays, nobody else needs a plan", "Adding a person costs nothing"],
+    cta: "Get Team",
+    href: TEAM_URL,
+    external: true,
   },
 ];
 
@@ -135,8 +159,8 @@ const paneLines = [
 ---
 
 <BaseLayout
-  title="Atur: one workspace for teams and their agents"
-  description="Atur keeps projects, customers, docs and time in one workspace. AI agents pick up issues, ship them on a branch and post the proof. You review and merge, from the web or your phone."
+  title="Atur: mission control for your AI coding agents"
+  description="Atur is mission control for AI coding agents: issues they pick up through MCP, live agent panes, push alerts and token cost tracking. Free to self-host, free on the web, phone app with a Solo or Team plan."
   canonical="/"
   showChrome={false}
 >
@@ -163,22 +187,16 @@ const paneLines = [
         <div>
           <h1>You review the work. Agents do the rest.</h1>
           <p class="lp-lead">
-            Atur keeps your projects, customers, docs and time in one workspace. AI agents pick up
-            issues, ship them on a branch and post the proof on the issue. Nothing merges until you
-            say so.
+            Atur is mission control for your AI coding agents. They pick up issues over MCP, work
+            on a branch and post the proof on the issue. You watch the live pane, answer when they
+            ask, and merge when you are satisfied. Nothing merges until you say so.
           </p>
           <div class="lp-cta-row">
-            <a class="lp-btn lp-btn-primary lp-btn-lg" href={SIGNUP_URL} data-revklik-goal="signup_click" data-revklik-goal-location="hero">Open a free workspace</a>
-            <a class="lp-btn lp-btn-outline lp-btn-lg" href="#tester" data-revklik-goal="tester_cta_click" data-revklik-goal-location="hero">
-              <svg class="lp-android" viewBox={ANDROID_VIEWBOX} aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" d={ANDROID_PATH} /></svg>
-              Join Android testers
-            </a>
-            <a class="lp-btn lp-btn-outline lp-btn-lg" href={TESTFLIGHT_URL} target="_blank" rel="noopener" data-revklik-goal="testflight_click" data-revklik-goal-location="hero">
-              <svg class="lp-apple" viewBox={APPLE_VIEWBOX} aria-hidden="true" focusable="false"><path fill="currentColor" d={APPLE_PATH} /></svg>
-              iPhone beta
-            </a>
+            <a class="lp-btn lp-btn-primary lp-btn-lg" href={SIGNUP_URL} data-revklik-goal="signup_click" data-revklik-goal-location="hero">Open the free web app</a>
+            <a class="lp-btn lp-btn-outline lp-btn-lg" href="#pricing" data-revklik-goal="pricing_cta_click" data-revklik-goal-location="hero">See the phone app plans</a>
+            <a class="lp-btn lp-btn-outline lp-btn-lg" href={SELFHOST_DOCS_URL} target="_blank" rel="noopener" data-revklik-goal="selfhost_click" data-revklik-goal-location="hero">Self-host it</a>
           </div>
-          <p class="lp-fine">Free to start. The phone apps are in public testing: TestFlight on iPhone, a closed test on Google Play.</p>
+          <p class="lp-fine">The web app is free. The iPhone and Android app needs a Cloud Solo or Team plan. The code is open source (AGPL-3.0).</p>
         </div>
 
         <figure class="lp-hero-visual">
@@ -442,20 +460,23 @@ const paneLines = [
 
       <section id="pricing" class="lp-wrap lp-section lp-pricing">
         <div>
-          <h2>One flat price for the whole team.</h2>
-          <p class="lp-section-lead">Start on Starter. Move to Team when delivery and customer work share the workspace. No per-seat math as you grow.</p>
-          <p class="lp-fine">No credit card required to try it.</p>
+          <h2>Free on the web. Paid for the phone app.</h2>
+          <p class="lp-section-lead">The web app at app.diatur.com is free to use. A Solo or Team plan unlocks the iPhone and Android app: live agent panes, the keyboard, dictation, and a push when an agent finishes or needs you. Prefer your own server? Self-host it for free.</p>
+          <p class="lp-fine">The store app works with an Atur Cloud account. If you self-host, build the phone app against your own server (see the <a class="lp-text-link" href={SELFHOST_DOCS_URL} target="_blank" rel="noopener">self-host guide</a>). Manage or cancel a plan in the <a class="lp-text-link" href="https://polar.sh/joyo-digitama-solusi/portal" target="_blank" rel="noopener">customer portal</a>.</p>
         </div>
         <div class="lp-plans">
           {plans.map((plan) => (
-            <div class={plan.team ? "lp-plan lp-plan-team" : "lp-plan"}>
+            <div class={plan.key === "team" ? "lp-plan lp-plan-team" : plan.key === "selfhost" ? "lp-plan lp-plan-free" : "lp-plan"}>
               <p class="lp-plan-name">{plan.name}</p>
-              <p class="lp-plan-price"><strong>{plan.price}</strong><span>/ month</span></p>
+              <p class="lp-plan-price"><strong>{plan.price}</strong><span>{plan.unit}</span></p>
               <p class="lp-plan-blurb">{plan.blurb}</p>
               <ul>
                 {plan.items.map((item) => <li><Icon name="check" size={16} />{item}</li>)}
               </ul>
-              <a class={plan.team ? "lp-btn lp-btn-primary" : "lp-btn lp-btn-outline"} href={SIGNUP_URL} data-revklik-goal="signup_click" data-revklik-goal-location={`pricing_${plan.name.toLowerCase()}`}>{plan.cta}</a>
+              <a class={plan.key === "team" ? "lp-btn lp-btn-primary" : "lp-btn lp-btn-outline"} href={plan.href} target="_blank" rel="noopener" data-revklik-goal={plan.key === "selfhost" ? "selfhost_click" : "checkout_click"} data-revklik-goal-location={`pricing_${plan.key}`}>{plan.cta}</a>
+              {plan.key === "selfhost" && (
+                <p class="lp-plan-note">Setup steps are in <a class="lp-text-link" href={SELFHOST_DOCS_URL} target="_blank" rel="noopener">docs/self-host.md</a>.</p>
+              )}
             </div>
           ))}
         </div>
@@ -477,7 +498,7 @@ const paneLines = [
           <div id="tester" role="tabpanel" aria-labelledby="install-tab-android" class="lp-install-panel">
             <div>
               <h2>Atur on Android: join the testers</h2>
-              <p>The Android app is in a closed test on Google Play. Google opens an app to everyone only after 12 testers have used it for 14 days, so every tester helps. Free, and it needs Android 8 or later.</p>
+              <p>The Android app is in a closed test on Google Play and needs an Atur Cloud Solo or Team plan (see <a class="lp-text-link" href="#pricing">pricing</a>). Google opens an app to everyone only after 12 testers have used it for 14 days, so every tester helps. It needs Android 8 or later.</p>
               <div class="lp-cta-row">
                 <a class="lp-btn lp-btn-primary lp-btn-lg" href={TESTER_GROUP_URL} target="_blank" rel="noopener" data-revklik-goal="tester_group_click" data-revklik-goal-location="tester">
                   <svg class="lp-android" viewBox={ANDROID_VIEWBOX} aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" d={ANDROID_PATH} /></svg>
@@ -494,7 +515,7 @@ const paneLines = [
           <div id="iphone-beta" role="tabpanel" aria-labelledby="install-tab-ios" class="lp-install-panel">
             <div>
               <h2>Atur on iPhone: public beta</h2>
-              <p>The iPhone app is on TestFlight, Apple's app for beta testing. The App Store release is in Apple's review. Free.</p>
+              <p>The iPhone app is on TestFlight, Apple's app for beta testing, and needs an Atur Cloud Solo or Team plan (see <a class="lp-text-link" href="#pricing">pricing</a>). The App Store release is in Apple's review.</p>
               <div class="lp-cta-row">
                 <a class="lp-btn lp-btn-primary lp-btn-lg" href={TESTFLIGHT_URL} target="_blank" rel="noopener" data-revklik-goal="testflight_click" data-revklik-goal-location="tester">
                   <svg class="lp-apple" viewBox={APPLE_VIEWBOX} aria-hidden="true" focusable="false"><path fill="currentColor" d={APPLE_PATH} /></svg>
@@ -524,10 +545,10 @@ const paneLines = [
       <section class="lp-wrap lp-section" style="padding-top:0">
         <div class="lp-final">
           <h2>Give an agent its first issue.</h2>
-          <p>Open a workspace, bind a repo, and assign the issue. You keep the review.</p>
+          <p>Open a free workspace on the web, bind a repo, and assign the issue. You keep the review. Add a Solo or Team plan when you want it all on your phone.</p>
           <div class="lp-cta-row">
-            <a class="lp-btn lp-btn-invert lp-btn-lg" href={SIGNUP_URL} data-revklik-goal="signup_click" data-revklik-goal-location="final">Open a free workspace</a>
-            <a class="lp-btn lp-btn-ghost-invert lp-btn-lg" href="#phone" data-revklik-goal="tester_cta_click" data-revklik-goal-location="final">Get the phone app</a>
+            <a class="lp-btn lp-btn-invert lp-btn-lg" href={SIGNUP_URL} data-revklik-goal="signup_click" data-revklik-goal-location="final">Open the free web app</a>
+            <a class="lp-btn lp-btn-ghost-invert lp-btn-lg" href="#pricing" data-revklik-goal="pricing_cta_click" data-revklik-goal-location="final">Compare plans</a>
           </div>
         </div>
       </section>
@@ -540,16 +561,10 @@ const paneLines = [
         <div class="lp-foot-brand">
           <a class="lp-brand" href="/"><img src="/logo-128.png" alt="" width="28" height="28" />Atur</a>
           <p class="lp-foot-tag">You hold the pecut.<br />Agents carry the issues.</p>
-          <p class="lp-foot-blurb">One workspace for projects, customers, docs and time, with AI agents that ship on a branch and stop at Need Review for you.</p>
+          <p class="lp-foot-blurb">Mission control for AI coding agents: issues over MCP, live panes, push alerts and token cost tracking. Free to self-host.</p>
           <div class="lp-foot-apps">
-            <a class="lp-btn lp-btn-primary" href="#tester" data-revklik-goal="tester_cta_click" data-revklik-goal-location="footer">
-              <svg class="lp-android" viewBox={ANDROID_VIEWBOX} aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" d={ANDROID_PATH} /></svg>
-              Android testers
-            </a>
-            <a class="lp-btn lp-btn-outline" href={TESTFLIGHT_URL} target="_blank" rel="noopener" data-revklik-goal="testflight_click" data-revklik-goal-location="footer">
-              <svg class="lp-apple" viewBox={APPLE_VIEWBOX} aria-hidden="true" focusable="false"><path fill="currentColor" d={APPLE_PATH} /></svg>
-              iPhone beta
-            </a>
+            <a class="lp-btn lp-btn-primary" href="#phone" data-revklik-goal="tester_cta_click" data-revklik-goal-location="footer">Phone app</a>
+            <a class="lp-btn lp-btn-outline" href={GITHUB_URL} target="_blank" rel="noopener" data-revklik-goal="selfhost_click" data-revklik-goal-location="footer">GitHub</a>
           </div>
         </div>
         <nav class="lp-foot-cols" aria-label="Footer">
@@ -560,6 +575,7 @@ const paneLines = [
             <a href="#herdr">herdr</a>
             <a href="#mcp">MCP</a>
             <a href="#pricing">Pricing</a>
+            <a href={SELFHOST_DOCS_URL} target="_blank" rel="noopener">Self-host</a>
           </div>
           <div>
             <p>Read</p>

@@ -1,8 +1,28 @@
 # Atur
 
-One workspace for your whole operation — issues, sprints, support tickets,
-deals, and timesheets. A single Cloudflare Worker serving a React SPA + Hono
-API, with a separate Astro marketing/blog site.
+Mission control for your AI coding agents. Agents pick up issues over MCP, work
+on a branch and post the proof on the issue. You watch their live terminal panes
+from the web or your phone, answer when they ask, get a push when one finishes or
+needs you, and merge when you are satisfied. Token and cost usage is tracked per
+agent, model and issue.
+
+Around the agents sits a full workspace: projects, sprints, support tickets,
+deals, pages and timesheets. It is a single Cloudflare Worker serving a React SPA
+and a Hono API, with a separate Astro marketing/blog site.
+
+## Ways to run Atur
+
+| Option              | Price       | What you get                                                                                              |
+| ------------------- | ----------- | --------------------------------------------------------------------------------------------------------- |
+| Self-host           | Free        | The whole app on your own Cloudflare account, under AGPL-3.0. See [docs/self-host.md](docs/self-host.md). |
+| Atur Cloud (web)    | Free        | The web app at https://app.diatur.com.                                                                    |
+| Atur Cloud **Solo** | $9 / month  | The iOS and Android app for one person: live agent panes, push alerts, dictation.                         |
+| Atur Cloud **Team** | $29 / month | The same app for everyone in the workspaces the subscriber owns.                                          |
+
+Plans and checkout: https://diatur.com/#pricing. The store app only talks to
+Atur Cloud. If you self-host, build the phone app against your own server
+(see [docs/self-host.md](docs/self-host.md)). The terminal bridge that powers live
+panes is described in [docs/bridge.md](docs/bridge.md).
 
 ## Stack
 
@@ -153,4 +173,8 @@ and registration commands.
 
 ## License
 
-AGPL-3.0-only (see `LICENSE`). Name, logo and the hosted service are covered by `NOTICE`; contributions need `CLA.md`. Use the managed service at https://app.diatur.com, or self-host on your own Cloudflare account or via CloudAgni.
+AGPL-3.0-only (see `LICENSE`). You can self-host Atur for free, including the
+phone app, which you build yourself (see [docs/self-host.md](docs/self-host.md)).
+The Atur name, logo and the hosted service at https://app.diatur.com are covered
+by `NOTICE`, and contributions need `CLA.md`. The Solo and Team plans pay for the
+store app on Atur Cloud; they are not a license to the code.
