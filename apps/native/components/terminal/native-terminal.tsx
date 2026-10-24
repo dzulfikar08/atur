@@ -144,7 +144,9 @@ export function NativeTerminal({
           onFontSizeCommit={(size) => void saveFontSize(size)}
           onTapText={canType ? focusKeyboard : noop}
         />
-        {Math.abs(fit - fontSize) >= 0.5 ? (
+        {/* Only when the pane is wider than the view (another client sized it): a phone-sized pane already fits. */}
+        {cols > gridForViewport(box.width, box.height, fontSize).cols &&
+        Math.abs(fit - fontSize) >= 0.5 ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Fit terminal width"
