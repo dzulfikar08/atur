@@ -1,6 +1,6 @@
 import type { BottomTabBarProps } from "expo-router/js-tabs";
 import { CommonActions } from "expo-router/react-navigation";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Keyboard, Platform, Pressable, Text, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -35,19 +35,49 @@ function useAndroidKeyboardOpen(): boolean {
   return open;
 }
 
+const TabBarInsetContext = createContext<{ inset: number; setInset: (h: number) => void }>({
+  inset: 0,
+  setInset: () => {},
+});
+
+/** Holds the height the floating bar covers at the bottom of tab screens. */
+export function TabBarInsetProvider({ children }: { children: ReactNode }) {
+  const [inset, setInset] = useState(0);
+  const value = useMemo(() => ({ inset, setInset }), [inset]);
+  return <TabBarInsetContext.Provider value={value}>{children}</TabBarInsetContext.Provider>;
+}
+
+/**
+ * Bottom space the floating tab bar covers (0 outside the tabs). Scrolling
+ * screens pad the end of their content by it so the last row can scroll
+ * fully above the bar; bottom-anchored buttons sit above it.
+ */
+export function useTabBarInset(): number {
+  return useContext(TabBarInsetContext).inset;
+}
+
 /**
  * Floating tab bar (after JoyoFit's): a rounded pill inset from the screen
- * edges, the active tab on a muted background. It stays in the layout flow
- * below the screens, so no screen needs extra bottom padding; the strip
- * around it takes the screen background, which is what makes it float.
+ * edges, the active tab on a muted background. It is absolutely positioned
+ * over the screens, so content scrolls underneath it; it reports the height
+ * it covers (`useTabBarInset`) for screens to pad by.
  */
 export function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
   const { theme } = useUnistyles();
   const keyboardOpen = useAndroidKeyboardOpen();
+  const { setInset } = useContext(TabBarInsetContext);
+  useEffect(() => () => setInset(0), [setInset]);
+  useEffect(() => {
+    if (keyboardOpen) setInset(0);
+  }, [keyboardOpen, setInset]);
   if (keyboardOpen) return null;
 
   return (
-    <View style={[styles.strip, { paddingBottom: bottomOffset(insets.bottom) }]}>
+    <View
+      pointerEvents="box-none"
+      onLayout={(e) => setInset(Math.ceil(e.nativeEvent.layout.height))}
+      style={[styles.strip, { paddingBottom: bottomOffset(insets.bottom) }]}
+    >
       <View accessibilityRole="tablist" style={styles.pill}>
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
@@ -100,9 +130,12 @@ export function FloatingTabBar({ state, descriptors, navigation, insets }: Botto
 
 const styles = StyleSheet.create((theme) => ({
   strip: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: MARGIN_X,
     paddingTop: GAP_BOTTOM,
-    backgroundColor: theme.colors.background,
   },
   pill: {
     flexDirection: "row",

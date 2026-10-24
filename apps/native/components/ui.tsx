@@ -22,6 +22,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+import { useTabBarInset } from "@/components/floating-tab-bar";
 import { assetSource, type Priority } from "@/lib/api";
 import { productColor } from "@/lib/product";
 import { stateColor } from "@/theme";
@@ -64,6 +65,7 @@ export function Screen({
   edges?: ("top" | "bottom")[];
 }) {
   const { theme } = useUnistyles();
+  const tabBarInset = useTabBarInset();
   // Background polls refetch too; only a pull the user made shows the spinner
   // (otherwise every poll drags the page down as if pulled).
   const [pulled, setPulled] = useState(false);
@@ -87,7 +89,11 @@ export function Screen({
     <SafeAreaView style={styles.screen} edges={edges}>
       {scroll ? (
         <ScrollView
-          contentContainerStyle={styles.screenContent}
+          contentContainerStyle={[
+            styles.screenContent,
+            // Content scrolls under the floating tab bar; the end clears it.
+            tabBarInset > 0 && { paddingBottom: theme.spacing.lg + tabBarInset },
+          ]}
           keyboardShouldPersistTaps="handled"
           refreshControl={
             onRefresh ? (
@@ -396,12 +402,17 @@ export function Fab({
   onPress: () => void;
 }) {
   const { theme } = useUnistyles();
+  const tabBarInset = useTabBarInset();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      style={({ pressed }) => [styles.fab, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.fab,
+        tabBarInset > 0 && { bottom: theme.spacing.lg + tabBarInset },
+        pressed && styles.pressed,
+      ]}
     >
       <Ionicons name={icon} size={26} color={theme.colors.primaryForeground} />
     </Pressable>

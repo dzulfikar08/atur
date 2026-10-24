@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Tabs } from "expo-router";
 import { useEffect, useState } from "react";
 
-import { FloatingTabBar } from "@/components/floating-tab-bar";
+import { FloatingTabBar, TabBarInsetProvider } from "@/components/floating-tab-bar";
 import type { IconName } from "@/components/ui";
 import { api } from "@/lib/api";
 import { attentionCount } from "@/lib/pane-meta";
@@ -43,25 +43,30 @@ export default function TabLayout() {
   const attention = panes ? attentionCount(panes, seen) : 0;
 
   return (
-    <Tabs tabBar={(props) => <FloatingTabBar {...props} />} screenOptions={{ headerShown: false }}>
-      {TABS.map((tab) => (
-        <Tabs.Screen
-          key={tab.name}
-          name={tab.name}
-          options={{
-            tabBarLabel: tab.label,
-            tabBarBadge:
-              tab.name === "inbox" && unread?.count
-                ? unread.count
-                : tab.name === "panes" && attention > 0
-                  ? attention
-                  : undefined,
-            tabBarIcon: ({ focused, size, color }) => (
-              <Ionicons name={focused ? tab.icon : tab.outline} size={size} color={color} />
-            ),
-          }}
-        />
-      ))}
-    </Tabs>
+    <TabBarInsetProvider>
+      <Tabs
+        tabBar={(props) => <FloatingTabBar {...props} />}
+        screenOptions={{ headerShown: false }}
+      >
+        {TABS.map((tab) => (
+          <Tabs.Screen
+            key={tab.name}
+            name={tab.name}
+            options={{
+              tabBarLabel: tab.label,
+              tabBarBadge:
+                tab.name === "inbox" && unread?.count
+                  ? unread.count
+                  : tab.name === "panes" && attention > 0
+                    ? attention
+                    : undefined,
+              tabBarIcon: ({ focused, size, color }) => (
+                <Ionicons name={focused ? tab.icon : tab.outline} size={size} color={color} />
+              ),
+            }}
+          />
+        ))}
+      </Tabs>
+    </TabBarInsetProvider>
   );
 }
