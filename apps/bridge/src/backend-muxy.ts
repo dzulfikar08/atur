@@ -12,6 +12,7 @@
  * - no terminal title and no agent transcript path.
  */
 import { existsSync } from "node:fs";
+import { connect } from "node:net";
 import { join } from "node:path";
 import {
   InputError,
@@ -360,15 +361,27 @@ export class MuxyBackend implements PaneBackend {
   /**
    * Every CLI call except `server status/stop` starts a server when none runs.
    * Only creating a workspace may do that (like tmux `new-session`): polling
-   * and pane commands must never resurrect a server the user stopped, so they
-   * check the socket first (Muxy removes it on a clean stop).
+   * and pane commands must never resurrect a server the user stopped or that
+   * crashed, so they first connect to its socket (a crash leaves the socket
+   * file behind, so its existence proves nothing). A connect costs ~2 ms, far
+   * less than the CLI spawn it guards.
    */
-  private serverRunning(): boolean {
-    return existsSync(this.socket);
+  private serverRunning(): Promise<boolean> {
+    if (!existsSync(this.socket)) return Promise.resolve(false);
+    const { promise, resolve } = Promise.withResolvers<boolean>();
+    const probe = connect(this.socket);
+    const done = (up: boolean) => {
+      probe.destroy();
+      resolve(up);
+    };
+    probe.once("connect", () => done(true));
+    probe.once("error", () => done(false));
+    probe.setTimeout(1000, () => done(false));
+    return promise;
   }
 
-  private requireServer(): void {
-    if (!this.serverRunning()) throw new PaneGoneError("muxy server is not running");
+  private async requireServer(): Promise<void> {
+    if (!(await this.serverRunning())) throw new PaneGoneError("muxy server is not running");
   }
 
   private async run(args: string[], timeoutMs: number = COMMAND_TIMEOUT_MS): Promise<Ran> {
@@ -404,7 +417,7 @@ export class MuxyBackend implements PaneBackend {
   /** A session-scoped command; ids Muxy would reject are gone by definition. */
   private async session<T>(id: string, args: string[], timeoutMs?: number): Promise<T> {
     if (!SESSION_ID.test(id)) throw new PaneGoneError(`invalid session id: ${id}`);
-    this.requireServer();
+    await this.requireServer();
     return this.json<T>(["session", args[0] as string, id, ...args.slice(1)], timeoutMs);
   }
 
@@ -423,7 +436,7 @@ export class MuxyBackend implements PaneBackend {
   }
 
   async listPanes(): Promise<PaneSummary[]> {
-    if (!this.serverRunning()) return [];
+    if (!(await this.serverRunning())) return [];
     const [sessions, projects, agents] = await Promise.all([
       this.json<MuxySession[]>(["session", "list", "--json"]),
       this.json<MuxyProject[]>(["project", "list", "--json"]),
@@ -433,7 +446,7 @@ export class MuxyBackend implements PaneBackend {
   }
 
   async pollPanes(): Promise<PaneSummary[]> {
-    if (!this.serverRunning()) return [];
+    if (!(await this.serverRunning())) return [];
     const [sessions, agents] = await Promise.all([
       this.json<MuxySession[]>(["session", "list", "--json"]),
       this.agents(),
@@ -443,7 +456,7 @@ export class MuxyBackend implements PaneBackend {
 
   async getPane(id: string, timeoutMs?: number): Promise<PaneSummary> {
     if (!SESSION_ID.test(id)) throw new PaneGoneError(`invalid session id: ${id}`);
-    this.requireServer();
+    await this.requireServer();
     const [sessions, projects, agents] = await Promise.all([
       this.json<MuxySession[]>(["session", "list", "--json"], timeoutMs),
       this.json<MuxyProject[]>(["project", "list", "--json"], timeoutMs),
@@ -501,7 +514,7 @@ export class MuxyBackend implements PaneBackend {
   }
 
   private async send(id: string, payload: string): Promise<void> {
-    this.requireServer();
+    await this.requireServer();
     // `--` keeps text starting with a dash literal.
     const args = ["session", "send", id, "--", payload];
     const res = await this.run(args);

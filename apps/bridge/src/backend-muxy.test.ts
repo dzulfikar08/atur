@@ -336,4 +336,27 @@ describe.skipIf(!hasMuxy)("MuxyBackend against a real Muxy server", () => {
     await expect(backend.readVisible("123")).rejects.toBeInstanceOf(PaneGoneError);
     await expect(backend.sendKeys("w1:p1", ["enter"])).rejects.toBeInstanceOf(PaneGoneError);
   });
+
+  // Last: it kills this suite's server.
+  test("a crashed server is not restarted by polling or pane commands", async () => {
+    const socket = muxySocketPath(env);
+    const serverPids = () =>
+      Bun.spawnSync(["pgrep", "-f", `muxy-server --socket ${socket}`])
+        .stdout.toString()
+        .split("\n")
+        .filter(Boolean)
+        .map(Number);
+    const [pid] = serverPids();
+    expect(pid).toBeGreaterThan(0);
+    process.kill(pid as number, "SIGKILL");
+    await until(async () => serverPids().length === 0, "server exit");
+    // A crash leaves the socket file behind.
+    expect(existsSync(socket)).toBe(true);
+
+    expect(await backend.pollPanes()).toEqual([]);
+    expect(await backend.listPanes()).toEqual([]);
+    await expect(backend.readVisible(paneId)).rejects.toBeInstanceOf(PaneGoneError);
+    await expect(backend.sendKeys(paneId, ["enter"])).rejects.toBeInstanceOf(PaneGoneError);
+    expect(serverPids()).toEqual([]);
+  });
 });

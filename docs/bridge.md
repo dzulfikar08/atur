@@ -199,7 +199,7 @@ With Muxy, tabs and splits belong to the desktop app, not the server, so the bri
 
 A pane's `cwd` is the directory its session started in: Muxy does not report where a session `cd`-ed to since, so a pane only matches a bound checkout (see [Install and run](#install-and-run)) if it started inside it.
 
-Any `muxy` command starts a Muxy server when none runs, and that server's terminals inherit the environment of whoever started it. The bridge therefore only lets creating a workspace start one (as tmux does with `new-session`): while no server socket exists, `/panes` is empty and pane commands answer 404. The bridge also drops its own settings (`ATUR_*`, `BRIDGE_*`) from the environment it runs `muxy` with, so a server it starts never hands the machine token to your agents.
+Any `muxy` command starts a Muxy server when none runs, and that server's terminals inherit the environment of whoever started it. The bridge therefore only lets creating a workspace start one (as tmux does with `new-session`): before anything else it connects to the server socket, and while no server answers there (stopped, or crashed and left a stale socket file), `/panes` is empty and pane commands answer 404. The bridge also drops its own settings (`ATUR_*`, `BRIDGE_*`) from the environment it runs `muxy` with, so a server it starts never hands the machine token to your agents.
 
 ## Managing panes
 
@@ -451,4 +451,4 @@ bun test          # the tmux and Muxy integration tests start their own isolated
 bun run typecheck
 ```
 
-`manage.test.ts` runs the pane management routes over a fake backend (validation, status codes, wire shapes); `backend-tmux.test.ts` creates a workspace, splits and closes on that tmux server and checks the name conflict. `backend-muxy.test.ts` runs against a Muxy server in a temporary `MUXY_DIR` (stopped with `muxy server stop --force` afterwards): nothing starts that server before a workspace is created, its terminals do not see the bridge's token, and it covers create, split, close, colours, key bytes, paste wrapping and paged scrollback. Muxy allows duplicate project names, so there is no conflict case.
+`manage.test.ts` runs the pane management routes over a fake backend (validation, status codes, wire shapes); `backend-tmux.test.ts` creates a workspace, splits and closes on that tmux server and checks the name conflict. `backend-muxy.test.ts` runs against a Muxy server in a temporary `MUXY_DIR` (stopped with `muxy server stop --force` afterwards): nothing starts that server before a workspace is created or after it crashes, its terminals do not see the bridge's token, and it covers create, split, close, colours, key bytes, paste wrapping and paged scrollback. Muxy allows duplicate project names, so there is no conflict case.
