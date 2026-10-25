@@ -23,12 +23,13 @@ jobs:
       # (never shipped in the worker bundle or the mobile app). Re-check and drop when fixed.
       #   GHSA-vfj7-8cjw-p6xm  braces <=3.0.3 (latest is 3.0.3; glob tooling)
       #   GHSA-86w9-cpqp-85rv  node-forge <=1.4.0 (latest is 1.4.0; @expo/cli dev-server TLS)
-      #   GHSA-rfgv-xxqx-mfg5, GHSA-w293-vg96-wgc3  undici 7.29.0 pinned exactly by miniflare
-      #     (local Workers simulator; even miniflare's latest pins a vulnerable undici)
+      #   GHSA-mrhx-c7xc-m3w5  zod <4.6.6, the 3.x copy @expo/cli pins (^3.25.76 even in its
+      #     latest release; no fixed 3.x exists). The app's own zod is 4.x.
+      # undici is overridden to a fixed release in package.json (miniflare pins a vulnerable one).
       - run: >-
           bun audit --audit-level=high
           --ignore=GHSA-vfj7-8cjw-p6xm --ignore=GHSA-86w9-cpqp-85rv
-          --ignore=GHSA-rfgv-xxqx-mfg5 --ignore=GHSA-w293-vg96-wgc3
+          --ignore=GHSA-mrhx-c7xc-m3w5
       - run: bun run test
       - run: bun --filter @atur/app build
       - run: bun --filter @atur/web build
