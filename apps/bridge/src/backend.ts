@@ -48,6 +48,14 @@ export class ConflictError extends Error {
   }
 }
 
+/** The request itself is invalid for this backend (answered 400). */
+export class InputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InputError";
+  }
+}
+
 export type SplitDirection = "right" | "down";
 
 /** A herdr workspace / tmux session / Muxy project, folded from its panes. */

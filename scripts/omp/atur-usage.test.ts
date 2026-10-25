@@ -129,6 +129,37 @@ describe("atur-usage hook", () => {
     expect(posts[1].body).toMatchObject({ input_tokens: 50, output_tokens: 25 });
   });
 
+  it("names the agent after the innermost multiplexer pane", async () => {
+    const saved = { term: process.env.TERM_PROGRAM };
+    const nameFor = async (env: Record<string, string>) => {
+      Object.assign(process.env, env);
+      try {
+        posts = [];
+        const entries = makeEntries();
+        const ctx = makeCtx(entries);
+        const hook = await importHook({});
+        await hook.emit("session_start", {}, ctx);
+        entries.add(assistantMsg(10, 5));
+        await hook.emit("tool_call", toolCall(ISSUE_A), ctx);
+        await hook.emit("session_shutdown", {}, ctx);
+        return posts[0]?.body.agent_name;
+      } finally {
+        delete process.env.HERDR_PANE_ID;
+        delete process.env.MUXY_SESSION_ID;
+        if (saved.term === undefined) delete process.env.TERM_PROGRAM;
+        else process.env.TERM_PROGRAM = saved.term;
+      }
+    };
+    // A Muxy server started from a herdr pane leaks HERDR_PANE_ID into its terminals.
+    expect(
+      await nameFor({ TERM_PROGRAM: "muxy", MUXY_SESSION_ID: "804218", HERDR_PANE_ID: "w1:p2" }),
+    ).toBe("omp/muxy-804218");
+    // herdr running inside a Muxy terminal: herdr is the innermost pane.
+    expect(
+      await nameFor({ TERM_PROGRAM: "herdr", MUXY_SESSION_ID: "804218", HERDR_PANE_ID: "w1:p2" }),
+    ).toBe("omp/pane-w1:p2");
+  });
+
   it("never re-reports the same usage on retry after a failed POST", async () => {
     const entries = makeEntries();
     const ctx = makeCtx(entries);

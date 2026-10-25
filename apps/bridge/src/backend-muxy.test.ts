@@ -4,13 +4,14 @@
  * block is skipped when the muxy CLI is not installed.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PaneGoneError } from "./backend";
+import { InputError, PaneGoneError } from "./backend";
 import {
   MuxyBackend,
   muxyBinary,
+  muxyChildEnv,
   muxyKeyBytes,
   muxySocketPath,
   pastePayloads,
@@ -114,8 +115,14 @@ describe("pastePayloads", () => {
     expect(pastePayloads("a\nb")).toEqual(["\x1b[200~a\nb\x1b[201~"]);
   });
 
-  test("an end marker inside the text cannot close the paste early", () => {
+  test("paste markers inside the text are removed, nested ones too", () => {
     expect(pastePayloads("a\n\x1b[201~rm -rf /\n")).toEqual(["\x1b[200~a\nrm -rf /\n\x1b[201~"]);
+    // One pass would turn the nested marker into a real end marker.
+    expect(pastePayloads("a\n\x1b[20\x1b[201~1~rm -rf ~\n")).toEqual([
+      "\x1b[200~a\nrm -rf ~\n\x1b[201~",
+    ]);
+    // A single line cannot switch the terminal into paste mode either.
+    expect(pastePayloads("\x1b[200~foo")).toEqual(["foo"]);
   });
 
   test("chunks split between code points and reassemble to the original", () => {
@@ -124,6 +131,28 @@ describe("pastePayloads", () => {
     expect(chunks).toHaveLength(3);
     expect(chunks.join("")).toBe(text);
     for (const chunk of chunks) expect(chunk.isWellFormed()).toBe(true);
+  });
+
+  test("a chunked paste opens in the first chunk and closes whole in the last", () => {
+    const chunks = pastePayloads("abcd\nefgh", 4);
+    expect(chunks).toEqual(["\x1b[200~abcd", "\nefg", "h\x1b[201~"]);
+  });
+});
+
+describe("muxyChildEnv", () => {
+  test("drops the bridge's secrets and settings, keeps the user's environment", () => {
+    expect(
+      muxyChildEnv({
+        HOME: "/h",
+        PATH: "/bin",
+        MUXY_DIR: "/m",
+        ATUR_CONNECT_TOKEN: "atb_x",
+        ATUR_URL: "https://x",
+        BRIDGE_TOKEN: "t",
+        HERDR_BRIDGE_TOKEN: "t",
+        MUXY_SESSION_ID: "7",
+      }),
+    ).toEqual({ HOME: "/h", PATH: "/bin", MUXY_DIR: "/m" });
   });
 });
 
@@ -184,7 +213,13 @@ const hasMuxy = muxyBinary() !== "muxy";
 describe.skipIf(!hasMuxy)("MuxyBackend against a real Muxy server", () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "atur-muxy-")));
   const work = join(root, "work");
-  const env = { ...process.env, MUXY_DIR: join(root, "state") };
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    MUXY_DIR: join(root, "state"),
+    ATUR_CONNECT_TOKEN: "atb_leak_check",
+  };
+  delete env.MUXY_SESSION_ID;
+  delete env.MUXY_SERVER_ID;
   const backend = new MuxyBackend({ env });
   let paneId = "";
   let workspaceId = "";
@@ -207,6 +242,13 @@ describe.skipIf(!hasMuxy)("MuxyBackend against a real Muxy server", () => {
 
   beforeAll(async () => {
     mkdirSync(work, { recursive: true });
+    // Nothing may start the server before createWorkspace does.
+    expect(await backend.listPanes()).toEqual([]);
+    expect(await backend.pollPanes()).toEqual([]);
+    await expect(backend.readVisible("123")).rejects.toBeInstanceOf(PaneGoneError);
+    await expect(backend.sendText("123", "x")).rejects.toBeInstanceOf(PaneGoneError);
+    expect(existsSync(muxySocketPath(env))).toBe(false);
+
     const created = await backend.createWorkspace({ cwd: work, label: "atur-test" });
     paneId = created.pane.id;
     workspaceId = created.workspace.id;
@@ -215,6 +257,21 @@ describe.skipIf(!hasMuxy)("MuxyBackend against a real Muxy server", () => {
   afterAll(() => {
     Bun.spawnSync([muxyBinary(), "server", "stop", "--force"], { env });
     rmSync(root, { recursive: true, force: true });
+  });
+
+  test("terminals of a server the bridge started never see its tokens", async () => {
+    await backend.sendText(paneId, 'echo "tok=[$ATUR_CONNECT_TOKEN]"');
+    await backend.sendKeys(paneId, ["enter"]);
+    // The output row starts with "tok=["; the echoed command line does not.
+    const text = await until(screenHas("\r\ntok=["), "echo output");
+    expect(text).toContain("\r\ntok=[]");
+    expect(text).not.toContain("atb_leak_check");
+  });
+
+  test("a project name the CLI would read as an option is refused as bad input", async () => {
+    await expect(backend.createWorkspace({ cwd: work, label: "--x" })).rejects.toBeInstanceOf(
+      InputError,
+    );
   });
 
   test("a new workspace is a project whose session is listed under its label", async () => {

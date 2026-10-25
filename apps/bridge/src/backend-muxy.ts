@@ -14,6 +14,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
+  InputError,
   PaneGoneError,
   type AgentStatus,
   type CreatedWorkspace,
@@ -234,15 +235,42 @@ const PASTE_END = "\x1b[201~";
  * Literal text → `session send` payloads. `send` types bytes as-is, so a bare
  * newline would press Enter; multi-line text is wrapped in bracketed-paste
  * markers instead (every agent CLI and modern shell enables bracketed paste).
- * An end marker inside the text is removed so it cannot cut the paste short.
- * Chunks split on code points, never inside a surrogate pair.
+ * Paste markers inside the text are removed until none is left (a nested
+ * marker reappears after one pass), so the text can neither open a paste nor
+ * end one early. The text is chunked before wrapping, so a marker is never
+ * split across two calls, and chunks split on code points, never inside a
+ * surrogate pair.
  */
 export function pastePayloads(text: string, chunk: number = SEND_CHUNK): string[] {
-  const multiline = /[\r\n]/.test(text);
-  const body = multiline ? `${PASTE_START}${text.split(PASTE_END).join("")}${PASTE_END}` : text;
-  const points = Array.from(body);
+  let clean = text;
+  for (let prev = ""; prev !== clean;) {
+    prev = clean;
+    clean = clean.split(PASTE_END).join("").split(PASTE_START).join("");
+  }
+  const points = Array.from(clean);
   const out: string[] = [];
   for (let i = 0; i < points.length; i += chunk) out.push(points.slice(i, i + chunk).join(""));
+  if (out.length > 0 && /[\r\n]/.test(clean)) {
+    out[0] = `${PASTE_START}${out[0]}`;
+    out[out.length - 1] = `${out[out.length - 1]}${PASTE_END}`;
+  }
+  return out;
+}
+
+/**
+ * Environment for the `muxy` CLI. A CLI call starts the Muxy server when none
+ * runs, and that server hands its environment to every terminal it opens: the
+ * bridge's own settings (machine token, loopback token) must not reach them,
+ * nor the id of a Muxy terminal the bridge itself may have been started from.
+ */
+export function muxyChildEnv(
+  env: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (/^(ATUR_|BRIDGE_|HERDR_BRIDGE_)/.test(key) || key === "MUXY_SESSION_ID") continue;
+    out[key] = value;
+  }
   return out;
 }
 
@@ -311,19 +339,36 @@ interface Ran {
 
 export interface MuxyOptions {
   bin?: string;
-  /** Environment for the CLI (e.g. `MUXY_DIR` selects the server); the process env when unset. */
+  /** Environment the backend runs in (e.g. `MUXY_DIR` selects the server); the process env when unset. */
   env?: Record<string, string | undefined>;
 }
 
 export class MuxyBackend implements PaneBackend {
   readonly kind = "muxy";
   private readonly bin: string;
-  private readonly env: Record<string, string | undefined> | undefined;
+  private readonly env: Record<string, string | undefined>;
+  private readonly socket: string;
   private readonly lastScreen = new Map<string, { text: string; revision: number }>();
 
   constructor(opts: MuxyOptions = {}) {
-    this.bin = opts.bin ?? muxyBinary(opts.env);
-    this.env = opts.env;
+    const env = opts.env ?? process.env;
+    this.bin = opts.bin ?? muxyBinary(env);
+    this.env = muxyChildEnv(env);
+    this.socket = muxySocketPath(env);
+  }
+
+  /**
+   * Every CLI call except `server status/stop` starts a server when none runs.
+   * Only creating a workspace may do that (like tmux `new-session`): polling
+   * and pane commands must never resurrect a server the user stopped, so they
+   * check the socket first (Muxy removes it on a clean stop).
+   */
+  private serverRunning(): boolean {
+    return existsSync(this.socket);
+  }
+
+  private requireServer(): void {
+    if (!this.serverRunning()) throw new PaneGoneError("muxy server is not running");
   }
 
   private async run(args: string[], timeoutMs: number = COMMAND_TIMEOUT_MS): Promise<Ran> {
@@ -357,8 +402,9 @@ export class MuxyBackend implements PaneBackend {
   }
 
   /** A session-scoped command; ids Muxy would reject are gone by definition. */
-  private session<T>(id: string, args: string[], timeoutMs?: number): Promise<T> {
-    if (!SESSION_ID.test(id)) return Promise.reject(new PaneGoneError(`invalid session id: ${id}`));
+  private async session<T>(id: string, args: string[], timeoutMs?: number): Promise<T> {
+    if (!SESSION_ID.test(id)) throw new PaneGoneError(`invalid session id: ${id}`);
+    this.requireServer();
     return this.json<T>(["session", args[0] as string, id, ...args.slice(1)], timeoutMs);
   }
 
@@ -377,6 +423,7 @@ export class MuxyBackend implements PaneBackend {
   }
 
   async listPanes(): Promise<PaneSummary[]> {
+    if (!this.serverRunning()) return [];
     const [sessions, projects, agents] = await Promise.all([
       this.json<MuxySession[]>(["session", "list", "--json"]),
       this.json<MuxyProject[]>(["project", "list", "--json"]),
@@ -386,6 +433,7 @@ export class MuxyBackend implements PaneBackend {
   }
 
   async pollPanes(): Promise<PaneSummary[]> {
+    if (!this.serverRunning()) return [];
     const [sessions, agents] = await Promise.all([
       this.json<MuxySession[]>(["session", "list", "--json"]),
       this.agents(),
@@ -395,6 +443,7 @@ export class MuxyBackend implements PaneBackend {
 
   async getPane(id: string, timeoutMs?: number): Promise<PaneSummary> {
     if (!SESSION_ID.test(id)) throw new PaneGoneError(`invalid session id: ${id}`);
+    this.requireServer();
     const [sessions, projects, agents] = await Promise.all([
       this.json<MuxySession[]>(["session", "list", "--json"], timeoutMs),
       this.json<MuxyProject[]>(["project", "list", "--json"], timeoutMs),
@@ -452,6 +501,7 @@ export class MuxyBackend implements PaneBackend {
   }
 
   private async send(id: string, payload: string): Promise<void> {
+    this.requireServer();
     // `--` keeps text starting with a dash literal.
     const args = ["session", "send", id, "--", payload];
     const res = await this.run(args);
@@ -483,7 +533,12 @@ export class MuxyBackend implements PaneBackend {
   }
 
   async createWorkspace(opts: { cwd: string; label?: string }): Promise<CreatedWorkspace> {
+    // The CLI reads any argument starting with `--` as an option, even after --name.
+    if (opts.label?.startsWith("--")) {
+      throw new InputError('a Muxy project name cannot start with "--"');
+    }
     // --reuse: a folder Muxy already knows opens in its existing project.
+    // This is the one call that may start the server (see serverRunning).
     const project = await this.json<{ id: string; name: string }>([
       "project",
       "add",
@@ -511,7 +566,11 @@ export class MuxyBackend implements PaneBackend {
     };
   }
 
-  /** Muxy has no server-side splits: the new session joins the source's project. */
+  /**
+   * Muxy has no server-side splits: the new session joins the source's project.
+   * Muxy reports only the directory a session started in, so that is where the
+   * new one starts unless `cwd` is given.
+   */
   async splitPane(id: string, _direction: SplitDirection, cwd?: string): Promise<PaneSummary> {
     const source = await this.getPane(id);
     const start = cwd ?? source.cwd;

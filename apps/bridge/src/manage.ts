@@ -15,6 +15,7 @@ import { stat } from "node:fs/promises";
 import { isAbsolute, normalize } from "node:path";
 import {
   ConflictError,
+  InputError,
   PaneGoneError,
   workspacesOf,
   type PaneBackend,
@@ -22,13 +23,6 @@ import {
   type WorkspaceSummary,
 } from "./backend";
 import { listItem } from "./hub";
-
-export class InputError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "InputError";
-  }
-}
 
 const MAX_BODY_BYTES = 8 * 1024;
 const MAX_PATH_CHARS = 4096;

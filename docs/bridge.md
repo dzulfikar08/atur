@@ -195,7 +195,11 @@ The Worker holds one bridge URL, so one Worker talks to one bridge (one machine)
 
 With tmux the resize is visible on the desktop: a terminal attached to that window shows it at phone size while the phone is open. The bridge puts the window back (and your own `window-size` setting, if you had one) 15 seconds after the last phone viewer leaves, or when the bridge stops.
 
-With Muxy, tabs and splits belong to the desktop app, not the server, so the bridge sees each terminal (session) on its own. Keys reach the session as the bytes a terminal sends (`\r`, `\x1b[A`, ...), and multi-line text goes in as one bracketed paste: an agent or shell that has not turned bracketed paste on sees the paste markers.
+With Muxy, tabs and splits belong to the desktop app, not the server, so the bridge sees each terminal (session) on its own. Keys reach the session as the bytes a terminal sends (`\r`, `\x1b[A`, ...), and multi-line text goes in as one bracketed paste: an agent or shell that has not turned bracketed paste on sees the paste markers. Paste markers inside pasted text are removed.
+
+A pane's `cwd` is the directory its session started in: Muxy does not report where a session `cd`-ed to since, so a pane only matches a bound checkout (see [Install and run](#install-and-run)) if it started inside it.
+
+Any `muxy` command starts a Muxy server when none runs, and that server's terminals inherit the environment of whoever started it. The bridge therefore only lets creating a workspace start one (as tmux does with `new-session`): while no server socket exists, `/panes` is empty and pane commands answer 404. The bridge also drops its own settings (`ATUR_*`, `BRIDGE_*`) from the environment it runs `muxy` with, so a server it starts never hands the machine token to your agents.
 
 ## Managing panes
 
@@ -211,11 +215,11 @@ Besides watching panes, the phone app can open a workspace, split a pane and clo
 `pane` objects have the same shape as the rows of `GET /panes`. Errors are `{error}` with `400` (bad input), `404` (unknown pane), `409` (tmux: a session of that name exists) or `502` (the backend failed).
 
 - **Input checks.** `cwd` must be an absolute path to an existing directory (it is `stat`ed; control characters and more than 4096 characters are refused). `label` is optional, at most 64 characters, no control characters. The body is JSON, at most 8 KiB.
-- **Where the new pane starts.** A split starts in the source pane's current directory unless `cwd` is given. A workspace's first pane starts in `cwd`.
+- **Where the new pane starts.** A split starts in the source pane's current directory unless `cwd` is given (Muxy: the directory the source session started in). A workspace's first pane starts in `cwd`.
 - **No focus change.** The new workspace or pane does not take focus on the desktop (herdr `focus: false`, tmux `-d`; Muxy sessions created from the CLI never take focus).
 - **herdr.** `workspace.create`, `pane.split` and `pane.close` over the socket. Closing the last pane of a workspace closes the workspace (herdr's rule).
 - **tmux.** A workspace is a detached session (`new-session -d -s <label> -c <cwd>`; the label defaults to the folder name, and tmux turns `.` and `:` into `_`). A split is `split-window -d -h` (right) or `-v` (down); close is `kill-pane`. Closing a session's last pane ends the session.
-- **Muxy.** A workspace is a project (`muxy project add <cwd> --reuse`: a folder Muxy already knows opens in its existing project, and the label then stays the project's name) with a new session in it. A split is a new session in the source pane's project, whatever the direction; the desktop app lists it under Existing Terminals rather than as a split. Close is `session end`, which keeps the session's saved output in Muxy.
+- **Muxy.** A workspace is a project (`muxy project add <cwd> --reuse`: a folder Muxy already knows opens in its existing project, and the label then stays the project's name) with a new session in it. A label starting with `--` is refused with `400` (the CLI would read it as an option). A split is a new session in the source pane's project, whatever the direction; the desktop app lists it under Existing Terminals rather than as a split. Close is `session end`, which keeps the session's saved output in Muxy.
 - **Over the relay** these are ordinary `req` frames to the machine's bridge, so no relay protocol change was needed. A bridge that predates these routes answers its generic `404 {"error":"not found"}`; the Worker turns that into `501` "this bridge is too old to manage panes; update atur-bridge".
 - There is no route to close a whole workspace: close its panes, or use `herdr workspace close`.
 
@@ -432,7 +436,7 @@ Any agent that can run a command on its own events can call `tmux-status.sh <nam
 - The machine stays offline on the Machines page: read the log (`journalctl --user -u atur-bridge -f`). `relay: offline, ...; retrying` is a network problem (the line is printed once, not per retry). `the machine token was rejected` means the token was revoked or mistyped: create a new one and run `atur-bridge connect <token>`, then `systemctl --user restart atur-bridge`. `needs an active plan` means the account has no Solo or Team plan.
 - `replaced by another connection using this token`: two bridges are using the same machine token. Give each machine its own token.
 - `no terminal backend found`: no herdr socket, no Muxy server socket and no `tmux` binary were found. Install tmux, start herdr or Muxy, or set `BRIDGE_BACKEND` (and `HERDR_SOCKET` or `MUXY_DIR`).
-- `/panes` is empty with Muxy: the bridge drives another Muxy profile than the app. The app's server runs with `--socket <dir>/server.sock` (`ps aux | grep muxy-server`); point `MUXY_DIR` at that `<dir>`.
+- `/panes` is empty with Muxy: Muxy is not running (the bridge never starts it just to list panes), or the bridge drives another Muxy profile than the app. The app's server runs with `--socket <dir>/server.sock` (`ps aux | grep muxy-server`); point `MUXY_DIR` at that `<dir>`.
 - `/panes` is empty with tmux: the bridge talks to a different tmux server than your session. Compare `tmux display -p '#{socket_path}'` (run inside your session) with `TMUX_SOCKET`, and make sure both run as the same user.
 - Creating, splitting or closing from the app fails with "too old to manage panes": the machine runs a bridge from before these routes. Update it (re-run the install command, or `git pull` and restart `atur-bridge.service`).
 - A pane is not in the app: its working directory is not inside a bound workspace checkout (see above), or the Worker cannot reach the bridge (`curl` the tunnel hostname with the token).
@@ -447,4 +451,4 @@ bun test          # the tmux and Muxy integration tests start their own isolated
 bun run typecheck
 ```
 
-`manage.test.ts` runs the pane management routes over a fake backend (validation, status codes, wire shapes); `backend-tmux.test.ts` creates a workspace, splits and closes on that tmux server and checks the name conflict. `backend-muxy.test.ts` does the same against a Muxy server in a temporary `MUXY_DIR` (stopped with `muxy server stop --force` afterwards) and checks colours, key bytes, paste wrapping and paged scrollback.
+`manage.test.ts` runs the pane management routes over a fake backend (validation, status codes, wire shapes); `backend-tmux.test.ts` creates a workspace, splits and closes on that tmux server and checks the name conflict. `backend-muxy.test.ts` runs against a Muxy server in a temporary `MUXY_DIR` (stopped with `muxy server stop --force` afterwards): nothing starts that server before a workspace is created, its terminals do not see the bridge's token, and it covers create, split, close, colours, key bytes, paste wrapping and paged scrollback. Muxy allows duplicate project names, so there is no conflict case.
