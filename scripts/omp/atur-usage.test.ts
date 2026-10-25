@@ -71,11 +71,16 @@ afterAll(() => {
   server.close();
   if (savedPaneId === undefined) delete process.env.HERDR_PANE_ID;
   else process.env.HERDR_PANE_ID = savedPaneId;
+  if (savedMuxyId === undefined) delete process.env.MUXY_SESSION_ID;
+  else process.env.MUXY_SESSION_ID = savedMuxyId;
 });
-// HERDR_PANE_ID is set inside herdr panes (like this one) and would win the
-// agent_name fallback chain — isolate the session-file path for assertions.
+// HERDR_PANE_ID / MUXY_SESSION_ID are set inside herdr panes and Muxy terminals
+// and would win the agent_name fallback chain — isolate the session-file path
+// for assertions.
 const savedPaneId = process.env.HERDR_PANE_ID;
+const savedMuxyId = process.env.MUXY_SESSION_ID;
 delete process.env.HERDR_PANE_ID;
+delete process.env.MUXY_SESSION_ID;
 
 beforeEach(() => {
   posts = [];

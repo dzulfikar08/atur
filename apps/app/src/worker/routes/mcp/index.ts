@@ -1230,7 +1230,7 @@ export const TOOLS = [
   {
     name: "get_workspace_links",
     description:
-      "Control-plane binding for a workspace: GitHub repo(s), local checkout path, default branch, herdr workspace. Pass workspace for one binding (membership required) or omit it to list all bindings",
+      "Control-plane binding for a workspace: GitHub repo(s), local checkout path, default branch, terminal workspace (herdr_workspace: the herdr workspace or Muxy project name). Pass workspace for one binding (membership required) or omit it to list all bindings",
     inputSchema: {
       type: "object",
       properties: {
@@ -1241,7 +1241,7 @@ export const TOOLS = [
   {
     name: "set_workspace_link",
     description:
-      "Create or update a workspace binding (repo_urls, local_path, default_branch, herdr_workspace, notes, mode, auto_merge). Pass null to clear a field. mode: 'local-only' (default) or 'direct-PR'; auto_merge: 'yolo' lets the agent merge its own PR after green gates. Owner-or-admin only",
+      "Create or update a workspace binding (repo_urls, local_path, default_branch, herdr_workspace = herdr workspace or Muxy project name, notes, mode, auto_merge). Pass null to clear a field. mode: 'local-only' (default) or 'direct-PR'; auto_merge: 'yolo' lets the agent merge its own PR after green gates. Owner-or-admin only",
     inputSchema: {
       type: "object",
       properties: {

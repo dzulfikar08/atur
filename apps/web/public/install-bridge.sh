@@ -96,8 +96,8 @@ else
 fi
 say "  platform: $OS-$ARCH"
 
-if ! have tmux && ! have herdr; then
-  say "  note: neither tmux nor herdr was found. Install tmux (the bridge shows panes of whatever tmux runs)."
+if ! have tmux && ! have herdr && ! have muxy && [ ! -x /Applications/Muxy.app/Contents/MacOS/muxy ]; then
+  say "  note: none of tmux, herdr or Muxy was found. Install tmux (the bridge shows panes of whatever tmux runs)."
 fi
 
 # --- release ----------------------------------------------------------------

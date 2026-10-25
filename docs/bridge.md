@@ -4,10 +4,10 @@
 
 ```
 Atur Cloud (customers):
-phone / browser -> Atur Worker (auth, audit) -> BridgeRelay Durable Object <== wss (the bridge dials out) == atur-bridge -> herdr or tmux
+phone / browser -> Atur Worker (auth, audit) -> BridgeRelay Durable Object <== wss (the bridge dials out) == atur-bridge -> herdr, tmux or Muxy
 
 Self-host / tunnel:
-phone / browser -> Atur Worker (auth, audit) -> tunnel -> atur-bridge (127.0.0.1:7601) -> herdr or tmux
+phone / browser -> Atur Worker (auth, audit) -> tunnel -> atur-bridge (127.0.0.1:7601) -> herdr, tmux or Muxy
                                                      atur-bridge -> POST /api/bridge/agent-events -> Worker -> push
 ```
 
@@ -15,10 +15,11 @@ The bridge binds `127.0.0.1` only. It drives one terminal multiplexer, called th
 
 - **tmux**: works with any agent running in a tmux pane (Claude Code, Codex, omp, anything else). No extra software.
 - **herdr**: herdr (a terminal multiplexer for agents) detects agents and their state by itself.
+- **Muxy**: [Muxy 2](https://muxy.app) (a desktop terminal multiplexer, macOS and Linux) detects agents and their state by itself; the bridge drives it through its `muxy` CLI.
 
 ## Connect a machine to Atur Cloud
 
-Needs an Atur plan (Solo or Team) and tmux (or herdr) on the machine. No tunnel, no open port, no Bun: the bridge is a single binary that dials out to `app.diatur.com`.
+Needs an Atur plan (Solo or Team) and tmux, herdr or Muxy on the machine. No tunnel, no open port, no Bun: the bridge is a single binary that dials out to `app.diatur.com`.
 
 1. In [app.diatur.com](https://app.diatur.com), open the **Machines** page and create a machine. Copy its install command. The token (`atb_...`) is shown once.
 2. Run it on the machine whose terminals you want to reach:
@@ -63,7 +64,7 @@ This is the path for your own Worker (`HERDR_BRIDGE_URL` / `HERDR_BRIDGE_TOKEN`,
 ## Requirements
 
 - [Bun](https://bun.sh) 1.2 or newer.
-- tmux 3.1 or newer (for the tmux backend), or herdr.
+- tmux 3.1 or newer (for the tmux backend), herdr, or Muxy 2.2 or newer.
 - Git, only for worktree-aware pane binding.
 
 ## Install and run
@@ -75,7 +76,7 @@ bun install
 BRIDGE_TOKEN=$(openssl rand -hex 24) bun run src/main.ts
 ```
 
-It prints `terminal backend: tmux` (or `herdr`) and `atur-bridge listening on 127.0.0.1:7601`. Check it:
+It prints `terminal backend: tmux` (or `herdr`, `muxy`) and `atur-bridge listening on 127.0.0.1:7601`. Check it:
 
 ```bash
 curl -s -H "x-bridge-token: $BRIDGE_TOKEN" http://127.0.0.1:7601/panes
@@ -93,9 +94,11 @@ On the self-host path, a pane only appears in the app when its working directory
 | `BRIDGE_TOKEN`       | random per run               | Shared secret. Clients must send it as `x-bridge-token`. Unset: a random one is generated at startup, so the loopback server is never open. For the tunnel setup also the key for push events: **no token, no notifications.** Must equal the Worker's `HERDR_BRIDGE_TOKEN`. |
 | `ATUR_CONNECT_TOKEN` | empty                        | Machine token (`atb_...`) from the Machines page. Set: the bridge dials out to Atur Cloud (see above) and sends agent events over that socket. `atur-bridge connect <token>` writes it to `~/.config/atur/bridge.env`.                                                       |
 | `ATUR_BRIDGE_ENV`    | `~/.config/atur/bridge.env`  | Settings file. On a foreground run the bridge reads it for every variable not already in the environment.                                                                                                                                                                    |
-| `BRIDGE_BACKEND`     | auto                         | `herdr`, `tmux` or `auto`. Auto picks herdr when its socket exists, otherwise tmux when the `tmux` binary is on `PATH`. Pin it in a service, so a herdr that is slow to start never flips you to tmux.                                                                       |
+| `BRIDGE_BACKEND`     | auto                         | `herdr`, `tmux`, `muxy` or `auto`. Auto picks herdr when its socket exists, then Muxy when its server socket exists, otherwise tmux when the `tmux` binary is on `PATH`. Pin it in a service, so a herdr or Muxy that is slow to start never flips you to tmux.              |
 | `HERDR_SOCKET`       | `~/.config/herdr/herdr.sock` | herdr socket path.                                                                                                                                                                                                                                                           |
 | `TMUX_SOCKET`        | tmux default server          | Socket of the tmux server to drive. A value containing `/` is a path (`tmux -S`), a bare name is a socket name (`tmux -L`).                                                                                                                                                  |
+| `MUXY_DIR`           | Muxy's data directory        | Muxy profile to drive, as for the `muxy` CLI. Default: `~/Library/Application Support/Muxy 2` on macOS, `$XDG_STATE_HOME/muxy` (or `~/.local/state/muxy`) on Linux. Its `server.sock` is what auto-detection looks for.                                                      |
+| `MUXY_BIN`           | `muxy` on `PATH`             | The `muxy` CLI. Falls back to the binary inside `/Applications/Muxy.app` on macOS, where the app does not put it on `PATH`.                                                                                                                                                  |
 | `ATUR_URL`           | `https://app.diatur.com`     | Atur server: the relay endpoint (`/api/bridge/connect`) and the target of agent events. Set it to your own server when self-hosting.                                                                                                                                         |
 | `AGENT_POLL_MS`      | `2000`                       | How often the bridge looks at agent states for push events.                                                                                                                                                                                                                  |
 | `ATUR_PASTE_DIR`     | `~/.cache/atur/pastes`       | Where images pasted from the phone are saved before their path goes into the prompt.                                                                                                                                                                                         |
@@ -170,27 +173,29 @@ bunx wrangler secret put HERDR_BRIDGE_URL     # https://bridge.example.com
 bunx wrangler secret put HERDR_BRIDGE_TOKEN   # same value as BRIDGE_TOKEN
 ```
 
-For local development, `HERDR_BRIDGE_URL=http://127.0.0.1:7601` in `apps/app/.dev.vars` needs no tunnel. The names say herdr for historical reasons; they apply to both backends.
+For local development, `HERDR_BRIDGE_URL=http://127.0.0.1:7601` in `apps/app/.dev.vars` needs no tunnel. The names say herdr for historical reasons; they apply to every backend.
 
 The Worker holds one bridge URL, so one Worker talks to one bridge (one machine).
 
-## herdr or tmux
+## herdr, tmux or Muxy
 
-| Feature                          | herdr                                            | tmux                                                                                              |
-| -------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| Live pane mirror, typing, paste  | yes                                              | yes                                                                                               |
-| Images pasted into prompts       | yes                                              | yes                                                                                               |
-| Scrollback on the phone          | up to 1000 rows (herdr limit)                    | up to the pane's `history-limit` (2000 by default)                                                |
-| Agent detection                  | automatic                                        | hooks in the agent, or the process name (`claude`, `codex`, `omp`, `opencode`, `gemini`, `aider`) |
-| Agent state (working, needs you) | automatic                                        | via hooks, see below. Without hooks the state is "unknown" and there are no pushes                |
-| Push: finished / needs you       | yes                                              | yes, once the hooks are installed                                                                 |
-| Push text (last reply, question) | omp panes only                                   | none, the push carries the pane title                                                             |
-| Phone-sized panes                | an invisible herdr client attaches at phone size | the pane's window is resized to the phone grid (`window-size manual`) while the phone is open     |
-| Workspace / tab                  | herdr workspace / tab                            | tmux session / window                                                                             |
-| Pane id                          | `wR:p2`                                          | `%3`                                                                                              |
-| New workspace / split / close    | `workspace.create`, `pane.split`, `pane.close`   | `new-session -d`, `split-window`, `kill-pane`                                                     |
+| Feature                          | herdr                                            | tmux                                                                                              | Muxy                                                                      |
+| -------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Live pane mirror, typing, paste  | yes                                              | yes                                                                                               | yes                                                                       |
+| Images pasted into prompts       | yes                                              | yes                                                                                               | yes                                                                       |
+| Scrollback on the phone          | up to 1000 rows (herdr limit)                    | up to the pane's `history-limit` (2000 by default)                                                | whatever Muxy keeps (a byte budget), read 500 rows per CLI call           |
+| Agent detection                  | automatic                                        | hooks in the agent, or the process name (`claude`, `codex`, `omp`, `opencode`, `gemini`, `aider`) | automatic (Muxy's providers: omp, Claude Code, Codex, OpenCode, …)        |
+| Agent state (working, needs you) | automatic                                        | via hooks, see below. Without hooks the state is "unknown" and there are no pushes                | automatic                                                                 |
+| Push: finished / needs you       | yes                                              | yes, once the hooks are installed                                                                 | yes                                                                       |
+| Push text (last reply, question) | omp panes only                                   | none, the push carries the pane title                                                             | none: Muxy exposes no title or agent transcript path                      |
+| Phone-sized panes                | an invisible herdr client attaches at phone size | the pane's window is resized to the phone grid (`window-size manual`) while the phone is open     | no: a session keeps the size of the Muxy window showing it                |
+| Workspace / tab                  | herdr workspace / tab                            | tmux session / window                                                                             | Muxy project / session                                                    |
+| Pane id                          | `wR:p2`                                          | `%3`                                                                                              | the session id, e.g. `15178128752692842423`                               |
+| New workspace / split / close    | `workspace.create`, `pane.split`, `pane.close`   | `new-session -d`, `split-window`, `kill-pane`                                                     | `project add --reuse` + `session create`, `session create`, `session end` |
 
 With tmux the resize is visible on the desktop: a terminal attached to that window shows it at phone size while the phone is open. The bridge puts the window back (and your own `window-size` setting, if you had one) 15 seconds after the last phone viewer leaves, or when the bridge stops.
+
+With Muxy, tabs and splits belong to the desktop app, not the server, so the bridge sees each terminal (session) on its own. Keys reach the session as the bytes a terminal sends (`\r`, `\x1b[A`, ...), and multi-line text goes in as one bracketed paste: an agent or shell that has not turned bracketed paste on sees the paste markers.
 
 ## Managing panes
 
@@ -207,9 +212,10 @@ Besides watching panes, the phone app can open a workspace, split a pane and clo
 
 - **Input checks.** `cwd` must be an absolute path to an existing directory (it is `stat`ed; control characters and more than 4096 characters are refused). `label` is optional, at most 64 characters, no control characters. The body is JSON, at most 8 KiB.
 - **Where the new pane starts.** A split starts in the source pane's current directory unless `cwd` is given. A workspace's first pane starts in `cwd`.
-- **No focus change.** The new workspace or pane does not take focus on the desktop (herdr `focus: false`, tmux `-d`).
+- **No focus change.** The new workspace or pane does not take focus on the desktop (herdr `focus: false`, tmux `-d`; Muxy sessions created from the CLI never take focus).
 - **herdr.** `workspace.create`, `pane.split` and `pane.close` over the socket. Closing the last pane of a workspace closes the workspace (herdr's rule).
 - **tmux.** A workspace is a detached session (`new-session -d -s <label> -c <cwd>`; the label defaults to the folder name, and tmux turns `.` and `:` into `_`). A split is `split-window -d -h` (right) or `-v` (down); close is `kill-pane`. Closing a session's last pane ends the session.
+- **Muxy.** A workspace is a project (`muxy project add <cwd> --reuse`: a folder Muxy already knows opens in its existing project, and the label then stays the project's name) with a new session in it. A split is a new session in the source pane's project, whatever the direction; the desktop app lists it under Existing Terminals rather than as a split. Close is `session end`, which keeps the session's saved output in Muxy.
 - **Over the relay** these are ordinary `req` frames to the machine's bridge, so no relay protocol change was needed. A bridge that predates these routes answers its generic `404 {"error":"not found"}`; the Worker turns that into `501` "this bridge is too old to manage panes; update atur-bridge".
 - There is no route to close a whole workspace: close its panes, or use `herdr workspace close`.
 
@@ -425,7 +431,8 @@ Any agent that can run a command on its own events can call `tmux-status.sh <nam
 
 - The machine stays offline on the Machines page: read the log (`journalctl --user -u atur-bridge -f`). `relay: offline, ...; retrying` is a network problem (the line is printed once, not per retry). `the machine token was rejected` means the token was revoked or mistyped: create a new one and run `atur-bridge connect <token>`, then `systemctl --user restart atur-bridge`. `needs an active plan` means the account has no Solo or Team plan.
 - `replaced by another connection using this token`: two bridges are using the same machine token. Give each machine its own token.
-- `no terminal backend found`: neither a herdr socket nor the `tmux` binary was found. Install tmux or set `BRIDGE_BACKEND` and `HERDR_SOCKET`.
+- `no terminal backend found`: no herdr socket, no Muxy server socket and no `tmux` binary were found. Install tmux, start herdr or Muxy, or set `BRIDGE_BACKEND` (and `HERDR_SOCKET` or `MUXY_DIR`).
+- `/panes` is empty with Muxy: the bridge drives another Muxy profile than the app. The app's server runs with `--socket <dir>/server.sock` (`ps aux | grep muxy-server`); point `MUXY_DIR` at that `<dir>`.
 - `/panes` is empty with tmux: the bridge talks to a different tmux server than your session. Compare `tmux display -p '#{socket_path}'` (run inside your session) with `TMUX_SOCKET`, and make sure both run as the same user.
 - Creating, splitting or closing from the app fails with "too old to manage panes": the machine runs a bridge from before these routes. Update it (re-run the install command, or `git pull` and restart `atur-bridge.service`).
 - A pane is not in the app: its working directory is not inside a bound workspace checkout (see above), or the Worker cannot reach the bridge (`curl` the tunnel hostname with the token).
@@ -436,8 +443,8 @@ Any agent that can run a command on its own events can call `tmux-status.sh <nam
 
 ```bash
 cd apps/bridge
-bun test          # the tmux integration test starts its own isolated tmux server, skipped when tmux is not installed
+bun test          # the tmux and Muxy integration tests start their own isolated servers, skipped when tmux / Muxy is not installed
 bun run typecheck
 ```
 
-`manage.test.ts` runs the pane management routes over a fake backend (validation, status codes, wire shapes); `backend-tmux.test.ts` creates a workspace, splits and closes on that tmux server and checks the name conflict.
+`manage.test.ts` runs the pane management routes over a fake backend (validation, status codes, wire shapes); `backend-tmux.test.ts` creates a workspace, splits and closes on that tmux server and checks the name conflict. `backend-muxy.test.ts` does the same against a Muxy server in a temporary `MUXY_DIR` (stopped with `muxy server stop --force` afterwards) and checks colours, key bytes, paste wrapping and paged scrollback.

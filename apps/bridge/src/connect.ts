@@ -66,7 +66,7 @@ export interface RelayConfig {
   localPort: number;
   /** Sent as `x-bridge-token` to the loopback server. */
   localToken: string;
-  backend: "herdr" | "tmux";
+  backend: "herdr" | "tmux" | "muxy";
   version: string;
   hostname?: string;
   log?: (msg: string) => void;
@@ -580,7 +580,9 @@ export class RelayConnector {
     local.onclose = (ev) => {
       if (this.streams.get(sid) !== stream) return;
       this.streams.delete(sid);
-      const code = stream.open || ev.code !== 1006 ? sendableCloseCode(ev.code) : 1011;
+      // A socket that never opened got no close frame, so its code is synthetic
+      // (1006 on older Bun, 1002 since 1.4): report the refusal as 1011.
+      const code = stream.open ? sendableCloseCode(ev.code) : 1011;
       this.sendFrame({ t: "close", sid, code, reason: ev.reason || undefined });
     };
   }

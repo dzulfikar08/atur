@@ -953,13 +953,14 @@ export interface BridgeMachine {
   last_seen_at: string | null;
   online: boolean;
   hostname: string | null;
-  backend: "herdr" | "tmux" | null;
+  backend: "herdr" | "tmux" | "muxy" | null;
   version: string | null;
 }
 
 // ── Workspace link (DEV-29 control-plane binding; snake_case wire format) ──
 // One row of workspace_links: which repo(s), local checkout, branch, and
-// herdr workspace back a given Atur workspace (see services/workspaceLinks.ts).
+// terminal workspace (herdr workspace or Muxy project) back a given Atur
+// workspace (see services/workspaceLinks.ts).
 export interface WorkspaceLink {
   workspace: string;
   repo_urls: string[] | null;

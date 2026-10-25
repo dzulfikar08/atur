@@ -4,7 +4,8 @@ import type { DbClient } from "../db/index";
 import * as linksRepo from "../repositories/workspaceLinks";
 
 // Control-plane bindings (DEV-29): which repo(s), local checkout, branch, and
-// herdr workspace back a given Atur workspace. Agents read these before
+// terminal workspace (herdr workspace or Muxy project, stored as
+// herdr_workspace) back a given Atur workspace. Agents read these before
 // spawning so they clone/attach the right context; humans maintain them.
 
 const optionalText = z.string().min(1).max(1024).nullable().optional();

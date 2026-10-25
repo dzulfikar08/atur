@@ -1,6 +1,6 @@
 /**
  * The terminal multiplexer the bridge drives. Everything the hubs need from
- * herdr or tmux goes through this one interface, so the wire protocol to the
+ * herdr, tmux or Muxy goes through this one interface, so the wire protocol to the
  * app (hub.ts, observe.ts) and the push-event poller (agent-events.ts) never
  * learn which backend is underneath.
  */
@@ -50,7 +50,7 @@ export class ConflictError extends Error {
 
 export type SplitDirection = "right" | "down";
 
-/** A herdr workspace / tmux session, folded from its panes. */
+/** A herdr workspace / tmux session / Muxy project, folded from its panes. */
 export interface WorkspaceSummary {
   id: string;
   label: string;
@@ -84,7 +84,7 @@ export function workspacesOf(panes: readonly PaneSummary[]): WorkspaceSummary[] 
 }
 
 export interface PaneBackend {
-  readonly kind: "herdr" | "tmux";
+  readonly kind: "herdr" | "tmux" | "muxy";
   /** Every pane with its workspace label, for `GET /panes`. */
   listPanes(): Promise<PaneSummary[]>;
   /** Cheapest full pane list, for the event poller; `workspaceLabel` may be empty. */

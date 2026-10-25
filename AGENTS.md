@@ -422,14 +422,15 @@ wrangler d1 execute atur-db --remote --command "INSERT INTO api_keys (id,key_has
 
 ### Control Plane — Agent Claim/Evidence Convention (DEV-29)
 
-Atur is the control plane; the harness (herdr/omp) is the execution plane.
+Atur is the control plane; the harness (herdr or Muxy + omp) is the execution plane.
 Harness = source of truth for live state. Atur = source of truth for intent
 (issues) + history (evidence). Never gate on Atur reflecting live state.
 
 **Before spawning an agent for a workspace**, read its binding:
 `get_workspace_links(workspace: "<slug>")` (or `GET /api/workspaces/:slug/links`).
-The binding carries repo(s), local checkout path, default branch, and herdr
-workspace. Spawn work in a git worktree of the bound repo.
+The binding carries repo(s), local checkout path, default branch, and terminal
+workspace (`herdr_workspace`: the herdr workspace or Muxy project). Spawn work
+in a git worktree of the bound repo.
 
 **Claim** (agent starts work):
 
@@ -438,7 +439,9 @@ add_comment: "Picked up by <agent-name> (pane <pane-id>).
 Observe: https://app.diatur.com/panes/<pane-id> — live terminal of the pane
 in the browser (Atur Worker authenticates; requires the atur-bridge daemon
 running on the agent host with its Cloudflare Tunnel up). On the agent host
-itself, `herdr pane read <pane-id> --format ansi` reads the current screen."
+itself, `herdr pane read <pane-id> --format ansi` (herdr; pane id =
+$HERDR_PANE_ID) or `muxy session read-screen <pane-id>` (Muxy; pane id =
+$MUXY_SESSION_ID) reads the current screen."
 update_issue: state_id = In Progress
 ```
 

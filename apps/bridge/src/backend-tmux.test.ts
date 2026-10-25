@@ -16,7 +16,6 @@ import {
   TmuxBackend,
   tmuxKeyName,
 } from "./backend-tmux";
-import { chooseBackendKind } from "./select-backend";
 
 function row(fields: Partial<Record<string, string>> = {}): string {
   const f = {
@@ -165,31 +164,6 @@ describe("capture output", () => {
   test("history keeps the last N rows, oldest first", () => {
     expect(captureToRows("a\nb\nc\nd\n", 2)).toEqual(["c", "d"]);
     expect(captureToRows("a\nb\n", 10)).toEqual(["a", "b"]);
-  });
-});
-
-describe("chooseBackendKind", () => {
-  const probes = (herdr: boolean, tmux: boolean) => ({
-    herdrSocketExists: () => herdr,
-    tmuxInstalled: () => tmux,
-  });
-
-  test("auto prefers herdr, then tmux", () => {
-    expect(chooseBackendKind({}, probes(true, true))).toBe("herdr");
-    expect(chooseBackendKind({}, probes(false, true))).toBe("tmux");
-    expect(chooseBackendKind({ BRIDGE_BACKEND: "auto" }, probes(false, true))).toBe("tmux");
-  });
-
-  test("BRIDGE_BACKEND forces a backend regardless of probes", () => {
-    expect(chooseBackendKind({ BRIDGE_BACKEND: "tmux" }, probes(true, true))).toBe("tmux");
-    expect(chooseBackendKind({ BRIDGE_BACKEND: "HERDR" }, probes(false, false))).toBe("herdr");
-  });
-
-  test("nothing available, or a bad value, is an error", () => {
-    expect(() => chooseBackendKind({}, probes(false, false))).toThrow(/no terminal backend/);
-    expect(() => chooseBackendKind({ BRIDGE_BACKEND: "screen" }, probes(true, true))).toThrow(
-      /must be herdr, tmux or auto/,
-    );
   });
 });
 

@@ -76,7 +76,7 @@ function NewMachineToken({
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Runs on Linux and macOS. Works with herdr or tmux.{" "}
+          Runs on Linux and macOS. Works with herdr, tmux or Muxy.{" "}
           <a href={DOCS_URL} target="_blank" rel="noreferrer" className="underline">
             Setup guide
           </a>
@@ -183,7 +183,7 @@ export default function MachinesPage() {
           <div className="space-y-1.5">
             <CardTitle className="text-base">Your machines</CardTitle>
             <CardDescription>
-              Runs on Linux and macOS. Works with herdr or tmux.{" "}
+              Runs on Linux and macOS. Works with herdr, tmux or Muxy.{" "}
               <a href={DOCS_URL} target="_blank" rel="noreferrer" className="underline">
                 Setup guide
               </a>

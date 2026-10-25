@@ -23,6 +23,9 @@ describe("parseBridgeFrame", () => {
     expect(
       parse({ t: "hello", v: 1, hostname: "laptop", backend: "tmux", version: "0.3.0" }),
     ).toEqual({ t: "hello", v: 1, hostname: "laptop", backend: "tmux", version: "0.3.0" });
+    expect(
+      parse({ t: "hello", v: 1, hostname: "mac", backend: "muxy", version: "0.9.0" }),
+    ).toMatchObject({ t: "hello", backend: "muxy" });
     expect(parse({ t: "res", id: "r1", status: 200, headers: { a: "b" }, b64: "e30=" })).toEqual({
       t: "res",
       id: "r1",

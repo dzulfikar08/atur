@@ -11,7 +11,7 @@
 //   ATUR_API_KEY      X-API-Key value; falls back to ATUR_API_KEY_FILE, then
 //   ATUR_API_KEY_FILE key file path; falls back to ~/.config/atur/crew-api-key
 //   ATUR_BASE_URL     default https://app.diatur.com
-//   ATUR_AGENT_NAME  default omp/pane-<HERDR_PANE_ID> | omp/<session-id8>
+//   ATUR_AGENT_NAME  default omp/pane-<HERDR_PANE_ID> | omp/muxy-<MUXY_SESSION_ID> | omp/<session-id8>
 //
 // Failure model: every handler swallows its own errors — a broken report
 // must never block a tool call or crash a session. Failed POSTs keep the
@@ -50,6 +50,7 @@ function apiKey(): string {
 function agentName(sessionFile: string | undefined): string {
   if (process.env.ATUR_AGENT_NAME) return process.env.ATUR_AGENT_NAME;
   if (process.env.HERDR_PANE_ID) return `omp/pane-${process.env.HERDR_PANE_ID}`;
+  if (process.env.MUXY_SESSION_ID) return `omp/muxy-${process.env.MUXY_SESSION_ID}`;
   const m = /([0-9a-f]{8})\.jsonl$/i.exec(sessionFile || "");
   return `omp/${m ? m[1] : "session"}`;
 }

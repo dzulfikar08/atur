@@ -149,7 +149,9 @@ function BindingEditDialog({
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <Label htmlFor="binding-herdr">Herdr workspace</Label>
+              <Label htmlFor="binding-herdr">
+                Terminal workspace (herdr workspace / Muxy project)
+              </Label>
               <Input
                 id="binding-herdr"
                 value={herdrWorkspace}
@@ -310,8 +312,8 @@ export default function WorkspaceBindingsPage() {
           <h1 className="text-2xl font-bold">Workspace Bindings</h1>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Control-plane bindings: which repo(s), local checkout, branch, and herdr workspace back
-          each workspace's agents.
+          Control-plane bindings: which repo(s), local checkout, branch, and terminal workspace
+          (herdr workspace or Muxy project) back each workspace's agents.
           {!canEdit && " Read-only — ask a workspace admin to make changes."}
         </p>
       </div>
@@ -358,7 +360,7 @@ export default function WorkspaceBindingsPage() {
                       <dd className="break-all font-mono">{link.local_path ?? "—"}</dd>
                       <dt>Branch</dt>
                       <dd className="break-all">{link.default_branch ?? "—"}</dd>
-                      <dt>Herdr</dt>
+                      <dt>Terminal</dt>
                       <dd className="break-all">{link.herdr_workspace ?? "—"}</dd>
                       <dt>Auto-merge</dt>
                       <dd>{link.auto_merge ?? "—"}</dd>
@@ -382,7 +384,7 @@ export default function WorkspaceBindingsPage() {
                       <TableHead>Mode</TableHead>
                       <TableHead>Local path</TableHead>
                       <TableHead>Branch</TableHead>
-                      <TableHead>Herdr</TableHead>
+                      <TableHead>Terminal</TableHead>
                       <TableHead>Auto-merge</TableHead>
                       <TableHead>Updated</TableHead>
                       {canEdit && <TableHead className="w-24" />}
