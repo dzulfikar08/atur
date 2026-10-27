@@ -20,6 +20,7 @@ import * as activitiesService from "../../services/crm_activities";
 import * as workspaceService from "../../services/workspaces";
 import * as assetsService from "../../services/assets";
 import * as commentsService from "../../services/comments";
+import * as issueMoveService from "../../services/issueMove";
 import { fieldSettingsSchema, withSettings } from "../../services/customFields";
 import * as valuesRepo from "../../repositories/customFieldValues";
 import * as workspaceRepo from "../../repositories/workspaces";
@@ -234,6 +235,25 @@ export const TOOLS = [
         },
       },
       required: ["project_id", "workspace", "issue_id"],
+    },
+  },
+  {
+    name: "move_issue",
+    description:
+      "Move an issue to another project in the same workspace. Keeps comments, activity, time entries, relations and attachments; assigns the next sequence number of the target project (old key is recorded in the activity trail). State maps to the target's state of the same name/group unless state_id is given; project-scoped labels are remapped by name or dropped; sprint/module/cycle links and custom field values of the old project are removed. Refused while sub-issues remain in the source project (move them first). Returns the slim issue plus previousKey, key and droppedLabels.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string", description: "Workspace slug" },
+        issue_id: { type: "string", description: "Issue UUID to move" },
+        target_project_id: { type: "string", description: "Destination project UUID" },
+        state_id: {
+          type: "string",
+          description:
+            "Optional state UUID of the TARGET project; default maps the current state by name/group",
+        },
+      },
+      required: ["workspace", "issue_id", "target_project_id"],
     },
   },
   {
@@ -1942,6 +1962,30 @@ async function handleToolRaw(
           ),
         )
         .limit(1);
+    }
+    case "move_issue": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      if (typeof params.issue_id !== "string" || typeof params.target_project_id !== "string") {
+        throw new HTTPException(400, { message: "issue_id and target_project_id are required" });
+      }
+      // Both ends are bound to the named workspace inside moveIssue (issue and
+      // target project each looked up by workspace_id → cross-workspace 404).
+      const moved = await issueMoveService.moveIssue(
+        db,
+        workspaceId,
+        params.issue_id,
+        params.target_project_id,
+        {
+          stateId: params.state_id !== undefined ? String(params.state_id) : undefined,
+          actorId: userId,
+        },
+      );
+      return {
+        ...moved.issue,
+        previousKey: moved.previousKey,
+        key: moved.key,
+        droppedLabels: moved.droppedLabels,
+      };
     }
     case "get_issue": {
       // Accept issue_id (UUID) or sequence_id (human number within a project).

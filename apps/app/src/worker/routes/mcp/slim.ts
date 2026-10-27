@@ -42,6 +42,7 @@ type ToolSchema = {
 // Identity fields per tool family (Drizzle runtime keys are camelCase — that
 // is what the JSON-RPC payload has always carried).
 const ISSUE = ["id", "name", "sequenceId", "stateId", "priority", "projectId"];
+const MOVED_ISSUE = [...ISSUE, "previousKey", "key", "droppedLabels"];
 const PROJECT = ["id", "name", "identifier", "folderId"];
 const WORKSPACE = ["id", "name", "slug"];
 const FOLDER = ["id", "name", "color", "sortOrder"];
@@ -93,6 +94,7 @@ const SLIM_TOOLS: Record<string, string[]> = {
   get_issue: ISSUE,
   create_issue: ISSUE,
   update_issue: ISSUE,
+  move_issue: MOVED_ISSUE,
   // Projects / folders / workspaces
   list_projects: PROJECT,
   get_project: PROJECT,

@@ -7,6 +7,7 @@ import { requireWorkspaceMember, requireWorkspaceProject } from "../middleware/w
 import * as issuesService from "../services/issues";
 import * as issuesRepo from "../repositories/issues";
 import type { IssueListOpts } from "../repositories/issues";
+import { moveIssue, moveIssueSchema } from "../services/issueMove";
 import * as issueDetailService from "../services/issueDetail";
 
 const DUE_VALUES = new Set(["overdue", "today", "week", "none", "any"]);
@@ -90,6 +91,30 @@ export const issueRoutes = new Hono<{ Bindings: Env }>({ strict: false })
       if (!issue) throw new HTTPException(404, { message: "Issue not found" });
       const result = await issuesService.listSubIssues(db, issue.id);
       return c.json(result);
+    },
+  )
+
+  .post(
+    "/:issueId/move",
+    authMiddleware,
+    requireWorkspaceMember,
+    requireWorkspaceProject,
+    async (c) => {
+      const db = getDb(c.env.DB);
+      const project = c.get("project");
+      const issue = await issuesRepo.resolveIssue(db, project.id, c.req.param("issueId")!);
+      if (!issue) throw new HTTPException(404, { message: "Issue not found" });
+      const body = moveIssueSchema.parse(await c.req.json());
+      const result = await moveIssue(db, project.workspaceId, issue.id, body.target_project_id, {
+        stateId: body.state_id,
+        actorId: c.get("user").sub,
+      });
+      return c.json({
+        ...result.issue,
+        previous_key: result.previousKey,
+        key: result.key,
+        dropped_labels: result.droppedLabels,
+      });
     },
   )
 

@@ -114,6 +114,26 @@ list_issues(project_id="<uuid>", workspace="<slug>", state="<state_uuid>", limit
 search_issues(query="search terms", workspace="<slug>")
 ```
 
+**Move an issue to another project (same workspace):**
+
+```
+move_issue(
+  workspace="<slug>",
+  issue_id="<issue uuid>",
+  target_project_id="<uuid>",
+  state_id="<target-project state uuid>"   // optional; default maps by state name/group
+)
+→ { id, sequenceId, projectId, stateId, previousKey: "JRG-439", key: "FIT-3", droppedLabels: [...] }
+```
+
+The issue keeps its id, comments, activity, time entries, relations and attachments and takes the next
+sequence number of the target project (the old key is recorded in its activity trail). Project-scoped
+labels are remapped by name or dropped (reported in `droppedLabels`; none are created), sprint/module/cycle
+links and custom-field values of the old project are removed, estimate/type are cleared. Refused (409) while
+sub-issues remain in the source project — move the sub-issues first, then the parent — and for deals/pipeline
+projects. REST: `POST /api/workspaces/:slug/projects/:projectId/issues/:issueId/move`
+`{ target_project_id, state_id? }`.
+
 **Link issues:**
 
 ```
@@ -384,23 +404,23 @@ add_comment(
 )
 ```
 
-### 50 Available Tools
+### 51 Available Tools
 
-| Category              | Tools                                                                                                                                             |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Workspace             | `list_workspaces`, `create_workspace`, `update_workspace`, `delete_workspace`, `list_workspace_members`                                           |
-| Projects              | `list_projects`, `get_project`, `create_project`                                                                                                  |
-| Issues                | `list_issues`, `create_issue`, `get_issue`, `update_issue`, `delete_issue`, `search_issues`, `add_comment`, `list_comments`, `get_issue_feedback` |
-| Issue Relations       | `list_issue_relations`, `add_issue_relation`, `remove_issue_relation`                                                                             |
-| Sprints               | `list_sprints`, `create_sprint`, `get_sprint`, `update_sprint`, `add_issue_to_sprint`, `remove_issue_from_sprint`, `get_sprint_progress`          |
-| Modules               | `list_modules`, `get_module`, `add_issue_to_module`, `remove_issue_from_module`                                                                   |
-| Pages                 | `list_pages`, `get_page`, `create_page`, `update_page`                                                                                            |
-| States/Labels/Members | `list_states`, `list_labels`, `list_members`, `set_assignee`                                                                                      |
-| Time                  | `list_time_entries`, `create_time_entry`, `delete_time_entry`, `get_agent_usage`                                                                  |
-| CRM Contacts          | `list_contacts`, `create_contact`, `get_contact`, `update_contact`, `log_activity` (contacts key on email or `threads_username`)                  |
-| CRM Threads           | `list_threads_inbox`, `reply_threads_item` (public post; human-approved text only), `make_threads_lead`                                           |
-| CRM Deals             | `create_deal`, `list_deals`, `move_deal_stage`, `update_deal`                                                                                     |
-| Assets                | `upload_image`                                                                                                                                    |
+| Category              | Tools                                                                                                                                                           |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workspace             | `list_workspaces`, `create_workspace`, `update_workspace`, `delete_workspace`, `list_workspace_members`                                                         |
+| Projects              | `list_projects`, `get_project`, `create_project`                                                                                                                |
+| Issues                | `list_issues`, `create_issue`, `get_issue`, `update_issue`, `move_issue`, `delete_issue`, `search_issues`, `add_comment`, `list_comments`, `get_issue_feedback` |
+| Issue Relations       | `list_issue_relations`, `add_issue_relation`, `remove_issue_relation`                                                                                           |
+| Sprints               | `list_sprints`, `create_sprint`, `get_sprint`, `update_sprint`, `add_issue_to_sprint`, `remove_issue_from_sprint`, `get_sprint_progress`                        |
+| Modules               | `list_modules`, `get_module`, `add_issue_to_module`, `remove_issue_from_module`                                                                                 |
+| Pages                 | `list_pages`, `get_page`, `create_page`, `update_page`                                                                                                          |
+| States/Labels/Members | `list_states`, `list_labels`, `list_members`, `set_assignee`                                                                                                    |
+| Time                  | `list_time_entries`, `create_time_entry`, `delete_time_entry`, `get_agent_usage`                                                                                |
+| CRM Contacts          | `list_contacts`, `create_contact`, `get_contact`, `update_contact`, `log_activity` (contacts key on email or `threads_username`)                                |
+| CRM Threads           | `list_threads_inbox`, `reply_threads_item` (public post; human-approved text only), `make_threads_lead`                                                         |
+| CRM Deals             | `create_deal`, `list_deals`, `move_deal_stage`, `update_deal`                                                                                                   |
+| Assets                | `upload_image`                                                                                                                                                  |
 
 ### Registration
 
