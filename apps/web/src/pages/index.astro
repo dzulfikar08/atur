@@ -158,10 +158,22 @@ const herdrLines = [
 const paneLines = [
   ["dim", "› fix the verify flow in ATUR-35"],
   ["", "Reading src/auth/verify.ts"],
+  ["", "Reading src/auth/verify.test.ts"],
   ["", "Token TTL is compared in seconds"],
   ["", "against Date.now() in milliseconds."],
+  ["", "Editing src/auth/verify.ts"],
+  ["dim", "  - if (exp < Date.now())"],
+  ["dim", "  + if (exp * 1000 < Date.now())"],
+  ["", "Running bun test verify"],
   ["ok", "✓ 3 tests added, all passing"],
+  ["", "Checking the invite flow in a browser"],
+  ["ok", "✓ verify link opens, no 500"],
+  ["", "Saved verify-flow.png"],
+  ["", "git commit -m \"fix: TTL in milliseconds\""],
+  ["", "Opened PR from fix/verify-ttl"],
   ["", "Posting evidence to ATUR-35…"],
+  ["dim", "  Moved ATUR-35 to Need Review"],
+  ["dim", "› waiting for your review"],
 ];
 
 // Questions a visitor asks before connecting an agent. Answers are plain text
@@ -277,14 +289,23 @@ const faqLd = {
 
           <figure class="lp-pane-visual">
             <div class="lp-phone lp-phone-pane">
-              <div class="lp-screen" role="img" aria-label="Example pane screen: an agent's terminal, a prompt box with mic and send, and a key row.">
-                <div class="lp-status"><span>09.44</span><span class="lp-notch"></span><span class="lp-status-pad"></span></div>
+              <div class="lp-screen" role="img" aria-label="Example pane screen: an agent's live terminal with a prompt box, mic, send and a key row.">
+                <div class="lp-status">
+                  <span>9:44</span>
+                  <span class="lp-island"></span>
+                  <span class="lp-status-icons"><i class="sig"></i><i class="bat"></i></span>
+                </div>
                 <div class="lp-pane-head">
-                  <p>ATUR-35 agent</p>
+                  <span class="lp-pane-back"><Icon name="arrowLeft" size={16} /></span>
+                  <div>
+                    <p>ATUR-35 agent</p>
+                    <span>codex · fix/verify-ttl</span>
+                  </div>
                   <span class="lp-live">Live</span>
                 </div>
                 <div class="lp-term">
                   {paneLines.map(([kind, text]) => <p class={kind}>{text}</p>)}
+                  <p><span class="lp-cursor"></span></p>
                 </div>
                 <div class="lp-composer">
                   <span class="lp-composer-input">Message the agent…</span>
@@ -293,8 +314,9 @@ const faqLd = {
                   <span class="lp-composer-send"><Icon name="send" size={14} /></span>
                 </div>
                 <div class="lp-keys">
-                  {["Ctrl", "Alt", "Esc", "Tab", "←", "↓", "↑", "→"].map((k) => <span>{k}</span>)}
+                  {["Ctrl", "Esc", "Tab", "←", "↓", "↑", "→"].map((k) => <span>{k}</span>)}
                 </div>
+                <span class="lp-home"></span>
               </div>
             </div>
             <figcaption>Example screen.</figcaption>

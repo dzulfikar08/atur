@@ -1806,24 +1806,53 @@
   }
 }
 
-/* Phone mockups (Panes section): an HTML rendering of the app, labelled as
-   an example. */
+/* Phone mockup (Panes section): an HTML rendering of the app's pane screen,
+   labelled as an example. Real phone proportions (about 9:19.5) and a dark
+   screen, as the pane view is a terminal in both themes. The device carries
+   the section's one shadow. */
 .lp-phone {
   position: relative;
-  width: 17.5rem;
+  width: min(17.5rem, 78vw);
+  aspect-ratio: 9 / 19.5;
   margin: 0 auto;
-  padding: 7px;
-  border-radius: 42px;
-  background: var(--lp-device);
+  padding: 9px;
+  border-radius: 48px;
+  background: #1b1b1d;
   box-shadow:
-    0 30px 60px -20px rgba(22, 22, 22, 0.35),
-    0 10px 20px -10px rgba(22, 22, 22, 0.2);
+    inset 0 0 0 1.5px #3a3a3e,
+    inset 0 0 0 4px #0c0c0d,
+    0 40px 80px -30px rgba(22, 22, 22, 0.45),
+    0 12px 24px -12px rgba(22, 22, 22, 0.25);
+}
+/* Side buttons: action, volume up/down, power. */
+.lp-phone::before,
+.lp-phone::after {
+  content: "";
+  position: absolute;
+  width: 3px;
+  border-radius: 2px;
+  background: #2a2a2d;
+}
+.lp-phone::before {
+  left: -3px;
+  top: 22%;
+  height: 14%;
+  box-shadow: 0 -40px 0 -1px #2a2a2d;
+}
+.lp-phone::after {
+  right: -3px;
+  top: 26%;
+  height: 18%;
 }
 .lp-screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   overflow: hidden;
-  border-radius: 35px;
-  background: #fafafa;
-  color: #0d0d0d;
+  border-radius: 39px;
+  background: #0b0b0c;
+  color: #ededed;
   font-size: 11px;
   line-height: 1.45;
 }
@@ -1831,18 +1860,64 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 22px 0;
-  font-size: 10px;
-  font-weight: 800;
+  padding: 13px 22px 4px 26px;
+  font-size: 11px;
+  font-weight: 700;
 }
-.lp-notch {
-  width: 64px;
-  height: 16px;
+.lp-island {
+  width: 72px;
+  height: 21px;
   border-radius: 999px;
-  background: var(--lp-device);
+  background: #000;
 }
-.lp-status-pad {
-  width: 26px;
+.lp-status-icons {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.lp-status-icons .sig {
+  width: 14px;
+  height: 8px;
+  background: linear-gradient(
+    90deg,
+    currentColor 0 2px,
+    transparent 2px 4px,
+    currentColor 4px 6px,
+    transparent 6px 8px,
+    currentColor 8px 10px,
+    transparent 10px 12px,
+    currentColor 12px 14px
+  );
+  clip-path: polygon(
+    0 75%,
+    14% 75%,
+    14% 100%,
+    0 100%,
+    0 75%,
+    29% 50%,
+    43% 50%,
+    43% 100%,
+    29% 100%,
+    29% 50%,
+    57% 25%,
+    71% 25%,
+    71% 100%,
+    57% 100%,
+    57% 25%,
+    86% 0,
+    100% 0,
+    100% 100%,
+    86% 100%
+  );
+}
+.lp-status-icons .bat {
+  position: relative;
+  width: 20px;
+  height: 9px;
+  border: 1px solid rgba(237, 237, 237, 0.5);
+  border-radius: 3px;
+  background: linear-gradient(90deg, currentColor 0 72%, transparent 72%) content-box;
+  padding: 1px;
 }
 .lp-pane-visual figcaption {
   margin-top: 14px;
@@ -2076,45 +2151,49 @@
 .lp-note strong {
   color: var(--lp-fg);
 }
-
-.lp-pane-visual {
-  position: relative;
-}
-.lp-pane-visual::before {
-  content: "";
-  position: absolute;
-  inset: 40px 8% 40px;
-  border-radius: 40px;
-  background: var(--lp-started-soft);
-}
-.lp-phone-pane .lp-screen {
-  background: #fff;
-}
 .lp-pane-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px 10px;
+  gap: 8px;
+  padding: 10px 14px 10px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.lp-pane-back {
+  display: grid;
+  place-items: center;
+  color: #8a8a8a;
+}
+.lp-pane-head div {
+  flex: 1;
+  min-width: 0;
 }
 .lp-pane-head p {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+}
+.lp-pane-head div span {
+  color: #8a8a8a;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
 }
 .lp-live {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
   font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
-  color: #15803d;
 }
 .lp-term {
-  min-height: 190px;
+  flex: 1;
+  min-height: 0;
   padding: 12px 14px;
-  background: var(--lp-term-bg);
-  color: var(--lp-term-fg);
+  overflow: hidden;
   font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 10px;
-  line-height: 1.6;
+  font-size: 9.5px;
+  line-height: 1.7;
 }
 .lp-term .dim {
   color: #8a8a8a;
@@ -2122,49 +2201,70 @@
 .lp-term .ok {
   color: #4ade80;
 }
+.lp-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 11px;
+  vertical-align: -2px;
+  background: #ededed;
+}
 .lp-composer {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 10px 8px;
+  padding: 8px 10px 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 .lp-composer-input {
   flex: 1;
-  padding: 8px 10px;
-  border: 1px solid #e1e1e1;
-  border-radius: 12px;
-  color: #666;
+  min-width: 0;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: #1c1c1e;
+  color: #8a8a8a;
+  white-space: nowrap;
 }
 .lp-composer-btn,
 .lp-composer-send {
   display: inline-grid;
+  flex-shrink: 0;
   place-items: center;
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  border: 1px solid #e1e1e1;
-  color: #555;
+  background: #1c1c1e;
+  color: #b5b5b5;
 }
 .lp-composer-send {
-  border: 0;
-  background: #161616;
-  color: #fafafa;
+  background: #ededed;
+  color: #0b0b0c;
 }
 .lp-keys {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 4px;
-  padding: 4px 8px 14px;
+  padding: 4px 10px 22px;
 }
 .lp-keys span {
   display: grid;
   place-items: center;
-  height: 26px;
+  height: 24px;
   border-radius: 6px;
-  background: #f0f0f0;
+  background: #1c1c1e;
+  color: #d4d4d4;
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 9px;
   font-weight: 600;
+}
+.lp-home {
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  width: 34%;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(237, 237, 237, 0.75);
+  transform: translateX(-50%);
 }
 
 /* herdr band: In Progress tint, because herdr is where work in progress
