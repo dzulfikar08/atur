@@ -1,0 +1,16 @@
+{
+  "solo": {
+    "productId": "c86b15e8-e91b-464e-a6d0-e5d3f70d7b83",
+    "name": "Atur Solo",
+    "amount": 900,
+    "currency": "usd",
+    "interval": "month"
+  },
+  "team": {
+    "productId": "ddd252b0-6cf2-4a91-8757-2fd057f8bf51",
+    "name": "Atur Team",
+    "amount": 2900,
+    "currency": "usd",
+    "interval": "month"
+  }
+}

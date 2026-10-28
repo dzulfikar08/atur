@@ -82,3 +82,10 @@ run_worker_first = true
 # Polar (payments → CRM import): credentials are per-workspace and entered in
 # the app UI (Integrations → Polar), stored in the polar_settings table — NOT
 # worker secrets. Webhook endpoint: /webhooks/polar/:slug (signed, per-workspace).
+
+# Atur Cloud paid plans. "1" lets /billing hand signed-in users to the Polar
+# checkout (products "Atur Solo" / "Atur Team"); unset shows the waitlist.
+# Only matters when ATUR_BILLING_WEBHOOK_SECRET is set (Atur Cloud); a self-host
+# without that secret has billing off and everyone entitled.
+[vars]
+ATUR_CHECKOUT_OPEN = "1"

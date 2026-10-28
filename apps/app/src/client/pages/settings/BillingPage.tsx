@@ -71,6 +71,22 @@ export default function BillingPage() {
     }
   }, [returning, entitled, setParams, qc]);
 
+  // diatur.com plan buttons land here as /billing?plan=solo|team, after sign-in
+  // if needed, so the checkout always carries this account's id and email.
+  const wanted = params.get("plan");
+  const autoPlan = wanted === "solo" || wanted === "team" ? wanted : null;
+  const autoCheckout =
+    autoPlan !== null && !!me && me.billing.managed && me.billing.checkout_open && !entitled;
+  useEffect(() => {
+    if (!me || !autoPlan) return;
+    if (autoCheckout) window.location.assign(checkoutHref(autoPlan, me));
+    else setParams({}, { replace: true });
+  }, [me, autoPlan, autoCheckout, setParams]);
+
+  if (autoCheckout) {
+    return <div className="p-6 text-sm text-muted-foreground">Opening checkout...</div>;
+  }
+
   if (isLoading || !me) return <div className="p-6 text-sm text-muted-foreground">Loading...</div>;
   const billing = me.billing;
 

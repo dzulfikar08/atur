@@ -2332,7 +2332,7 @@
 
 .lp-herdr-visual {
   position: relative;
-  padding-bottom: 72px;
+  padding-bottom: 150px;
 }
 .lp-hw {
   overflow: hidden;
@@ -2400,75 +2400,45 @@
   line-height: 1.7;
 }
 .lp-hw-term .dim,
-.lp-hp-term .dim {
+.lp-phone .lp-term .dim {
   color: #8a8a8a;
 }
-.lp-hw-term .ok,
-.lp-hp-term .ok {
+.lp-hw-term .ok {
   color: #4ade80;
 }
-.lp-hw-term .warn {
+.lp-hw-term .warn,
+.lp-phone .lp-term .warn {
   color: #f9a8d4;
 }
 
-.lp-hp {
+/* The same phone as the Panes section, scaled down and overlapping the
+   laptop window: one pane, two screens. */
+.lp-phone-mini {
   position: absolute;
-  right: 4%;
+  right: 2%;
   bottom: 0;
-  width: 210px;
-  padding: 6px;
-  border-radius: 30px;
-  background: var(--lp-device);
-  box-shadow: 0 24px 40px -18px rgba(22, 22, 22, 0.45);
+  margin: 0;
+  transform: scale(0.6);
+  transform-origin: bottom right;
+  box-shadow:
+    inset 0 0 0 1.5px #3a3a3e,
+    inset 0 0 0 4px #0c0c0d,
+    0 50px 90px -30px rgba(0, 0, 0, 0.6);
 }
-.lp-hp > * {
-  background: #fff;
-  color: #0d0d0d;
+.lp-phone-mini .lp-term {
+  font-size: 10.5px;
 }
-.lp-hp-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 14px 8px;
-  border-radius: 24px 24px 0 0;
-  font-size: 12px;
-  font-weight: 800;
+.lp-composer-typed {
+  color: #ededed;
+  white-space: normal;
 }
-.lp-hp-head span {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 10px;
-  color: #15803d;
+.lp-phone-mini .lp-composer {
+  padding-bottom: 26px;
 }
-.lp-hp .lp-hp-term {
-  padding: 10px 12px;
-  background: var(--lp-term-bg);
-  color: var(--lp-term-fg);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 9.5px;
-  line-height: 1.6;
-}
-.lp-hp-composer {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 8px 12px;
-  border-radius: 0 0 24px 24px;
-  font-size: 10px;
-}
-.lp-hp-composer span {
-  flex: 1;
-  padding: 6px 8px;
-  border: 1px solid #e1e1e1;
-  border-radius: 10px;
-}
-.lp-hp-composer b {
-  display: inline-grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  background: #161616;
-  color: #fafafa;
+@media (max-width: 599px) {
+  .lp-phone-mini {
+    transform: scale(0.5);
+  }
 }
 .lp-sticker {
   position: absolute;
@@ -2732,51 +2702,6 @@
    not because it sits in the middle. */
 .lp-plan-team {
   background: var(--lp-review-soft);
-}
-/* Waitlist shown under the plans while paid checkout is closed. */
-.lp-waitlist {
-  display: grid;
-  gap: 16px;
-  margin-top: 20px;
-  padding: 28px;
-  border-radius: var(--lp-radius-lg);
-  background: var(--lp-card);
-  scroll-margin-top: 96px;
-}
-.lp-waitlist-fields {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.lp-waitlist input,
-.lp-waitlist select {
-  min-height: 48px;
-  padding: 0 16px;
-  border: 1.5px solid var(--lp-border);
-  border-radius: var(--lp-radius-sm);
-  background: var(--lp-bg);
-  color: var(--lp-fg);
-  font: inherit;
-}
-.lp-waitlist input {
-  flex: 1 1 240px;
-}
-.lp-waitlist input:focus-visible,
-.lp-waitlist select:focus-visible {
-  outline: 2px solid var(--lp-primary);
-  outline-offset: 2px;
-}
-.lp-waitlist-status:empty {
-  display: none;
-}
-@media (min-width: 900px) {
-  .lp-waitlist {
-    grid-template-columns: 1fr 1.2fr;
-    align-items: center;
-  }
-  .lp-waitlist-status {
-    grid-column: 1 / -1;
-  }
 }
 .lp-plan-name {
   font-weight: 800;
