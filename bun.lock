@@ -209,6 +209,7 @@
   ],
   "patchedDependencies": {
     "tiptap-markdown@0.9.0": "patches/tiptap-markdown@0.9.0.patch",
+    "@novnc/novnc@1.7.0": "patches/@novnc%2Fnovnc@1.7.0.patch",
   },
   "overrides": {
     "@tiptap/core": "3.32.0",
