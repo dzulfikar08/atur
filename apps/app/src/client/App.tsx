@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import AppShell from "@/components/layout/AppShell";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import CreateWorkspace from "@/components/onboarding/CreateWorkspace";
+import { AppLoader } from "@/components/AppLoader";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/stores/auth";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
@@ -64,14 +65,6 @@ const PlatformPage = lazy(() => import("@/pages/platform/PlatformPage"));
 const PlatformUserPage = lazy(() => import("@/pages/platform/PlatformUserPage"));
 const PlatformWorkspacePage = lazy(() => import("@/pages/platform/PlatformWorkspacePage"));
 
-function PageLoader() {
-  return (
-    <div className="flex items-center justify-center h-screen">
-      <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-    </div>
-  );
-}
-
 function RootRoute() {
   const navigate = useNavigate();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -93,7 +86,7 @@ function RootRoute() {
     }
   }, [initialized, isAuthenticated, firstSlug, navigate]);
 
-  if (!initialized) return <PageLoader />;
+  if (!initialized) return <AppLoader label="Checking your session" />;
   // The marketing site owns the public landing. Logged-out visitors on the app
   // origin bounce to https://diatur.com (auth pages like /auth/login still
   // live here on the app origin). Dev keeps you local: the seeded dev user
@@ -105,7 +98,8 @@ function RootRoute() {
       return null;
     }
     window.location.replace("https://diatur.com");
-    return null;
+    // Keep the splash up while the browser leaves instead of flashing blank.
+    return <AppLoader label="Redirecting to diatur.com" />;
   }
 
   // Authenticated but the workspaces query failed (e.g. transient auth issue) —
@@ -125,12 +119,12 @@ function RootRoute() {
     return <CreateWorkspace />;
   }
 
-  return <PageLoader />;
+  return <AppLoader label="Opening your workspace" />;
 }
 
 export default function App() {
   return (
-    <Suspense fallback={<PageLoader />}>
+    <Suspense fallback={<AppLoader />}>
       <Routes>
         {/* Root route — auth-aware: redirects logged-out visitors to the marketing site */}
         <Route path="/" element={<RootRoute />} />

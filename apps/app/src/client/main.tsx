@@ -6,6 +6,7 @@ import "@/i18n";
 import "@/index.css";
 import App from "./App";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { BootSplashRelease } from "@/components/AppLoader";
 import { initNativePlatform } from "@/lib/native";
 import { initDevAuth } from "@/lib/dev-auth";
 
@@ -30,12 +31,15 @@ const reactRoot = createRoot(rootEl, {
 } as any);
 
 reactRoot.render(
-  <ErrorBoundary name="root">
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Toaster />
-        <App />
-      </BrowserRouter>
-    </QueryClientProvider>
-  </ErrorBoundary>,
+  <>
+    <BootSplashRelease />
+    <ErrorBoundary name="root">
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <Toaster />
+          <App />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
+  </>,
 );

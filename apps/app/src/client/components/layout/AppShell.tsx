@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
+import { ContentLoader } from "@/components/AppLoader";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import WorkspaceRail from "./WorkspaceRail";
@@ -124,7 +125,10 @@ export default function AppShell() {
         {/* Page content - with bottom padding on mobile for bottom nav */}
         <main id="main" className="flex-1 overflow-y-auto">
           <div className="p-4 pb-20 md:p-6 md:pb-6 lg:p-8 lg:pb-8">
-            <Outlet />
+            {/* Route chunks load here so the shell stays on screen. */}
+            <Suspense fallback={<ContentLoader />}>
+              <Outlet />
+            </Suspense>
           </div>
         </main>
       </div>
