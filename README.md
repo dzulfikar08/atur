@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg" />
+    <img src="docs/logo.svg" alt="Atur logo" width="96" height="96" />
+  </picture>
+</p>
+
 # Atur
 
 Mission control for your AI coding agents. Agents pick up issues over MCP, work
