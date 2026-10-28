@@ -28,7 +28,15 @@ import {
 type Mods = { ctrl?: boolean; alt?: boolean; shift?: boolean; super?: boolean };
 type Quality = "high" | "balanced" | "low";
 type Inbound =
-  | { t: "connect"; url: string; viewOnly: boolean; mode: MouseMode; quality: Quality }
+  | {
+      t: "connect";
+      url: string;
+      viewOnly: boolean;
+      mode: MouseMode;
+      quality: Quality;
+      /** Give up on an unanswered socket after this long (the direct path fails fast). */
+      timeoutMs?: number;
+    }
   | { t: "disconnect" }
   | { t: "viewOnly"; value: boolean }
   | { t: "mode"; value: MouseMode }
@@ -233,7 +241,7 @@ function disconnect() {
   host.replaceChildren();
 }
 
-function connect(url: string) {
+function connect(url: string, timeoutMs = CONNECT_TIMEOUT_MS) {
   // Keep the last frame up while the new session paints its first one.
   snapshotGhost();
   disconnect();
@@ -260,7 +268,7 @@ function connect(url: string) {
 
   connectTimer = window.setTimeout(() => {
     if (gen === generation) ch.kill(4000, "connect timeout");
-  }, CONNECT_TIMEOUT_MS);
+  }, timeoutMs);
 
   session.addEventListener("connect", () => {
     if (gen !== generation) return;
@@ -615,7 +623,7 @@ window.__atur = {
         mode = msg.mode;
         quality = msg.quality;
         run(recognizer.setMode(effectiveMode()));
-        connect(msg.url);
+        connect(msg.url, msg.timeoutMs);
         render();
         break;
       case "disconnect":

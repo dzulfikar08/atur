@@ -53,6 +53,13 @@ const SENTINEL = "\u200b\u200b";
 // connect-src of the page's CSP: only our own API host.
 const PAGE_HTML = SCREEN_HTML.replace("__CONNECT_SRC__", WS_ORIGIN);
 
+/** The direct socket gets this long to reach RFB before falling back to the Worker. */
+const DIRECT_TIMEOUT_MS = 3500;
+/** After a failed direct attempt, use the Worker path for this long. */
+const DIRECT_RETRY_MS = 60_000;
+/** The bridge has no direct listener (404): don't ask again for this long. */
+const DIRECT_ABSENT_MS = 10 * 60_000;
+
 /** A session that stays up this long has earned a fresh retry budget. */
 const STABLE_MS = 10_000;
 
@@ -176,6 +183,12 @@ export default function DesktopScreen() {
   /** A ticket request is in flight; its session will replace the page's current one. */
   const fetching = useRef(false);
   const mounted = useRef(true);
+  /**
+   * Direct (tailnet) path state. `via` = the current attempt dials the bridge
+   * directly; `connected` = it reached RFB; `skipUntil` = after a failure or a
+   * 404 the Worker path is used until then.
+   */
+  const direct = useRef({ via: false, connected: false, skipUntil: 0 });
 
   const goTo = (next: Phase) => {
     phaseRef.current = next;
@@ -226,6 +239,32 @@ export default function DesktopScreen() {
     fetching.current = true;
     setEndedWith(null);
     goTo(attemptRef.current > 0 ? "reconnecting" : "connecting");
+    direct.current.connected = false;
+    direct.current.via = false;
+    // Prefer the tailnet path to the bridge (no Cloudflare hop). Any failure
+    // here just means the Worker relay below, which always works.
+    if (Date.now() >= direct.current.skipUntil) {
+      try {
+        const d = await api.screenDirect();
+        if (seq !== connectSeq.current || !mounted.current) return;
+        fetching.current = false;
+        direct.current.via = true;
+        const p = prefsRef.current;
+        page.current?.send({
+          t: "connect",
+          url: `${d.url}?ticket=${encodeURIComponent(d.ticket)}`,
+          viewOnly: p.viewOnly,
+          mode: p.mode,
+          quality: p.quality,
+          timeoutMs: DIRECT_TIMEOUT_MS,
+        });
+        return;
+      } catch (error) {
+        if (seq !== connectSeq.current || !mounted.current) return;
+        const absent = error instanceof ApiError && error.status === 404;
+        direct.current.skipUntil = Date.now() + (absent ? DIRECT_ABSENT_MS : DIRECT_RETRY_MS);
+      }
+    }
     let ticket: string;
     try {
       ({ ticket } = await api.screenTicket());
@@ -313,6 +352,7 @@ export default function DesktopScreen() {
         // Ended by the user (or for good): late reports from the page don't revive it.
         if (phaseRef.current === "ended") break;
         if (message.state === "connected") {
+          direct.current.connected = true;
           goTo("live");
           setEndedWith(null);
           clearTimeout(stableTimer.current);
@@ -321,6 +361,14 @@ export default function DesktopScreen() {
             setAttempt(0);
           }, STABLE_MS);
         } else if (message.state === "disconnected") {
+          // The direct path never came up (tailnet unreachable, ticket refused):
+          // go through the Worker right away, without spending a retry.
+          if (direct.current.via && !direct.current.connected && !fetching.current) {
+            direct.current.skipUntil = Date.now() + DIRECT_RETRY_MS;
+            direct.current.via = false;
+            void connectRef.current();
+            break;
+          }
           // A newer attempt is fetching its ticket and will replace this session.
           if (fetching.current) break;
           clearTimeout(stableTimer.current);

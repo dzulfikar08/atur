@@ -23,9 +23,13 @@
  *   GET /pane-repo        → main repo path for a pane cwd (worktree-aware)
  *   GET /attach?pane=<id> → WebSocket upgrade: snapshot mirror + input
  *   GET /observe?pane=<id> → WebSocket upgrade: read-only structured transcript (+ opt-in session-log chat feed)
- *   GET /screen/status    → desktop-sharing availability, running state, viewer count
+ *   GET /screen/status    → desktop-sharing availability, running state, viewer count, `direct` URL
  *   GET /screen           → WebSocket upgrade: raw RFB bytes to the loopback wayvnc
  *                           (text frames are the viewer's ping/pong, answered here)
+ *
+ * Direct screen path: with BRIDGE_LISTEN (tailnet address) the bridge also serves
+ * GET /screen there, and only that, authenticated by a Worker-minted ticket
+ * (screen-direct.ts) instead of x-bridge-token. See docs/bridge.md.
  *
  * Agent events: a poller watches the backend's panes and reports "done"/"blocked"
  * transitions, over the relay socket in relay mode, else by POST to
@@ -34,13 +38,21 @@
  */
 import { randomBytes } from "node:crypto";
 import { hostname } from "node:os";
-import type { ServerWebSocket } from "bun";
+import type { BunFile, Server, ServerWebSocket } from "bun";
 import { AgentEventWatcher, agentEventsConfigFromEnv } from "./agent-events";
 import { DEFAULT_ATUR_URL, RelayConnector } from "./connect";
 import { PaneHub, type BridgeMeta } from "./hub";
 import { handleManage } from "./manage";
 import { ObserveHub } from "./observe";
 import { imageExtension, MAX_PASTE_BYTES, PasteError, pasteDirFromEnv, savePaste } from "./pastes";
+import {
+  TicketLedger,
+  directUrl,
+  parseListen,
+  redeemScreenTicket,
+  reportDirectStop,
+  tailscaleIPv4,
+} from "./screen-direct";
 import { ScreenHub, screenConfigFromEnv, type ScreenMeta } from "./screen";
 import { createBackend } from "./select-backend";
 import { BRIDGE_VERSION } from "./version";
@@ -67,7 +79,37 @@ console.log(`terminal backend: ${backend.kind}`);
 
 const hub = new PaneHub(backend);
 const observeHub = new ObserveHub(backend);
-const screenHub = new ScreenHub(screenConfigFromEnv(process.env));
+const aturForEvents = agentEventsConfigFromEnv(process.env);
+const directListeners = parseListen(process.env.BRIDGE_LISTEN, PORT + 1, tailscaleIPv4);
+if (directListeners.length > 0 && !process.env.BRIDGE_TOKEN) {
+  throw new Error(
+    "BRIDGE_LISTEN needs BRIDGE_TOKEN: it is the key direct screen tickets are signed with",
+  );
+}
+const directTls =
+  process.env.BRIDGE_TLS_CERT && process.env.BRIDGE_TLS_KEY
+    ? { cert: Bun.file(process.env.BRIDGE_TLS_CERT), key: Bun.file(process.env.BRIDGE_TLS_KEY) }
+    : undefined;
+const directPublicUrl = directUrl(process.env.BRIDGE_DIRECT_URL, directListeners[0], !!directTls);
+const spentTickets = new TicketLedger();
+const screenHub = new ScreenHub(screenConfigFromEnv(process.env), undefined, (meta) => {
+  if (meta.direct) void reportDirectStop(aturForEvents, meta.direct.audit);
+});
+
+/** Direct listener: GET /screen with a valid ticket, nothing else. */
+function directFetch(req: Request, server: Server<Meta>): Response | undefined {
+  const url = new URL(req.url);
+  if (url.pathname !== "/screen" || req.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+    return Response.json({ error: "not found" }, { status: 404 });
+  }
+  const claims = redeemScreenTicket(TOKEN, url.searchParams.get("ticket") ?? "", spentTickets);
+  if (!claims) return Response.json({ error: "invalid or expired ticket" }, { status: 401 });
+  const meta = screenHub.newMeta({ sub: claims.sub, audit: claims.audit });
+  if (!server.upgrade(req, { data: meta })) {
+    return Response.json({ error: "websocket upgrade failed" }, { status: 426 });
+  }
+  return undefined;
+}
 const pasteDir = pasteDirFromEnv(process.env);
 
 type Meta = BridgeMeta | ScreenMeta;
@@ -78,199 +120,222 @@ function isScreen(ws: ServerWebSocket<Meta>): ws is ServerWebSocket<ScreenMeta> 
 
 hub.start();
 
-Bun.serve<Meta>({
-  hostname: "127.0.0.1",
-  port: PORT,
-  async fetch(req, server): Promise<Response> {
-    if (!authorized(req)) {
-      return Response.json({ error: "unauthorized" }, { status: 401 });
-    }
-    const url = new URL(req.url);
-    if (url.pathname === "/health") {
-      return Response.json({ ok: true });
-    }
-    if (url.pathname === "/panes") {
-      try {
-        return Response.json(await hub.listPanes());
-      } catch (e) {
-        return Response.json(
-          { error: e instanceof Error ? e.message : String(e) },
-          { status: 502 },
-        );
+/**
+ * One Bun server per listen address, all sharing the same websocket handlers.
+ * The loopback server is the full bridge API (x-bridge-token). A `direct`
+ * server (tailnet address) answers only GET /screen with a Worker-minted ticket.
+ */
+function serve(opts: {
+  hostname: string;
+  port: number;
+  direct: boolean;
+  tls?: { cert: BunFile; key: BunFile };
+}): void {
+  Bun.serve<Meta>({
+    hostname: opts.hostname,
+    port: opts.port,
+    tls: opts.tls,
+    async fetch(req, server): Promise<Response> {
+      if (opts.direct) return directFetch(req, server) as Response; // undefined = upgraded
+      if (!authorized(req)) {
+        return Response.json({ error: "unauthorized" }, { status: 401 });
       }
-    }
-    if (url.pathname === "/pane-repo") {
-      // Main repository containing the pane's cwd (git-worktree-aware). The
-      // Worker uses it to bind a pane to the Atur workspace whose
-      // workspace_links.local_path matches — crew worktrees resolve to their
-      // parent repo, so they inherit its binding.
-      const paneId = url.searchParams.get("pane");
-      if (!paneId) {
-        return Response.json({ error: "missing pane param" }, { status: 400 });
-      }
-      try {
-        const path = await hub.mainRepoPath(paneId);
-        if (!path) {
-          return Response.json({ error: "no repo for pane cwd" }, { status: 404 });
-        }
-        return Response.json({ path });
-      } catch (e) {
-        return Response.json(
-          { error: e instanceof Error ? e.message : String(e) },
-          { status: 502 },
-        );
-      }
-    }
-    if (url.pathname === "/attach") {
-      const paneId = url.searchParams.get("pane");
-      if (!paneId) {
-        return Response.json({ error: "missing pane param" }, { status: 400 });
-      }
-      const upgraded = server.upgrade(req, { data: { paneId, joined: false } });
-      if (!upgraded) {
-        return Response.json({ error: "websocket upgrade failed" }, { status: 426 });
-      }
-      return undefined as unknown as Response; // upgraded — Bun ignores this
-    }
-    if (url.pathname === "/observe") {
-      const paneId = url.searchParams.get("pane");
-      if (!paneId) {
-        return Response.json({ error: "missing pane param" }, { status: 400 });
-      }
-      const upgraded = server.upgrade(req, { data: { paneId, joined: false, observe: true } });
-      if (!upgraded) {
-        return Response.json({ error: "websocket upgrade failed" }, { status: 426 });
-      }
-      return undefined as unknown as Response; // upgraded — Bun ignores this
-    }
-    if (url.pathname === "/panes/paste" && req.method === "POST") {
-      // Image pasted into a pane's prompt: saved here, its path goes into the prompt.
-      const image = new Uint8Array(await req.arrayBuffer());
-      try {
-        const saved = await savePaste(pasteDir, image);
-        console.log(
-          `paste: pane=${url.searchParams.get("pane") ?? "-"} ${saved.bytes} bytes → ${saved.path}`,
-        );
-        return Response.json(saved);
-      } catch (e) {
-        if (e instanceof PasteError)
-          return Response.json({ error: e.message }, { status: e.status });
-        return Response.json(
-          { error: e instanceof Error ? e.message : String(e) },
-          { status: 500 },
-        );
-      }
-    }
-    if (url.pathname === "/screen/clipboard" && req.method === "POST") {
-      const png = new Uint8Array(await req.arrayBuffer());
-      if (png.length > MAX_PASTE_BYTES) {
-        return Response.json({ error: "image too large" }, { status: 413 });
-      }
-      if (imageExtension(png) !== "png")
-        return Response.json({ error: "not a PNG" }, { status: 415 });
-      try {
-        await screenHub.setClipboardImage(png);
+      const url = new URL(req.url);
+      if (url.pathname === "/health") {
         return Response.json({ ok: true });
-      } catch (e) {
-        return Response.json(
-          { error: e instanceof Error ? e.message : String(e) },
-          { status: 502 },
-        );
       }
-    }
-    if (url.pathname === "/screen/status") {
-      return Response.json(screenHub.status());
-    }
-    if (url.pathname === "/screen") {
-      const upgraded = server.upgrade(req, { data: screenHub.newMeta() });
-      if (!upgraded) {
-        return Response.json({ error: "websocket upgrade failed" }, { status: 426 });
+      if (url.pathname === "/panes") {
+        try {
+          return Response.json(await hub.listPanes());
+        } catch (e) {
+          return Response.json(
+            { error: e instanceof Error ? e.message : String(e) },
+            { status: 502 },
+          );
+        }
       }
-      return undefined as unknown as Response; // upgraded — Bun ignores this
-    }
-    const managed = await handleManage(req, url, backend);
-    if (managed) return managed;
-    return Response.json({ error: "not found" }, { status: 404 });
-  },
-  websocket: {
-    open(ws): void {
-      if (isScreen(ws)) {
-        void screenHub.open(ws);
-        return;
+      if (url.pathname === "/pane-repo") {
+        // Main repository containing the pane's cwd (git-worktree-aware). The
+        // Worker uses it to bind a pane to the Atur workspace whose
+        // workspace_links.local_path matches — crew worktrees resolve to their
+        // parent repo, so they inherit its binding.
+        const paneId = url.searchParams.get("pane");
+        if (!paneId) {
+          return Response.json({ error: "missing pane param" }, { status: 400 });
+        }
+        try {
+          const path = await hub.mainRepoPath(paneId);
+          if (!path) {
+            return Response.json({ error: "no repo for pane cwd" }, { status: 404 });
+          }
+          return Response.json({ path });
+        } catch (e) {
+          return Response.json(
+            { error: e instanceof Error ? e.message : String(e) },
+            { status: 502 },
+          );
+        }
       }
-      const paneWs = ws as ServerWebSocket<BridgeMeta>;
-      if (paneWs.data.observe) {
-        void observeHub
-          .subscribe(paneWs, paneWs.data.paneId)
+      if (url.pathname === "/attach") {
+        const paneId = url.searchParams.get("pane");
+        if (!paneId) {
+          return Response.json({ error: "missing pane param" }, { status: 400 });
+        }
+        const upgraded = server.upgrade(req, { data: { paneId, joined: false } });
+        if (!upgraded) {
+          return Response.json({ error: "websocket upgrade failed" }, { status: 426 });
+        }
+        return undefined as unknown as Response; // upgraded — Bun ignores this
+      }
+      if (url.pathname === "/observe") {
+        const paneId = url.searchParams.get("pane");
+        if (!paneId) {
+          return Response.json({ error: "missing pane param" }, { status: 400 });
+        }
+        const upgraded = server.upgrade(req, { data: { paneId, joined: false, observe: true } });
+        if (!upgraded) {
+          return Response.json({ error: "websocket upgrade failed" }, { status: 426 });
+        }
+        return undefined as unknown as Response; // upgraded — Bun ignores this
+      }
+      if (url.pathname === "/panes/paste" && req.method === "POST") {
+        // Image pasted into a pane's prompt: saved here, its path goes into the prompt.
+        const image = new Uint8Array(await req.arrayBuffer());
+        try {
+          const saved = await savePaste(pasteDir, image);
+          console.log(
+            `paste: pane=${url.searchParams.get("pane") ?? "-"} ${saved.bytes} bytes → ${saved.path}`,
+          );
+          return Response.json(saved);
+        } catch (e) {
+          if (e instanceof PasteError)
+            return Response.json({ error: e.message }, { status: e.status });
+          return Response.json(
+            { error: e instanceof Error ? e.message : String(e) },
+            { status: 500 },
+          );
+        }
+      }
+      if (url.pathname === "/screen/clipboard" && req.method === "POST") {
+        const png = new Uint8Array(await req.arrayBuffer());
+        if (png.length > MAX_PASTE_BYTES) {
+          return Response.json({ error: "image too large" }, { status: 413 });
+        }
+        if (imageExtension(png) !== "png")
+          return Response.json({ error: "not a PNG" }, { status: 415 });
+        try {
+          await screenHub.setClipboardImage(png);
+          return Response.json({ ok: true });
+        } catch (e) {
+          return Response.json(
+            { error: e instanceof Error ? e.message : String(e) },
+            { status: 502 },
+          );
+        }
+      }
+      if (url.pathname === "/screen/status") {
+        return Response.json({ ...screenHub.status(), direct: directPublicUrl });
+      }
+      if (url.pathname === "/screen") {
+        const upgraded = server.upgrade(req, { data: screenHub.newMeta() });
+        if (!upgraded) {
+          return Response.json({ error: "websocket upgrade failed" }, { status: 426 });
+        }
+        return undefined as unknown as Response; // upgraded — Bun ignores this
+      }
+      const managed = await handleManage(req, url, backend);
+      if (managed) return managed;
+      return Response.json({ error: "not found" }, { status: 404 });
+    },
+    websocket: {
+      open(ws): void {
+        if (isScreen(ws)) {
+          void screenHub.open(ws);
+          return;
+        }
+        const paneWs = ws as ServerWebSocket<BridgeMeta>;
+        if (paneWs.data.observe) {
+          void observeHub
+            .subscribe(paneWs, paneWs.data.paneId)
+            .then((ok) => {
+              if (!ok) {
+                paneWs.send(JSON.stringify({ type: "error", error: "unknown pane" }));
+                paneWs.close(1008, "pane not found");
+              }
+            })
+            .catch((e: unknown) => {
+              console.error("observe error:", e);
+              paneWs.send(
+                JSON.stringify({
+                  type: "error",
+                  error: e instanceof Error ? e.message : String(e),
+                }),
+              );
+              paneWs.close(1011, "observe error");
+            });
+          return;
+        }
+        hub.register(paneWs);
+        void hub
+          .handleUpgrade(paneWs)
           .then((ok) => {
-            if (!ok) {
-              paneWs.send(JSON.stringify({ type: "error", error: "unknown pane" }));
-              paneWs.close(1008, "pane not found");
-            }
+            if (!ok) paneWs.close(1008, "pane not found");
           })
           .catch((e: unknown) => {
-            console.error("observe error:", e);
-            paneWs.send(
-              JSON.stringify({
-                type: "error",
-                error: e instanceof Error ? e.message : String(e),
-              }),
-            );
-            paneWs.close(1011, "observe error");
+            console.error("attach error:", e);
+            paneWs.close(1011, "attach error");
           });
-        return;
-      }
-      hub.register(paneWs);
-      void hub
-        .handleUpgrade(paneWs)
-        .then((ok) => {
-          if (!ok) paneWs.close(1008, "pane not found");
-        })
-        .catch((e: unknown) => {
-          console.error("attach error:", e);
-          paneWs.close(1011, "attach error");
-        });
-    },
-    message(ws, _message): void {
-      if (isScreen(ws)) {
-        screenHub.message(ws, _message);
-        return;
-      }
-      const paneWs = ws as ServerWebSocket<BridgeMeta>;
-      // Read-only by protocol: there is no input path from /observe to the
-      // pane. The only client frames honoured are the transcript opt-in and
-      // paging (they read the agent's session log); anything else closes.
-      if (paneWs.data.observe) {
-        if (
-          typeof _message !== "string" ||
-          !observeHub.message(paneWs, paneWs.data.paneId, _message)
-        ) {
-          paneWs.close(1008, "observe channel is read-only");
+      },
+      message(ws, _message): void {
+        if (isScreen(ws)) {
+          screenHub.message(ws, _message);
+          return;
         }
-        return;
-      }
-      if (typeof _message !== "string") return;
-      void hub.handleMessage(paneWs, _message);
+        const paneWs = ws as ServerWebSocket<BridgeMeta>;
+        // Read-only by protocol: there is no input path from /observe to the
+        // pane. The only client frames honoured are the transcript opt-in and
+        // paging (they read the agent's session log); anything else closes.
+        if (paneWs.data.observe) {
+          if (
+            typeof _message !== "string" ||
+            !observeHub.message(paneWs, paneWs.data.paneId, _message)
+          ) {
+            paneWs.close(1008, "observe channel is read-only");
+          }
+          return;
+        }
+        if (typeof _message !== "string") return;
+        void hub.handleMessage(paneWs, _message);
+      },
+      drain(ws): void {
+        if (isScreen(ws)) screenHub.drain(ws);
+      },
+      close(ws, code, reason): void {
+        if (isScreen(ws)) {
+          screenHub.close(ws, code, reason);
+          return;
+        }
+        const paneWs = ws as ServerWebSocket<BridgeMeta>;
+        if (paneWs.data.observe) {
+          observeHub.detach(paneWs);
+          return;
+        }
+        hub.detach(paneWs);
+      },
     },
-    drain(ws): void {
-      if (isScreen(ws)) screenHub.drain(ws);
-    },
-    close(ws, code, reason): void {
-      if (isScreen(ws)) {
-        screenHub.close(ws, code, reason);
-        return;
-      }
-      const paneWs = ws as ServerWebSocket<BridgeMeta>;
-      if (paneWs.data.observe) {
-        observeHub.detach(paneWs);
-        return;
-      }
-      hub.detach(paneWs);
-    },
-  },
-});
+  });
+}
 
+serve({ hostname: "127.0.0.1", port: PORT, direct: false });
 console.log(`atur-bridge listening on 127.0.0.1:${PORT}`);
+
+// Optional direct (tailnet) screen listeners; see screen-direct.ts.
+for (const l of directListeners) {
+  serve({ hostname: l.hostname, port: l.port, direct: true, tls: directTls });
+  console.log(
+    `atur-bridge screen listening on ${l.hostname}:${l.port}${directTls ? " (tls)" : ""}`,
+  );
+}
 
 const connector = CONNECT_TOKEN
   ? new RelayConnector({

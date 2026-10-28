@@ -3,6 +3,9 @@ import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { parseOr400, publicJsonError } from "../lib/validate";
 import { agentEventSchema, pushAgentEvent } from "../services/agentPush";
+import { and, eq, isNull } from "drizzle-orm";
+import * as schema from "../db/schema";
+import { SCREEN_AUDIT_PANE } from "./screen";
 import { workspaceSlugForPane } from "./panes";
 import * as workspaceRepo from "../repositories/workspaces";
 import * as memberRepo from "../repositories/members";
@@ -53,4 +56,33 @@ bridgeEventRoutes.post("/agent-events", async (c) => {
   const pushed = await pushAgentEvent(db, c.env, memberIds, event, slug);
   if (!pushed.ok) return c.json({ error: "push delivery failed" }, 502);
   return c.json({ sent: pushed.sent });
+});
+
+// POST /api/bridge/screen-events — a direct (tailnet) screen session ended on
+// the bridge; stamps detached_at on the audit row the Worker wrote when it
+// minted the ticket. Same shared-token credential as /agent-events.
+bridgeEventRoutes.post("/screen-events", async (c) => {
+  const secret = c.env.HERDR_BRIDGE_TOKEN;
+  if (!secret) return c.json({ error: "bridge events not configured" }, 503);
+  if (!(await tokenMatches(c.req.header("x-bridge-token") ?? "", secret))) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  const body = (await c.req.json().catch(() => null)) as {
+    audit_id?: unknown;
+    event?: unknown;
+  } | null;
+  if (typeof body?.audit_id !== "string" || body.event !== "stop") {
+    return c.json({ error: "audit_id and event=stop required" }, 400);
+  }
+  await getDb(c.env.DB)
+    .update(schema.paneAudit)
+    .set({ detachedAt: Date.now() })
+    .where(
+      and(
+        eq(schema.paneAudit.id, body.audit_id),
+        eq(schema.paneAudit.paneId, SCREEN_AUDIT_PANE),
+        isNull(schema.paneAudit.detachedAt),
+      ),
+    );
+  return c.json({ ok: true });
 });

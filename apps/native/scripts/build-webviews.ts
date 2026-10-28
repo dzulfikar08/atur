@@ -54,7 +54,8 @@ html,body{margin:0;background:#0a0a0a;-webkit-user-select:none;user-select:none;
 });
 
 const screen = page({
-  connectSrc: "__CONNECT_SRC__",
+  // The API host, plus the bridge's direct path: wss on a tailnet (MagicDNS) name.
+  connectSrc: "__CONNECT_SRC__ wss://*.ts.net:*",
   style: `html,body{margin:0;height:100%;background:#000;overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 #viewport{position:fixed;inset:0;overflow:hidden}
 #screen,#ghost{position:absolute;left:0;top:0}

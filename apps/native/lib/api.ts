@@ -499,6 +499,14 @@ export const api = {
       method: "POST",
       body: { scope: "screen" },
     }),
+  /**
+   * Direct (tailnet) path to the bridge: a wss:// URL plus a one-time ticket
+   * minted by the Worker. 404 when the bridge has no direct listener.
+   */
+  screenDirect: () =>
+    request<{ url: string; ticket: string; expires_at: number }>("/api/screen/direct", {
+      method: "POST",
+    }),
   projects: () => request<{ results: Project[] }>("/api/me/projects").then((r) => r.results),
   /** Every issue visible to me (cross-workspace), walked page by page like the web's listAllIssues. */
   allMyIssues: (workspace?: string) =>

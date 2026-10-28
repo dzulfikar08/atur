@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
+import { eq } from "drizzle-orm";
 import type { Env } from "../../lib/env";
 import * as schema from "../../db/schema";
 import { errorMiddleware } from "../../middleware/error";
@@ -194,5 +195,78 @@ describe.skipIf(!sqliteSupported)("POST /api/bridge/agent-events", () => {
     const res = await post(event);
     expect(res.status).toBe(502);
     expect(await remainingTokens()).toEqual([DEAD, GOOD, OTHER].sort());
+  });
+});
+
+describe.skipIf(!sqliteSupported)("POST /api/bridge/screen-events", () => {
+  let t: TestDb;
+  let app: Hono<{ Bindings: Env }>;
+
+  const post = (body: unknown, token: string | null = TOKEN) =>
+    app.request(
+      "/api/bridge/screen-events",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { "x-bridge-token": token } : {}),
+        },
+        body: JSON.stringify(body),
+      },
+      { DB: t.d1, HERDR_BRIDGE_TOKEN: TOKEN } as never,
+    );
+
+  const detachedAt = async (id: string) =>
+    (
+      await t.db
+        .select({ detachedAt: schema.paneAudit.detachedAt })
+        .from(schema.paneAudit)
+        .where(eq(schema.paneAudit.id, id))
+    )[0]?.detachedAt;
+
+  beforeEach(async () => {
+    t = await createTestDb();
+    await t.db
+      .insert(schema.users)
+      .values({ id: "owner", email: "o@example.com", username: "owner" });
+    await t.db.insert(schema.paneAudit).values([
+      {
+        id: "direct-1",
+        userId: "owner",
+        paneId: "screen:desktop",
+        attachedAt: 1,
+        detachedAt: null,
+      },
+      { id: "terminal-1", userId: "owner", paneId: "wR:p1", attachedAt: 1, detachedAt: null },
+    ]);
+    app = new Hono<{ Bindings: Env }>();
+    app.use("*", errorMiddleware);
+    app.route("/api/bridge", bridgeEventRoutes);
+  });
+
+  it("stamps detached_at on the screen audit row", async () => {
+    const res = await post({ audit_id: "direct-1", event: "stop" });
+    expect(res.status).toBe(200);
+    expect(await detachedAt("direct-1")).toBeGreaterThan(0);
+  });
+
+  it("401s without the bridge token and leaves the row open", async () => {
+    expect((await post({ audit_id: "direct-1", event: "stop" }, null)).status).toBe(401);
+    expect((await post({ audit_id: "direct-1", event: "stop" }, "wrong")).status).toBe(401);
+    expect(await detachedAt("direct-1")).toBeNull();
+  });
+
+  it("only touches screen rows, and only once", async () => {
+    await post({ audit_id: "terminal-1", event: "stop" });
+    expect(await detachedAt("terminal-1")).toBeNull();
+    await post({ audit_id: "direct-1", event: "stop" });
+    const first = await detachedAt("direct-1");
+    await post({ audit_id: "direct-1", event: "stop" });
+    expect(await detachedAt("direct-1")).toBe(first);
+  });
+
+  it("400s a malformed body", async () => {
+    expect((await post({ event: "stop" })).status).toBe(400);
+    expect((await post({ audit_id: "direct-1", event: "start" })).status).toBe(400);
   });
 });

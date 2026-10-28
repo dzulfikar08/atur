@@ -26,22 +26,31 @@ vi.mock("../../middleware/auth", () => ({
 
 // requireSuperuser reads users.is_superuser through select().from().where().get().
 const superuserRow = vi.fn();
+const auditInsert = vi.fn().mockResolvedValue(undefined);
 vi.mock("../../db/index", () => ({
   getDb: () => ({
     select: () => ({ from: () => ({ where: () => ({ get: superuserRow }) }) }),
+    insert: () => ({ values: auditInsert }),
   }),
 }));
 
 import { screenRoutes } from "../screen";
 import { authMiddleware } from "../../middleware/auth";
 
-const env = { DB: {}, HERDR_BRIDGE_URL: "http://127.0.0.1:7601" } as unknown as Env;
+const env = {
+  DB: {},
+  HERDR_BRIDGE_URL: "http://127.0.0.1:7601",
+  HERDR_BRIDGE_TOKEN: "bridge-secret",
+} as unknown as Env;
+let directUrl: string | null = null;
 
 let upgradeHeaders: Headers | null = null;
 const fetchStub = vi.fn((input: string | URL | Request, init?: RequestInit) => {
   const url = String(input);
   if (url.endsWith("/screen/status")) {
-    return Promise.resolve(Response.json({ available: true, running: false, viewers: 0 }));
+    return Promise.resolve(
+      Response.json({ available: true, running: false, viewers: 0, direct: directUrl }),
+    );
   }
   if (url.endsWith("/screen")) {
     upgradeHeaders = new Headers(init?.headers);
@@ -61,6 +70,7 @@ function testApp() {
 beforeEach(() => {
   vi.clearAllMocks();
   upgradeHeaders = null;
+  directUrl = null;
   superuserRow.mockResolvedValue({ isSuperuser: 1 });
   vi.stubGlobal("fetch", fetchStub);
 });
@@ -84,7 +94,12 @@ describe("screen routes", () => {
   it("proxies the bridge status for a superuser", async () => {
     const res = await testApp().request("/api/screen/status", undefined, env);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ available: true, running: false, viewers: 0 });
+    expect(await res.json()).toEqual({
+      available: true,
+      running: false,
+      viewers: 0,
+      direct: null,
+    });
   });
 
   it("502s status when the bridge is not configured", async () => {
@@ -144,6 +159,37 @@ describe("screen routes", () => {
       superuserRow.mockResolvedValue({ isSuperuser: 0 });
       expect((await post(png)).status).toBe(403);
       expect(fetchStub).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("POST /direct", () => {
+    it("403s a non-superuser before minting anything", async () => {
+      superuserRow.mockResolvedValue({ isSuperuser: 0 });
+      directUrl = "wss://box.example.ts.net:7602/screen";
+      const res = await testApp().request("/api/screen/direct", { method: "POST" }, env);
+      expect(res.status).toBe(403);
+      expect(auditInsert).not.toHaveBeenCalled();
+    });
+
+    it("404s when the bridge advertises no direct listener", async () => {
+      const res = await testApp().request("/api/screen/direct", { method: "POST" }, env);
+      expect(res.status).toBe(404);
+      expect(auditInsert).not.toHaveBeenCalled();
+    });
+
+    it("mints a screen ticket bound to the caller and writes the audit row", async () => {
+      directUrl = "wss://box.example.ts.net:7602/screen";
+      const res = await testApp().request("/api/screen/direct", { method: "POST" }, env);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { url: string; ticket: string; expires_at: number };
+      expect(body.url).toBe(directUrl);
+      expect(body.expires_at).toBeGreaterThan(Date.now());
+      const [payload] = body.ticket.split(".");
+      const claims = JSON.parse(atob(payload!.replace(/-/g, "+").replace(/_/g, "/")));
+      const audit = auditInsert.mock.calls[0]![0] as { id: string; userId: string; paneId: string };
+      expect(claims).toMatchObject({ v: 1, aud: "screen", sub: "user-1", audit: audit.id });
+      expect(audit).toMatchObject({ userId: "user-1", paneId: "screen:desktop" });
+      expect(JSON.stringify(body)).not.toContain("bridge-secret");
     });
   });
 });

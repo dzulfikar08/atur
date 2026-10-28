@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import type { Env } from "../lib/env";
 import { wsTicketAuth } from "../lib/wsTicket";
+import { mintScreenTicket } from "../lib/screenTicket";
 import { getDb } from "../db/index";
 import * as schema from "../db/schema";
 import { requireSuperuser } from "./admin";
@@ -72,6 +73,46 @@ screenRoutes.get("/status", async (c) => {
   } catch {
     return c.json({ error: "execution plane unreachable" }, 502);
   }
+});
+
+// Direct path: when the bridge also listens on a tailnet address it advertises
+// the URL in its status. This mints the short-lived ticket that listener
+// accepts (the bridge token itself never leaves the Worker) and writes the same
+// audit row a relayed session gets; the bridge stamps detached_at when the
+// session ends (POST /api/bridge/screen-events). 404 = no direct path, use /ws.
+screenRoutes.post("/direct", async (c) => {
+  const base = bridgeBase(c.env);
+  const key = c.env.HERDR_BRIDGE_TOKEN;
+  if (!base || !key) return c.json({ error: "direct path not configured" }, 404);
+  let direct: string | null = null;
+  try {
+    const res = await fetch(`${base}/screen/status`, { headers: bridgeHeaders(c.env) });
+    if (res.ok) direct = ((await res.json()) as { direct?: string | null }).direct ?? null;
+  } catch {
+    /* unreachable bridge: no direct path */
+  }
+  if (!direct) return c.json({ error: "direct path not configured" }, 404);
+
+  const user = c.get("user");
+  const auditId = uuid();
+  const { ticket, expiresAt } = await mintScreenTicket(key, {
+    sub: user.sub,
+    audit: auditId,
+    jti: uuid(),
+  });
+  try {
+    await getDb(c.env.DB).insert(schema.paneAudit).values({
+      id: auditId,
+      userId: user.sub,
+      paneId: SCREEN_AUDIT_PANE,
+      attachedAt: Date.now(),
+      detachedAt: null,
+    });
+  } catch (err) {
+    console.error("screen audit insert failed:", err);
+  }
+  console.log(`screen direct ticket user=${user.sub} audit=${auditId}`);
+  return c.json({ url: direct, ticket, expires_at: expiresAt });
 });
 
 screenRoutes.get("/ws", async (c) => {
