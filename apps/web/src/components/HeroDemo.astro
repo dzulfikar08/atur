@@ -60,7 +60,7 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
       <p data-demo-url>{tabs[0].url}</p>
     </div>
 
-    <div class="lp-demo-app">
+    <div class="lp-demo-app" data-app>
       <div class="lp-demo-side" aria-hidden="true">
         <p class="lp-demo-ws"><span>A</span>Atur</p>
         <p class="lp-demo-nav"><Icon name="calendar" size={15} />Today</p>
@@ -80,41 +80,53 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
         <div class="lp-demo-top" aria-hidden="true">
           <p class="lp-demo-crumb" data-crumb>{tabs[0].crumb}</p>
           <p class="lp-demo-search"><Icon name="search" size={13} />Search...</p>
+          <p class="lp-demo-mhead m-only">
+            <span class="lp-demo-wsw"><span>A</span><i class="lp-demo-chev"></i></span>
+            <span class="lp-demo-mbtns"><span class="lp-demo-sq"><Icon name="search" size={16} /></span><span class="lp-demo-user">DU</span></span>
+          </p>
         </div>
 
         <div class="lp-demo-main">
           <section id="demo-board" role="tabpanel" aria-labelledby="demo-tab-board" class="lp-demo-panel lp-demo-board-panel">
             <div class="lp-demo-toolbar" aria-hidden="true">
-              <p class="lp-demo-views">
+              <p class="lp-demo-views d-only">
                 <span class="on"><Icon name="kanban" size={12} />Board</span>
                 <span><Icon name="checklist" size={12} />List</span>
                 <span><Icon name="table" size={12} />Sheet</span>
                 <span><Icon name="calendar" size={12} />Calendar</span>
               </p>
-              <p class="lp-demo-agents"><span class="lp-demo-dot"></span>2 agents on this board</p>
-              <p class="lp-demo-new"><Icon name="plus" size={13} />New Issue</p>
+              <p class="lp-demo-tbtns m-only"><span><Icon name="more" size={14} />Filter</span><span><Icon name="timer" size={14} />Sprints</span></p>
+              <p class="lp-demo-agents d-only"><span class="lp-demo-dot"></span>2 agents on this board</p>
+              <p class="lp-demo-new"><Icon name="plus" size={13} /><span>New<span class="d-only"> Issue</span></span></p>
             </div>
             <div class="lp-demo-board">
               {STATES.map((s) => {
                 const cards = ISSUES.filter((i) => i.tone === s.tone);
+                const collapsed = s.tone === "done";
                 return (
-                  <div class={`lp-demo-col lp-tone-${s.tone}`} data-col={s.tone}>
-                    <p class="lp-demo-col-head">
-                      <span class="lp-dot"></span><span class="lp-demo-col-name">{s.name}</span><span class="lp-demo-count" data-count>{cards.length}</span>
-                    </p>
-                    <div class="lp-demo-cards">
+                  <div class={`lp-demo-col lp-tone-${s.tone}`} data-col={s.tone} data-collapsed={collapsed ? "" : undefined}>
+                    <div class="lp-demo-col-head">
+                      <button type="button" class="lp-demo-sec m-only" data-sec aria-expanded={collapsed ? "false" : "true"} aria-controls={`demo-cards-${s.tone}`} aria-label={`${s.name} issues`}><i class="lp-demo-chev"></i></button>
+                      <span class="lp-dot d-only"></span><span class="lp-demo-col-name">{s.name}</span><span class="lp-demo-count" data-count>{cards.length}</span>
+                    </div>
+                    <div class="lp-demo-cards" id={`demo-cards-${s.tone}`}>
                       {cards.map((issue) => (
                         <button type="button" class:list={["lp-demo-card", { flag: issue.tone === "needs" || issue.tone === "review" }]} data-open={issue.key}>
-                          <span class="lp-demo-card-top">
+                          <span class="lp-demo-card-top d-only">
                             <span class="lp-demo-mono" aria-label={issue.key}>{cardSeq(issue.key)}</span>
                             <span class="lp-demo-pdot" data-p={issue.priority.toLowerCase()}></span>
                             <span class="sr-only">Priority: {issue.priority}</span>
                           </span>
                           <span class="lp-demo-card-title">{issue.title}</span>
-                          <span class="lp-demo-agent">
+                          <span class="lp-demo-agent d-only">
                             <Icon name="bot" size={12} />{issue.agent} · <span data-agent-status>{agentChipText(issue.tone)}</span>
                           </span>
-                          <span class="lp-demo-av" aria-hidden="true">{issue.agent[0].toUpperCase()}</span>
+                          <span class="lp-demo-av d-only" aria-hidden="true">{issue.agent[0].toUpperCase()}</span>
+                          <span class="lp-demo-card-meta m-only">
+                            <span class="lp-demo-mono"><span class="sr-only">ATUR-</span>{issue.key.split("-")[1].padStart(4, "0")}</span>
+                            <span class="lp-demo-sbadge" data-card-state>{s.name}</span>
+                            <span class="lp-demo-ptext"><span class="lp-demo-pdot" data-p={issue.priority.toLowerCase()}></span>{issue.priority.toLowerCase()}</span>
+                          </span>
                         </button>
                       ))}
                     </div>
@@ -128,16 +140,16 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
             {ISSUES.map((issue) => (
               <article class="lp-demo-issue" data-issue={issue.key} hidden={issue.key !== SELECTED}>
                 <header class="lp-demo-issue-head">
-                  <p class="lp-demo-path"><span aria-hidden="true">‹</span> Web <span aria-hidden="true">›</span> <strong class="lp-demo-mono">{padKey(issue.key)}</strong></p>
+                  <p class="lp-demo-path"><span aria-hidden="true">‹</span> <span class="d-only">Web <span aria-hidden="true">›</span></span> <strong class="lp-demo-mono">{padKey(issue.key)}</strong></p>
                   <h3 tabindex="-1">{issue.title}</h3>
                   <p class="lp-demo-body">{issue.body}</p>
                 </header>
 
                 <div class="lp-demo-rels" aria-hidden="true">
-                  <p class="lp-demo-rel"><strong>Relations (0)</strong><span class="lp-demo-addbtn">Add Relation</span></p>
+                  <p class="lp-demo-rel"><strong>Relations (0)</strong></p>
                   <p class="lp-demo-none">No relations</p>
-                  <p class="lp-demo-rel"><strong>Sub-issues (0)</strong></p>
-                  <p class="lp-demo-none">No sub-issues</p>
+                  <p class="lp-demo-rel d-only"><strong>Sub-issues (0)</strong></p>
+                  <p class="lp-demo-none d-only">No sub-issues</p>
                 </div>
 
                 <div class="lp-demo-side-pane">
@@ -161,21 +173,23 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
                       <dt>Priority</dt>
                       <dd><span class="lp-demo-pdot" data-p={issue.priority.toLowerCase()}></span>{issue.priority}</dd>
                     </div>
-                    <div><dt>Estimate (pts)</dt><dd>None</dd></div>
-                    <div><dt>Created</dt><dd class="lp-demo-mono">{issue.created}</dd></div>
-                    <div><dt>Updated</dt><dd class="lp-demo-mono" data-updated>{issue.updated}</dd></div>
+                    <div class="d-only"><dt>Estimate (pts)</dt><dd>None</dd></div>
+                    <div class="d-only"><dt>Created</dt><dd class="lp-demo-mono">{issue.created}</dd></div>
+                    <div class="d-only"><dt>Updated</dt><dd class="lp-demo-mono" data-updated>{issue.updated}</dd></div>
                   </dl>
+                  <p class="lp-demo-dates m-only">Created {issue.created} · Updated <span data-updated>{issue.updated}</span></p>
 
-                  <div class="lp-demo-subtabs" role="tablist" aria-label={`${issue.key} discussion`}>
+                  <div class="lp-demo-subtabs d-only" role="tablist" aria-label={`${issue.key} discussion`}>
                     <button type="button" role="tab" id={`demo-sub-comments-${issue.key}`} aria-controls={`demo-subpanel-comments-${issue.key}`} aria-selected="true" data-sub="comments">
-                      <Icon name="comment" size={13} /><span>Comments (<span data-n="comments">{countOf(issue.key, "comment")}</span>)</span>
+                      <Icon name="comment" size={13} /><span>Comments (<span data-tally="comments">{countOf(issue.key, "comment")}</span>)</span>
                     </button>
                     <button type="button" role="tab" id={`demo-sub-activity-${issue.key}`} aria-controls={`demo-subpanel-activity-${issue.key}`} aria-selected="false" tabindex="-1" data-sub="activity">
-                      <Icon name="clock" size={13} /><span>Activity (<span data-n="activity">{countOf(issue.key, "event")}</span>)</span>
+                      <Icon name="clock" size={13} /><span>Activity (<span data-tally="activity">{countOf(issue.key, "event")}</span>)</span>
                     </button>
                   </div>
 
                   <div role="tabpanel" id={`demo-subpanel-comments-${issue.key}`} aria-labelledby={`demo-sub-comments-${issue.key}`} data-subpanel="comments">
+                    <h4 class="lp-demo-sechead m-only"><Icon name="comment" size={13} /><span>Comments (<span data-tally="comments">{countOf(issue.key, "comment")}</span>)</span></h4>
                     <ol class="lp-demo-thread" data-thread>
                       {issue.thread.filter((e) => e.kind === "comment").map((entry) =>
                         entry.evidence ? (
@@ -205,6 +219,7 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
                   </div>
 
                   <div role="tabpanel" id={`demo-subpanel-activity-${issue.key}`} aria-labelledby={`demo-sub-activity-${issue.key}`} data-subpanel="activity" hidden>
+                    <h4 class="lp-demo-sechead m-only"><Icon name="clock" size={13} /><span>Activity (<span data-tally="activity">{countOf(issue.key, "event")}</span>)</span></h4>
                     <ol class="lp-demo-acts" data-acts>
                       {issue.thread.filter((e) => e.kind === "event").map((entry) => (
                         <li>
@@ -259,21 +274,21 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
                       <thead>
                         <tr>
                           <th scope="col"><strong>{sec.name}</strong> <span class="lp-demo-mono">{sec.note}</span></th>
-                          <th scope="col">entries</th><th scope="col">tracked</th><th scope="col">in</th><th scope="col">out</th><th scope="col">tokens</th><th scope="col">cost</th>
+                          <th scope="col" class="x">entries</th><th scope="col" class="x">tracked</th><th scope="col" class="x">in</th><th scope="col" class="x">out</th><th scope="col">tokens</th><th scope="col">cost</th>
                         </tr>
                       </thead>
                       <tbody>
                         {sec.rows.map((r) => (
                           <tr>
                             <th scope="row">{r.seq && <span class="lp-demo-mono">{r.seq}</span>}{r.label}</th>
-                            <td>{r.entries}</td><td>{formatHm(r.seconds)}</td><td>{formatTokens(r.input)}</td><td>{formatTokens(r.output)}</td><td class="t">{formatTokens(r.input + r.output)}</td><td class="t">{formatCost(r.cost)}</td>
+                            <td class="x">{r.entries}</td><td class="x">{formatHm(r.seconds)}</td><td class="x">{formatTokens(r.input)}</td><td class="x">{formatTokens(r.output)}</td><td class="t">{formatTokens(r.input + r.output)}</td><td class="t">{formatCost(r.cost)}</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
                         <tr>
                           <th scope="row">total</th>
-                          <td>{sec.entries}</td><td class="t">{formatHm(sec.seconds)}</td><td></td><td></td><td class="t">{formatTokens(sec.input + sec.output)}</td><td class="t">{formatCost(sec.cost)}</td>
+                          <td class="x">{sec.entries}</td><td class="t x">{formatHm(sec.seconds)}</td><td class="x"></td><td class="x"></td><td class="t">{formatTokens(sec.input + sec.output)}</td><td class="t">{formatCost(sec.cost)}</td>
                         </tr>
                       </tfoot>
                     </table>
@@ -284,6 +299,14 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
             <p class="lp-demo-fine">Cost uses Atur's model price table. Agent usage is its own lane, excluded from human totals.</p>
           </section>
         </div>
+
+        <p class="lp-demo-bnav m-only" aria-hidden="true">
+          <span><Icon name="grid" size={20} />Home</span>
+          <span class="on" data-side="board issue"><Icon name="kanban" size={20} />Projects</span>
+          <span><Icon name="circle" size={20} />Issues</span>
+          <span><Icon name="search" size={20} />Search</span>
+          <span data-side="pane usage"><Icon name="more" size={20} />More</span>
+        </p>
       </div>
     </div>
   </div>
@@ -343,17 +366,47 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
     const issueEl = (key: string) => root.querySelector<HTMLElement>(`[data-issue="${key}"]`)!;
     const crumb = root.querySelector<HTMLElement>(".lp-demo-crumb");
 
+    // The window is as tall as the active screen. Anything that changes the
+    // screen runs inside swap(), which eases the height from the old size to
+    // the new one instead of jumping.
+    const frame = root.querySelector<HTMLElement>("[data-app]")!;
+    let swapping = false;
+    const swap = (change: () => void) => {
+      if (swapping || reduceMotion) return change();
+      swapping = true;
+      const from = frame.offsetHeight;
+      change();
+      frame.style.height = "auto";
+      const to = frame.offsetHeight;
+      swapping = false;
+      if (from === to) {
+        frame.style.height = "";
+        return;
+      }
+      frame.style.height = `${from}px`;
+      void frame.offsetHeight;
+      frame.style.height = `${to}px`;
+      const done = () => {
+        frame.style.height = "";
+        frame.removeEventListener("transitionend", done);
+      };
+      frame.addEventListener("transitionend", done);
+      setTimeout(done, 450);
+    };
+
     // ── Tabs (ARIA tabs pattern) ──
     const tabs = [...root.querySelectorAll<HTMLButtonElement>("[role=tab][data-url]")];
     const url = root.querySelector("[data-demo-url]");
     const tabOpened = new Set<string>();
     const selectTab = (tab: HTMLButtonElement, focus = false) => {
-      for (const t of tabs) {
-        const on = t === tab;
-        t.setAttribute("aria-selected", String(on));
-        t.tabIndex = on ? 0 : -1;
-        document.getElementById(t.getAttribute("aria-controls") ?? "")?.toggleAttribute("hidden", !on);
-      }
+      swap(() => {
+        for (const t of tabs) {
+          const on = t === tab;
+          t.setAttribute("aria-selected", String(on));
+          t.tabIndex = on ? 0 : -1;
+          document.getElementById(t.getAttribute("aria-controls") ?? "")?.toggleAttribute("hidden", !on);
+        }
+      });
       const id = tab.id.replace("demo-tab-", "");
       if (url) url.textContent = tab.dataset.url ?? "";
       if (crumb) crumb.textContent = tab.dataset.crumb ?? "";
@@ -380,12 +433,14 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
     root.querySelectorAll<HTMLElement>("[data-issue]").forEach((el) => {
       const subs = [...el.querySelectorAll<HTMLButtonElement>("[data-sub]")];
       const pick = (sub: HTMLButtonElement, focus = false) => {
-        for (const s of subs) {
-          const on = s === sub;
-          s.setAttribute("aria-selected", String(on));
-          s.tabIndex = on ? 0 : -1;
-          el.querySelector<HTMLElement>(`[data-subpanel="${s.dataset.sub}"]`)!.toggleAttribute("hidden", !on);
-        }
+        swap(() => {
+          for (const s of subs) {
+            const on = s === sub;
+            s.setAttribute("aria-selected", String(on));
+            s.tabIndex = on ? 0 : -1;
+            el.querySelector<HTMLElement>(`[data-subpanel="${s.dataset.sub}"]`)!.toggleAttribute("hidden", !on);
+          }
+        });
         if (focus) sub.focus();
       };
       subs.forEach((sub, i) => {
@@ -401,8 +456,9 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
     // ── Thread ──
     const tpl = (name: string) => root.querySelector<HTMLTemplateElement>(`template[data-tpl=${name}]`)!;
     const bump = (key: string, which: "comments" | "activity") => {
-      const n = issueEl(key).querySelector<HTMLElement>(`[data-n=${which}]`)!;
-      n.textContent = String(Number(n.textContent) + 1);
+      issueEl(key)
+        .querySelectorAll<HTMLElement>(`[data-tally=${which}]`)
+        .forEach((n) => (n.textContent = String(Number(n.textContent) + 1)));
     };
     const addComment = (key: string, who: string, text: string, agent: boolean, evidence = false) => {
       const li = tpl(evidence ? "evidence" : "comment").content.firstElementChild!.cloneNode(true) as HTMLElement;
@@ -436,6 +492,10 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
       root.querySelector(`[data-col="${to}"] .lp-demo-cards`)!.prepend(card);
       card.classList.toggle("flag", to === "needs" || to === "review");
       card.querySelector("[data-agent-status]")!.textContent = agentChipText(to);
+      card.querySelector("[data-card-state]")!.textContent = stateName(to);
+      const target = root.querySelector<HTMLElement>(`[data-col="${to}"]`)!;
+      target.removeAttribute("data-collapsed");
+      target.querySelector("[data-sec]")?.setAttribute("aria-expanded", "true");
       root.querySelectorAll<HTMLElement>("[data-col]").forEach((col) => {
         col.querySelector("[data-count]")!.textContent = String(col.querySelectorAll("[data-open]").length);
       });
@@ -443,17 +503,19 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
       el.querySelector<HTMLSelectElement>("[data-state]")!.value = to;
       const sel = el.querySelector<HTMLElement>("[data-statesel]")!;
       sel.className = `lp-demo-statesel lp-tone-${to}`;
-      el.querySelector("[data-updated]")!.textContent = "less than a minute ago";
+      el.querySelectorAll("[data-updated]").forEach((u) => (u.textContent = "less than a minute ago"));
       addEvent(key, who, stateName(from), stateName(to));
       announce(`${key} moved to ${stateName(to)}`);
     };
 
     const openIssue = (key: string) => {
-      root.querySelectorAll<HTMLElement>("[data-issue]").forEach((el) => (el.hidden = el.dataset.issue !== key));
       const tab = tabFor("issue");
       tab.dataset.url = `app.diatur.com/atur/projects/web/issues/${key.split("-")[1]}`;
       tab.dataset.crumb = `atur / Projects / ATUR / ${key}`;
-      selectTab(tab);
+      swap(() => {
+        root.querySelectorAll<HTMLElement>("[data-issue]").forEach((el) => (el.hidden = el.dataset.issue !== key));
+        selectTab(tab);
+      });
       issueEl(key).querySelector("h3")?.focus();
     };
     root.querySelectorAll<HTMLButtonElement>("[data-open]").forEach((card) => {
@@ -480,6 +542,16 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
           addComment(key, agent, "Resuming with your answer.", true);
           moveIssue(key, "started", agent);
         }, reduceMotion ? 0 : 900);
+      });
+    });
+
+    // ── Phone layout: state sections open and close ──
+    root.querySelectorAll<HTMLButtonElement>("[data-sec]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        swap(() => {
+          const closed = btn.closest("[data-col]")!.toggleAttribute("data-collapsed");
+          btn.setAttribute("aria-expanded", String(!closed));
+        });
       });
     });
 
@@ -537,10 +609,11 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
     // ── Agent usage grouping ──
     const usageBody = root.querySelector<HTMLElement>("[data-usage]")!;
     const groupButtons = [...root.querySelectorAll<HTMLButtonElement>("[data-group]")];
-    const td = (value: string, total = false) => {
+    // "x" columns (entries, tracked, in, out) drop out on phones.
+    const td = (value: string, ...classes: string[]) => {
       const cell = document.createElement("td");
       cell.textContent = value;
-      if (total) cell.className = "t";
+      if (classes.length) cell.className = classes.join(" ");
       return cell;
     };
     const mono = (value: string) => {
@@ -570,6 +643,7 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
         const th = document.createElement("th");
         th.scope = "col";
         th.textContent = label;
+        if (label !== "tokens" && label !== "cost") th.className = "x";
         head.append(th);
       }
       const body = table.createTBody();
@@ -579,13 +653,13 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
         th.scope = "row";
         if (r.seq) th.append(mono(r.seq));
         th.append(r.label);
-        tr.append(th, td(String(r.entries)), td(formatHm(r.seconds)), td(formatTokens(r.input)), td(formatTokens(r.output)), td(formatTokens(r.input + r.output), true), td(formatCost(r.cost), true));
+        tr.append(th, td(String(r.entries), "x"), td(formatHm(r.seconds), "x"), td(formatTokens(r.input), "x"), td(formatTokens(r.output), "x"), td(formatTokens(r.input + r.output), "t"), td(formatCost(r.cost), "t"));
       }
       const foot = table.createTFoot().insertRow();
       const total = document.createElement("th");
       total.scope = "row";
       total.textContent = "total";
-      foot.append(total, td(String(sec.entries)), td(formatHm(sec.seconds), true), td(""), td(""), td(formatTokens(sec.input + sec.output), true), td(formatCost(sec.cost), true));
+      foot.append(total, td(String(sec.entries), "x"), td(formatHm(sec.seconds), "t", "x"), td("", "x"), td("", "x"), td(formatTokens(sec.input + sec.output), "t"), td(formatCost(sec.cost), "t"));
       scroll.append(table);
       card.append(scroll);
       return card;
@@ -594,7 +668,7 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
       btn.addEventListener("click", () => {
         const by = btn.dataset.group as UsageGroup;
         for (const b of groupButtons) b.setAttribute("aria-pressed", String(b === btn));
-        usageBody.replaceChildren(...groupUsage(by).map(renderSection));
+        swap(() => usageBody.replaceChildren(...groupUsage(by).map(renderSection)));
         announce(`Usage grouped by ${by}`);
       });
     });

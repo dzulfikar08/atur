@@ -430,9 +430,21 @@
     --p-none: #64748b;
   }
 }
+/* The window is as tall as the screen inside it; HeroDemo eases the height
+   when the screen changes. Only very long content scrolls (panel cap). */
 .lp-demo-app {
+  --demo-cap: 640px;
   display: flex;
-  height: 480px;
+  overflow: hidden;
+  transition: height 0.28s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-demo-app {
+    transition: none;
+  }
+}
+.lp-demo .m-only {
+  display: none;
 }
 .lp-demo-side {
   display: none;
@@ -465,7 +477,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
+  padding: 5px 8px;
   border-radius: 8px;
   color: var(--lp-muted-fg);
 }
@@ -511,12 +523,13 @@
 }
 .lp-demo-main {
   display: flex;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
 }
 .lp-demo-panel {
   flex: 1;
   min-width: 0;
+  max-height: var(--demo-cap);
   padding: 16px;
   overflow: auto;
 }
@@ -606,7 +619,7 @@
 }
 .lp-demo-board {
   display: grid;
-  grid-template-columns: repeat(4, minmax(200px, 1fr));
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
   gap: 12px;
   padding: 14px 16px 16px;
 }
@@ -700,6 +713,9 @@
 }
 .lp-demo-agent {
   display: inline-flex;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
   align-items: center;
   gap: 6px;
   width: max-content;
@@ -781,13 +797,6 @@
 }
 .lp-demo-rel:not(:first-child) {
   margin-top: 18px;
-}
-.lp-demo-addbtn {
-  padding: 3px 10px;
-  border: 1px solid var(--lp-border);
-  border-radius: 8px;
-  font-size: 0.75rem;
-  font-weight: 600;
 }
 .lp-demo-none {
   margin-top: 8px;
@@ -931,7 +940,8 @@
 .lp-demo-evidence-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 2px 8px;
   margin-bottom: 8px;
   color: var(--lp-review-ink);
   font-size: 0.875rem;
@@ -944,8 +954,8 @@
   font-weight: 800;
 }
 .lp-demo-evidence-head .lp-demo-mono {
-  margin-left: auto;
-  flex-shrink: 0;
+  flex-basis: 100%;
+  margin: 0 0 0 22px;
 }
 .lp-demo-attach {
   display: inline-flex;
@@ -1142,8 +1152,8 @@
   color: var(--lp-fg);
 }
 .lp-demo-term {
-  flex: 1;
-  min-height: 120px;
+  flex: none;
+  height: 220px;
   padding: 14px 16px;
   overflow: auto;
   border: 1px solid var(--lp-border);
@@ -1321,9 +1331,6 @@
   .lp-demo {
     margin-top: 56px;
   }
-  .lp-demo-app {
-    height: 520px;
-  }
   .lp-demo-side {
     display: block;
   }
@@ -1352,10 +1359,450 @@
     display: inline-flex;
   }
 }
+@media (max-width: 1099px) {
+  .lp-demo-agent {
+    padding: 4px 7px;
+    font-size: 0.625rem;
+  }
+}
 @media (min-width: 900px) and (max-width: 1099px) {
   .lp-demo-views span:nth-child(n + 3),
   .lp-demo-new {
     display: none;
+  }
+}
+
+/* Phones: the app's own mobile layout, not the desktop squeezed. Stacked state
+   sections (MobileProjectBoard), single-column issue (MobileIssueDetail), the
+   pane view, compact usage rows, a bottom nav. No fake browser bar or sidebar. */
+@media (max-width: 759px) {
+  .lp-demo .d-only {
+    display: none;
+  }
+  .lp-demo-app {
+    --demo-cap: 960px;
+  }
+  .lp-demo-col-main {
+    display: block;
+  }
+  .lp-demo-bar {
+    display: none;
+  }
+  .lp-demo-top {
+    padding: 10px 14px;
+  }
+  .lp-demo-crumb,
+  .lp-demo-search {
+    display: none;
+  }
+  .lp-demo .lp-demo-mhead {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .lp-demo-wsw {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 9px;
+    border: 1px solid var(--lp-border);
+    border-radius: 9px;
+    font-size: 0.75rem;
+    font-weight: 800;
+  }
+  .lp-demo-wsw > span {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: var(--lp-primary);
+    color: var(--lp-on-primary);
+  }
+  .lp-demo-mbtns {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .lp-demo-sq {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--lp-border);
+    border-radius: 9px;
+    color: var(--lp-muted-fg);
+  }
+  .lp-demo-user {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    background: var(--lp-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+  .lp-demo-chev {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border: solid currentColor;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg) translate(-1px, -1px);
+    transition: transform 0.15s;
+  }
+  .lp-demo-panel {
+    padding: 14px;
+  }
+
+  /* Board: bordered state sections, each a tappable header over its cards. */
+  .lp-demo-board-panel {
+    padding: 0;
+  }
+  .lp-demo .lp-demo-toolbar {
+    padding: 10px 14px;
+  }
+  .lp-demo .lp-demo-tbtns {
+    display: flex;
+    gap: 8px;
+  }
+  .lp-demo-tbtns span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--lp-border);
+    border-radius: 9px;
+    font-weight: 600;
+  }
+  .lp-demo-new {
+    display: inline-flex;
+    margin-left: auto;
+    padding: 6px 12px;
+  }
+  .lp-demo-board {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 14px 14px;
+  }
+  .lp-demo-col {
+    overflow: hidden;
+    border: 1px solid var(--lp-border);
+    border-radius: 12px;
+  }
+  .lp-demo-col-head {
+    position: relative;
+    min-height: 44px;
+    margin: 0;
+    padding: 0 12px;
+    background: var(--lp-bg);
+  }
+  .lp-demo .lp-demo-sec {
+    display: inline-grid;
+    order: -1;
+    place-items: center;
+    width: 24px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--lp-fg);
+    cursor: pointer;
+  }
+  .lp-demo-sec::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+  .lp-demo-sec[aria-expanded="false"] .lp-demo-chev {
+    transform: rotate(-45deg);
+  }
+  .lp-demo-col-name {
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--tone-soft);
+    color: var(--tone-ink);
+    font-size: 0.6875rem;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .lp-demo-count {
+    padding: 0;
+    border: 0;
+    background: none;
+    font-weight: 500;
+  }
+  .lp-demo-cards {
+    gap: 6px;
+    min-height: 0;
+    padding: 8px;
+  }
+  .lp-demo-col[data-collapsed] .lp-demo-cards {
+    display: none;
+  }
+  .lp-demo-cards:not(:has(> .lp-demo-card))::after {
+    content: "No issues";
+    padding: 10px 0;
+    color: var(--lp-muted-fg);
+    font-size: 0.75rem;
+    text-align: center;
+  }
+  .lp-demo-card {
+    display: grid;
+    grid-template-columns: 10px minmax(0, 1fr);
+    gap: 4px 12px;
+    min-height: 44px;
+    padding: 10px 12px;
+  }
+  .lp-demo-card::before {
+    content: "";
+    grid-row: 1;
+    width: 10px;
+    height: 10px;
+    margin-top: 5px;
+    border-radius: 999px;
+    background: var(--tone-ink);
+  }
+  .lp-demo-card.flag {
+    border-color: var(--lp-border);
+  }
+  .lp-demo-card-title {
+    grid-column: 2;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+  .lp-demo .lp-demo-card-meta {
+    display: flex;
+    grid-column: 2;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .lp-demo-sbadge {
+    padding: 1px 8px;
+    border-radius: 6px;
+    background: var(--lp-muted);
+    color: var(--lp-fg);
+    font-size: 0.6875rem;
+    font-weight: 600;
+  }
+  .lp-demo-ptext {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--lp-muted-fg);
+    font-size: 0.6875rem;
+  }
+  .lp-demo-ptext .lp-demo-pdot {
+    width: 6px;
+    height: 6px;
+  }
+
+  /* Issue: badges row, title, description, dates, relations, then the
+     comment and activity sections stacked. */
+  .lp-demo-issue {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .lp-demo-issue-head,
+  .lp-demo-side-pane {
+    display: contents;
+  }
+  .lp-demo-path {
+    order: 1;
+  }
+  .lp-demo-props {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    order: 2;
+    padding: 0;
+    border: 0;
+  }
+  .lp-demo-props dt {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .lp-demo-props dd {
+    margin: 0;
+  }
+  .lp-demo-props > div:nth-child(2) {
+    order: 1;
+  }
+  .lp-demo-props > div:nth-child(3) {
+    order: 2;
+  }
+  .lp-demo-props > div:nth-child(1) {
+    order: 3;
+  }
+  .lp-demo-statesel select {
+    padding-right: 6px;
+  }
+  .lp-demo-props dd:has(.lp-demo-pdot) {
+    padding: 4px 12px;
+    border: 1px solid var(--lp-border);
+    border-radius: 999px;
+    font-size: 0.75rem;
+  }
+  .lp-demo-issue h3 {
+    order: 3;
+    margin: 4px 0 0;
+    font-size: 1.0625rem;
+  }
+  .lp-demo-body {
+    order: 4;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    color: var(--lp-fg);
+  }
+  .lp-demo .lp-demo-dates {
+    display: block;
+    order: 5;
+    color: var(--lp-muted-fg);
+    font-size: 0.75rem;
+  }
+  .lp-demo-rels {
+    display: block;
+    order: 6;
+    margin: 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--lp-border);
+  }
+  .lp-demo-rel {
+    color: var(--lp-muted-fg);
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  [data-subpanel="comments"] {
+    order: 7;
+  }
+  [data-subpanel="activity"] {
+    order: 8;
+  }
+  .lp-demo [data-subpanel][hidden] {
+    display: block;
+  }
+  .lp-demo .lp-demo-sechead {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding-top: 12px;
+    border-top: 1px solid var(--lp-border);
+    color: var(--lp-muted-fg);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .lp-demo-thread {
+    gap: 14px;
+    margin-top: 12px;
+  }
+  .lp-demo-acts {
+    margin-top: 4px;
+  }
+
+  /* Pane: back and title, badges under it, full-width Terminal/Transcript. */
+  .lp-demo-pane-title {
+    flex-basis: calc(100% - 38px);
+  }
+  .lp-demo-badge[data-kbd-badge] {
+    margin-left: 38px;
+  }
+  .lp-demo-ptabs {
+    align-self: stretch;
+  }
+  .lp-demo-ptabs span {
+    flex: 1;
+    justify-content: center;
+    padding: 6px 12px;
+  }
+  .lp-demo-term {
+    height: 224px;
+    font-size: 0.6875rem;
+    overflow-wrap: anywhere;
+  }
+
+  /* Usage: name, tokens, cost. Entries, tracked, in and out stay on desktop. */
+  .lp-demo-seg {
+    width: 100%;
+    margin-left: 0;
+  }
+  .lp-demo-seg button {
+    flex: 1;
+    min-height: 44px;
+  }
+  .lp-demo-table {
+    min-width: 0;
+  }
+  .lp-demo-table .x {
+    display: none;
+  }
+  .lp-demo-table th,
+  .lp-demo-table td {
+    padding: 11px 10px;
+  }
+  .lp-demo-table th:first-child {
+    padding-left: 14px;
+  }
+  .lp-demo-table th:nth-last-child(2),
+  .lp-demo-table td:nth-last-child(2) {
+    width: 64px;
+  }
+  .lp-demo-table th:last-child,
+  .lp-demo-table td:last-child {
+    width: 56px;
+    padding-right: 14px;
+  }
+  .lp-demo-table tbody th,
+  .lp-demo-table thead th:first-child {
+    white-space: normal;
+  }
+  .lp-demo-table thead th:first-child .lp-demo-mono {
+    display: block;
+    margin: 2px 0 0;
+  }
+  .lp-demo-table tbody th .lp-demo-mono {
+    display: inline-block;
+    min-width: 22px;
+  }
+  .lp-demo-table tbody th {
+    max-width: none;
+    line-height: 1.3;
+  }
+
+  /* Bottom nav, as in the app. */
+  .lp-demo .lp-demo-bnav {
+    display: flex;
+    flex-shrink: 0;
+    justify-content: space-around;
+    border-top: 1px solid var(--lp-border);
+    background: var(--lp-card);
+  }
+  .lp-demo-bnav span {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    height: 56px;
+    color: var(--lp-muted-fg);
+    font-size: 0.625rem;
+    font-weight: 600;
+  }
+  .lp-demo-bnav span.on {
+    color: var(--lp-fg);
   }
 }
 
