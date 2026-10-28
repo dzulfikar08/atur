@@ -1,19 +1,26 @@
 /**
- * Muxy backend: drives a Muxy 2 server through its `muxy` CLI (JSON output),
- * so agents running in Muxy tabs show up in the web and phone app.
+ * Muxy backend: one persistent connection to a Muxy 2 server's socket,
+ * speaking its native protocol (muxy-wire.ts), so agents running in Muxy
+ * tabs show up in the web and phone app.
  *
  * Mapping: workspace = Muxy project, tab = pane = Muxy session (a decimal
  * 64-bit id). Muxy keeps tabs and splits in its UI clients; the server, and so
- * the bridge, only sees sessions. Agent state comes from Muxy's own detection
- * (`muxy activity list`). Differences from herdr/tmux, all inherent to the CLI:
- * - no resize: a session keeps the size of the Muxy window showing it;
- * - a split creates a new session in the same project (the desktop app lists
- *   it under Existing Terminals) instead of a visible split;
- * - no terminal title and no agent transcript path.
+ * the bridge, only sees sessions.
+ *
+ * State is pushed, not polled: the server tells the connection when sessions,
+ * projects or agent activity change, and the bridge keeps a cache that
+ * listPanes/pollPanes/getPane answer from. A terminal read or typed into is
+ * attached once and stays attached while it is in use: its visible grid, title,
+ * directory and foreground process arrive as pushed frames and events.
+ *
+ * What a session has from Muxy that the old CLI hid: its live title and
+ * working directory, the foreground process, a resizable PTY. What stays
+ * different from herdr/tmux: a split is a new session in the same project
+ * (the desktop app lists it under Existing Terminals).
  */
-import { existsSync } from "node:fs";
-import { connect } from "node:net";
-import { join } from "node:path";
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { readdir, readlink, stat } from "node:fs/promises";
+import { basename, join } from "node:path";
 import {
   InputError,
   PaneGoneError,
@@ -24,15 +31,67 @@ import {
   type ScreenRead,
   type SplitDirection,
 } from "./backend";
-import type { GridSize } from "./sizer";
+import { MuxyConnection, MuxyServerError, MuxyUnsupportedError } from "./muxy-client";
+import { muxyKeyEvent, pasteChunks } from "./muxy-render";
+import { MuxyTerminal, type PageSource } from "./muxy-terminal";
+import {
+  CONTROL,
+  ErrorCode,
+  Kind,
+  MAX_INPUT,
+  Topic,
+  frameAck,
+  keyFrame,
+  parseScreenFrame,
+  parseSessionMetadata,
+  parseTerminalEvent,
+  pasteFrame,
+  randomUuid,
+  requests,
+  sessionIdText,
+  type AgentActivity,
+  type Cbor,
+  type Message,
+  type ProjectInfo,
+  type SessionInfo,
+  type SessionMeta,
+  type U64,
+} from "./muxy-wire";
+import { SizeHolders, type GridSize, type SizeTiming } from "./sizer";
 
-const COMMAND_TIMEOUT_MS = 8000;
-/** `muxy session history --limit` rejects anything larger. */
-const HISTORY_PAGE = 500;
-/** Characters per `session send` call: argv has a size limit. */
-const SEND_CHUNK = 16_384;
 const SESSION_ID = /^[1-9][0-9]{0,19}$/;
 const MAC_APP_BINARY = "/Applications/Muxy.app/Contents/MacOS/muxy";
+/** Muxy's CLI default for a session nobody has opened in a window yet. */
+const NEW_SESSION_SIZE = { cols: 80, rows: 24 };
+/** How long a metadata window waits for every session to report. */
+const META_WINDOW_MS = 400;
+/** A pane list older than this re-reads titles first (GET /panes); the poller re-reads in the background. */
+const META_TTL_MS = 5_000;
+const META_POLL_TTL_MS = 30_000;
+/** Activity changes often; a title read at most this long ago is fresh enough. */
+const MIN_EVENT_REFRESH_MS = 3_000;
+/** An attached terminal nobody read or typed into for this long is detached. */
+const IDLE_DETACH_MS = 20_000;
+const SWEEP_MS = 5_000;
+const TRANSCRIPT_RETRY_MS = 10_000;
+const TRANSCRIPT_REFRESH_MS = 60_000;
+const SERVER_START_TIMEOUT_MS = 20_000;
+/** Longest stop() waits for a phone-sized session to be given back. */
+const STOP_WAIT_MS = 3_000;
+const PROJECT_COLORS = [
+  "#e5484d",
+  "#f76b15",
+  "#f5a623",
+  "#ebcb00",
+  "#9bcd1e",
+  "#30a46c",
+  "#12a594",
+  "#05a2c2",
+  "#3e63dd",
+  "#5b5bd6",
+  "#8e4ec6",
+  "#d6409f",
+];
 
 /** Muxy's data directory, resolved the way Muxy itself does (stable channel). */
 export function muxyDirectory(
@@ -55,7 +114,7 @@ export function muxySocketPath(
   return join(muxyDirectory(env, platform), "server.sock");
 }
 
-/** `MUXY_BIN`, else `muxy` on PATH, else the binary inside the macOS app bundle. */
+/** `MUXY_BIN`, else `muxy` on PATH, else the binary inside the macOS app bundle. Only used to start a server. */
 export function muxyBinary(env: Record<string, string | undefined> = process.env): string {
   if (env.MUXY_BIN) return env.MUXY_BIN;
   const onPath = Bun.which("muxy");
@@ -63,206 +122,12 @@ export function muxyBinary(env: Record<string, string | undefined> = process.env
   return existsSync(MAC_APP_BINARY) ? MAC_APP_BINARY : "muxy";
 }
 
-// ── Wire shapes (`--json` output of muxy 2.2) ─────────────────────────────
-
-export type MuxyColor = "Default" | { Indexed: number } | { Rgb: [number, number, number] };
-
-export interface MuxyStyle {
-  fg: MuxyColor;
-  bg: MuxyColor;
-  bold: boolean;
-  italic: boolean;
-  /** None | Single | Double | Curly | Dotted | Dashed */
-  underline: string;
-  underline_color: MuxyColor;
-  invisible: boolean;
-  overline: boolean;
-  inverse: boolean;
-  strikethrough: boolean;
-  faint: boolean;
-}
-
-export interface MuxyRun {
-  text: string;
-  style: Partial<MuxyStyle>;
-}
-
-export interface MuxyRow {
-  index: number;
-  runs: MuxyRun[];
-}
-
-interface MuxyHistory {
-  /** Scrollback above the screen, oldest first. */
-  rows: MuxyRow[];
-  /** Cursor for the next older page; null at the top. */
-  next: string | null;
-  screen: { size: { cols: number; rows: number }; rows: MuxyRow[] };
-}
-
-export interface MuxySession {
-  id: string;
-  project_id: string;
-  directory: string;
-  status: string;
-}
-
-export interface MuxyProject {
-  id: string;
-  name: string;
-}
-
-export interface MuxyAgent {
-  session: string;
-  /** Provider name (`OhMyPi`, `Claude`, ...); other shapes for providers newer than this bridge. */
-  provider: unknown;
-  /** unknown | idle | working | blocked */
-  state: unknown;
-}
-
-// ── Screen rendering ──────────────────────────────────────────────────────
-
-function colorParams(color: unknown, base: number): string[] {
-  if (!color || typeof color !== "object") return [];
-  if ("Indexed" in color && typeof color.Indexed === "number") {
-    const n = color.Indexed;
-    if (base !== 58 && n < 8) return [String(base + n)];
-    if (base !== 58 && n < 16) return [String(base + 60 + n - 8)];
-    return [`${base + (base === 58 ? 0 : 8)};5;${n}`];
-  }
-  if ("Rgb" in color && Array.isArray(color.Rgb) && color.Rgb.length === 3) {
-    const [r, g, b] = color.Rgb as [number, number, number];
-    return [`${base + (base === 58 ? 0 : 8)};2;${r};${g};${b}`];
-  }
-  return [];
-}
-
-const UNDERLINE_PARAMS: Record<string, string> = {
-  Single: "4",
-  Double: "4:2",
-  Curly: "4:3",
-  Dotted: "4:4",
-  Dashed: "4:5",
-};
-
-/** SGR parameters for a run's style; empty for the default style. */
-export function sgrParams(style: Partial<MuxyStyle>): string[] {
-  const params: string[] = [];
-  if (style.bold) params.push("1");
-  if (style.faint) params.push("2");
-  if (style.italic) params.push("3");
-  const underline = style.underline ? UNDERLINE_PARAMS[style.underline] : undefined;
-  if (underline) params.push(underline);
-  if (style.inverse) params.push("7");
-  if (style.invisible) params.push("8");
-  if (style.strikethrough) params.push("9");
-  if (style.overline) params.push("53");
-  params.push(...colorParams(style.fg, 30), ...colorParams(style.bg, 40));
-  if (underline) params.push(...colorParams(style.underline_color, 58));
-  return params;
-}
-
 /**
- * One screen row as ANSI, self-contained: it ends with a reset when styled.
- * Muxy splits rows into many runs of the same style (box drawing comes one
- * cell per run), so an SGR is only written when the style changes.
- */
-export function renderRow(row: MuxyRow): string {
-  let out = "";
-  let current = "";
-  for (const run of row.runs) {
-    const sgr = sgrParams(run.style).join(";");
-    if (sgr !== current) {
-      out += sgr === "" ? "\x1b[0m" : `\x1b[0;${sgr}m`;
-      current = sgr;
-    }
-    out += run.text;
-  }
-  return current === "" ? out : `${out}\x1b[0m`;
-}
-
-/** Rows in screen order with gaps filled, `height` rows when the size is known. */
-export function renderRows(rows: readonly MuxyRow[], height?: number): string[] {
-  const byIndex = new Map(rows.map((r) => [r.index, r]));
-  const count = height ?? (rows.length === 0 ? 0 : Math.max(...rows.map((r) => r.index)) + 1);
-  const out: string[] = [];
-  for (let i = 0; i < count; i++) {
-    const row = byIndex.get(i);
-    out.push(row ? renderRow(row) : "");
-  }
-  return out;
-}
-
-// ── Input ─────────────────────────────────────────────────────────────────
-
-const KEY_BYTES: Record<string, string> = {
-  enter: "\r",
-  tab: "\t",
-  space: " ",
-  backspace: "\x7f",
-  esc: "\x1b",
-  escape: "\x1b",
-  up: "\x1b[A",
-  down: "\x1b[B",
-  right: "\x1b[C",
-  left: "\x1b[D",
-  home: "\x1b[H",
-  end: "\x1b[F",
-  delete: "\x1b[3~",
-  pageup: "\x1b[5~",
-  pagedown: "\x1b[6~",
-  "shift+tab": "\x1b[Z",
-  "ctrl+\\": "\x1c",
-};
-
-/**
- * herdr key name → the bytes a terminal sends for it. `muxy session send-keys`
- * only knows a handful of keys, so every key goes through `session send`,
- * which writes bytes to the terminal unchanged. Unknown keys throw.
- */
-export function muxyKeyBytes(key: string): string {
-  const k = key.toLowerCase();
-  const named = KEY_BYTES[k];
-  if (named) return named;
-  const ctrl = /^ctrl\+([a-z])$/.exec(k);
-  if (ctrl) return String.fromCharCode((ctrl[1] as string).charCodeAt(0) - 96);
-  throw new Error(`muxy: unsupported key "${key}"`);
-}
-
-const PASTE_START = "\x1b[200~";
-const PASTE_END = "\x1b[201~";
-
-/**
- * Literal text → `session send` payloads. `send` types bytes as-is, so a bare
- * newline would press Enter; multi-line text is wrapped in bracketed-paste
- * markers instead (every agent CLI and modern shell enables bracketed paste).
- * Paste markers inside the text are removed until none is left (a nested
- * marker reappears after one pass), so the text can neither open a paste nor
- * end one early. The text is chunked before wrapping, so a marker is never
- * split across two calls, and chunks split on code points, never inside a
- * surrogate pair.
- */
-export function pastePayloads(text: string, chunk: number = SEND_CHUNK): string[] {
-  let clean = text;
-  for (let prev = ""; prev !== clean;) {
-    prev = clean;
-    clean = clean.split(PASTE_END).join("").split(PASTE_START).join("");
-  }
-  const points = Array.from(clean);
-  const out: string[] = [];
-  for (let i = 0; i < points.length; i += chunk) out.push(points.slice(i, i + chunk).join(""));
-  if (out.length > 0 && /[\r\n]/.test(clean)) {
-    out[0] = `${PASTE_START}${out[0]}`;
-    out[out.length - 1] = `${out[out.length - 1]}${PASTE_END}`;
-  }
-  return out;
-}
-
-/**
- * Environment for the `muxy` CLI. A CLI call starts the Muxy server when none
- * runs, and that server hands its environment to every terminal it opens: the
- * bridge's own settings (machine token, loopback token) must not reach them,
- * nor the id of a Muxy terminal the bridge itself may have been started from.
+ * Environment for the `muxy` CLI. Starting the Muxy server is the one thing
+ * the protocol cannot do, and that server hands its environment to every
+ * terminal it opens: the bridge's own settings (machine token, loopback
+ * token) must not reach them, nor the id of a Muxy terminal the bridge itself
+ * may have been started from.
  */
 export function muxyChildEnv(
   env: Record<string, string | undefined>,
@@ -277,312 +142,750 @@ export function muxyChildEnv(
 
 // ── Pane list ─────────────────────────────────────────────────────────────
 
-const PROVIDER_AGENTS: Record<string, string> = {
-  Claude: "claude",
-  Codex: "codex",
-  OpenCode: "opencode",
-  Cursor: "cursor",
-  Copilot: "copilot",
-  Droid: "droid",
-  Pi: "pi",
-  Grok: "grok",
-  Kiro: "kiro",
-  Xal: "xal",
-  Antigravity: "antigravity",
-  OhMyPi: "omp",
+/** `AgentProvider` numbers → the agent names the app knows. */
+const PROVIDER_AGENTS: Record<number, string> = {
+  0: "claude",
+  1: "codex",
+  2: "opencode",
+  3: "cursor",
+  4: "copilot",
+  5: "droid",
+  6: "pi",
+  7: "grok",
+  8: "kiro",
+  9: "xal",
+  10: "antigravity",
+  11: "omp",
 };
 
-const STATES: Record<string, AgentStatus> = {
-  unknown: "unknown",
-  idle: "idle",
-  working: "working",
-  blocked: "blocked",
+/** `AgentState` numbers. */
+const STATES: Record<number, AgentStatus> = {
+  0: "unknown",
+  1: "idle",
+  2: "working",
+  3: "blocked",
 };
+
+export interface PaneSources {
+  sessions: Iterable<SessionInfo>;
+  /** Projects in Muxy's order; sessions are listed project by project. */
+  projects: readonly ProjectInfo[];
+  agents: ReadonlyMap<string, AgentActivity>;
+  meta: ReadonlyMap<string, SessionMeta>;
+  transcripts: ReadonlyMap<string, string | null>;
+}
 
 /** Live sessions → pane summaries, labelled by project and tagged by detected agent. */
-export function summarizeSessions(
-  sessions: readonly MuxySession[],
-  projects: readonly MuxyProject[],
-  agents: readonly MuxyAgent[],
-): PaneSummary[] {
-  const labels = new Map(projects.map((p) => [p.id, p.name]));
-  const bySession = new Map(agents.map((a) => [a.session, a]));
-  return sessions
-    .filter((s) => s.status === "Live")
-    .map((s) => {
-      const agent = bySession.get(s.id);
-      const provider = typeof agent?.provider === "string" ? agent.provider : null;
-      const state = typeof agent?.state === "string" ? STATES[agent.state] : undefined;
-      return {
-        id: s.id,
-        workspaceId: s.project_id,
-        workspaceLabel: labels.get(s.project_id) ?? "",
-        tabId: s.id,
-        cwd: s.directory || null,
-        title: null,
-        agent: agent ? ((provider && PROVIDER_AGENTS[provider]) ?? "agent") : null,
-        agentStatus: agent ? (state ?? "unknown") : null,
-        agentSessionPath: null,
-        revision: 0,
-      };
-    });
+export function summarizePanes(sources: PaneSources): PaneSummary[] {
+  const order = new Map(sources.projects.map((p, i) => [p.id, i]));
+  const labels = new Map(sources.projects.map((p) => [p.id, p.name]));
+  const sorted = [...sources.sessions].sort(
+    (a, b) =>
+      (order.get(a.project) ?? Number.MAX_SAFE_INTEGER) -
+        (order.get(b.project) ?? Number.MAX_SAFE_INTEGER) ||
+      (BigInt(a.id) < BigInt(b.id) ? -1 : BigInt(a.id) > BigInt(b.id) ? 1 : 0),
+  );
+  return sorted.map((s) => {
+    const agent = sources.agents.get(s.id);
+    const meta = sources.meta.get(s.id);
+    return {
+      id: s.id,
+      workspaceId: s.project,
+      workspaceLabel: labels.get(s.project) ?? "",
+      tabId: s.id,
+      cwd: meta?.directory || s.directory || null,
+      title: meta?.title || null,
+      agent: agent ? (PROVIDER_AGENTS[agent.provider] ?? "agent") : null,
+      agentStatus: agent ? (STATES[agent.state] ?? "unknown") : null,
+      agentSessionPath: sources.transcripts.get(s.id) ?? null,
+      revision: 0,
+    };
+  });
+}
+
+// ── Agent transcripts ─────────────────────────────────────────────────────
+
+/** An omp session file: `.../sessions/<project dir>/<timestamp>_<id>.jsonl`; sub-agent files sit one level deeper. */
+const OMP_TRANSCRIPT = /\/sessions\/[^/]+\/[^/]+\.jsonl$/;
+const SESSION_ENV = /(?:^|\0)MUXY_SESSION_ID=([0-9]+)(?:\0|$)/;
+
+/**
+ * omp keeps its session transcript open for appending, and a process started
+ * in a Muxy terminal has that terminal's id in `MUXY_SESSION_ID`. Linux only:
+ * it reads `/proc/<pid>/environ` and `/proc/<pid>/fd`. Muxy does not report
+ * the pid of a terminal's foreground process, so this is the only link
+ * between a session and its transcript.
+ */
+export async function findOmpTranscripts(
+  sessionIds: ReadonlySet<string>,
+  procRoot = "/proc",
+): Promise<Map<string, string>> {
+  const found = new Map<string, { path: string; mtime: number }>();
+  const pids = (await readdir(procRoot).catch(() => [])).filter((name) => /^[0-9]+$/.test(name));
+  const inspect = async (pid: string): Promise<void> => {
+    const environ = await Bun.file(join(procRoot, pid, "environ"))
+      .text()
+      .catch(() => "");
+    const session = SESSION_ENV.exec(environ)?.[1];
+    if (!session || !sessionIds.has(session)) return;
+    const fds = await readdir(join(procRoot, pid, "fd")).catch(() => []);
+    for (const fd of fds) {
+      const target = await readlink(join(procRoot, pid, "fd", fd)).catch(() => "");
+      if (!OMP_TRANSCRIPT.test(target)) continue;
+      const mtime = (await stat(target).catch(() => null))?.mtimeMs;
+      if (mtime === undefined) continue;
+      const current = found.get(session);
+      if (!current || mtime > current.mtime) found.set(session, { path: target, mtime });
+    }
+  };
+  for (let i = 0; i < pids.length; i += 64) await Promise.all(pids.slice(i, i + 64).map(inspect));
+  return new Map([...found].map(([id, v]) => [id, v.path]));
 }
 
 // ── Backend ───────────────────────────────────────────────────────────────
 
-const GONE = /UnknownSession|does not exist|session ID must be/i;
-
-interface Ran {
-  code: number;
-  stdout: string;
-  stderr: string;
-}
-
 export interface MuxyOptions {
+  /** The `muxy` CLI, used only to start a server when a workspace is created and none runs. */
   bin?: string;
   /** Environment the backend runs in (e.g. `MUXY_DIR` selects the server); the process env when unset. */
   env?: Record<string, string | undefined>;
+  /** Phone-size timing (tests shorten it). */
+  timing?: SizeTiming;
 }
+
+type RefreshName = "sessions" | "catalog" | "activity";
 
 export class MuxyBackend implements PaneBackend {
   readonly kind = "muxy";
   private readonly bin: string;
   private readonly env: Record<string, string | undefined>;
   private readonly socket: string;
-  private readonly lastScreen = new Map<string, { text: string; revision: number }>();
+  private readonly timing: SizeTiming | undefined;
+
+  private conn: MuxyConnection | null = null;
+  private connecting: Promise<MuxyConnection | null> | null = null;
+  private unsupported: { error: MuxyUnsupportedError; at: number } | null = null;
+  private readonly logged = new Set<string>();
+  /** Set while stop() closes the connection: that is not a lost server. */
+  private stopping = false;
+
+  private sessions = new Map<string, SessionInfo>();
+  private projects: ProjectInfo[] = [];
+  private agents = new Map<string, AgentActivity>();
+  private meta = new Map<string, SessionMeta>();
+  private transcripts = new Map<string, { path: string | null; at: number }>();
+  private metaAt = 0;
+  private metaRun: Promise<void> | null = null;
+  private metaWaiter: { waiting: Set<string>; done: () => void } | null = null;
+  private transcriptRun: Promise<void> | null = null;
+  private readonly refresh: Record<RefreshName, { running: boolean; dirty: boolean }> = {
+    sessions: { running: false, dirty: false },
+    catalog: { running: false, dirty: false },
+    activity: { running: false, dirty: false },
+  };
+
+  private readonly terminals = new Map<string, MuxyTerminal>();
+  private readonly byChannel = new Map<number, MuxyTerminal>();
+  private readonly attaching = new Map<string, Promise<MuxyTerminal>>();
+  private sweeper: ReturnType<typeof setInterval> | null = null;
+
+  /** One holder set per session: a phone viewer sizes the PTY of the session it watches. */
+  private readonly sizers = new Map<string, SizeHolders>();
+  private readonly holderSession = new Map<unknown, string>();
+  /** Sessions whose PTY we resized → the size to put back, and the phone size we set. */
+  private readonly borrowed = new Map<string, { original: GridSize; applied: GridSize }>();
+  /** Size restores in flight: stop() waits for them. */
+  private readonly restoring = new Set<Promise<void>>();
 
   constructor(opts: MuxyOptions = {}) {
     const env = opts.env ?? process.env;
     this.bin = opts.bin ?? muxyBinary(env);
     this.env = muxyChildEnv(env);
     this.socket = muxySocketPath(env);
+    this.timing = opts.timing;
+  }
+
+  // ── Connection ──────────────────────────────────────────────────────────
+
+  private logOnce(key: string, ...args: unknown[]): void {
+    if (this.logged.has(key)) return;
+    this.logged.add(key);
+    console.error(...args);
   }
 
   /**
-   * Every CLI call except `server status/stop` starts a server when none runs.
-   * Only creating a workspace may do that (like tmux `new-session`): polling
-   * and pane commands must never resurrect a server the user stopped or that
-   * crashed, so they first connect to its socket (a crash leaves the socket
-   * file behind, so its existence proves nothing). A connect costs ~2 ms, far
-   * less than the CLI spawn it guards.
+   * The live connection, connecting when there is none; null when no server
+   * answers. Only creating a workspace may start a server (like tmux
+   * `new-session`): polling and pane commands must never resurrect a server
+   * the user stopped or that crashed, and a connect does not start one. A
+   * server this bridge cannot talk to throws (loudly, once per retry window)
+   * instead of looking like a stopped one.
    */
-  private serverRunning(): Promise<boolean> {
-    if (!existsSync(this.socket)) return Promise.resolve(false);
-    const { promise, resolve } = Promise.withResolvers<boolean>();
-    const probe = connect(this.socket);
-    const done = (up: boolean) => {
-      probe.destroy();
-      resolve(up);
-    };
-    probe.once("connect", () => done(true));
-    probe.once("error", () => done(false));
-    probe.setTimeout(1000, () => done(false));
-    return promise;
-  }
-
-  private async requireServer(): Promise<void> {
-    if (!(await this.serverRunning())) throw new PaneGoneError("muxy server is not running");
-  }
-
-  private async run(args: string[], timeoutMs: number = COMMAND_TIMEOUT_MS): Promise<Ran> {
-    const proc = Bun.spawn([this.bin, ...args], {
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      env: this.env,
-      signal: AbortSignal.timeout(timeoutMs),
+  private async connection(): Promise<MuxyConnection | null> {
+    if (this.connecting) return this.connecting;
+    if (this.conn?.isOpen) return this.conn;
+    if (this.unsupported && Date.now() - this.unsupported.at < 5_000) throw this.unsupported.error;
+    if (!existsSync(this.socket)) return null;
+    this.connecting ??= this.connect().finally(() => {
+      this.connecting = null;
     });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ]);
-    return { code, stdout, stderr };
+    return this.connecting;
   }
 
-  /** A missing session surfaces as PaneGoneError; anything else is transient. */
-  private failure(args: string[], stderr: string): Error {
-    const message = stderr.trim().replace(/^muxy:\s*/, "") || "failed";
-    if (GONE.test(message)) return new PaneGoneError(message);
-    return new Error(`muxy ${args.slice(0, 2).join(" ")}: ${message}`);
+  private async requireConnection(): Promise<MuxyConnection> {
+    const conn = await this.connection();
+    if (!conn) throw new PaneGoneError("muxy server is not running");
+    return conn;
   }
 
-  /** Run a command and parse its JSON output. */
-  private async json<T>(args: string[], timeoutMs?: number): Promise<T> {
-    const res = await this.run(args, timeoutMs);
-    if (res.code !== 0) throw this.failure(args, res.stderr);
-    return JSON.parse(res.stdout) as T;
-  }
-
-  /** A session-scoped command; ids Muxy would reject are gone by definition. */
-  private async session<T>(id: string, args: string[], timeoutMs?: number): Promise<T> {
-    if (!SESSION_ID.test(id)) throw new PaneGoneError(`invalid session id: ${id}`);
-    await this.requireServer();
-    return this.json<T>(["session", args[0] as string, id, ...args.slice(1)], timeoutMs);
-  }
-
-  /** Detected agents; detection failing must not hide the panes themselves. */
-  private async agents(timeoutMs?: number): Promise<MuxyAgent[]> {
+  private async connect(): Promise<MuxyConnection | null> {
+    let conn: MuxyConnection;
     try {
-      const res = await this.json<{ agents?: MuxyAgent[] }>(
-        ["activity", "list", "--json"],
-        timeoutMs,
-      );
-      return res.agents ?? [];
+      conn = await MuxyConnection.open(this.socket, {
+        onMessage: (message) => this.onMessage(message),
+        onClose: (reason) => this.onClose(reason),
+      });
     } catch (e) {
-      console.error("muxy: activity list failed:", e);
-      return [];
+      if (e instanceof MuxyUnsupportedError) {
+        this.unsupported = { error: e, at: Date.now() };
+        this.logOnce(`unsupported:${e.message}`, `muxy: ${e.message}`);
+        throw e;
+      }
+      // Refused or vanished: no server is answering on that socket.
+      return null;
+    }
+    this.conn = conn;
+    this.unsupported = null;
+    try {
+      await Promise.all([this.refreshSessions(), this.refreshCatalog(), this.refreshActivity()]);
+      await this.refreshMetadata();
+      await this.resolveTranscripts();
+    } catch (e) {
+      conn.close();
+      this.logOnce(`prime:${String(e)}`, "muxy: reading the server's state failed:", e);
+      return null;
+    }
+    this.logged.delete("closed");
+    return conn;
+  }
+
+  private onClose(reason: Error): void {
+    this.conn = null;
+    this.sessions = new Map();
+    this.projects = [];
+    this.agents = new Map();
+    this.meta = new Map();
+    this.transcripts = new Map();
+    this.metaAt = 0;
+    this.metaWaiter?.done();
+    this.terminals.clear();
+    this.byChannel.clear();
+    clearInterval(this.sweeper ?? undefined);
+    this.sweeper = null;
+    for (const refresh of Object.values(this.refresh)) refresh.dirty = false;
+    if (this.stopping) return;
+    this.logOnce(
+      "closed",
+      `muxy: connection lost (${reason.message}); will reconnect when it answers`,
+    );
+  }
+
+  // ── Pushed state ────────────────────────────────────────────────────────
+
+  private onMessage(message: Message): void {
+    const fields = message.fields as Cbor[];
+    if (message.channel === CONTROL) {
+      if (message.kind === Kind.Changed) {
+        const topic = fields[0];
+        if (topic === Topic.Sessions) this.coalesce("sessions", () => this.onSessionsChanged());
+        else if (topic === Topic.Catalog) this.coalesce("catalog", () => this.refreshCatalog());
+        else if (topic === Topic.Activity)
+          this.coalesce("activity", () => this.onActivityChanged());
+      } else if (message.kind === Kind.SessionMetadata) {
+        const { session, meta } = parseSessionMetadata(fields);
+        this.meta.set(session, meta);
+        if (this.metaWaiter?.waiting.delete(session) && this.metaWaiter.waiting.size === 0) {
+          this.metaWaiter.done();
+        }
+      } else if (message.kind === Kind.SessionEnded) {
+        this.dropSession(sessionIdText(fields[0] as Cbor));
+      }
+      return;
+    }
+    const terminal = this.byChannel.get(message.channel);
+    if (!terminal) return;
+    if (message.kind === Kind.Frame) {
+      const frame = parseScreenFrame(fields);
+      terminal.applyFrame(frame);
+      // The server sends the next frame only after this one is acknowledged.
+      this.conn?.send(frameAck(terminal.channel, frame.seq));
+    } else if (message.kind === Kind.Metadata) {
+      const event = parseTerminalEvent(fields);
+      if (!event) return;
+      terminal.applyEvent(event);
+      if (event.type !== "history") {
+        this.meta.set(terminal.id, {
+          title: terminal.title,
+          directory: terminal.directory,
+          process: terminal.process,
+        });
+      }
     }
   }
 
+  /** Runs `fn`, once more if another invalidation arrived meanwhile. */
+  private coalesce(name: RefreshName, fn: () => Promise<void>): void {
+    const state = this.refresh[name];
+    if (state.running) {
+      state.dirty = true;
+      return;
+    }
+    state.running = true;
+    void (async () => {
+      do {
+        state.dirty = false;
+        try {
+          await fn();
+        } catch (e) {
+          // A connection that is gone is reported once by onClose.
+          if (this.conn?.isOpen) {
+            this.logOnce(`refresh:${name}:${String(e)}`, `muxy: refreshing ${name} failed:`, e);
+          }
+        }
+      } while (state.dirty);
+      state.running = false;
+    })();
+  }
+
+  private async onSessionsChanged(): Promise<void> {
+    if (await this.refreshSessions()) {
+      void this.refreshMetadata();
+      void this.resolveTranscripts();
+    }
+  }
+
+  private async onActivityChanged(): Promise<void> {
+    await this.refreshActivity();
+    void this.refreshMetadata(MIN_EVENT_REFRESH_MS);
+    void this.resolveTranscripts();
+  }
+
+  private async refreshSessions(): Promise<boolean> {
+    const conn = this.conn;
+    if (!conn) return false;
+    const reply = await conn.request(requests.listSessions);
+    if (reply.type !== "sessions") throw new Error("unexpected reply to ListSessions");
+    const next = new Map(reply.sessions.map((s) => [s.id, s]));
+    const gone = [...this.sessions.keys()].filter((id) => !next.has(id));
+    const added = [...next.keys()].some((id) => !this.sessions.has(id));
+    for (const id of gone) this.dropSession(id);
+    this.sessions = next;
+    return added;
+  }
+
+  private async refreshCatalog(): Promise<void> {
+    const conn = this.conn;
+    if (!conn) return;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const projects: ProjectInfo[] = [];
+      let after: string | null = null;
+      let revision: U64 | null = null;
+      try {
+        do {
+          const cursor: string | null = after;
+          const pinned: U64 | null = revision;
+          const reply = await conn.request((id) => requests.readCatalog(id, cursor, pinned));
+          if (reply.type !== "catalog") throw new Error("unexpected reply to ReadCatalog");
+          projects.push(...reply.page.projects);
+          after = reply.page.next;
+          revision = reply.page.revision;
+        } while (after !== null);
+      } catch (e) {
+        if (e instanceof MuxyServerError && e.code === ErrorCode.CatalogChanged) continue;
+        throw e;
+      }
+      this.projects = projects;
+      return;
+    }
+    throw new Error("the Muxy project catalog kept changing");
+  }
+
+  private async refreshActivity(): Promise<void> {
+    const conn = this.conn;
+    if (!conn) return;
+    const reply = await conn.request(requests.readActivity);
+    if (reply.type !== "activity") throw new Error("unexpected reply to ReadActivity");
+    this.agents = new Map(reply.activity.agents.map((a) => [a.session, a]));
+  }
+
+  /**
+   * Live title, directory and foreground process of every session. The server
+   * pushes them only for sessions this connection references, and a reference
+   * has a side effect (Muxy keeps a session a window closes alive while
+   * another client references it), so the references are held for the few
+   * tens of milliseconds the server needs to report, not kept. Terminals the
+   * bridge has attached get the same data pushed without this.
+   */
+  private refreshMetadata(minGapMs = 0): Promise<void> {
+    if (!this.metaRun && Date.now() - this.metaAt < minGapMs) return Promise.resolve();
+    this.metaRun ??= this.metadataWindow().finally(() => {
+      this.metaRun = null;
+      this.metaAt = Date.now();
+    });
+    return this.metaRun;
+  }
+
+  private async metadataWindow(): Promise<void> {
+    const conn = this.conn;
+    const ids = [...this.sessions.keys()];
+    if (!conn || ids.length === 0) return;
+    const { promise, resolve } = Promise.withResolvers<void>();
+    this.metaWaiter = { waiting: new Set(ids), done: resolve };
+    const timer = setTimeout(resolve, META_WINDOW_MS);
+    try {
+      await conn.request((id) => requests.syncSessionReferences(id, ids));
+      await promise;
+    } catch (e) {
+      this.logOnce(`meta:${String(e)}`, "muxy: reading session titles failed:", e);
+    } finally {
+      clearTimeout(timer);
+      this.metaWaiter = null;
+      await conn.request((id) => requests.syncSessionReferences(id, [])).catch(() => undefined);
+    }
+  }
+
+  /** Finds omp transcripts of omp panes that have none yet (or whose answer is old). */
+  private resolveTranscripts(): Promise<void> {
+    if (process.platform !== "linux") return Promise.resolve();
+    const now = Date.now();
+    const wanted = new Set<string>();
+    for (const [id, agent] of this.agents) {
+      if (PROVIDER_AGENTS[agent.provider] !== "omp" || !this.sessions.has(id)) continue;
+      const known = this.transcripts.get(id);
+      const age = known ? now - known.at : Infinity;
+      if (!known || age > (known.path ? TRANSCRIPT_REFRESH_MS : TRANSCRIPT_RETRY_MS))
+        wanted.add(id);
+    }
+    if (wanted.size === 0) return this.transcriptRun ?? Promise.resolve();
+    this.transcriptRun ??= findOmpTranscripts(wanted)
+      .then((paths) => {
+        const at = Date.now();
+        for (const id of wanted) this.transcripts.set(id, { path: paths.get(id) ?? null, at });
+      })
+      .catch((e: unknown) =>
+        this.logOnce(`transcripts:${String(e)}`, "muxy: finding transcripts failed:", e),
+      )
+      .finally(() => {
+        this.transcriptRun = null;
+      });
+    return this.transcriptRun;
+  }
+
+  private dropSession(id: string): void {
+    this.sessions.delete(id);
+    this.meta.delete(id);
+    this.agents.delete(id);
+    this.transcripts.delete(id);
+    this.borrowed.delete(id);
+    this.dropTerminal(id, false);
+    const holders = this.sizers.get(id);
+    if (holders) {
+      holders.stop();
+      this.sizers.delete(id);
+    }
+  }
+
+  private panes(): PaneSummary[] {
+    const transcripts = new Map<string, string | null>();
+    for (const [id, t] of this.transcripts) transcripts.set(id, t.path);
+    return summarizePanes({
+      sessions: this.sessions.values(),
+      projects: this.projects,
+      agents: this.agents,
+      meta: this.meta,
+      transcripts,
+    });
+  }
+
+  // ── PaneBackend: panes ──────────────────────────────────────────────────
+
   async listPanes(): Promise<PaneSummary[]> {
-    if (!(await this.serverRunning())) return [];
-    const [sessions, projects, agents] = await Promise.all([
-      this.json<MuxySession[]>(["session", "list", "--json"]),
-      this.json<MuxyProject[]>(["project", "list", "--json"]),
-      this.agents(),
-    ]);
-    return summarizeSessions(sessions, projects, agents);
+    if (!(await this.connection())) return [];
+    if (Date.now() - this.metaAt > META_TTL_MS) await this.refreshMetadata();
+    void this.resolveTranscripts();
+    return this.panes();
   }
 
   async pollPanes(): Promise<PaneSummary[]> {
-    if (!(await this.serverRunning())) return [];
-    const [sessions, agents] = await Promise.all([
-      this.json<MuxySession[]>(["session", "list", "--json"]),
-      this.agents(),
-    ]);
-    return summarizeSessions(sessions, [], agents);
+    if (!(await this.connection())) return [];
+    if (Date.now() - this.metaAt > META_POLL_TTL_MS) void this.refreshMetadata();
+    void this.resolveTranscripts();
+    return this.panes();
   }
 
-  async getPane(id: string, timeoutMs?: number): Promise<PaneSummary> {
+  async getPane(id: string): Promise<PaneSummary> {
     if (!SESSION_ID.test(id)) throw new PaneGoneError(`invalid session id: ${id}`);
-    await this.requireServer();
-    const [sessions, projects, agents] = await Promise.all([
-      this.json<MuxySession[]>(["session", "list", "--json"], timeoutMs),
-      this.json<MuxyProject[]>(["project", "list", "--json"], timeoutMs),
-      this.agents(timeoutMs),
-    ]);
-    const pane = summarizeSessions(sessions, projects, agents).find((p) => p.id === id);
+    await this.requireConnection();
+    if (!this.sessions.has(id)) await this.refreshSessions();
+    if (!this.sessions.has(id)) throw new PaneGoneError(`session ${id} does not exist`);
+    if (!this.transcripts.has(id)) await this.resolveTranscripts();
+    const pane = this.panes().find((p) => p.id === id);
     if (!pane) throw new PaneGoneError(`session ${id} does not exist`);
     return pane;
   }
 
-  private history(id: string, limit: number, before?: string): Promise<MuxyHistory> {
-    const page = ["history", "--limit", String(limit), ...(before ? ["--before", before] : [])];
-    return this.session<MuxyHistory>(id, page);
+  // ── Terminals ───────────────────────────────────────────────────────────
+
+  /** A session id Muxy would reject is gone by definition. */
+  private asGone(e: unknown, id: string): unknown {
+    if (
+      e instanceof MuxyServerError &&
+      (e.code === ErrorCode.UnknownSession || e.code === ErrorCode.UnknownChannel)
+    ) {
+      this.dropTerminal(id, false);
+      return new PaneGoneError(e.message || `session ${id} does not exist`);
+    }
+    return e;
+  }
+
+  /** The session's attached terminal, attaching it (never resizing it) on first use. */
+  private async terminal(id: string): Promise<MuxyTerminal> {
+    if (!SESSION_ID.test(id)) throw new PaneGoneError(`invalid session id: ${id}`);
+    const conn = await this.requireConnection();
+    const known = this.terminals.get(id);
+    if (known) {
+      known.lastUsed = Date.now();
+      return known;
+    }
+    if (!this.sessions.has(id)) await this.refreshSessions();
+    if (!this.sessions.has(id)) throw new PaneGoneError(`session ${id} does not exist`);
+    let attaching = this.attaching.get(id);
+    if (!attaching) {
+      attaching = this.attach(conn, id).finally(() => this.attaching.delete(id));
+      this.attaching.set(id, attaching);
+    }
+    try {
+      const terminal = await attaching;
+      terminal.lastUsed = Date.now();
+      return terminal;
+    } catch (e) {
+      throw this.asGone(e, id);
+    }
+  }
+
+  private async attach(conn: MuxyConnection, id: string): Promise<MuxyTerminal> {
+    let terminal: MuxyTerminal | null = null;
+    // Registered while the reply is dispatched: the first frame follows it immediately.
+    await conn.request(
+      (rid) => requests.attachWithoutResize(rid, id),
+      (reply) => {
+        if (reply.type !== "attached") return;
+        terminal = new MuxyTerminal(id, reply.attached);
+        this.terminals.set(id, terminal);
+        this.byChannel.set(terminal.channel, terminal);
+      },
+    );
+    const attached = terminal as MuxyTerminal | null;
+    if (!attached) throw new Error("unexpected reply to Attach");
+    this.meta.set(id, {
+      title: attached.title,
+      directory: attached.directory,
+      process: attached.process,
+    });
+    this.sweeper ??= setInterval(() => this.sweep(), SWEEP_MS);
+    this.sweeper.unref();
+    return attached;
+  }
+
+  private dropTerminal(id: string, detach: boolean): void {
+    const terminal = this.terminals.get(id);
+    if (!terminal) return;
+    this.terminals.delete(id);
+    this.byChannel.delete(terminal.channel);
+    if (detach && this.conn?.isOpen) {
+      this.conn.request((rid) => requests.detach(rid, terminal.channel)).catch(() => undefined);
+    }
+    if (this.terminals.size === 0) {
+      clearInterval(this.sweeper ?? undefined);
+      this.sweeper = null;
+    }
+  }
+
+  /** Detaches terminals nobody uses: an attachment keeps a closed desktop tab's session alive. */
+  private sweep(): void {
+    const now = Date.now();
+    for (const [id, terminal] of this.terminals) {
+      if (now - terminal.lastUsed > IDLE_DETACH_MS && !this.borrowed.has(id)) {
+        this.dropTerminal(id, true);
+      }
+    }
   }
 
   async readVisible(id: string): Promise<ScreenRead> {
-    try {
-      const { screen } = await this.history(id, 1);
-      const text = renderRows(screen.rows, screen.size.rows).join("\r\n");
-      const last = this.lastScreen.get(id);
-      if (last && last.text === text) return { text, revision: last.revision };
-      const revision = (last?.revision ?? 0) + 1;
-      if (this.lastScreen.size > 200) this.lastScreen.clear();
-      this.lastScreen.set(id, { text, revision });
-      return { text, revision };
-    } catch (e) {
-      if (e instanceof PaneGoneError) this.lastScreen.delete(id);
-      throw e;
-    }
+    return (await this.terminal(id)).read();
   }
 
   async readHistory(id: string, lines: number): Promise<string[]> {
-    const first = await this.history(id, Math.min(Math.max(lines, 1), HISTORY_PAGE));
-    const screen = renderRows(first.screen.rows, first.screen.size.rows);
-    let scrollback = first.rows.map(renderRow);
-    let next = first.next;
-    while (next && scrollback.length + screen.length < lines) {
-      const page = await this.history(id, HISTORY_PAGE, next);
-      if (page.rows.length === 0) break;
-      scrollback = [...page.rows.map(renderRow), ...scrollback];
-      next = page.next;
+    const terminal = await this.terminal(id);
+    const screen = terminal.screenLines();
+    const need = lines - screen.length;
+    const source: PageSource = async (before, maxRows) => {
+      const conn = await this.requireConnection();
+      const reply = await conn.request((rid) =>
+        requests.historyPage(rid, terminal.channel, before, maxRows),
+      );
+      if (reply.type !== "history") throw new Error("unexpected reply to HistoryPage");
+      return reply.page;
+    };
+    try {
+      const scrollback = need > 0 ? await terminal.scrollback(need, source) : [];
+      const rows = [...scrollback, ...screen];
+      return rows.length > lines ? rows.slice(rows.length - lines) : rows;
+    } catch (e) {
+      throw this.asGone(e, id);
     }
-    const rows = [...scrollback, ...screen];
-    return rows.length > lines ? rows.slice(rows.length - lines) : rows;
   }
 
   async geometry(id: string): Promise<GridSize | null> {
     try {
-      const { screen } = await this.history(id, 1);
-      const { cols, rows } = screen.size;
-      return cols > 0 && rows > 0 ? { cols, rows } : null;
+      const { size } = await this.terminal(id);
+      return size.cols > 0 && size.rows > 0 ? { cols: size.cols, rows: size.rows } : null;
     } catch {
       return null; // geometry unavailable — callers keep what they have
     }
   }
 
-  private async send(id: string, payload: string): Promise<void> {
-    await this.requireServer();
-    // `--` keeps text starting with a dash literal.
-    const args = ["session", "send", id, "--", payload];
-    const res = await this.run(args);
-    if (res.code !== 0) throw this.failure(args, res.stderr);
-  }
+  // ── Input ───────────────────────────────────────────────────────────────
 
   async sendText(id: string, text: string): Promise<void> {
     if (text === "") return;
-    if (!SESSION_ID.test(id)) throw new PaneGoneError(`invalid session id: ${id}`);
-    for (const payload of pastePayloads(text)) await this.send(id, payload);
+    const terminal = await this.terminal(id);
+    const conn = await this.requireConnection();
+    try {
+      const chunks = pasteChunks(text);
+      if (/[\r\n]/.test(text)) {
+        // A paste: the server adds bracketed-paste markers only when the program asked for them.
+        for (const chunk of chunks)
+          conn.send(pasteFrame(terminal.channel, new TextEncoder().encode(chunk)));
+      } else {
+        for (const chunk of chunks) {
+          const bytes = new TextEncoder().encode(chunk);
+          for (let i = 0; i < bytes.length; i += MAX_INPUT) {
+            await conn.request((rid) =>
+              requests.writeInput(rid, terminal.channel, bytes.subarray(i, i + MAX_INPUT)),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      throw this.asGone(e, id);
+    }
   }
 
   async sendKeys(id: string, keys: string[]): Promise<void> {
     if (keys.length === 0) return;
-    if (!SESSION_ID.test(id)) throw new PaneGoneError(`invalid session id: ${id}`);
-    await this.send(id, keys.map(muxyKeyBytes).join(""));
+    const events = keys.map(muxyKeyEvent);
+    const terminal = await this.terminal(id);
+    const conn = await this.requireConnection();
+    for (const event of events) conn.send(keyFrame(terminal.channel, event));
   }
 
-  private async createSession(projectId: string, cwd: string): Promise<PaneSummary> {
-    const created = await this.json<{ id: string }>([
-      "session",
-      "create",
-      projectId,
-      "--directory",
-      cwd,
-      "--json",
-    ]);
-    return this.getPane(created.id);
+  // ── Workspaces ──────────────────────────────────────────────────────────
+
+  /** The one place a server may be started: the protocol cannot, the CLI can. */
+  private async startServer(): Promise<void> {
+    const proc = Bun.spawn([this.bin, "server", "start", "--json"], {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      env: this.env,
+      signal: AbortSignal.timeout(SERVER_START_TIMEOUT_MS),
+    });
+    const [stderr, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
+    if (code !== 0) {
+      throw new Error(`muxy server start: ${stderr.trim().replace(/^muxy:\s*/, "") || "failed"}`);
+    }
+  }
+
+  private async createSession(project: string, directory: string): Promise<PaneSummary> {
+    const conn = await this.requireConnection();
+    const reply = await conn.request((id) =>
+      requests.createSession(
+        id,
+        project,
+        randomUuid(),
+        directory,
+        NEW_SESSION_SIZE.cols,
+        NEW_SESSION_SIZE.rows,
+      ),
+    );
+    if (reply.type !== "created") throw new Error("unexpected reply to CreateSession");
+    this.sessions.set(reply.session.id, reply.session);
+    // A window already running was opened before this session existed.
+    await this.refreshMetadata();
+    if (!this.meta.has(reply.session.id)) await this.refreshMetadata();
+    return this.getPane(reply.session.id);
   }
 
   async createWorkspace(opts: { cwd: string; label?: string }): Promise<CreatedWorkspace> {
-    // The CLI reads any argument starting with `--` as an option, even after --name.
-    if (opts.label?.startsWith("--")) {
-      throw new InputError('a Muxy project name cannot start with "--"');
+    const label = opts.label?.trim();
+    if (opts.label !== undefined && !label)
+      throw new InputError("a Muxy project name cannot be blank");
+    let directory: string;
+    try {
+      directory = realpathSync(opts.cwd);
+      if (!statSync(directory).isDirectory()) throw new Error("not a directory");
+    } catch {
+      throw new InputError("project directory must exist");
     }
-    // --reuse: a folder Muxy already knows opens in its existing project.
-    // This is the one call that may start the server (see serverRunning).
-    const project = await this.json<{ id: string; name: string }>([
-      "project",
-      "add",
-      opts.cwd,
-      "--reuse",
-      ...(opts.label ? ["--name", opts.label] : []),
-      "--json",
-    ]);
+    let conn = await this.connection();
+    if (!conn) {
+      await this.startServer();
+      conn = await this.connection();
+      if (!conn) throw new Error("muxy: the server did not come up after `muxy server start`");
+    }
+    await this.refreshCatalog();
+    let project = this.projects.find(
+      (p) => p.directory === directory || realpathOrNull(p.directory) === directory,
+    );
+    if (!project) {
+      const taken = new Set(this.projects.map((p) => p.color.toLowerCase()));
+      const free = PROJECT_COLORS.filter((c) => !taken.has(c));
+      const colors = free.length > 0 ? free : PROJECT_COLORS;
+      const created = {
+        id: randomUuid(),
+        directory,
+        name: label ?? (basename(directory) || "Home"),
+        color: colors[Math.floor(Math.random() * colors.length)] as string,
+      };
+      try {
+        await conn.request((id) => requests.createProject(id, randomUuid(), created));
+      } catch (e) {
+        if (e instanceof MuxyServerError && e.code === ErrorCode.BadRequest) {
+          throw new InputError(e.message || "Muxy refused the project");
+        }
+        throw e;
+      }
+      await this.refreshCatalog();
+      project = this.projects.find((p) => p.id === created.id);
+      if (!project) throw new Error("muxy: the new project did not appear in the catalog");
+    }
     const pane = await this.createSession(project.id, opts.cwd);
-    const sessions = await this.json<MuxySession[]>([
-      "session",
-      "list",
-      "--project",
-      project.id,
-      "--json",
-    ]);
+    const siblings = [...this.sessions.values()].filter((s) => s.project === project.id);
     return {
       workspace: {
         id: project.id,
         label: project.name,
         cwd: pane.cwd ?? opts.cwd,
-        paneCount: Math.max(sessions.filter((s) => s.status === "Live").length, 1),
+        paneCount: Math.max(siblings.length, 1),
       },
       pane,
     };
   }
 
   /**
-   * Muxy has no server-side splits: the new session joins the source's project.
-   * Muxy reports only the directory a session started in, so that is where the
-   * new one starts unless `cwd` is given.
+   * Muxy has no server-side splits: the new session joins the source's project,
+   * starting in the source's live directory unless `cwd` is given.
    */
   async splitPane(id: string, _direction: SplitDirection, cwd?: string): Promise<PaneSummary> {
     const source = await this.getPane(id);
@@ -592,16 +895,134 @@ export class MuxyBackend implements PaneBackend {
   }
 
   async closePane(id: string): Promise<void> {
-    await this.session(id, ["end", "--yes", "--json"]);
-    this.lastScreen.delete(id);
+    if (!SESSION_ID.test(id)) throw new PaneGoneError(`invalid session id: ${id}`);
+    const conn = await this.requireConnection();
+    try {
+      await conn.request((rid) => requests.endSession(rid, id));
+    } catch (e) {
+      throw this.asGone(e, id);
+    }
+    this.dropSession(id);
   }
 
-  // A session takes the size of the Muxy window showing it; the CLI cannot resize.
-  resize(_holder: unknown, _id: string, _size: GridSize): Promise<void> {
-    return Promise.resolve();
+  // ── Phone-sized panes ───────────────────────────────────────────────────
+
+  /**
+   * A Muxy session has one PTY shared by every window showing it, so a phone
+   * viewer sizes it for everyone: the PTY is resized to the phone grid while
+   * a viewer holds it, and put back to the size it had (the desktop window's)
+   * once the last holder has left.
+   */
+  async resize(holder: unknown, id: string, size: GridSize): Promise<void> {
+    await this.terminal(id);
+    const previous = this.holderSession.get(holder);
+    if (previous !== undefined && previous !== id) this.sizers.get(previous)?.drop(holder);
+    this.holderSession.set(holder, id);
+    let holders = this.sizers.get(id);
+    if (!holders) {
+      holders = new SizeHolders(
+        {
+          apply: (s) => void this.applySize(id, s),
+          restore: () => void this.restoreSize(id),
+        },
+        this.timing,
+      );
+      this.sizers.set(id, holders);
+    }
+    holders.request(holder, size);
   }
 
-  release(_holder: unknown): void {}
+  release(holder: unknown): void {
+    const id = this.holderSession.get(holder);
+    this.holderSession.delete(holder);
+    if (id !== undefined) this.sizers.get(id)?.drop(holder);
+  }
 
-  stop(): void {}
+  private async applySize(id: string, size: GridSize): Promise<void> {
+    try {
+      const terminal = await this.terminal(id);
+      this.borrowed.set(id, {
+        original: this.borrowed.get(id)?.original ?? { ...terminal.size },
+        applied: size,
+      });
+      await this.setSize(terminal, size);
+      console.log(`sizer: muxy session ${id} resized to ${size.cols}x${size.rows}`);
+    } catch (e) {
+      console.error(`sizer: could not resize muxy session ${id}:`, e);
+    }
+  }
+
+  private restoreSize(id: string): Promise<void> {
+    const borrowed = this.borrowed.get(id);
+    this.borrowed.delete(id);
+    if (this.sizers.get(id)?.isEmpty) this.sizers.delete(id);
+    if (!borrowed) return Promise.resolve();
+    const { original, applied } = borrowed;
+    // Put the size back only while the session still has the one we gave it (or the one
+    // it had, when its frame has not arrived yet): a desktop window resized meanwhile wins.
+    const putBack = (terminal: MuxyTerminal): Promise<boolean> => {
+      const ours = sameSize(terminal.size, applied) || sameSize(terminal.size, original);
+      return ours ? this.setSize(terminal, original).then(() => true) : Promise.resolve(false);
+    };
+    // A borrowed session stays attached (the idle sweep skips it), so the request is
+    // written before this returns, which stop() relies on.
+    const attached = this.terminals.get(id);
+    const resized = attached ? putBack(attached) : this.terminal(id).then(putBack);
+    const done = resized.then(
+      (restored) =>
+        console.log(
+          restored
+            ? `sizer: muxy session ${id} restored to ${original.cols}x${original.rows}`
+            : `sizer: muxy session ${id} was resized by someone else; left as it is`,
+        ),
+      (e: unknown) => {
+        if (!(e instanceof PaneGoneError))
+          console.error(`sizer: could not restore muxy session ${id}:`, e);
+      },
+    );
+    this.restoring.add(done);
+    void done.finally(() => this.restoring.delete(done));
+    return done;
+  }
+
+  private setSize(terminal: MuxyTerminal, size: GridSize): Promise<unknown> {
+    const conn = this.conn;
+    if (!conn?.isOpen) return Promise.reject(new PaneGoneError("muxy server is not running"));
+    return conn.request((rid) => requests.resize(rid, terminal.channel, size.cols, size.rows));
+  }
+
+  /**
+   * Gives every borrowed size back and closes the connection. The server reads a
+   * request only while the connection is open, so the restores are awaited (a
+   * few seconds at most) before it is closed.
+   */
+  async stop(): Promise<void> {
+    for (const holders of this.sizers.values()) holders.stop();
+    this.sizers.clear();
+    this.holderSession.clear();
+    clearInterval(this.sweeper ?? undefined);
+    this.sweeper = null;
+    if (this.restoring.size > 0) {
+      const { promise, resolve } = Promise.withResolvers<void>();
+      const timer = setTimeout(resolve, STOP_WAIT_MS);
+      void Promise.allSettled(this.restoring).then(() => resolve());
+      await promise;
+      clearTimeout(timer);
+    }
+    this.stopping = true;
+    this.conn?.close();
+    this.stopping = false;
+  }
+}
+
+function sameSize(a: GridSize, b: GridSize): boolean {
+  return a.cols === b.cols && a.rows === b.rows;
+}
+
+function realpathOrNull(path: string): string | null {
+  try {
+    return realpathSync(path);
+  } catch {
+    return null;
+  }
 }

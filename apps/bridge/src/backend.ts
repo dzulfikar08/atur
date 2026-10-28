@@ -118,8 +118,11 @@ export interface PaneBackend {
   closePane(id: string): Promise<void>;
   /** The viewer left or stopped asking; sizes are restored once nobody holds one. */
   release(holder: unknown): void;
-  /** Daemon shutdown: give every borrowed size back. */
-  stop(): void;
+  /**
+   * Daemon shutdown: give every borrowed size back. A backend that has to talk to
+   * its server to do that (Muxy) returns a promise; a caller about to exit awaits it.
+   */
+  stop(): void | Promise<void>;
 }
 
 /** herdr socket path; shared by the herdr client and backend auto-detection. */

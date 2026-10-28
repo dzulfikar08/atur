@@ -307,9 +307,9 @@ for (const sig of ["SIGTERM", "SIGINT"] as const) {
   process.on(sig, () => {
     connector?.stop();
     agentEvents?.stop();
-    // A tmux window resized for a phone must not stay phone-sized after we exit.
-    backend.stop();
+    // A tmux window resized for a phone must not stay phone-sized after we exit; Muxy
+    // gives a resized session back over its socket, so exit waits for that.
     // Stop wayvnc with the daemon so a restart never leaves an orphan listener.
-    void screenHub.shutdown().finally(() => process.exit(0));
+    void Promise.all([backend.stop(), screenHub.shutdown()]).finally(() => process.exit(0));
   });
 }
