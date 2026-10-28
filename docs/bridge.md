@@ -103,7 +103,32 @@ On the self-host path, a pane only appears in the app when its working directory
 | `AGENT_POLL_MS`      | `2000`                       | How often the bridge looks at agent states for push events.                                                                                                                                                                                                                  |
 | `ATUR_PASTE_DIR`     | `~/.cache/atur/pastes`       | Where images pasted from the phone are saved before their path goes into the prompt.                                                                                                                                                                                         |
 
-Desktop sharing (`/screen`) has its own `SCREEN_*` options, see [DEPLOY.md](DEPLOY.md#6-screen-desktop-sharing).
+Desktop sharing (`/screen`) has its own `SCREEN_*` options, see [DEPLOY.md](DEPLOY.md#6-screen-desktop-sharing) and the next section.
+
+### Screen mirror: speed and the direct path
+
+Three things make the mirror fast, all off the Cloudflare hop or tuned for it.
+
+**GPU H.264 (`SCREEN_VNC_GPU`, `SCREEN_VNC_FPS`).** wayvnc starts with `-g` (VAAPI H.264) and `-f 60`. noVNC offers H.264 whenever the browser or WebView passes the WebCodecs probe and decodes it with `VideoDecoder`; otherwise it keeps using Tight/ZRLE. A full frame of real desktop content is about 70 KB instead of 420 KB. Set `SCREEN_VNC_GPU=0` to turn `-g` off, `SCREEN_VNC_FPS=30` to lower the cap. If wayvnc will not start with `-g` (no VAAPI, no render node) the bridge logs one warning, starts it without `-g` and keeps doing so until restarted. A `-g` wayvnc that dies while serving has the same effect on its next start.
+
+**Backpressure (`SCREEN_QUEUE_BYTES`, default 256 KiB).** Each viewer has a cap on bytes queued toward its WebSocket. Past it the bridge stops reading wayvnc for that viewer only, and resumes when the socket drains. Bytes are never dropped: an RFB stream cannot lose data in the middle of a message. Pausing reads fills wayvnc's socket for that client, and neatvnc then holds back updates and sends only the latest damage once the client catches up, so a slow link turns into skipped frames instead of a queue of stale ones. The cap covers the bridge's own queue; the kernel and `cloudflared` buffers behind it are outside the bridge's control, which is another reason the direct path helps. Each viewer's close line in the journal shows `stalls=N`, the number of times its reads were paused.
+
+**Direct path (`BRIDGE_LISTEN`).** The Cloudflare tunnel adds 70 to 230 ms of round trip and caps one stream near 5 Mbps. With `BRIDGE_LISTEN` the bridge also listens on a tailnet address and clients that can reach it skip Cloudflare entirely.
+
+| Variable             | Default           | Meaning                                                                                                                                                                                                                              |
+| -------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `BRIDGE_LISTEN`      | unset (no direct) | Comma-separated `host[:port]` extra addresses for the direct screen listener (port defaults to `BRIDGE_PORT + 1`). `tailscale` stands for `tailscale ip -4`. Wildcard addresses (`0.0.0.0`, `::`) are refused. Needs `BRIDGE_TOKEN`. |
+| `BRIDGE_TLS_CERT`    | unset             | PEM certificate for the direct listener, with `BRIDGE_TLS_KEY`. Browsers and the native WebView only open `wss://` from an https page, so get a certificate with `tailscale cert <machine>.<tailnet>.ts.net`.                        |
+| `BRIDGE_DIRECT_URL`  | derived           | The base URL clients dial, e.g. `wss://box.tail1234.ts.net:7602`. Derived from the first listener (`ws://` or `wss://`) when unset; set it when you use TLS, because the certificate names the MagicDNS host, not the IP.            |
+| `SCREEN_VNC_GPU`     | `1`               | `0`/`false` drops wayvnc's `-g`.                                                                                                                                                                                                     |
+| `SCREEN_VNC_FPS`     | `60`              | wayvnc's frame-rate cap (`-f`).                                                                                                                                                                                                      |
+| `SCREEN_QUEUE_BYTES` | `262144`          | Per-viewer send queue cap.                                                                                                                                                                                                           |
+
+The direct listener answers one thing, `GET /screen`, and only with a ticket; every other path is a 404 and the bridge token is never accepted there. The Worker mints the ticket (`POST /api/screen/direct`, superuser only, same audit row as a relayed session) as an HMAC of a small payload keyed with the bridge token: screen-only, 60 seconds, single use, naming the user and the audit row. The token itself never leaves the Worker and the bridge, so a page that opens the socket never sees it, and a leaked ticket is worth one viewer for under a minute. Format and checks are in `apps/bridge/src/screen-direct.ts`. When a direct viewer leaves, the bridge calls `POST /api/bridge/screen-events` on the Worker, which stamps `detached_at` on the audit row; the bridge journal also logs `viewer #N attached direct user=… audit=…` and the desktop notification says "connected directly".
+
+Clients (the native Screen view and the web `/screen` page) call `POST /api/screen/direct` first. A 404 (no direct listener) or any failure to open the socket within 3.5 s sends them to the Worker relay, and they stay on the relay for a minute (ten when the Worker said there is no direct listener) before trying again. The relay always works, so turning `BRIDGE_LISTEN` on or off needs no client change.
+
+Clipboard note: noVNC 1.7.0 stopped parsing the stream when wayvnc pushed a clipboard payload to a view-only viewer ("Unexpected server message (type 5/6)"). `patches/@novnc%2Fnovnc@1.7.0.patch` (a `patchedDependencies` entry, applied by `bun install`) fixes it; drop the patch once noVNC releases a version with the fix.
 
 ### systemd user service
 

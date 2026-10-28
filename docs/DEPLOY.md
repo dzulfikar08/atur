@@ -198,6 +198,7 @@ Path: browser → Worker `/api/screen/ws` (superuser gate + audit) → tunnel �
   app, text frames beside the RFB stream) and then fall silent for
   `SCREEN_VIEWER_TIMEOUT_MS` (30 s) are dropped (close 4002). The Worker relay
   passes close codes through. Details: `docs/native-panes-screen.md`.
-- `GET /api/screen/status` (superuser) → `{available, running, viewers}`.
+- `GET /api/screen/status` (superuser) → `{available, running, viewers}` from the bridge (the bridge's own status also carries `direct`, the advertised direct URL).
+- Speed: wayvnc runs with `-g -f 60` (GPU H.264, falls back by itself), viewers have a bounded send queue, and a tailnet direct path (`BRIDGE_LISTEN`, `POST /api/screen/direct`) skips Cloudflare. See [bridge.md](bridge.md#screen-mirror-speed-and-the-direct-path).
 - Restarting `atur-bridge` ends open viewer sessions (wayvnc lives in its
   cgroup); herdr panes are unaffected.
