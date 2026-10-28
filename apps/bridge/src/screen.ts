@@ -20,6 +20,8 @@ import { join } from "node:path";
 export interface ScreenMeta {
   screen: true;
   id: number;
+  /** Set for sessions that came in over the direct (tailnet) listener. */
+  direct?: { sub: string; audit: string };
 }
 
 /** The slice of Bun's ServerWebSocket the hub needs (kept narrow for tests). */
@@ -27,6 +29,8 @@ export interface ScreenWs {
   data: ScreenMeta;
   send(data: Uint8Array | string): number;
   close(code?: number, reason?: string): void;
+  /** Bytes queued for the peer and not yet written to its socket. */
+  getBufferedAmount?(): number;
 }
 
 /**
@@ -54,6 +58,15 @@ export interface ScreenConfig {
   viewerTimeoutMs: number;
   /** wl-copy, for pasting images from the phone. */
   wlCopyBin: string;
+  /** Pass `-g` so wayvnc encodes H.264 on the GPU (falls back to none if it won't start). */
+  gpu: boolean;
+  /** wayvnc frame rate cap (`-f`). */
+  fps: number;
+  /**
+   * Per-viewer cap on bytes queued toward the WebSocket. Past it we stop
+   * reading from wayvnc for that viewer until the queue drains.
+   */
+  maxQueueBytes: number;
 }
 
 export function screenConfigFromEnv(env: Record<string, string | undefined>): ScreenConfig {
@@ -72,6 +85,9 @@ export function screenConfigFromEnv(env: Record<string, string | undefined>): Sc
     startTimeoutMs: Number(env.SCREEN_START_TIMEOUT_MS ?? 8_000),
     viewerTimeoutMs: Number(env.SCREEN_VIEWER_TIMEOUT_MS ?? 30_000),
     wlCopyBin: env.SCREEN_WL_COPY_BIN || "wl-copy",
+    gpu: !/^(0|false|no|off)$/i.test(env.SCREEN_VNC_GPU ?? "1"),
+    fps: Math.max(1, Number(env.SCREEN_VNC_FPS) || 60),
+    maxQueueBytes: Math.max(16 * 1024, Number(env.SCREEN_QUEUE_BYTES) || 256 * 1024),
   };
 }
 
@@ -88,8 +104,10 @@ interface Conn {
   /** Client bytes received before the TCP leg was up / not yet flushed. */
   pending: Uint8Array[];
   closed: boolean;
-  /** TCP reads paused because the WebSocket is backed up. */
+  /** TCP reads paused because the WebSocket queue is over its cap. */
   paused: boolean;
+  /** Backpressure episodes (each one is a stretch of frames wayvnc skipped for this viewer). */
+  stalls: number;
   /** When the viewer last pinged (0 = never: older clients don't, so no timeout). */
   lastPing: number;
 }
@@ -100,17 +118,24 @@ export class ScreenHub {
   private readonly conns = new Map<ScreenWs, Conn>();
   private proc: Subprocess | null = null;
   private starting: Promise<void> | null = null;
+  private stopping: Promise<void> | null = null;
   private stopTimer: ReturnType<typeof setTimeout> | null = null;
   private sweepTimer: Timer | null = null;
   private nextId = 1;
+  /** Wayvnc rejected `-g` once: later starts skip it. */
+  private gpuBroken = false;
 
   constructor(
     private readonly cfg: ScreenConfig,
     private readonly notify: Notify = defaultNotify(cfg),
+    /** Called when a viewer that came in over the direct listener ends. */
+    private readonly onDirectClose?: (meta: ScreenMeta) => void,
   ) {}
 
-  newMeta(): ScreenMeta {
-    return { screen: true, id: this.nextId++ };
+  newMeta(direct?: ScreenMeta["direct"]): ScreenMeta {
+    return direct
+      ? { screen: true, id: this.nextId++, direct }
+      : { screen: true, id: this.nextId++ };
   }
 
   status(): ScreenStatus {
@@ -131,11 +156,22 @@ export class ScreenHub {
       if (this.conns.size < this.cfg.maxViewers) break;
       this.drop(oldest, SCREEN_CLOSE.replaced, "replaced by a newer viewer");
     }
-    const conn: Conn = { ws, tcp: null, pending: [], closed: false, paused: false, lastPing: 0 };
+    const conn: Conn = {
+      ws,
+      tcp: null,
+      pending: [],
+      closed: false,
+      paused: false,
+      stalls: 0,
+      lastPing: 0,
+    };
     this.conns.set(ws, conn);
     this.cancelStop();
     this.startSweep();
-    console.log(`screen: viewer #${ws.data.id} connecting (viewers=${this.conns.size})`);
+    const via = ws.data.direct
+      ? ` direct user=${ws.data.direct.sub} audit=${ws.data.direct.audit}`
+      : "";
+    console.log(`screen: viewer #${ws.data.id} connecting${via} (viewers=${this.conns.size})`);
 
     try {
       await this.ensureServer();
@@ -172,10 +208,10 @@ export class ScreenHub {
       return;
     }
     this.flush(conn);
-    console.log(`screen: viewer #${ws.data.id} attached (viewers=${this.conns.size})`);
+    console.log(`screen: viewer #${ws.data.id} attached${via} (viewers=${this.conns.size})`);
     this.notify(
       "Atur Screen",
-      `Remote viewer connected (${this.conns.size} watching this desktop)`,
+      `Remote viewer connected${ws.data.direct ? " directly" : ""} (${this.conns.size} watching this desktop)`,
       "critical",
     );
   }
@@ -274,14 +310,27 @@ export class ScreenHub {
     }, every);
   }
 
+  /**
+   * Relay one wayvnc read to the viewer. Frames are never dropped here: an RFB
+   * stream cannot lose bytes mid-message, so a viewer whose queue is over the
+   * cap just stops being read from (TCP pause) until the socket drains. That
+   * backs up into wayvnc's per-client socket, where neatvnc's own congestion
+   * control (it holds back new framebuffer updates while the previous one is
+   * unsent / its fence is unanswered, then sends only the latest damage) turns
+   * the lag into skipped intermediate frames. Overshoot past the cap is one read.
+   */
   private onTcpData(conn: Conn, chunk: Uint8Array): void {
     if (conn.closed) return;
     // ws.send copies/queues; -1 means queued under backpressure, 0 dropped.
     const r = conn.ws.send(chunk);
     if (r === 0) {
       this.drop(conn, 1011, "viewer connection stalled");
-    } else if (r === -1 && !conn.paused) {
+      return;
+    }
+    const queued = conn.ws.getBufferedAmount?.() ?? 0;
+    if ((r === -1 || queued > this.cfg.maxQueueBytes) && !conn.paused) {
       conn.paused = true;
+      conn.stalls++;
       conn.tcp?.pause();
     }
   }
@@ -317,7 +366,10 @@ export class ScreenHub {
         /* already closed */
       }
     }
-    console.log(`screen: viewer #${conn.ws.data.id} closed (viewers=${this.conns.size})`);
+    console.log(
+      `screen: viewer #${conn.ws.data.id} closed stalls=${conn.stalls} (viewers=${this.conns.size})`,
+    );
+    if (conn.ws.data.direct) this.onDirectClose?.(conn.ws.data);
     if (this.conns.size === 0) {
       this.notify("Atur Screen", "Remote viewer disconnected", "low");
       this.scheduleStop();
@@ -346,17 +398,38 @@ export class ScreenHub {
   }
 
   private async startServer(): Promise<void> {
+    // A viewer reconnecting right after the grace stop must not find the old
+    // wayvnc still holding the port ("in use by a process the bridge did not start").
+    await this.stopping;
     if (await portOpen(this.cfg.port)) {
       throw new Error(
         `127.0.0.1:${this.cfg.port} is already in use by a process the bridge did not start`,
       );
     }
+    if (!this.cfg.gpu || this.gpuBroken) return this.launch(false);
+    try {
+      return await this.launch(true);
+    } catch (e) {
+      // No usable GPU encoder (or no VAAPI): serve Tight/ZRLE instead of nothing.
+      // Only a start that succeeds without -g proves -g was the cause.
+      await this.launch(false);
+      this.gpuBroken = true;
+      console.warn(
+        `screen: wayvnc failed to start with -g (${e instanceof Error ? e.message : e}); running without GPU H.264 from now on`,
+      );
+    }
+  }
+
+  private async launch(gpu: boolean): Promise<void> {
     const args = [
       this.cfg.wayvncBin,
       "-r", // render the cursor into the frame (browsers don't get one otherwise)
+      "-f",
+      String(this.cfg.fps),
       "-L",
       "warning",
     ];
+    if (gpu) args.push("-g");
     if (this.cfg.output) args.push("-o", this.cfg.output);
     // Explicit loopback address: wayvnc must never listen on a routable interface.
     args.push("127.0.0.1", String(this.cfg.port));
@@ -375,12 +448,26 @@ export class ScreenHub {
     this.proc = proc;
     const log = collectTail(proc.stderr as ReadableStream<Uint8Array>);
     void collectTail(proc.stdout as ReadableStream<Uint8Array>);
-    console.log(`screen: wayvnc started pid=${proc.pid} 127.0.0.1:${this.cfg.port}`);
+    console.log(
+      `screen: wayvnc started pid=${proc.pid} 127.0.0.1:${this.cfg.port} fps=${this.cfg.fps} gpu=${gpu}`,
+    );
 
+    let up = false;
     void proc.exited.then((code) => {
-      if (this.proc === proc) this.proc = null;
+      const unexpected = this.proc === proc;
+      if (unexpected) this.proc = null;
       console.log(`screen: wayvnc exited code=${code}`);
-      for (const conn of [...this.conns.values()]) this.drop(conn, 1011, "screen server exited");
+      if (up && gpu && unexpected && code !== 0 && !this.gpuBroken) {
+        this.gpuBroken = true;
+        console.warn(
+          "screen: wayvnc with -g died while serving; next start runs without GPU H.264",
+        );
+      }
+      // Before the port opens, start() reports the failure (and may retry without -g).
+      // A stop we asked for says nothing about viewers that arrived meanwhile.
+      if (up && unexpected) {
+        for (const conn of [...this.conns.values()]) this.drop(conn, 1011, "screen server exited");
+      }
     });
 
     const deadline = Date.now() + this.cfg.startTimeoutMs;
@@ -388,11 +475,17 @@ export class ScreenHub {
       if (this.proc !== proc) {
         throw new Error(`wayvnc exited during start: ${(await log).trim() || "no output"}`);
       }
-      if (await portOpen(this.cfg.port)) return;
+      if (await portOpen(this.cfg.port)) {
+        up = true;
+        return;
+      }
       await Bun.sleep(50);
     }
     await this.stopServer();
-    throw new Error(`wayvnc did not open 127.0.0.1:${this.cfg.port} in time`);
+    const out = (await log).trim();
+    throw new Error(
+      `wayvnc did not open 127.0.0.1:${this.cfg.port} in time${out ? `: ${out}` : ""}`,
+    );
   }
 
   private async stopServer(): Promise<void> {
@@ -402,8 +495,12 @@ export class ScreenHub {
     console.log(`screen: stopping wayvnc pid=${proc.pid}`);
     proc.kill("SIGTERM");
     const killer = setTimeout(() => proc.kill("SIGKILL"), 3000);
-    await proc.exited;
-    clearTimeout(killer);
+    const gone = proc.exited.then(() => {
+      clearTimeout(killer);
+      if (this.stopping === gone) this.stopping = null;
+    });
+    this.stopping = gone;
+    await gone;
   }
 }
 
