@@ -37,5 +37,5 @@ Atur keeps the loop short because feedback, issues, and customer records all liv
 
 You can read more about how Atur ties support tickets to issues and deals on the [features page][f], and for the metrics that show whether the loop is actually working, see [helpdesk metrics that matter][m].
 
-[f]: /#features
+[f]: /#loop
 [m]: /blog/helpdesk-metrics-that-matter

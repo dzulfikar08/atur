@@ -31,12 +31,12 @@ Atur is the wrong choice for a product or engineering team that only needs issue
 
 ## Pricing, plainly
 
-Atur is $9/month Starter, $29/month Team, with no credit card required to try the full workspace. Linear's pricing is per editor, with the final cost depending on seat count and optional add-ons — see their site for the current number.
+Atur's web workspace is free. Solo ($9/month) and Team ($29/month, for everyone in the workspaces you own) add the phone app. Linear's pricing is per editor, with the final cost depending on seat count and optional add-ons; see their site for the current number.
 
-_Accurate as of August 2026._
+_Accurate as of October 2026._
 
 For the similar argument about Jira, read [Atur vs Jira][j], and for how far a single workspace can stretch on documentation, see [Atur vs Notion][n]. See the [features overview][f] for how states, projects, and cycles fit together.
 
 [j]: /blog/atur-vs-jira
 [n]: /blog/atur-vs-notion
-[f]: /#features
+[f]: /#loop

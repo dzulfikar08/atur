@@ -45,7 +45,7 @@ For cost, agents log time entries against the issues they work, tagged with the 
 
 Atur ships a built-in MCP server. Any MCP-capable client (Claude Code, Cursor, Copilot) connects with one API key and gets the same 70+ tools your team uses: create, claim, and update issues, manage sprints, add comments, log time, and read the same states a human sees. Because the server speaks the product's own state model, an agent-driven change never creates a shadow workflow: the issue it moves is exactly the issue your teammate sees the next morning.
 
-Read more about the mechanics in [MCP for project management: AI agents in your tracker][m], or see how the loop fits together in the [agents section](/#agents) of our homepage.
+Read more about the mechanics in [MCP for project management: AI agents in your tracker][m], or see how the loop fits together in the [agents section](/#mcp) of our homepage.
 
 ## Getting started with project management for AI agents
 

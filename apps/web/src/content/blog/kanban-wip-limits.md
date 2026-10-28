@@ -91,6 +91,6 @@ an agent can read it: [AI standup notes][s] are written from that state, and
 [AI sprint planning][sp] drafts the cycle from it.
 
 [c]: /blog/helpdesk-metrics-that-matter
-[wf]: /#agents
+[wf]: /#mcp
 [s]: /blog/ai-standup-notes
 [sp]: /blog/ai-sprint-planning

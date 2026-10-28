@@ -29,9 +29,9 @@ The difference is direction. An AI summary is one more tab to read; an agent tha
 
 ## Pricing, plainly
 
-Atur is $9/month Starter, $29/month Team, full workspace on trial, no credit card. Asana's per-seat pricing rises with the tier that unlocks the feature you actually wanted — portfolios and advanced automation live above the starter price — and at small-team scale the two come out similar; at larger seat counts Asana costs more.
+Atur's web workspace is free: issues, pages, CRM, time and the MCP server. The paid plans only add the phone app: Solo is $9/month for one person, Team is $29/month for everyone in the workspaces you own. Asana's per-seat pricing rises with the tier that unlocks the feature you actually wanted, so at larger seat counts Asana costs more.
 
-_Accurate as of September 2026._
+_Accurate as of October 2026._
 
 For the rest of the comparison set: [Atur vs Monday][mo], [Atur vs Notion][n], [Atur vs Jira][j]. If the agent angle is the interesting part, start with [MCP for project management][m].
 

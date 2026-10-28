@@ -1,6 +1,6 @@
 ---
 title: "Atur vs Jira: when a smaller tracker is the right call"
-description: "Atur and Jira solve different scales. Jira wins on enterprise depth; Atur wins on setup speed, built-in CRM and MCP, and flat $9/$29 pricing."
+description: "Atur and Jira solve different scales. Jira wins on enterprise depth; Atur wins on setup speed, built-in CRM and MCP, and a free web workspace with flat phone-app plans."
 pubDate: 2026-08-21
 category: "comparisons"
 tags: ["jira", "comparison"]
@@ -27,7 +27,7 @@ That matters most at the boundaries. A support ticket that needs engineering bec
 
 Setup reflects that difference. Atur is a single workspace configured in minutes: states, cycles, a support inbox, and a pipeline board come from the defaults. Jira's comparable setup is measured in weeks of admin work and ongoing licensing decisions.
 
-The pricing difference is structural, not just arithmetic. Atur is $9/month for a Starter workspace and $29/month for a Team workspace, no credit card required to try. Jira's cost scales per user, so the final number depends on your headcount and the add-ons your teams rely on. For a ten-person team that needs support, CRM, time, and pages alongside issues, that difference is real at renewal time.
+The pricing difference is structural, not just arithmetic. Atur's web workspace is free, and the paid plans only add the phone app: $9/month for Solo, $29/month for a Team that covers everyone in the workspaces you own. Jira's cost scales per user, so the final number depends on your headcount and the add-ons your teams rely on. For a ten-person team that needs support, CRM, time, and pages alongside issues, that difference is real at renewal time.
 
 Atur also ships a built-in MCP server with 70+ tools, so an AI agent can triage tickets, draft release notes, and answer "what is blocked?" without a separate integration layer. That is an integration burden Jira does not absorb.
 
@@ -37,9 +37,9 @@ Atur is the wrong choice when your team is large enough that a single workspace 
 
 ## Pricing, plainly
 
-Atur is $9/month Starter, $29/month Team, with no credit card required to try the full workspace. Jira's pricing is per user, with the final cost depending on headcount and add-ons — see their site for the current number.
+Atur's web workspace is free. Solo ($9/month) and Team ($29/month, for everyone in the workspaces you own) add the phone app. Jira's pricing is per user, with the final cost depending on headcount and add-ons; see their site for the current number.
 
-_Accurate as of August 2026._
+_Accurate as of October 2026._
 
 Read how Linear fits into the same comparison on the [pricing overview][p], and for the other end of the spectrum see [Atur vs Linear][l] and [Atur vs Notion][n].
 

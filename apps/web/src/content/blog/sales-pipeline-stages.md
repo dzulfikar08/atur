@@ -42,4 +42,4 @@ Reps hit their quotas in bloated pipelines by over-promising on stage, and they 
 In Atur, the CRM pipeline board keeps a full stage history for every deal, so the board shows not just where a deal sits but how it got there and how long it waited. Because feedback from the support portal links to the same contact record, a deal that carried an open ticket last week gets the honest look it needs in the review. Read [how to close the customer feedback loop][f] to see why that history matters beyond sales, and visit the [CRM page][c] for how the pipeline board and contact records fit together.
 
 [f]: /blog/customer-feedback-loop
-[c]: /#crm
+[c]: /#workspace

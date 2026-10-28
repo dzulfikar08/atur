@@ -47,5 +47,5 @@ Metrics come alive when tickets stop living in isolation. A spike in first-respo
 
 In Atur, tickets and issues share a state model, so a reopened ticket automatically surfaces as a blocked issue on the board, and the customer record carries the history forward. You can see how the support portal turns email into tracked tickets with SLAs on our [features page][f], and for the broader view of when a shared inbox stops scaling, read [shared inbox vs ticketing system][s].
 
-[f]: /#features
+[f]: /#loop
 [s]: /blog/shared-inbox-vs-ticketing

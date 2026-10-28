@@ -29,9 +29,9 @@ Atur is the wrong choice for docs-first, wiki-heavy, or public-publishing teams.
 
 ## Pricing, plainly
 
-Atur is $9/month Starter, $29/month Team, with no credit card required to try the full workspace. Notion's pricing is per member, with the final cost depending on seat count and optional add-ons — see their site for the current number.
+Atur's web workspace is free. Solo ($9/month) and Team ($29/month, for everyone in the workspaces you own) add the phone app. Notion's pricing is per member, with the final cost depending on seat count and optional add-ons; see their site for the current number.
 
-_Accurate as of August 2026._
+_Accurate as of October 2026._
 
 For the question of where a small tracker beats enterprise depth, read [Atur vs Jira][j] and [Atur vs Linear][l]. Against the other "everything in one" candidates, see [Atur vs ClickUp][c] and [Atur vs monday.com][m]. See the [pages section][p] of the site for how wikilinks and backlinks work in practice.
 
@@ -39,4 +39,4 @@ For the question of where a small tracker beats enterprise depth, read [Atur vs 
 [l]: /blog/atur-vs-linear
 [c]: /blog/atur-vs-clickup
 [m]: /blog/atur-vs-monday
-[p]: /#pages
+[p]: /#workspace

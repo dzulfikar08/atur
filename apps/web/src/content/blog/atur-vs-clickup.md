@@ -27,9 +27,9 @@ If you genuinely need ClickUp's breadth — say, a team that lives in deeply cus
 
 ## Pricing, plainly
 
-Atur is $9/month Starter, $29/month Team with unlimited members — a flat price, not a per-seat tax. ClickUp prices per member per month, and the cost grows with every seat and add-on; see their site for current numbers.
+Atur's web workspace is free. The paid plans only add the phone app: Solo is $9/month for one person, Team is a flat $29/month for everyone in the workspaces you own, not a per-seat charge. ClickUp prices per member per month, and the cost grows with every seat and add-on; see their site for current numbers.
 
-_Accurate as of August 2026._
+_Accurate as of October 2026._
 
 For the comparison against the other two "everything in one" candidates, read [Atur vs Notion][n] and [Atur vs monday.com][m]. To see why the connected model matters for AI workflows, read [Let an agent run your whole operation][ai].
 

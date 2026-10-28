@@ -38,4 +38,4 @@ For the kanban discipline that gives those AI-suggested states something stable 
 [k]: /blog/kanban-wip-limits
 [t]: /blog/ai-ticket-triage
 [r]: /blog/ai-release-notes
-[w]: /#agents
+[w]: /#mcp
