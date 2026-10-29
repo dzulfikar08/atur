@@ -9,6 +9,10 @@ on:
     branches: [feat/native-direct]
     paths: [".github/scroll-trigger"]
   workflow_dispatch:
+    inputs:
+      cpu_load:
+        description: "Busy loops on the emulator during the scroll (a slow phone); 0 for none"
+        default: "0"
 
 concurrency:
   group: native-direct-scroll-${{ github.ref }}
@@ -144,6 +148,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         env:
           ATUR_E2E_PHASES: "4"
+          ATUR_E2E_CPU_LOAD: ${{ inputs.cpu_load || '0' }}
         with:
           api-level: 34
           arch: x86_64

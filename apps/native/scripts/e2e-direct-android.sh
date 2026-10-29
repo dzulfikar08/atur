@@ -34,7 +34,8 @@
 # every UI check.
 #
 # ATUR_E2E_PHASES selects the phases to run (default 1234; the lean scroll workflow sets 4). A phase
-# that is not selected counts as passed.
+# that is not selected counts as passed. ATUR_E2E_CPU_LOAD=<n> keeps <n> busy loops running on the
+# device during phase 4, to see scrolling on a device that is short of CPU (a slow phone).
 set -uo pipefail
 
 APK="$1" LINK="$2" PORT="$3" OUT="$4" SERVER_DIR="$5"
@@ -296,6 +297,23 @@ wait_scroll_line() {
   return 1
 }
 
+# Busy loops on the device, one per unit of ATUR_E2E_CPU_LOAD; stopped with the device shell's job.
+LOAD_PIDS=()
+start_load() {
+  local i
+  for ((i = 0; i < ${ATUR_E2E_CPU_LOAD:-0}; i++)); do
+    adb shell 'while :; do :; done' &
+    LOAD_PIDS+=($!)
+  done
+  [ ${#LOAD_PIDS[@]} -gt 0 ] && echo "host: ${#LOAD_PIDS[@]} busy loops on the device"
+  return 0
+}
+stop_load() {
+  [ ${#LOAD_PIDS[@]} -gt 0 ] && kill "${LOAD_PIDS[@]}" 2>/dev/null
+  adb shell 'pkill -f "while :; do :; done"' 2>/dev/null
+  return 0
+}
+
 phase4() {
   PHASE_LABEL="phase 4" PHASE_FILE="$PHASE4" PHASE_SHOT=phase4
   must "ask the server for a fourth pairing link (10.0.2.2)" \
@@ -312,6 +330,7 @@ phase4() {
   # While rows scroll in at 10 Hz the UI never idles and uiautomator cannot dump it: the bottom is
   # proven by the screenshot and the scenario's data checks; the frozen, scrolled-up view is dumped.
   sleep 5
+  start_load
   shot phase4-bottom
   must "12 swipes of 70% of the screen go back at least 400 rows, and the rows then stay put for 5 s of live output" \
     ui scroll-up 12 400 5 || return 1
@@ -329,6 +348,7 @@ PHASE4_STATUS=0
 if want 4; then
   phase4
   PHASE4_STATUS=$?
+  stop_load
   if [ $PHASE4_STATUS -eq 0 ]; then
     echo "PASS phase 4" | tee -a "$PHASE4"
   fi
