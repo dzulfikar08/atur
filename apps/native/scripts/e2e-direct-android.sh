@@ -110,8 +110,17 @@ open_link() {
   adb shell am start -a android.intent.action.VIEW -p "$PACKAGE" -d "'$link2'" >/dev/null
 }
 
+# One key at a time: the soft keyboard's composing text doubles characters when `input text` injects
+# a whole string faster than the app's text field settles.
 type_command() {
-  adb shell input text 'echo%stap-pair-ok' && adb shell input keyevent 66
+  local command='echo tap-pair-ok' char i
+  for ((i = 0; i < ${#command}; i++)); do
+    char="${command:i:1}"
+    [ "$char" = " " ] && char='%s'
+    adb shell input text "$char" || return 1
+    sleep 0.25
+  done
+  adb shell input keyevent 66
 }
 
 phase2() {
