@@ -52,14 +52,15 @@ def adb(*args: str) -> str:
 
 def nodes():
     """The nodes of the current screen: text, description, enabled, bounds."""
-    for _ in range(3):
+    # uiautomator waits for an idle UI and gives up while rows scroll in at 10 Hz: try again.
+    for _ in range(12):
         adb("shell", "uiautomator", "dump", REMOTE)
         xml = adb("exec-out", "cat", REMOTE)
         try:
             root = ET.fromstring(xml)
             break
         except ET.ParseError:
-            time.sleep(1)
+            time.sleep(0.5)
     else:
         return []
     found = []
@@ -257,7 +258,7 @@ def jump_to_bottom() -> None:
     with open(SCROLL_STATE) as state:
         before = json.load(state)
     tap("Jump to bottom", 20)
-    deadline = time.time() + 30
+    deadline = time.time() + 120
     while True:
         found = nodes()
         rows = numbered(found)

@@ -348,6 +348,11 @@ export async function runLossyE2E(link: string, say: Say): Promise<E2EReport> {
         samples.push(Date.now() - started);
         await sleep(LOSSY_KEY_GAP_MS);
       }
+      const stats = await live()?.echoStats(session.id);
+      say(
+        `${TAG} METRIC echo_detail_${mode}=first=${samples.slice(0, 6).join("/")} ` +
+          `stats=${JSON.stringify(stats ?? null)}`,
+      );
       pane.sendInput("\u0004");
       await sleep(3000);
       return summarize(samples);
