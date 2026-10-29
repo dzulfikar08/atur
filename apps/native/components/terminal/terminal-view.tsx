@@ -78,10 +78,15 @@ export function TerminalView({
   // Newest row first, for an inverted list: offset 0 is the bottom of the pane,
   // so rows changing, appearing or going at the bottom while an agent streams
   // need no scroll correction at all. Keys: a scrollback row keeps
-  // historyBase + index (appends below it never shift it); live rows are keyed
-  // by grid row. The scrollback items are built only when scrollback changes, and a
-  // live item is reused while its row is unchanged: a frame (ten a second while an
-  // agent prints) then touches only the rows that changed instead of every cell.
+  // historyBase + index (appends below it never shift it); a live row is keyed by its
+  // distance from the bottom of the grid, so the grid growing or shrinking (the pane is laid
+  // out at the phone's size after it opens) adds or removes cells above the bottom row and the
+  // bottom row stays the same cell: keyed from the top, the cell that was the bottom row ends
+  // up 20 rows above it, and the list keeps *that* one in place, which leaves the reader that
+  // far from the bottom, with nothing following the output.
+  // The scrollback items are built only when scrollback changes, and a live item is reused
+  // while its row is unchanged: a frame (ten a second while an agent prints) then touches only
+  // the rows that changed instead of every cell.
   const historyItems = useMemo(() => {
     const items: Row[] = [];
     for (let j = history.length - 1; j >= 0; j--) {
@@ -93,14 +98,19 @@ export function TerminalView({
   const rows = useMemo(() => {
     const previous = liveItems.current;
     const live: Row[] = [];
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const line = lines[i]!;
-      const kept = previous[lines.length - 1 - i];
-      live.push(kept?.key === `l${i}` && kept.line === line ? kept : { key: `l${i}`, line });
+    for (let fromBottom = 0; fromBottom < lines.length; fromBottom++) {
+      const line = lines[lines.length - 1 - fromBottom]!;
+      const kept = previous[fromBottom];
+      live.push(kept?.line === line ? kept : { key: `l${fromBottom}`, line });
     }
     liveItems.current = live;
     return live.concat(historyItems);
   }, [historyItems, lines]);
+  useEffect(() => scrollTrace("grid_rows", { n: lines.length }), [lines.length]);
+  useEffect(
+    () => scrollTrace("history_rows", { n: history.length, base: historyBase }),
+    [history, historyBase],
+  );
   const stick = useRef(true);
   /** Scrolled away from the bottom: the jump button shows and nothing follows the output. */
   const [away, setAway] = useState(false);

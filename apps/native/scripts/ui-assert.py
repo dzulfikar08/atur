@@ -216,10 +216,22 @@ def scroll_up(swipes: int, min_rows: int, hold: float) -> None:
     bottom = max(place(r) for r in start)
     bottom_live = newest_live(start)
     print(f"ok: the bottom shows rows up to place {bottom} (live-{bottom_live})")
+    if any(has(n, "Jump to bottom") for n in found):
+        fail(
+            "before any swipe the view is already away from the bottom (the jump button is shown): "
+            "it did not follow the output",
+            found,
+        )
+    print("ok: the view is at the bottom before the swipes (no jump button)")
     for _ in range(swipes):
         swipe_back(width, height)
         time.sleep(0.4)
     time.sleep(2.5)
+    # For the record: what a dump taken while the output runs says (it has been seen to show the
+    # view as it was before the swipes).
+    live_rows = numbered(nodes())
+    if live_rows:
+        metric("scroll_rows_reached_unfrozen_dump", bottom - min(place(r) for r in live_rows))
     found = frozen_nodes()
     seen = numbered(found)
     if not seen:
