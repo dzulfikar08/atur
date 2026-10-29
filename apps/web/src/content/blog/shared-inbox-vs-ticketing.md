@@ -25,7 +25,7 @@ The deeper problem is history. A shared inbox remembers conversations only as em
 
 ## What ticketing adds
 
-A ticketing system does not just name conversations — it names them, assigns them, ages them, and counts the misses. The real win is not the column on a board but the audit trail: every handoff is recorded, every SLA is timestamped, and every reply is tied to a customer record that survives staff changes.
+A ticketing system does not just name conversations: it names them, assigns them, ages them, and counts the misses. The real win is not the column on a board but the audit trail: every handoff is recorded, every SLA is timestamped, and every reply is tied to a customer record that survives staff changes.
 
 States let a team signal "in progress" or "waiting on customer" without an email to the group. Assignment removes the need for "who owns this" threads. Per-customer history means the third responder does not need to ask, "Has this customer already paid?" SLAs make breaches visible before they become complaints rather than a footnote in a retrospective.
 

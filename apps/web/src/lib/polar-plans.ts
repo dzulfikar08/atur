@@ -3,8 +3,9 @@
 // With POLAR_ACCESS_TOKEN set (an organization access token with products:read
 // for joyo-digitama-solusi), the build fetches both products, fails if either
 // is archived or no longer a single monthly USD price, and refreshes
-// src/data/polar-plans.json. Without a token (CI, forks) it uses that snapshot,
-// so the committed file is always what the last real build saw.
+// apps/app/src/shared/atur-plans.json, which the app's /billing page also
+// imports. Without a token (CI, forks) it uses that file, so the committed
+// copy is always what the last real build saw.
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -25,7 +26,7 @@ const PRODUCT_IDS: Record<PlanKey, string> = {
 
 // Resolved from the app root (astro build runs in apps/web); import.meta.url
 // points into the bundle at build time.
-const SNAPSHOT = resolve("src/data/polar-plans.json");
+const SNAPSHOT = resolve("../app/src/shared/atur-plans.json");
 
 interface PolarPrice {
   amount_type: string;
@@ -76,7 +77,9 @@ async function loadPlans(): Promise<Record<PlanKey, Plan>> {
   const token = import.meta.env?.POLAR_ACCESS_TOKEN ?? process.env.POLAR_ACCESS_TOKEN;
   const snapshot = await readFile(SNAPSHOT, "utf8");
   if (!token) {
-    console.warn("[polar-plans] POLAR_ACCESS_TOKEN not set: using src/data/polar-plans.json");
+    console.warn(
+      "[polar-plans] POLAR_ACCESS_TOKEN not set: using apps/app/src/shared/atur-plans.json",
+    );
     return JSON.parse(snapshot);
   }
   const plans = { solo: await fetchPlan(token, "solo"), team: await fetchPlan(token, "team") };
@@ -84,7 +87,7 @@ async function loadPlans(): Promise<Record<PlanKey, Plan>> {
   if (fresh !== snapshot) {
     await writeFile(SNAPSHOT, fresh);
     console.warn(
-      "[polar-plans] prices changed in Polar: refreshed src/data/polar-plans.json, commit it",
+      "[polar-plans] prices changed in Polar: refreshed apps/app/src/shared/atur-plans.json, commit it",
     );
   }
   return plans;

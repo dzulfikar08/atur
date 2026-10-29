@@ -79,25 +79,16 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
       <div class="lp-demo-col-main">
         <div class="lp-demo-top" aria-hidden="true">
           <p class="lp-demo-crumb" data-crumb>{tabs[0].crumb}</p>
-          <p class="lp-demo-search"><Icon name="search" size={13} />Search...</p>
           <p class="lp-demo-mhead m-only">
-            <span class="lp-demo-wsw"><span>A</span><i class="lp-demo-chev"></i></span>
-            <span class="lp-demo-mbtns"><span class="lp-demo-sq"><Icon name="search" size={16} /></span><span class="lp-demo-user">DU</span></span>
+            <span class="lp-demo-wsw"><span>A</span>atur</span>
+            <span class="lp-demo-mbtns"><span class="lp-demo-user">DU</span></span>
           </p>
         </div>
 
         <div class="lp-demo-main">
           <section id="demo-board" role="tabpanel" aria-labelledby="demo-tab-board" class="lp-demo-panel lp-demo-board-panel">
             <div class="lp-demo-toolbar" aria-hidden="true">
-              <p class="lp-demo-views d-only">
-                <span class="on"><Icon name="kanban" size={12} />Board</span>
-                <span><Icon name="checklist" size={12} />List</span>
-                <span><Icon name="table" size={12} />Sheet</span>
-                <span><Icon name="calendar" size={12} />Calendar</span>
-              </p>
-              <p class="lp-demo-tbtns m-only"><span><Icon name="more" size={14} />Filter</span><span><Icon name="timer" size={14} />Sprints</span></p>
-              <p class="lp-demo-agents d-only"><span class="lp-demo-dot"></span>2 agents on this board</p>
-              <p class="lp-demo-new"><Icon name="plus" size={13} /><span>New<span class="d-only"> Issue</span></span></p>
+              <p class="lp-demo-agents"><span class="lp-demo-dot"></span>2 agents on this board</p>
             </div>
             <div class="lp-demo-board">
               {STATES.map((s) => {
@@ -247,7 +238,7 @@ const countOf = (key: string, kind: "comment" | "event") => ISSUES.find((i) => i
               <button type="button" class="lp-demo-take" data-take>Take keyboard</button>
               <span class="lp-demo-badge lp-demo-badge-live">Live</span>
             </div>
-            <p class="lp-demo-ptabs" aria-hidden="true"><span class="on"><Icon name="code" size={13} />Terminal</span><span><Icon name="file" size={13} />Transcript</span></p>
+            <p class="lp-demo-ptabs" aria-hidden="true"><Icon name="terminal" size={13} />Terminal</p>
             <div class="lp-demo-term" role="log" aria-label={`${PANE_ISSUE} agent terminal`} data-term></div>
             <form class="lp-demo-composer" data-composer>
               <label class="sr-only" for="demo-composer-input">Message the agent</label>

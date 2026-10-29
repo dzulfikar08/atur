@@ -21,17 +21,17 @@ The most common pipeline disease is "happy ears": a stage added to capture a fee
 
 A clean B2B set looks like this:
 
-- **Lead** — a real person with a real problem, confirmed by a first call within 48 hours of capture.
-- **Qualified** — budget, authority, need, and timeline all confirmed. No exceptions.
-- **Proposal** — a written scope signed off by the buyer's process owner.
-- **Negotiation** — commercial terms agreed, legal review in flight, no red lines remaining.
-- **Won** or **Lost** — signed contract or a recorded reason for loss.
+- **Lead**: a real person with a real problem, confirmed by a first call within 48 hours of capture.
+- **Qualified**: budget, authority, need, and timeline all confirmed. No exceptions.
+- **Proposal**: a written scope signed off by the buyer's process owner.
+- **Negotiation**: commercial terms agreed, legal review in flight, no red lines remaining.
+- **Won** or **Lost**: signed contract or a recorded reason for loss.
 
 That is five stages, and each one is disputable only by facts, not by optimism.
 
 ## Aging deals and the history trail
 
-A stage is a snapshot; the history of stages is the diagnosis. A deal that sat in "Qualified" for 35 days is sending a signal — the problem may not be urgent enough, or the competition is stronger, or the handoff from marketing was incomplete. A pipeline with no stage history can hide those signals indefinitely.
+A stage is a snapshot; the history of stages is the diagnosis. A deal that sat in "Qualified" for 35 days is sending a signal: the problem may not be urgent enough, or the competition is stronger, or the handoff from marketing was incomplete. A pipeline with no stage history can hide those signals indefinitely.
 
 The hygiene rules: review deals older than 30 days every week, and before any forecast meeting, audit the last stage change for each deal. If the owner cannot state the date, deal, and evidence of the last move, the deal is in the wrong stage.
 
