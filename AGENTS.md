@@ -63,6 +63,8 @@ State UUIDs are needed for `update_issue` (changing status). Label UUIDs are nee
 | Waqtu                 | `waqtu`              |
 | CloudAgni             | `cloudagni`          |
 | JoyoDigitama          | `joyodigitama`       |
+| Joyorogo              | `joyorogo`           |
+| JoyoFit               | `joyofit`            |
 | WeLoveOurBaby         | `weloveourbaby`      |
 | BriefOK               | `briefok`            |
 | WatchFit              | `watchfit`           |
