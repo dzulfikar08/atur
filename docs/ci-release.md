@@ -9,6 +9,9 @@ Store builds run on GitHub Actions, never on the laptop (no Gradle, Xcode or `ex
 
 Both run only on `workflow_dispatch` (tag triggers are commented out at the top of each file) and are bound to the GitHub environment `release`. The existing `ci.yml` (lint, typecheck, tests) is separate and takes no secrets.
 
+On `feat/native-direct` (the phone's direct path, `apps/native/modules/atur-direct`): `native-direct-android-apk.yml` builds an installable arm64 APK with the Rust core and no secrets. Commit a change to `.github/release-apk-trigger` to run it; the artifact `atur-android-arm64-apk` is kept 14 days. It is signed with the Expo template's debug keystore (the `release` environment is closed to this branch), so it cannot be installed over a Play install of `com.diatur.app`.
+There is no TestFlight workflow for the direct build yet: the `release` environment (and the iOS secrets in it) only deploys from `master` and `v*` tags, and `mac-build.sh` needs `modules/atur-direct/scripts/build-core.sh ios` to run first (the core artifacts are git-ignored).
+
 ## Running a release
 
 ```bash
