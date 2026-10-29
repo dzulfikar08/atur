@@ -163,7 +163,13 @@ export async function runDirectE2E(
     say(`${TAG} WAIT background`);
     await waitFor("the app to leave and return", () => appCycles() > cyclesBefore, 180_000);
     await waitFor("connected again", () => directManager.getSnapshot().state === "connected");
-    await waitFor("reattached", () => attached > attachedBefore);
+    // The connection either survived the trip (nothing to attach again) or was dropped after the
+    // grace period and the pane attached on the new one; both must leave a working terminal.
+    await sleep(2000);
+    record(
+      "reattached_after_background",
+      attached > attachedBefore ? "yes" : "no (connection survived)",
+    );
     record(
       "after_background_ms",
       await typeAndSee("echo after-bg-$((1+1))", "after-bg-2", "after background"),
