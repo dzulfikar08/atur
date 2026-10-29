@@ -16,6 +16,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 const plain = (text: string) => text.replace(/\x1b\[[0-9;:?]*[A-Za-z]/g, "");
 
 let rows: string[] = [];
+const seen: string[] = [];
 const waiters = new Set<() => void>();
 const changed = () => {
   for (const waiter of [...waiters]) waiter();
@@ -30,6 +31,7 @@ let keyboard = false;
 
 ws.onmessage = (event) => {
   const msg = JSON.parse(String(event.data)) as Record<string, unknown>;
+  seen.push(`${String(msg.type)}${msg.type === "error" ? `:${String(msg.message)}` : ""}`);
   if (msg.type === "hello" || msg.type === "keyboard") {
     keyboard = (msg.keyboard ?? msg.you) === true || keyboard;
   } else if (msg.type === "snapshot" && typeof msg.ansi === "string") {
@@ -45,9 +47,17 @@ ws.onmessage = (event) => {
   }
 };
 
-function until(check: () => boolean, ms = 15_000): Promise<void> {
+function until(label: string, check: () => boolean, ms = 15_000): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("timed out")), ms);
+    const timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `timed out waiting for ${label}; frames: ${seen.slice(-12).join(",")}; rows: ${JSON.stringify(rows)}`,
+          ),
+        ),
+      ms,
+    );
     const waiter = () => {
       if (!check()) return;
       clearTimeout(timer);
@@ -63,11 +73,11 @@ await new Promise<void>((resolve, reject) => {
   ws.onopen = () => resolve();
   ws.onerror = () => reject(new Error("bridge refused the socket"));
 });
-await until(() => firstSnapshotAt > 0);
+await until("the first snapshot", () => firstSnapshotAt > 0);
 console.log(`bridge attach_ms=${(firstSnapshotAt - started).toFixed(2)}`);
 
 ws.send(JSON.stringify({ type: "claim" }));
-await until(() => keyboard);
+await until("the keyboard", () => keyboard);
 ws.send(JSON.stringify({ type: "input", data: "cat >/dev/null\r" }));
 await sleep(1200);
 
@@ -77,7 +87,7 @@ for (let i = 0; i < samples; i++) {
   typed += "q";
   const sent = performance.now();
   ws.send(JSON.stringify({ type: "input", data: "q" }));
-  await until(() => rows.some((row) => row.includes(typed)));
+  await until(`echo of ${typed.length} keys`, () => rows.some((row) => row.includes(typed)));
   times.push(performance.now() - sent);
   await sleep(25);
 }
