@@ -70,7 +70,7 @@ test("an answer without a transport (an older core) is TLS", async () => {
 });
 
 test("connect exposes the route and the addresses to keep, and ignores what is malformed", async () => {
-  const route = { host: "10.184.172.54", kind: "local", ms: 3.2 };
+  const route = { host: "10.184.172.54", kind: "local" as const, ms: 3.2 };
   const modern = fakeNative({
     serverId: "s",
     serverName: "Desk",
