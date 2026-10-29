@@ -378,7 +378,7 @@ export function uuidText(v: Cbor): string {
 }
 
 export function uuidBytes(hex: string): Uint8Array {
-  if (!/^[0-9a-f]{32}$/.test(hex)) throw new WireError(`not a Muxy uuid: ${hex}`);
+  if (!/^[0-9a-f]{32}$/.test(hex)) throw new WireError(`not an Atur Terminal uuid: ${hex}`);
   const out = new Uint8Array(16);
   for (let i = 0; i < 16; i++) out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   return out;

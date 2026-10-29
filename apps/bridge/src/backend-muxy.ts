@@ -568,7 +568,7 @@ export class MuxyBackend implements PaneBackend {
       this.projects = projects;
       return;
     }
-    throw new Error("the Muxy project catalog kept changing");
+    throw new Error("the Atur Terminal project catalog kept changing");
   }
 
   private async refreshActivity(): Promise<void> {
@@ -926,7 +926,7 @@ export class MuxyBackend implements PaneBackend {
         await conn.request((id) => requests.createProject(id, randomUuid(), created));
       } catch (e) {
         if (e instanceof MuxyServerError && e.code === ErrorCode.BadRequest) {
-          throw new InputError(e.message || "Muxy refused the project");
+          throw new InputError(e.message || "Atur Terminal refused the project");
         }
         throw e;
       }

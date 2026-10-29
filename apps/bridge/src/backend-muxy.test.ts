@@ -666,16 +666,18 @@ describe("MuxyBackend pane list over the protocol", () => {
     const { server, backend } = setup();
     server.hello = { versions: [3], features: [1], version: "9.0.0" };
     await expect(backend.listPanes()).rejects.toThrow(
-      /unsupported Muxy protocol.*Muxy 9\.0\.0.*protocol 3/,
+      /unsupported Atur Terminal protocol.*Atur Terminal 9\.0\.0.*protocol 3/,
     );
-    await expect(backend.pollPanes()).rejects.toThrow(/unsupported Muxy protocol/);
-    await expect(backend.getPane("11")).rejects.toThrow(/unsupported Muxy protocol/);
+    await expect(backend.pollPanes()).rejects.toThrow(/unsupported Atur Terminal protocol/);
+    await expect(backend.getPane("11")).rejects.toThrow(/unsupported Atur Terminal protocol/);
   });
 
   test("a server without server-side terminal input is refused with the fix", async () => {
     const { server, backend } = setup();
     server.hello = { versions: [2], features: [], version: "2.1.0" };
-    await expect(backend.listPanes()).rejects.toThrow(/Muxy 2\.1\.0.*Update Muxy to 2\.2/);
+    await expect(backend.listPanes()).rejects.toThrow(
+      /Atur Terminal 2\.1\.0.*Update Atur Terminal\./,
+    );
   });
 
   test("a server that answers in the old framing reads as unsupported", async () => {
@@ -692,7 +694,7 @@ describe("MuxyBackend pane list over the protocol", () => {
     });
     try {
       const backend = new MuxyBackend({ env: { ATUR_TERM_DIR: dir, HOME: dir } });
-      await expect(backend.listPanes()).rejects.toThrow(/unsupported Muxy protocol/);
+      await expect(backend.listPanes()).rejects.toThrow(/unsupported Atur Terminal protocol/);
       await backend.stop();
     } finally {
       listener.stop(true);

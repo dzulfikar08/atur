@@ -116,7 +116,7 @@ export function muxyKeyEvent(name: string): KeyEvent {
   }
   const key = KEY_ALIASES[rest] ?? rest;
   const printable = [...key].length === 1 && !/[\p{Cc}\p{Cf}\u{f700}-\u{f8ff}]/u.test(key);
-  if (!NAMED_KEYS.has(key) && !printable) throw new Error(`muxy: unsupported key "${name}"`);
+  if (!NAMED_KEYS.has(key) && !printable) throw new Error(`atur-term: unsupported key "${name}"`);
   const plain = (modifiers & ~SHIFT) === 0; // shift alone still types the character
   let text = "";
   if (plain && printable) text = modifiers & SHIFT ? key.toUpperCase() : key;

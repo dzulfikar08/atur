@@ -32,7 +32,7 @@ export class MuxyServerError extends Error {
     message: string,
   ) {
     super(message);
-    this.name = "MuxyServerError";
+    this.name = "AturTerminalServerError";
   }
 }
 
@@ -101,7 +101,7 @@ export class MuxyConnection {
         } else if (message.kind === Kind.Fatal) {
           failHandshake(
             new MuxyUnsupportedError(
-              `Muxy refused the connection: ${parseError(message.fields as Cbor[]).message}`,
+              `Atur Terminal refused the connection: ${parseError(message.fields as Cbor[]).message}`,
             ),
           );
         }
@@ -117,7 +117,7 @@ export class MuxyConnection {
           } catch (e) {
             // A frame this bridge cannot read: the stream cannot be resynchronised.
             const error = e instanceof Error ? e : new Error(String(e));
-            if (connection) connection.shutdown(new WireError(`muxy: ${error.message}`));
+            if (connection) connection.shutdown(new WireError(`atur-term: ${error.message}`));
             else failHandshake(new MuxyUnsupportedError(versionMessage(null)));
             socket.end();
           }
@@ -126,8 +126,8 @@ export class MuxyConnection {
           connection?.flush();
         },
         close() {
-          if (connection) connection.shutdown(new Error("muxy connection closed"));
-          else failHandshake(new Error("muxy connection closed during the handshake"));
+          if (connection) connection.shutdown(new Error("atur-term connection closed"));
+          else failHandshake(new Error("atur-term connection closed during the handshake"));
         },
         error(_socket, error) {
           if (connection) connection.shutdown(error);
@@ -137,7 +137,7 @@ export class MuxyConnection {
     });
 
     const timer = setTimeout(
-      () => failHandshake(new Error("muxy handshake timed out")),
+      () => failHandshake(new Error("atur-term handshake timed out")),
       HANDSHAKE_TIMEOUT_MS,
     );
     try {
@@ -148,7 +148,7 @@ export class MuxyConnection {
       }
       if (!server.features.includes(FEATURE_TERMINAL_INPUT)) {
         throw new MuxyUnsupportedError(
-          `Muxy ${server.version} cannot encode terminal input on the server. Update Muxy to 2.2 or newer.`,
+          `Atur Terminal ${server.version} cannot encode terminal input on the server. Update Atur Terminal.`,
         );
       }
       connection = new MuxyConnection(socket, server, handlers);
@@ -168,19 +168,19 @@ export class MuxyConnection {
       return;
     }
     if (message.channel === CONTROL && message.kind === Kind.Fatal) {
-      this.shutdown(new Error(`muxy: ${parseError(message.fields as Cbor[]).message}`));
+      this.shutdown(new Error(`atur-term: ${parseError(message.fields as Cbor[]).message}`));
       this.socket.end();
       return;
     }
     if (message.kind === Kind.ServerRestarting) {
-      this.shutdown(new Error("muxy server is restarting"));
+      this.shutdown(new Error("atur-term server is restarting"));
       this.socket.end();
       return;
     }
     try {
       this.handlers.onMessage(message);
     } catch (e) {
-      console.error("muxy: handling a pushed message failed:", e);
+      console.error("atur-term: handling a pushed message failed:", e);
     }
   }
 
@@ -213,12 +213,12 @@ export class MuxyConnection {
     sync?: (reply: OkReply) => void,
     timeoutMs: number = REQUEST_TIMEOUT_MS,
   ): Promise<OkReply> {
-    if (this.closed) return Promise.reject(new Error("muxy connection closed"));
+    if (this.closed) return Promise.reject(new Error("atur-term connection closed"));
     const id = this.nextId++;
     const { promise, resolve, reject } = Promise.withResolvers<OkReply>();
     const timer = setTimeout(() => {
       this.pending.delete(id);
-      reject(new Error("muxy request timed out"));
+      reject(new Error("atur-term request timed out"));
     }, timeoutMs);
     this.pending.set(id, { resolve, reject, timer, sync });
     try {
@@ -233,7 +233,7 @@ export class MuxyConnection {
 
   /** Fire and forget (acks, input frames). */
   send(bytes: Uint8Array): void {
-    if (this.closed) throw new Error("muxy connection closed");
+    if (this.closed) throw new Error("atur-term connection closed");
     this.write(bytes);
   }
 
@@ -260,7 +260,7 @@ export class MuxyConnection {
 
   close(): void {
     if (this.closed) return;
-    this.shutdown(new Error("muxy connection closed"));
+    this.shutdown(new Error("atur-term connection closed"));
     this.socket.end();
   }
 
@@ -279,7 +279,7 @@ export class MuxyConnection {
 
 function versionMessage(server: ServerHello | null): string {
   const theirs = server
-    ? `Muxy ${server.version} speaks protocol ${server.versions.join(", ")}`
-    : "this Muxy server is older than protocol 2 or speaks another framing";
-  return `unsupported Muxy protocol: ${theirs}; this bridge speaks protocol ${PROTOCOL_VERSION} (Muxy 2.2). Update the bridge or Muxy.`;
+    ? `Atur Terminal ${server.version} speaks protocol ${server.versions.join(", ")}`
+    : "this Atur Terminal server is older than protocol 2 or speaks another framing";
+  return `unsupported Atur Terminal protocol: ${theirs}; this bridge speaks protocol ${PROTOCOL_VERSION}. Update the bridge or Atur Terminal.`;
 }
