@@ -21,17 +21,38 @@ import {
   Text,
 } from "@/components/ui";
 import { directManager } from "@/lib/direct";
-import { DIRECT_STATE_LABEL, describeDirectError, describeFailure } from "@/lib/direct/describe";
+import {
+  DIRECT_STATE_LABEL,
+  describeAddresses,
+  describeDirectError,
+  describeFailure,
+  describeReroute,
+  describeRoute,
+  describeTransport,
+} from "@/lib/direct/describe";
 import { openableSessions } from "@/lib/direct/session-meta";
 import { useDirect } from "@/lib/direct/use-direct";
 import { useSession } from "@/lib/session";
-import type { EchoMode } from "@/modules/atur-direct/src/types";
+import type { EchoMode, EchoStats, TransportPreference } from "@/modules/atur-direct/src/types";
 
 const ECHO_MODES: { value: EchoMode; label: string }[] = [
   { value: "auto", label: "Auto" },
   { value: "always", label: "Always" },
   { value: "never", label: "Never" },
 ];
+
+const TRANSPORTS: { value: TransportPreference; label: string }[] = [
+  { value: "auto", label: "Auto" },
+  { value: "tls", label: "TLS only" },
+];
+
+const ECHO_LABEL: Record<EchoMode, string> = { auto: "Auto", always: "Always", never: "Never" };
+
+/** "auto · 38 ms · 12 keys, 9 guesses shown and right, 0 wrong": what the predictor did so far. */
+function describeEcho(stats: EchoStats): string {
+  const rtt = stats.rttMs === null ? "no round trip yet" : `${Math.round(stats.rttMs)} ms`;
+  return `${stats.mode} · ${rtt} · ${stats.keys} keys, ${stats.visibleConfirmed} guesses shown and right, ${stats.visibleWrong} shown and wrong`;
+}
 
 /**
  * Settings of the direct path: pair with a computer running Atur Terminal (scan the code it
@@ -50,21 +71,26 @@ export function DirectSettings({ home = false }: { home?: boolean }) {
   const pairing = usePairing({ onPaired: () => setPasted("") });
   const { problem, setProblem, review } = pairing;
 
-  // How the core currently echoes typing; read from any open session, "auto" when none is open.
-  const [echo, setEcho] = useState<EchoMode>("auto");
+  // Live numbers of the predictor, read from any open session; refreshed while the screen is open.
   const link = direct.connection;
   const probe = openableSessions(direct.sessions)[0]?.id;
+  const [stats, setStats] = useState<EchoStats | null>(null);
   useEffect(() => {
+    setStats(null);
     if (!link || !probe) return;
     let stale = false;
-    link
-      .echoStats(probe)
-      .then((stats) => {
-        if (!stale) setEcho(stats.mode);
-      })
-      .catch(() => {});
+    const read = () =>
+      link
+        .echoStats(probe)
+        .then((next) => {
+          if (!stale) setStats(next);
+        })
+        .catch(() => {});
+    void read();
+    const timer = setInterval(() => void read(), 3000);
     return () => {
       stale = true;
+      clearInterval(timer);
     };
   }, [link, probe]);
 
@@ -74,14 +100,30 @@ export function DirectSettings({ home = false }: { home?: boolean }) {
   };
 
   const chooseEcho = async (mode: EchoMode) => {
-    if (!link) return;
-    setEcho(mode);
     try {
-      await link.setEchoMode(mode);
+      await directManager.setEchoMode(mode);
     } catch (error) {
       setProblem(describeDirectError(error));
     }
   };
+
+  const chooseTransport = async (value: TransportPreference) => {
+    try {
+      await directManager.setTransport(value);
+    } catch (error) {
+      setProblem(describeDirectError(error));
+    }
+  };
+
+  const [recheck, setRecheck] = useState<string | null>(null);
+  const recheckRoute = async () => {
+    setRecheck(null);
+    const outcome = await directManager.reroute();
+    setRecheck(describeReroute(outcome, directManager.getSnapshot().connection?.route ?? null));
+  };
+
+  const route = link?.route ?? null;
+  const routeText = describeRoute(route, direct.rttMs);
 
   const confirmForget = () =>
     Alert.alert(
@@ -125,7 +167,32 @@ export function DirectSettings({ home = false }: { home?: boolean }) {
             onPress={() => void directManager.connect()}
           />
         ) : null}
+        {direct.state === "connected" && routeText ? (
+          <ListRow icon="navigate-outline" title="Route" value={routeText} />
+        ) : null}
+        {paired && direct.hosts.length > 0 ? (
+          <ListRow
+            icon="list-outline"
+            title="Addresses"
+            subtitle={`${direct.hosts.length} known, tried together`}
+          />
+        ) : null}
       </ListGroup>
+      {paired && direct.hosts.length > 0 ? (
+        <Text style={styles.hint}>{describeAddresses(direct.hosts, route?.host ?? null)}</Text>
+      ) : null}
+      {direct.state === "connected" ? (
+        <View style={styles.form}>
+          <Button
+            variant="secondary"
+            icon="navigate-outline"
+            label="Re-check route"
+            loading={direct.rerouting}
+            onPress={() => void recheckRoute()}
+          />
+          {recheck ? <Text style={styles.hint}>{recheck}</Text> : null}
+        </View>
+      ) : null}
       {direct.error && direct.state !== "connected" ? (
         <ErrorNote error={describeFailure(direct.error)} />
       ) : null}
@@ -183,13 +250,33 @@ export function DirectSettings({ home = false }: { home?: boolean }) {
             />
           </ListGroup>
 
+          <SectionTitle title="Transport" />
+          <View style={styles.chips}>
+            {TRANSPORTS.map((choice) => (
+              <Chip
+                key={choice.value}
+                label={choice.label}
+                selected={direct.transportPreference === choice.value}
+                onPress={() => void chooseTransport(choice.value)}
+              />
+            ))}
+          </View>
+          <Text style={styles.hint}>
+            {link
+              ? `In use: ${describeTransport(link.transport, link.udpNote)}. `
+              : "Not connected. "}
+            Auto starts on TLS and moves to UDP when the computer offers it, which rides out lossy
+            Wi-Fi better. TLS only never uses UDP.
+          </Text>
+
           <SectionTitle title="Local echo" />
+          <Text style={styles.value}>{`Local echo: ${ECHO_LABEL[direct.echoMode]}`}</Text>
           <View style={styles.chips}>
             {ECHO_MODES.map((mode) => (
               <Chip
                 key={mode.value}
                 label={mode.label}
-                selected={echo === mode.value}
+                selected={direct.echoMode === mode.value}
                 onPress={() => void chooseEcho(mode.value)}
               />
             ))}
@@ -197,8 +284,8 @@ export function DirectSettings({ home = false }: { home?: boolean }) {
           <Text style={styles.hint}>
             Shows what you type before the computer confirms it. Auto turns it on while the
             connection is slow.
-            {link ? "" : " Connect to change it."}
           </Text>
+          {stats ? <Text style={styles.hint}>{describeEcho(stats)}</Text> : null}
 
           <ListGroup>
             <ListRow
@@ -240,5 +327,6 @@ export function DirectSettings({ home = false }: { home?: boolean }) {
 const styles = StyleSheet.create((theme) => ({
   form: { gap: theme.spacing.md },
   chips: { flexDirection: "row", gap: theme.spacing.sm },
+  value: { fontSize: theme.fontSize.base, fontFamily: theme.fonts.bold },
   hint: { fontSize: theme.fontSize.sm, color: theme.colors.mutedForeground },
 }));

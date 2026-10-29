@@ -92,3 +92,51 @@ test("prefer-direct is unset until chosen, then remembered", async () => {
   await prefs.savePreferDirect(true);
   expect(await prefs.loadPreferDirect()).toBe(true);
 });
+
+test("updateHosts replaces only the addresses and keeps the rest and the position", async () => {
+  const storage = memoryStorage();
+  const store = createCredentialStore(storage);
+  await store.save(credential("a"));
+  await store.save(credential("b"));
+
+  expect(await store.updateHosts("a", ["10.184.172.228", "100.64.0.1", "desk.local"])).toBe(true);
+  const updated = await store.load("a");
+  expect(updated).toEqual({
+    ...credential("a"),
+    hosts: ["10.184.172.228", "100.64.0.1", "desk.local"],
+  });
+  // `a` was saved first and stays second: the newest saved computer is still `b`.
+  expect(await store.serverIds()).toEqual(["b", "a"]);
+  expect((await store.load("b"))?.hosts).toEqual(credential("b").hosts);
+});
+
+test("updateHosts leaves a credential alone when there is nothing to change", async () => {
+  const storage = memoryStorage();
+  const store = createCredentialStore(storage);
+  await store.save(credential("a"));
+  const before = storage.data.get("direct.credential.a");
+
+  expect(await store.updateHosts("a", credential("a").hosts)).toBe(false);
+  expect(await store.updateHosts("a", [])).toBe(false);
+  expect(await store.updateHosts("a", ["", "  "])).toBe(false);
+  expect(await store.updateHosts("missing", ["10.0.0.1"])).toBe(false);
+  expect(storage.data.get("direct.credential.a")).toBe(before);
+  expect(storage.data.has("direct.credential.missing")).toBe(false);
+});
+
+test("updateHosts keeps each address once and at most eight, in the order given", async () => {
+  const store = createCredentialStore(memoryStorage());
+  await store.save(credential("a"));
+  const many = Array.from({ length: 12 }, (_, i) => `10.0.0.${i + 1}`);
+  expect(await store.updateHosts("a", [" Desk.local ", "desk.LOCAL", ...many])).toBe(true);
+  expect((await store.load("a"))?.hosts).toEqual(["Desk.local", ...many.slice(0, 7)]);
+});
+
+test("updateHosts fails loudly when the keystore drops the write", async () => {
+  const inner = memoryStorage();
+  const store = createCredentialStore(inner);
+  await store.save(credential("a"));
+  const lossy = createCredentialStore({ ...inner, setItem: async () => {} });
+  await expect(lossy.updateHosts("a", ["10.0.0.1"])).rejects.toThrow();
+  expect((await store.load("a"))?.hosts).toEqual(credential("a").hosts);
+});

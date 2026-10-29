@@ -3,8 +3,11 @@ import { describe, expect, test } from "bun:test";
 import { findLinks, linkAtCell } from "./terminal-links";
 import {
   HISTORY_FULL_LINES,
+  HISTORY_MAX_LINES,
+  HISTORY_OLDER_STEP,
   HISTORY_TOP_UP_LINES,
   rowsAfter,
+  rowsBefore,
   TerminalScreen,
   type ScreenFrame,
 } from "./terminal-screen";
@@ -105,6 +108,139 @@ describe("scrollback", () => {
     expect(rowsAfter(["x", "y"], ["x", "y", "z", "x", "y", "w"])).toEqual(["w"]);
     expect(rowsAfter(["x", "y"], ["p", "q"])).toBeNull();
     expect(rowsAfter([], ["p"])).toBeNull();
+  });
+
+  test("rowsAfter from the start takes the earliest match: blank rows could match anywhere", () => {
+    const incoming = ["a", "", "", "b", "", "", "c"];
+    expect(rowsAfter(["", ""], incoming)).toEqual(["c"]);
+    expect(rowsAfter(["", ""], incoming, true)).toEqual(["b", "", "", "c"]);
+  });
+
+  test("rowsBefore finds where the loaded rows sit inside a longer, later window", () => {
+    expect(rowsBefore(["c", "d"], ["a", "b", "c", "d", "e"])).toBe(2);
+    expect(rowsBefore(["c", "d"], ["c", "d"])).toBe(0);
+    // Loaded rows longer than the match length: the first and the last rows must both line up.
+    const loaded = Array.from({ length: 100 }, (_, i) => `r${i}`);
+    expect(rowsBefore(loaded, ["old1", "old2", ...loaded, "new1"])).toBe(2);
+    expect(rowsBefore(loaded, [...loaded.slice(0, 50), "other", ...loaded.slice(51)])).toBeNull();
+    // The window does not reach back to them, or they are gone.
+    expect(rowsBefore(["c", "d"], ["d", "e"])).toBeNull();
+    expect(rowsBefore(["c", "d"], ["x"])).toBeNull();
+    expect(rowsBefore([], ["x"])).toBeNull();
+  });
+});
+
+/** `n` numbered scrollback rows, row `from` first. */
+function rowsNumbered(from: number, n: number): string[] {
+  return Array.from({ length: n }, (_, i) => `row${from + i}`);
+}
+
+describe("paged scrollback", () => {
+  /** A screen whose first read (`HISTORY_FULL_LINES`) is the newest rows 1500..2499 plus the grid. */
+  function loaded() {
+    const { screen, asked } = wired("g1\r\ng2");
+    screen.loadHistory("full");
+    screen.setHistory([...rowsNumbered(1500, 998), "g1", "g2"], 2);
+    return { screen, asked };
+  }
+
+  test("loadOlder reads a longer window and puts the older rows above, keeping identities", () => {
+    const { screen, asked } = loaded();
+    const before = screen.getState();
+    expect(before.history).toHaveLength(998);
+    // The pane has more than it was asked for, so the first read does not say "start reached".
+    screen.loadOlder();
+    expect(asked.at(-1)).toBe(998 + 2 + Math.max(HISTORY_OLDER_STEP, 998));
+
+    // Rows 1500..2497 are loaded; meanwhile 2 more scrolled into the scrollback (up to row 2499).
+    const window = [...rowsNumbered(500, 2000), "g1", "g2"];
+    screen.setHistory(window, 2);
+    const after = screen.getState();
+    expect(after.history).toEqual(rowsNumbered(500, 2000));
+    // row1500 was history[0] under key base; it still is, at index 1000 of the new history.
+    expect(after.history[1000]).toBe("row1500");
+    expect(after.historyBase + 1000).toBe(before.historyBase);
+  });
+
+  test("loadOlder stops once a read comes back shorter than asked: the start is loaded", () => {
+    const { screen, asked } = loaded();
+    screen.loadOlder();
+    const asking = asked.at(-1)!;
+    // The pane only has 1200 rows altogether.
+    screen.setHistory([...rowsNumbered(1300, 1198), "g1", "g2"], 2);
+    expect(asking).toBeGreaterThan(1200);
+    const count = asked.length;
+    screen.loadOlder();
+    screen.loadOlder();
+    expect(asked).toHaveLength(count);
+  });
+
+  test("loadOlder never asks for more than the cap, and not at all once it is loaded", () => {
+    const { screen, asked } = wired("g");
+    screen.loadHistory("full");
+    // Cap-sized read: every row it asked for came back.
+    screen.setHistory([...rowsNumbered(0, HISTORY_FULL_LINES - 1), "g"], 1);
+    for (let i = 0; i < 12; i++) {
+      screen.loadOlder();
+      const asking = asked.at(-1)!;
+      expect(asking).toBeLessThanOrEqual(HISTORY_MAX_LINES);
+      screen.setHistory([...rowsNumbered(0, asking - 1), "g"], 1);
+    }
+    const count = asked.length;
+    screen.loadOlder();
+    expect(asked).toHaveLength(count);
+    expect(asked.at(-1)).toBe(HISTORY_MAX_LINES);
+  });
+
+  test("one older read at a time; asking again meanwhile waits for the reply", () => {
+    const { screen, asked } = loaded();
+    screen.loadOlder();
+    screen.loadOlder();
+    screen.loadOlder();
+    expect(asked).toHaveLength(2);
+  });
+
+  test("an older read that cannot be placed replaces the rows with fresh identities", () => {
+    const { screen } = loaded();
+    const before = screen.getState();
+    screen.loadOlder();
+    // The scrollback was rewritten (cleared and printed again): none of the loaded rows is in it.
+    screen.setHistory([...rowsNumbered(9000, 3000), "g1", "g2"], 2);
+    const after = screen.getState();
+    expect(after.history).toHaveLength(3000);
+    expect(after.historyBase).toBeGreaterThan(before.historyBase + before.history.length);
+  });
+
+  test("a top-up after older rows came in appends below them", () => {
+    const { screen, asked } = loaded();
+    screen.loadOlder();
+    screen.setHistory([...rowsNumbered(500, 2000), "g1", "g2"], 2);
+    const base = screen.getState().historyBase;
+    screen.loadHistory("top-up");
+    expect(asked.at(-1)).toBe(HISTORY_TOP_UP_LINES);
+    // Three rows more scrolled off since: rows 2500..2502.
+    screen.setHistory([...rowsNumbered(2105, 398), "g1", "g2"], 2);
+    const after = screen.getState();
+    expect(after.history).toHaveLength(2003);
+    expect(after.history.at(-1)).toBe("row2502");
+    expect(after.historyBase).toBe(base);
+  });
+
+  test("a failed read frees the slot", () => {
+    const { screen, asked } = loaded();
+    screen.loadOlder();
+    expect(asked).toHaveLength(2);
+    screen.historyFailed();
+    screen.loadOlder();
+    expect(asked).toHaveLength(3);
+  });
+
+  test("a full read after loading asks for a window that reaches back over what is loaded", () => {
+    const { screen, asked } = loaded();
+    screen.loadOlder();
+    screen.setHistory([...rowsNumbered(500, 2000), "g1", "g2"], 2);
+    screen.loadHistory("full");
+    expect(asked.at(-1)).toBe(2000 + 2 + HISTORY_TOP_UP_LINES);
   });
 });
 

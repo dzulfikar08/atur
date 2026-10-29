@@ -1,5 +1,11 @@
-import type { DirectFailure, DirectState } from "@/lib/direct/manager";
-import { DirectError, type DirectErrorCode } from "@/modules/atur-direct/src/types";
+import type { DirectFailure, DirectState, RerouteOutcome } from "@/lib/direct/manager";
+import {
+  DirectError,
+  type DirectErrorCode,
+  type DirectRoute,
+  type DirectTransport,
+  type RouteKind,
+} from "@/modules/atur-direct/src/types";
 
 // Words for the direct connection's states and failures, for the settings screen and the
 // profile row. Never includes the pairing link or the credential: a core `reason` is shown only
@@ -43,3 +49,57 @@ export const DIRECT_STATE_LABEL: Record<DirectState, string> = {
   "needs-pairing": "Pair again",
   incompatible: "Needs an update",
 };
+
+/** "Direct UDP · 38 ms": the pane header's badge for a direct pane. */
+export function directBadgeLabel(
+  transport: DirectTransport | null | undefined,
+  rttMs: number | null,
+): string {
+  const base = transport ? `Direct ${transport.toUpperCase()}` : "Direct";
+  return rttMs === null ? base : `${base} · ${rttMs} ms`;
+}
+
+/** The settings line for the transport in use: "UDP", or "TLS (older server)" after a fallback. */
+export function describeTransport(transport: DirectTransport, udpNote: string): string {
+  const name = transport.toUpperCase();
+  return transport === "tls" && udpNote ? `${name} (${udpNote})` : name;
+}
+
+const ROUTE_LABEL: Record<RouteKind, string> = {
+  local: "Local",
+  tailscale: "Tailscale",
+  other: "Other",
+};
+
+/**
+ * "Local · 3 ms", "Tailscale · 120 ms": which way the connection goes and how long a round trip
+ * takes. `liveMs` (the latest ping) replaces the time the connection took to set up once there is
+ * one. Null for a core that reports no route.
+ */
+export function describeRoute(
+  route: DirectRoute | null | undefined,
+  liveMs: number | null,
+): string | null {
+  if (!route) return null;
+  const ms = liveMs ?? route.ms;
+  return `${ROUTE_LABEL[route.kind]} · ${ms < 1 ? "<1" : Math.round(ms)} ms`;
+}
+
+/** The known addresses, one per line, with the one in use marked; hosts only, nothing secret. */
+export function describeAddresses(hosts: readonly string[], inUse: string | null): string {
+  return hosts.map((host) => (host === inUse ? `${host} (in use)` : host)).join("\n");
+}
+
+/** What the "Re-check route" button tells after it ran. */
+export function describeReroute(outcome: RerouteOutcome, route: DirectRoute | null): string {
+  switch (outcome) {
+    case "swapped":
+      return route ? `Switched to a faster route (${ROUTE_LABEL[route.kind]}).` : "Switched route.";
+    case "kept":
+      return "Already on the best route this phone can find.";
+    case "failed":
+      return "Could not open a second connection to compare. Staying on this one.";
+    case "skipped":
+      return "Not connected.";
+  }
+}

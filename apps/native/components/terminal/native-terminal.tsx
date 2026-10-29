@@ -56,7 +56,9 @@ export function NativeTerminal({
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const [box, setBox] = useState({ width: 0, height: 0 });
   const width = box.width;
-  const { cols } = useSyncExternalStore(screen.subscribe, screen.getState);
+  // Only the width: the whole state changes with every frame, and the keyboard, the composer and
+  // the key row have no business re-rendering ten times a second while an agent prints.
+  const cols = useSyncExternalStore(screen.subscribe, () => screen.getState().cols);
   const [mods, setMods] = useState<Modifiers>({ ctrl: false, alt: false });
   const input = useRef<TextInput>(null);
 
@@ -93,6 +95,7 @@ export function NativeTerminal({
   }, [canType, box.width, paneHeight, fontSize, requestResize]);
 
   const loadMoreHistory = useCallback(() => screen.loadHistory(), [screen]);
+  const loadOlderHistory = useCallback(() => screen.loadOlder(), [screen]);
 
   /** Send data with any armed Ctrl/Alt folded in, then disarm them. */
   const send = (data: string) => {
@@ -143,6 +146,7 @@ export function NativeTerminal({
       >
         <TerminalView
           onScrollBack={loadMoreHistory}
+          onNearTop={loadOlderHistory}
           onSelectText={onSelectText}
           screen={screen}
           fontSize={fontSize}

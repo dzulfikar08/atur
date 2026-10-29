@@ -33,6 +33,9 @@ class AturDirectModule : Module() {
   private val connections = ConcurrentHashMap<String, Direct>()
   private val workerDispatcher = Executors.newCachedThreadPool().asCoroutineDispatcher()
   private val callDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+  // Scrollback reads are many page round trips on the computer: on their own thread (and in their
+  // own order), so they never hold up attach, detach, the session list or the latency ping.
+  private val historyDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
 
   override fun definition() =
     ModuleDefinition {
@@ -75,7 +78,7 @@ class AturDirectModule : Module() {
       }
 
       AsyncFunction("call") Coroutine { id: String, method: String, argsJson: String ->
-        withContext(callDispatcher) {
+        withContext(if (method == "history") historyDispatcher else callDispatcher) {
           guarded {
             val direct = connections[id]
             if (direct == null) UNKNOWN_CONNECTION else direct.call(method, argsJson)

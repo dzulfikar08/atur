@@ -16,8 +16,9 @@ permissions:
   contents: read
 
 env:
-  # The headless build the isolated test server comes from: any release with this protocol works.
-  SERVER_RELEASE: atur-v2.2.0-2
+  # The checkout of atur-terminal at the commit in core.ref: the Rust core is built from it and so
+  # is the isolated test server, so both speak the same protocol (including the UDP offer).
+  ATUR_CORE_CACHE: /tmp/atur-terminal-core
 
 jobs:
   gates:
@@ -34,7 +35,52 @@ jobs:
       - run: bun run typecheck
       - run: bun run test
 
+  server:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      LIBGHOSTTY_VT_SYS_OPTIMIZE: ReleaseFast
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out atur-terminal at the commit pinned in core.ref
+        id: core
+        run: |
+          REF="$(tr -d '[:space:]' < apps/native/modules/atur-direct/core.ref)"
+          git clone --quiet https://github.com/dzulfikar08/atur-terminal.git "$ATUR_CORE_CACHE"
+          git -C "$ATUR_CORE_CACHE" fetch --quiet origin "$REF" 2>/dev/null || git -C "$ATUR_CORE_CACHE" fetch --quiet origin
+          git -C "$ATUR_CORE_CACHE" checkout --quiet --detach "$REF"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+      - run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.ATUR_CORE_CACHE }}
+          key: server-${{ steps.core.outputs.ref }}
+          cache-on-failure: true
+      - name: Point the build at the pinned Zig through the baseline-CPU wrapper
+        run: |
+          echo "ATUR_TERM_ZIG=$(command -v zig)" >> "$GITHUB_ENV"
+          echo "$ATUR_CORE_CACHE/scripts/zig" >> "$GITHUB_PATH"
+      - name: Build the server and the command-line client
+        working-directory: ${{ env.ATUR_CORE_CACHE }}
+        run: |
+          cargo build --release --locked -p muxy-server -p muxy-cli
+          mkdir -p "$RUNNER_TEMP/atur-term-bins"
+          install -m 755 target/release/atur-term target/release/atur-term-server "$RUNNER_TEMP/atur-term-bins/"
+          ls -la "$RUNNER_TEMP/atur-term-bins"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atur-term-bins
+          path: ${{ runner.temp }}/atur-term-bins
+          if-no-files-found: error
+
   android-e2e:
+    needs: server
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -68,7 +114,6 @@ jobs:
       - name: Build the Rust core for the emulator (x86_64)
         env:
           ATUR_ANDROID_ABIS: x86_64
-          ATUR_CORE_CACHE: /tmp/atur-terminal-core
         run: |
           cargo install cargo-ndk --locked --version 4.1.2
           export ANDROID_NDK_HOME="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_ROOT}"
@@ -89,13 +134,24 @@ jobs:
             -Pandroid.enableMinifyInReleaseBuilds=true
           ls -la app/build/outputs/apk/release/
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: atur-term-bins
+          path: ${{ runner.temp }}/atur-term-bins
+
       - name: Start an isolated Atur Terminal server and print a pairing link
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           S=apps/native/scripts/start-test-server.sh
-          "$S" start "$RUNNER_TEMP/atur-server" 7600
+          "$S" start "$RUNNER_TEMP/atur-server" "$RUNNER_TEMP/atur-term-bins" 7600
           "$S" pair "$RUNNER_TEMP/atur-server" 10.0.2.2 "$RUNNER_TEMP/link.txt"
+
+      - name: Traffic shaping modules for the lossy-link phase
+        run: |
+          sudo apt-get install -y --no-install-recommends "linux-modules-extra-$(uname -r)" || true
+          sudo modprobe sch_netem
+          sudo modprobe sch_prio
+          sudo modprobe cls_u32
+          command -v tc
 
       - name: Enable KVM
         run: |
@@ -127,6 +183,15 @@ jobs:
             echo '```'
             grep -h -E '^(phase 2:|ok:|PASS|FAIL)' e2e-out/phase2.txt 2>/dev/null || echo 'phase 2 did not run'
             echo '```'
+            echo 'Phase 3, the same APK on a lossy link (tc netem on the TLS and the UDP port: 400 ms +- 200 ms and 5% loss each way, about 800 ms round trip), TLS against UDP, then a 10 s outage:'
+            echo '```'
+            grep -h -E 'ATUR_E2E (METRIC|RESULT|FAILURE|STEP)' e2e-out/lossy-lines.txt 2>/dev/null || echo 'phase 3 did not run'
+            echo '```'
+            echo 'Phase 4, scrolling back in a pane that prints all the time (2500 numbered rows, then one live row per 100 ms): the whole scrollback in order through the pane code, then 12 swipes of 70% of the screen on the pane screen, the rows holding still for 5 s of live output, the start of the scrollback in reach, and the jump-to-bottom button:'
+            echo '```'
+            grep -h -E 'ATUR_E2E (METRIC|RESULT|FAILURE|STEP)' e2e-out/scroll-lines.txt 2>/dev/null || echo 'phase 4 did not run'
+            grep -h -E '^(phase 4:|ok:|PASS|FAIL)' e2e-out/phase4.txt 2>/dev/null || true
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
@@ -140,6 +205,7 @@ jobs:
             apps/native/android/app/build/outputs/mapping/release/mapping.txt
 
   bridge-latency:
+    needs: server
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -148,11 +214,13 @@ jobs:
         with:
           bun-version: 1.4.4
       - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: atur-term-bins
+          path: ${{ runner.temp }}/atur-term-bins
       - name: Isolated server, the bridge, and the loopback measurement
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          apps/native/scripts/start-test-server.sh start "$RUNNER_TEMP/atur-server"
+          apps/native/scripts/start-test-server.sh start "$RUNNER_TEMP/atur-server" "$RUNNER_TEMP/atur-term-bins"
           . "$RUNNER_TEMP/atur-server/env.sh"
           export BRIDGE_TOKEN=bench BRIDGE_PORT=7601 BRIDGE_BACKEND=atur-terminal ATUR_TERM_BIN="$BIN/atur-term"
           (cd apps/bridge && nohup bun run src/main.ts > "$RUNNER_TEMP/bridge.log" 2>&1 &)
@@ -191,8 +259,6 @@ jobs:
           toolchain: 1.92.0
       - run: bun install --frozen-lockfile
       - name: Build the Rust core for iOS (device and simulator)
-        env:
-          ATUR_CORE_CACHE: /tmp/atur-terminal-core
         run: |
           apps/native/modules/atur-direct/scripts/build-core.sh ios
           ls -R apps/native/modules/atur-direct/ios | head -30

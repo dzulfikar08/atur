@@ -15,6 +15,9 @@ const credentialKey = (serverId: string) => `direct.credential.${serverId}`;
 
 const HEX64 = /^[0-9a-f]{64}$/i;
 
+/** As many addresses as a pairing link holds. */
+export const MAX_HOSTS = 8;
+
 function parseCredential(text: string | null): DirectCredential | null {
   if (!text) return null;
   let value: unknown;
@@ -53,6 +56,17 @@ function parseCredential(text: string | null): DirectCredential | null {
   };
 }
 
+/** Each address once (names ignore case), blanks dropped, at most `MAX_HOSTS`. */
+function cleanHosts(hosts: readonly string[]): string[] {
+  const kept: string[] = [];
+  for (const raw of hosts) {
+    const host = typeof raw === "string" ? raw.trim() : "";
+    if (host === "" || kept.length >= MAX_HOSTS) continue;
+    if (!kept.some((known) => known.toLowerCase() === host.toLowerCase())) kept.push(host);
+  }
+  return kept;
+}
+
 function parseIndex(text: string | null): string[] {
   if (!text) return [];
   try {
@@ -74,12 +88,28 @@ export interface CredentialStore {
   loadAll(): Promise<DirectCredential[]>;
   /** Stores (or replaces) the credential; throws when the keystore did not take it. */
   save(credential: DirectCredential): Promise<void>;
+  /**
+   * Replaces only the addresses of a stored credential (each once, at most eight, in the order
+   * given), keeping its token, fingerprint and position. False when nothing is stored for
+   * `serverId`, the list has no usable address, or it is the stored one already. Throws when the
+   * keystore did not take the write. The addresses are never logged.
+   */
+  updateHosts(serverId: string, hosts: readonly string[]): Promise<boolean>;
   clear(serverId: string): Promise<void>;
 }
 
 export function createCredentialStore(storage: KeyValueStorage): CredentialStore {
   const readIndex = async () => parseIndex(await storage.getItem(INDEX_KEY));
   const writeIndex = (ids: string[]) => storage.setItem(INDEX_KEY, JSON.stringify(ids));
+  const write = async (credential: DirectCredential) => {
+    const text = JSON.stringify(credential);
+    const key = credentialKey(credential.serverId);
+    await storage.setItem(key, text, { thisDeviceOnly: true });
+    // Storage swallows write failures; a pairing that is not kept must not look successful.
+    if ((await storage.getItem(key)) !== text) {
+      throw new Error("The credential could not be saved on this phone");
+    }
+  };
 
   return {
     serverIds: readIndex,
@@ -98,15 +128,21 @@ export function createCredentialStore(storage: KeyValueStorage): CredentialStore
     },
 
     async save(credential) {
-      const text = JSON.stringify(credential);
-      const key = credentialKey(credential.serverId);
-      await storage.setItem(key, text, { thisDeviceOnly: true });
-      // Storage swallows write failures; a pairing that is not kept must not look successful.
-      if ((await storage.getItem(key)) !== text) {
-        throw new Error("The credential could not be saved on this phone");
-      }
+      await write(credential);
       const rest = (await readIndex()).filter((id) => id !== credential.serverId);
       await writeIndex([credential.serverId, ...rest]);
+    },
+
+    async updateHosts(serverId, hosts) {
+      const clean = cleanHosts(hosts);
+      if (clean.length === 0) return false;
+      const stored = parseCredential(await storage.getItem(credentialKey(serverId)));
+      if (!stored) return false;
+      if (stored.hosts.length === clean.length && stored.hosts.every((h, i) => h === clean[i])) {
+        return false;
+      }
+      await write({ ...stored, hosts: clean });
+      return true;
     },
 
     async clear(serverId) {

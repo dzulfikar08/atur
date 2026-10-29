@@ -143,6 +143,7 @@ export function PaneScreen({ paneId }: { paneId: string }) {
     },
     onDiff: (rows) => screen.diff(rows),
     onHistory: (rows, visible) => screen.setHistory(rows, visible),
+    onHistoryFailed: () => screen.historyFailed(),
     onGeometry: ({ cols, rows }) => {
       const reflowed = screen.getState().cols !== cols;
       screen.hello(cols, rows);
@@ -173,7 +174,11 @@ export function PaneScreen({ paneId }: { paneId: string }) {
               <Text style={styles.title} numberOfLines={1}>
                 {title}
               </Text>
-              <TransportBadge transport={transport} rttMs={direct.rttMs} />
+              <TransportBadge
+                transport={transport}
+                rttMs={direct.rttMs}
+                wire={direct.connection?.transport}
+              />
             </View>
           ),
           // One menu keeps the header clean: views, split and close all live in ⋯.

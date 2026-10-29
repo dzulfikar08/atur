@@ -8,11 +8,15 @@ import {
   type DirectFileEntry,
   type DirectGitSummary,
   type DirectProject,
+  type DirectRoute,
   type DirectSession,
+  type DirectTransport,
   type EchoMode,
   type EchoStats,
   type HistoryReply,
   type PairingTarget,
+  type RouteKind,
+  type TransportPreference,
 } from "./types";
 
 /**
@@ -89,6 +93,17 @@ export class DirectConnection {
     readonly serverId: string,
     readonly serverName: string,
     readonly serverVersion: string,
+    /** What the connection runs on: the UDP stream, or TLS (the fallback, or what was asked for). */
+    readonly transport: DirectTransport = "tls",
+    /** Why UDP was not used ("older server", "no answer in 3 s", ...); "" when it was. */
+    readonly udpNote: string = "",
+    /** The address the connection went through; null on a core that does not report it. */
+    readonly route: DirectRoute | null = null,
+    /**
+     * The computer's addresses to keep for next time: what it reported just now, then the stored
+     * ones, at most eight. Empty on a core that does not report them.
+     */
+    readonly addresses: readonly string[] = [],
   ) {}
 
   /** Every event of this connection. `disconnected` is always the last one. */
@@ -248,18 +263,35 @@ export function createDirect(native: NativeAturDirect) {
       return unwrap<DirectCredential>(await native.pair(link, deviceName));
     },
 
-    /** Connects with a stored credential, trying each of its addresses in order. */
-    async connect(credential: DirectCredential): Promise<DirectConnection> {
+    /**
+     * Connects with a stored credential, racing its addresses (local ones first, the next one a
+     * moment later if the one before has not signed in; the first to finish wins). `transport` is
+     * `auto` (default: TLS first, then UDP when the server offers it) or `tls` (never UDP).
+     */
+    async connect(
+      credential: DirectCredential,
+      options: { transport?: TransportPreference } = {},
+    ): Promise<DirectConnection> {
       const id = newConnectionId();
-      const info = unwrap<{ serverId: string; serverName: string; serverVersion: string }>(
-        await native.connect(id, JSON.stringify(credential)),
-      );
+      const info = unwrap<{
+        serverId: string;
+        serverName: string;
+        serverVersion: string;
+        transport?: DirectTransport;
+        udpNote?: string;
+        route?: unknown;
+        addresses?: unknown;
+      }>(await native.connect(id, connectJson(credential, options.transport)));
       const connection = new DirectConnection(
         native,
         id,
         info.serverId,
         info.serverName,
         info.serverVersion,
+        info.transport === "udp" ? "udp" : "tls",
+        info.udpNote ?? "",
+        parseRoute(info.route),
+        parseAddresses(info.addresses),
       );
       connections.set(id, connection);
       for (const event of early.get(id) ?? []) connection.dispatch(event);
@@ -267,4 +299,37 @@ export function createDirect(native: NativeAturDirect) {
       return connection;
     },
   };
+}
+
+const ROUTE_KINDS: ReadonlySet<string> = new Set<RouteKind>(["local", "tailscale", "other"]);
+
+/** The core's `route`, or null for anything else (an older core sends none). */
+export function parseRoute(value: unknown): DirectRoute | null {
+  if (typeof value !== "object" || value === null) return null;
+  const route = value as Record<string, unknown>;
+  if (
+    typeof route.host !== "string" ||
+    route.host === "" ||
+    typeof route.kind !== "string" ||
+    !ROUTE_KINDS.has(route.kind) ||
+    typeof route.ms !== "number" ||
+    !Number.isFinite(route.ms)
+  ) {
+    return null;
+  }
+  return { host: route.host, kind: route.kind as RouteKind, ms: route.ms };
+}
+
+/** The core's `addresses`: plain non-empty strings only; anything else means none. */
+export function parseAddresses(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((host): host is string => typeof host === "string" && host !== "");
+}
+
+/** The credential with the transport preference merged in; the core ignores what it does not know. */
+export function connectJson(
+  credential: DirectCredential,
+  transport: TransportPreference = "auto",
+): string {
+  return JSON.stringify({ ...credential, transport });
 }

@@ -3,18 +3,23 @@ import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
 import { Text } from "@/components/ui";
+import { directBadgeLabel } from "@/lib/direct/describe";
 import type { PaneTransport } from "@/lib/direct/transport-choice";
+import type { DirectTransport } from "@/modules/atur-direct/src/types";
 
 /** Which road the pane screen's frames take: straight to the computer, or through Atur Cloud. */
 export function TransportBadge({
   transport,
   rttMs,
+  wire,
 }: {
   transport: PaneTransport;
   rttMs: number | null;
+  /** What the direct connection runs on, when there is one. */
+  wire?: DirectTransport | null;
 }) {
   const direct = transport === "direct";
-  const label = direct ? (rttMs === null ? "Direct" : `Direct · ${rttMs} ms`) : "Cloud";
+  const label = direct ? directBadgeLabel(wire, rttMs) : "Cloud";
   return (
     <View
       style={[styles.badge, direct && styles.badgeDirect]}

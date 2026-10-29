@@ -54,6 +54,8 @@ export interface PaneAttachHandlers {
    * (absent from older bridges).
    */
   onHistory?: (rows: string[], visible?: number) => void;
+  /** A direct `requestHistory` failed (the bridge never fails one: it just stays silent). */
+  onHistoryFailed?: () => void;
   /** The pane was re-laid out (another client became active, or the phone sizer attached). */
   onGeometry?: (size: { cols: number; rows: number }) => void;
   onError?: (message: string) => void;
@@ -193,6 +195,7 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
         onSnapshot: (ansi) => handlersRef.current.onSnapshot?.(ansi),
         onDiff: (rows) => handlersRef.current.onDiff?.(rows),
         onHistory: (rows, visible) => handlersRef.current.onHistory?.(rows, visible),
+        onHistoryFailed: () => handlersRef.current.onHistoryFailed?.(),
         onGeometry: (size) => handlersRef.current.onGeometry?.(size),
         onError: (message) => handlersRef.current.onError?.(message),
         onAttached: () => enter("attached"),

@@ -77,6 +77,8 @@ export interface DirectSession {
   projectId: string;
   projectName: string;
   directory: string;
+  /** The terminal's own title; "" when the terminal set none. */
+  title: string;
   status: SessionStatus;
   /** True while this phone has it attached. */
   attached: boolean;
@@ -123,7 +125,30 @@ export interface EchoStats {
   hiddenConfirmed: number;
   visibleWrong: number;
   hiddenWrong: number;
+  /** The transport this connection runs on. */
+  transport: DirectTransport;
+  /** The address the connection was made through; null when the core did not report one. */
+  route: DirectRoute | null;
 }
+
+/** What kind of address a connection went through, from the host alone. */
+export type RouteKind = "local" | "tailscale" | "other";
+
+/**
+ * The address that won the race when connecting. `ms` is that address's own connect, TLS
+ * handshake and sign-in time; the live round trip (`ping`) replaces it once there is a sample.
+ */
+export interface DirectRoute {
+  host: string;
+  kind: RouteKind;
+  ms: number;
+}
+
+/** What the connection runs on: the UDP stream, or TLS over TCP. */
+export type DirectTransport = "udp" | "tls";
+
+/** What the app asks for: `auto` tries UDP and keeps TLS when it does not come up. */
+export type TransportPreference = "auto" | "tls";
 
 /** Pushed by the core. Row strings are the bridge's frame vocabulary (ANSI, one string per row). */
 export type DirectEvent =

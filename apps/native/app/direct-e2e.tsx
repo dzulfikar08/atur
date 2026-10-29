@@ -1,13 +1,15 @@
-import { Redirect, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { AppState, ScrollView, Text, View } from "react-native";
 
-import { runDirectE2E } from "@/lib/direct/e2e";
+import { runDirectE2E, runLossyE2E, runScrollE2E, type E2EScenario } from "@/lib/direct/e2e";
 
 // Proof run for CI: only reachable in builds made with EXPO_PUBLIC_ATUR_E2E=1 (app/_layout.tsx
 // registers the route only then). `atur://direct-e2e?link64=<base64url pairing link>` starts it (the link
-// has & and ? in it, which a deep link query would split); the lines it
-// logs under ATUR_E2E are what scripts/e2e-direct-android.sh reads.
+// has & and ? in it, which a deep link query would split); `&scenario=lossy` plays the lossy-link
+// scenario (phase 3) instead of the scripted one, `&scenario=scroll` the scrollback scenario
+// (phase 4), which ends by opening the app's own pane screen for the host to scroll. The lines it logs under ATUR_E2E are what
+// scripts/e2e-direct-android.sh reads.
 const ENABLED = process.env.EXPO_PUBLIC_ATUR_E2E === "1";
 
 export default function DirectE2E() {
@@ -17,7 +19,12 @@ export default function DirectE2E() {
 }
 
 function Run() {
-  const { link64 } = useLocalSearchParams<{ link64?: string }>();
+  const { link64, scenario: scenarioParam } = useLocalSearchParams<{
+    link64?: string;
+    scenario?: string;
+  }>();
+  const scenario: E2EScenario =
+    scenarioParam === "lossy" ? "lossy" : scenarioParam === "scroll" ? "scroll" : "base";
   const link = link64 ? decodeLink(link64) : undefined;
   const [lines, setLines] = useState<string[]>([]);
   const started = useRef(false);
@@ -40,10 +47,21 @@ function Run() {
       console.log(line);
       setLines((previous) => [...previous.slice(-60), line]);
     };
-    void runDirectE2E(link, say, () => cycles.current).then((report) => {
-      say(`ATUR_E2E RESULT ${report.ok ? "PASS" : "FAIL"} ${JSON.stringify(report.metrics)}`);
+    const run =
+      scenario === "lossy"
+        ? runLossyE2E(link, say)
+        : scenario === "scroll"
+          ? runScrollE2E(link, say, (session) =>
+              router.push({ pathname: "/direct-pane/[sessionId]", params: { sessionId: session } }),
+            )
+          : runDirectE2E(link, say, () => cycles.current);
+    void run.then((report) => {
+      const name = scenario === "base" ? "" : `${scenario} `;
+      say(
+        `ATUR_E2E RESULT ${name}${report.ok ? "PASS" : "FAIL"} ${JSON.stringify(report.metrics)}`,
+      );
     });
-  }, [link]);
+  }, [link, scenario]);
 
   return (
     <View style={{ flex: 1, backgroundColor: "#000", paddingTop: 48, paddingHorizontal: 8 }}>

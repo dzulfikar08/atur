@@ -1,4 +1,4 @@
-import { shortCwd } from "@/lib/pane-meta";
+import { cleanPaneTitle } from "@/lib/pane-meta";
 import type { DirectSession } from "@/modules/atur-direct/src/types";
 
 /** What a direct session asks of the human, in the Panes tab's vocabulary. */
@@ -42,11 +42,34 @@ export function openableSessions(sessions: readonly DirectSession[]): DirectSess
     .map(({ session }) => session);
 }
 
-export function directSessionTitle(session: DirectSession): string {
-  return session.projectName || (session.agent ? `${session.agent.provider} session` : "shell");
+/** How an agent provider is shown: "Oh My Pi" is "omp" (any case); others are left as the core names them. */
+export function agentDisplayName(provider: string): string {
+  return provider.trim().toLowerCase() === "oh my pi" ? "omp" : provider;
 }
 
-/** "claude · …/work/atur": the agent and the folder, whichever are known. */
+/** The terminal's own title (what the desktop session list shows), then the project, then the agent. */
+export function directSessionTitle(session: DirectSession): string {
+  return (
+    cleanPaneTitle(session.title) ??
+    (session.projectName ||
+      (session.agent ? `${agentDisplayName(session.agent.provider)} session` : "shell"))
+  );
+}
+
+function basename(path: string): string {
+  return path.split("/").filter(Boolean).pop() ?? "";
+}
+
+/** "omp · atur · web": the agent, the project and the folder, minus whatever the title already says. */
 export function directSessionDetail(session: DirectSession): string {
-  return [session.agent?.provider, shortCwd(session.directory)].filter(Boolean).join(" · ");
+  const primary = directSessionTitle(session);
+  const parts: string[] = [];
+  for (const part of [
+    session.agent ? agentDisplayName(session.agent.provider) : "",
+    session.projectName,
+    basename(session.directory),
+  ]) {
+    if (part && part !== primary && !parts.includes(part)) parts.push(part);
+  }
+  return parts.join(" · ");
 }

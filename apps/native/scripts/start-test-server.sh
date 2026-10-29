@@ -1,10 +1,14 @@
 #!/bin/bash
 # An isolated Atur Terminal server for CI (.github/workflows/native-direct.yml), never the live one.
 #
-#   start-test-server.sh start <dir> [mobile-port]
-#       Downloads the headless build named by $SERVER_RELEASE (needs GH_TOKEN), starts its server in
-#       its own profile under <dir>, and with a port also turns on phone access on that port.
-#       Writes <dir>/env.sh, which exports BIN, ATUR_TERM_DIR and SHELL for the next steps.
+#   start-test-server.sh start <dir> <bin-dir> [mobile-port]
+#       Starts the server found in <bin-dir> (atur-term and atur-term-server, built by the `server`
+#       job of the workflow from the atur-terminal commit in modules/atur-direct/core.ref, so it
+#       has the UDP offer) in its own profile under <dir>, and with a port also turns on phone
+#       access on that port. The server offers UDP on ATUR_TERM_UDP_PORTS (default 60100-60100,
+#       the port the lossy-link proof shapes) and nothing else is opened.
+#       Writes <dir>/env.sh, which exports BIN, ATUR_TERM_DIR, ATUR_TERM_UDP_PORTS and SHELL for
+#       the next steps.
 #   start-test-server.sh pair <dir> <address> <out-file>
 #       Asks that server for a pairing link naming <address> and writes the link (one line) to
 #       <out-file>. A link works once and for five minutes: call this once per pairing.
@@ -13,18 +17,16 @@ set -euo pipefail
 LINK_PATTERN='^[a-z-]+://pair\?'
 
 start() {
-  local dir="$1" port="${2:-}"
+  local dir="$1" bin_dir="$2" port="${3:-}"
   mkdir -p "$dir"
-  gh release download "$SERVER_RELEASE" --repo dzulfikar08/atur-terminal \
-    --pattern 'atur-terminal-[0-9]*-linux-x86_64.tar.gz' --dir "$dir"
-  mkdir -p "$dir/server"
-  tar -xzf "$dir"/atur-terminal-[0-9]*-linux-x86_64.tar.gz -C "$dir/server"
   local bin
-  bin="$(dirname "$(find "$dir/server" -name atur-term-server -type f | head -1)")"
+  bin="$(cd "$bin_dir" && pwd)"
+  chmod +x "$bin/atur-term" "$bin/atur-term-server"
   mkdir -p "$dir/profile"
   {
     echo "export BIN='$bin'"
     echo "export ATUR_TERM_DIR='$dir/profile'"
+    echo "export ATUR_TERM_UDP_PORTS='${ATUR_TERM_UDP_PORTS:-60100-60100}'"
     echo "export SHELL=/bin/bash"
   } > "$dir/env.sh"
   # shellcheck disable=SC1091
@@ -54,5 +56,5 @@ pair() {
 case "${1:-}" in
   start) shift; start "$@" ;;
   pair) shift; pair "$@" ;;
-  *) echo "usage: start-test-server.sh start <dir> [mobile-port] | pair <dir> <address> <out-file>" >&2; exit 2 ;;
+  *) echo "usage: start-test-server.sh start <dir> <bin-dir> [mobile-port] | pair <dir> <address> <out-file>" >&2; exit 2 ;;
 esac

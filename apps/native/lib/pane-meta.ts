@@ -1,4 +1,5 @@
 import type { PaneListItem } from "@/lib/api";
+import { agentDisplayName } from "@/lib/direct/session-meta";
 
 // herdr agent statuses that mean the agent is mid-turn (same set as the web's
 // PanesPage).
@@ -122,7 +123,9 @@ export function cleanPaneTitle(title: string | null): string | null {
 }
 
 export function paneTitle(pane: PaneListItem): string {
-  return cleanPaneTitle(pane.title) ?? (pane.agent ? `${pane.agent} session` : "shell");
+  return (
+    cleanPaneTitle(pane.title) ?? (pane.agent ? `${agentDisplayName(pane.agent)} session` : "shell")
+  );
 }
 
 /**

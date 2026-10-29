@@ -12,6 +12,8 @@ export interface DirectPaneHandlers {
   onSnapshot?: (ansi: string) => void;
   onDiff?: (rows: [number, string][]) => void;
   onHistory?: (rows: string[], visible?: number) => void;
+  /** A `requestHistory` was answered with an error: its reply is never coming. */
+  onHistoryFailed?: () => void;
   onGeometry?: (size: { cols: number; rows: number }) => void;
   onError?: (message: string) => void;
   /** The computer accepted the attach (also after every reconnect). */
@@ -127,7 +129,9 @@ export function openDirectPane(
         .then((reply) => {
           if (!closed && link === current) handlers.onHistory?.(reply.rows, reply.visible);
         })
-        .catch(noop);
+        .catch(() => {
+          if (!closed && link === current) handlers.onHistoryFailed?.();
+        });
     },
     requestResize(cols, rows) {
       grid = { cols, rows };

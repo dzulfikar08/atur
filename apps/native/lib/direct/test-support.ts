@@ -1,15 +1,24 @@
 import type { KeyValueStorage } from "@/lib/direct/credentials";
-import type { DirectAppState, DirectLink, DirectNative, DirectTimers } from "@/lib/direct/manager";
+import type {
+  DirectAppState,
+  DirectLink,
+  DirectNative,
+  DirectNetwork,
+  DirectTimers,
+} from "@/lib/direct/manager";
 import {
   DirectError,
   type AttachInfo,
   type DirectCredential,
   type DirectEvent,
+  type DirectRoute,
   type DirectSession,
+  type DirectTransport,
   type EchoMode,
   type EchoStats,
   type HistoryReply,
   type PairingTarget,
+  type TransportPreference,
 } from "@/modules/atur-direct/src/types";
 
 // Fakes for the direct layer's tests: no native module, no clock, no keystore.
@@ -37,6 +46,7 @@ export function session(id: string, overrides: Partial<DirectSession> = {}): Dir
     projectId: "p1",
     projectName: "atur",
     directory: "/home/dev/work/atur",
+    title: "",
     status: "live",
     attached: false,
     agent: null,
@@ -115,6 +125,25 @@ export class FakeAppState implements DirectAppState {
   }
 }
 
+/** A network whose changes the test announces by hand. */
+export class FakeNetwork implements DirectNetwork {
+  private readonly listeners = new Set<() => void>();
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  /** The phone's network changed. */
+  change(): void {
+    for (const listener of [...this.listeners]) listener();
+  }
+
+  get listenerCount(): number {
+    return this.listeners.size;
+  }
+}
+
 let linkCount = 0;
 
 export class FakeLink implements DirectLink {
@@ -122,9 +151,15 @@ export class FakeLink implements DirectLink {
   readonly serverId: string;
   readonly serverName = "Desk";
   readonly serverVersion = "1.0.0";
+  transport: DirectTransport = "tls";
+  udpNote = "";
+  route: DirectRoute | null = null;
+  addresses: readonly string[] = [];
   closed = false;
   sessionList: DirectSession[] = [];
   pingMs = 12;
+  /** Every ping is lost while set. */
+  pingFails = false;
   sessionsCalls = 0;
   pingCalls = 0;
   disconnects = 0;
@@ -134,6 +169,9 @@ export class FakeLink implements DirectLink {
   readonly pastes: { session: string; text: string; submit: boolean }[] = [];
   readonly resizes: { session: string; cols: number; rows: number }[] = [];
   historyRows: HistoryReply = { rows: [], visible: 0 };
+  /** The `lines` of every `history` call; an error in `historyError` rejects them. */
+  readonly historyAsked: number[] = [];
+  historyError: DirectError | null = null;
   /** What `attach` answers with; an error rejects. */
   attachResult: AttachInfo | DirectError | null = null;
   private readonly listeners = new Set<(event: DirectEvent) => void>();
@@ -170,6 +208,7 @@ export class FakeLink implements DirectLink {
 
   async ping(): Promise<number> {
     this.pingCalls++;
+    if (this.pingFails) throw new DirectError("Timeout", "");
     return this.pingMs;
   }
 
@@ -213,11 +252,17 @@ export class FakeLink implements DirectLink {
     return true;
   }
 
-  async history(): Promise<HistoryReply> {
+  async history(_session: string, lines: number): Promise<HistoryReply> {
+    this.historyAsked.push(lines);
+    if (this.historyError) throw this.historyError;
     return this.historyRows;
   }
 
-  async setEchoMode(_mode: EchoMode): Promise<void> {}
+  readonly echoModes: EchoMode[] = [];
+
+  async setEchoMode(mode: EchoMode): Promise<void> {
+    this.echoModes.push(mode);
+  }
 
   async echoStats(): Promise<EchoStats> {
     return {
@@ -228,6 +273,8 @@ export class FakeLink implements DirectLink {
       hiddenConfirmed: 0,
       visibleWrong: 0,
       hiddenWrong: 0,
+      transport: this.transport,
+      route: this.route,
     };
   }
 }
@@ -240,6 +287,7 @@ export class FakeLink implements DirectLink {
 export class FakeNative implements DirectNative {
   script: (FakeLink | DirectError)[] = [new FakeLink()];
   readonly connects: DirectCredential[] = [];
+  readonly connectOptions: (TransportPreference | undefined)[] = [];
   pairResult: DirectCredential | DirectError = credential();
   parseResult: PairingTarget | DirectError = { hosts: ["100.64.0.1"], port: 4500 };
   readonly pairs: { link: string; deviceName: string }[] = [];
@@ -266,8 +314,12 @@ export class FakeNative implements DirectNative {
     return this.pairResult;
   }
 
-  async connect(cred: DirectCredential): Promise<DirectLink> {
+  async connect(
+    cred: DirectCredential,
+    options?: { transport?: TransportPreference },
+  ): Promise<DirectLink> {
     this.connects.push(cred);
+    this.connectOptions.push(options?.transport);
     await this.gate?.promise;
     const next = this.script.length > 1 ? this.script.shift() : this.script[0];
     if (next instanceof DirectError) throw next;

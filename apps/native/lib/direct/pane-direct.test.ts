@@ -16,8 +16,12 @@ function fakeManager(initial: DirectLink | null = null) {
     connection,
     sessions: [],
     rttMs: null,
+    hosts: [],
+    rerouting: false,
     error: null,
     preferDirect: true,
+    echoMode: "auto",
+    transportPreference: "auto",
   });
   let current = snapshot();
   return {
@@ -50,6 +54,7 @@ function recorder() {
     onSnapshot: log("snapshot"),
     onDiff: log("diff"),
     onHistory: log("history"),
+    onHistoryFailed: log("historyFailed"),
     onGeometry: log("geometry"),
     onError: log("error"),
     onAttached: log("attached"),
@@ -167,6 +172,23 @@ test("history comes from the connection and reaches onHistory", async () => {
   expect(calls).toEqual([["history", ["one", "two", "three"], 2]]);
 });
 
+test("the line count of a history request reaches the connection, and a failure is reported", async () => {
+  const link = new FakeLink();
+  const { handlers, calls } = recorder();
+  const pane = openDirectPane(fakeManager(link), "12", handlers, SIZE);
+  await flush();
+  calls.length = 0;
+
+  pane.requestHistory(4000);
+  await flush();
+  expect(link.historyAsked).toEqual([4000]);
+
+  link.historyError = new DirectError("Timeout", "");
+  pane.requestHistory(400);
+  await flush();
+  expect(calls.at(-1)).toEqual(["historyFailed"]);
+});
+
 test("reattaches on the next connection without a new pane", async () => {
   const first = new FakeLink();
   const second = new FakeLink();
@@ -194,6 +216,32 @@ test("reattaches on the next connection without a new pane", async () => {
   expect(pane.sendInput("a")).toBe(true);
   expect(second.inputs).toHaveLength(1);
   expect(first.inputs).toHaveLength(0);
+});
+
+test("a route swap moves the pane to the new connection with no loss in between", async () => {
+  const old = new FakeLink();
+  const swapped = new FakeLink();
+  const manager = fakeManager(old);
+  const { handlers, calls, names } = recorder();
+  const pane = openDirectPane(manager, "12", handlers, SIZE);
+  await flush();
+  pane.requestResize(70, 33);
+
+  // The manager closes the old connection and publishes the new one in one step.
+  old.closed = true;
+  manager.set(swapped);
+  await flush();
+  expect(names()).toEqual(["attached", "attached"]);
+  expect(swapped.attaches).toEqual([{ session: "12", cols: 70, rows: 33 }]);
+  expect(old.listenerCount).toBe(0);
+  expect(old.detaches).toEqual([]);
+
+  calls.length = 0;
+  old.emit({ t: "snapshot", session: "12", ansi: "stale" });
+  swapped.emit({ t: "snapshot", session: "12", ansi: "fresh" });
+  expect(calls).toEqual([["snapshot", "fresh"]]);
+  expect(pane.sendInput("a")).toBe(true);
+  expect(swapped.inputs).toHaveLength(1);
 });
 
 test("opened before connecting: no loss reported, attaches on arrival", async () => {

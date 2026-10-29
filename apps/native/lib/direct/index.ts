@@ -2,6 +2,7 @@ import { AppState } from "react-native";
 
 import { createCredentialStore } from "@/lib/direct/credentials";
 import { DirectManager } from "@/lib/direct/manager";
+import { createNetworkObserver } from "@/lib/direct/network";
 import { createDirectPrefs } from "@/lib/direct/prefs";
 import { getItem, removeItem, setItem } from "@/lib/storage";
 import { AturDirect } from "@/modules/atur-direct";
@@ -17,6 +18,7 @@ export const directManager = new DirectManager({
   native: AturDirect,
   credentials: createCredentialStore(storage),
   prefs: createDirectPrefs(storage),
+  network: createNetworkObserver(),
   appState: {
     isActive: () => AppState.currentState === "active",
     subscribe: (listener) => {

@@ -33,6 +33,9 @@ public final class AturDirectModule: Module {
   private var connections: [String: Direct] = [:]
   private let workerQueue = DispatchQueue(label: "com.diatur.direct.worker", attributes: .concurrent)
   private let callQueue = DispatchQueue(label: "com.diatur.direct.call")
+  // Scrollback reads are many page round trips on the computer: on their own queue, so they never
+  // hold up attach, detach, the session list or the latency ping.
+  private let historyQueue = DispatchQueue(label: "com.diatur.direct.history")
 
   private func connection(_ id: String) -> Direct? {
     lock.lock()
@@ -85,10 +88,20 @@ public final class AturDirectModule: Module {
       return answer
     }.runOnQueue(workerQueue)
 
-    AsyncFunction("call") { [weak self] (id: String, method: String, argsJson: String) -> String in
-      guard let direct = self?.connection(id) else { return unknownConnection }
-      return direct.call(method: method, argsJson: argsJson)
-    }.runOnQueue(callQueue)
+    AsyncFunction("call") {
+      [weak self] (id: String, method: String, argsJson: String, promise: Promise) in
+      guard let self else {
+        promise.resolve(unknownConnection)
+        return
+      }
+      (method == "history" ? self.historyQueue : self.callQueue).async {
+        guard let direct = self.connection(id) else {
+          promise.resolve(unknownConnection)
+          return
+        }
+        promise.resolve(direct.call(method: method, argsJson: argsJson))
+      }
+    }
 
     Function("fire") { [weak self] (id: String, method: String, argsJson: String) -> String in
       guard let direct = self?.connection(id) else { return unknownConnection }
