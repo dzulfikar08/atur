@@ -97,7 +97,7 @@ jobs:
             echo '```'
             ls -la "$APK" | awk '{print $5 " bytes  app-release.apk"}'
             sha256sum "$APK"
-            "$BT/apksigner" verify --print-certs "$APK" | grep -E 'Signer #1 certificate (DN|SHA-256)'
+            "$BT/apksigner" verify --verbose --print-certs "$APK" | grep -E 'Signer #1 certificate (DN|SHA-256)'
             echo '```'
             echo 'Signed with the Expo template debug keystore: cannot be installed over a Play install of com.diatur.app.'
           } | tee -a "$GITHUB_STEP_SUMMARY"
