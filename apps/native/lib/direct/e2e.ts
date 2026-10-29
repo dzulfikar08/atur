@@ -333,7 +333,9 @@ export async function runLossyE2E(link: string, say: Say): Promise<E2EReport> {
     const measureEcho = async (letter: string, mode: "never" | "always") => {
       await directManager.setEchoMode(mode);
       pane.sendInput("cat >/dev/null\r");
-      await sleep(3000);
+      // The predictor guesses again only once the server has caught up with the Enter: about
+      // four round trips and half a second, so wait that long (shaped link: ~0.8 s round trip).
+      await sleep(mode === "always" ? 9000 : 3000);
       const samples: number[] = [];
       let typed = "";
       for (let i = 0; i < LOSSY_KEYS; i++) {

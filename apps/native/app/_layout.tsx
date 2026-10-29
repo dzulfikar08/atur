@@ -75,7 +75,14 @@ export default function RootLayout() {
     if (anon) void directManager.start();
   }, [anon]);
 
-  const ready = fontsLoaded && session.status !== "loading" && (!anon || direct.loaded);
+  // The saved pairing is read in milliseconds; if it ever is not, the app opens anyway.
+  const [pairingWaitOver, setPairingWaitOver] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setPairingWaitOver(true), 4000);
+    return () => clearTimeout(timer);
+  }, []);
+  const ready =
+    fontsLoaded && session.status !== "loading" && (!anon || direct.loaded || pairingWaitOver);
   // Once shown, the tree stays: signing out must not blank the app while the pairing is read.
   const [launched, setLaunched] = useState(false);
   useEffect(() => {

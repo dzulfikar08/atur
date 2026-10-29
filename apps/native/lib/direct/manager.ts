@@ -273,12 +273,22 @@ export class DirectManager {
 
   /** Loads what was saved and connects when the app is in front. Idempotent. */
   start(): Promise<void> {
-    this.started ??= this.init();
+    this.started ??= this.init().catch((error: unknown) => {
+      // Never leave the app waiting on the saved pairing: it opens as if nothing was saved.
+      console.warn(
+        "direct: reading the saved pairing failed",
+        error instanceof Error ? error.message : "",
+      );
+      this.patch({ loaded: true });
+    });
     return this.started;
   }
 
   private async init(): Promise<void> {
-    if (!this.native) return;
+    if (!this.native) {
+      this.patch({ loaded: true });
+      return;
+    }
     const [prefer, credentials, echoMode, transportPreference] = await Promise.all([
       this.prefs.loadPreferDirect(),
       this.credentials.loadAll(),
