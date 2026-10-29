@@ -8,6 +8,8 @@
                                              command that was typed
   ui-assert.py tap <substring> [timeout]     tap the centre of the first enabled node that has it,
                                              scrolling down a few times when it is below the screen
+  ui-assert.py wait-frozen <substring> [t]   same as `wait`, with the workload's output paused for the dump
+                                             (a screen that changes ten times a second dumps stale)
   ui-assert.py wait-regex <regex> [timeout]  same as `wait`, for a node whose text (or one line or
                                              comma part of it) matches the regular expression
   ui-assert.py absent <substring> [timeout]  succeed once no visible node has it
@@ -61,6 +63,17 @@ def pause_output() -> None:
 def resume_output() -> None:
     if os.path.exists(PAUSE_FILE):
         os.remove(PAUSE_FILE)
+
+
+def frozen_nodes():
+    """`nodes()` of a screen whose output is paused: a dump taken while rows scroll in at 10 Hz can
+    be the tree of an earlier moment (uiautomator reads a cache that the flood of changes keeps
+    invalidating), which made a view that had scrolled far back look as if it never moved."""
+    pause_output()
+    try:
+        return nodes()
+    finally:
+        resume_output()
 
 
 def nodes():
@@ -124,10 +137,10 @@ def fail(message: str, found) -> None:
     sys.exit(1)
 
 
-def wait(predicate, what: str, timeout: float) -> None:
+def wait(predicate, what: str, timeout: float, freeze: bool = False) -> None:
     deadline = time.time() + timeout
     while True:
-        found = nodes()
+        found = frozen_nodes() if freeze else nodes()
         if any(predicate(node) for node in found):
             print(f"ok: {what}")
             return
@@ -195,9 +208,7 @@ def swipe_back(width: int, height: int) -> None:
 
 
 def scroll_up(swipes: int, min_rows: int, hold: float) -> None:
-    pause_output()
-    found = nodes()
-    resume_output()
+    found = frozen_nodes()
     width, height = screen_size(found)
     start = numbered(found)
     if not start:
@@ -209,7 +220,7 @@ def scroll_up(swipes: int, min_rows: int, hold: float) -> None:
         swipe_back(width, height)
         time.sleep(0.4)
     time.sleep(2.5)
-    found = nodes()
+    found = frozen_nodes()
     seen = numbered(found)
     if not seen:
         fail(f"after {swipes} swipes no numbered row is on screen", found)
@@ -225,27 +236,27 @@ def scroll_up(swipes: int, min_rows: int, hold: float) -> None:
             found,
         )
     print(f"ok: {swipes} swipes went back {reached} rows")
-    # The output goes on (one line per 100 ms) while the reader stays where they are.
+    # The output goes on (one line per 100 ms) while the reader stays where they are: look again
+    # after `hold` seconds of it (the screen is only frozen for the dump itself).
     baseline = sorted(seen)
     started = time.time()
-    while time.time() - started < hold:
-        time.sleep(1)
-        found = nodes()
-        now = sorted(numbered(found))
-        if now != baseline:
-            held = int((time.time() - started) * 1000)
-            metric("scroll_held_ms", held)
-            fail(
-                f"scroll_held_ms: the view moved after {held} ms while output continued\n"
-                f"  before: {baseline}\n  after:  {now}",
-                found,
-            )
-    metric("scroll_held_ms", int((time.time() - started) * 1000))
-    print(f"ok: the visible rows stayed put for {hold:g} s of live output")
+    time.sleep(hold)
+    found = frozen_nodes()
+    now = sorted(numbered(found))
+    held = int((time.time() - started) * 1000)
+    if now != baseline:
+        metric("scroll_held_ms", 0)
+        fail(
+            f"scroll_held_ms: the view moved during {hold:g} s of live output\n"
+            f"  before: {baseline}\n  after:  {now}",
+            found,
+        )
+    metric("scroll_held_ms", int(hold * 1000))
+    print(f"ok: the visible rows stayed put for {hold:g} s of live output (dump after {held} ms)")
 
 
 def scroll_top(max_swipes: int) -> None:
-    found = nodes()
+    found = frozen_nodes()
     width, height = screen_size(found)
     lowest = None
     for count in range(1, max_swipes + 1):
@@ -254,7 +265,7 @@ def scroll_top(max_swipes: int) -> None:
         if count % 6 and count != max_swipes:
             continue
         time.sleep(1.5)
-        found = nodes()
+        found = frozen_nodes()
         seen = numbered(found)
         if seen:
             lowest = min(place(r) for r in seen)
@@ -272,7 +283,7 @@ def scroll_top(max_swipes: int) -> None:
 def jump_to_bottom() -> None:
     with open(SCROLL_STATE) as state:
         before = json.load(state)
-    tap("Jump to bottom", 20)
+    tap("Jump to bottom", 20, freeze=True)
     # Output goes on while the view settles at the bottom, then stops for the dump.
     time.sleep(3)
     pause_output()
@@ -305,11 +316,11 @@ def jump_to_bottom() -> None:
     print(f"ok: the view follows the output (live-{first} -> live-{later})")
 
 
-def tap(needle: str, timeout: float) -> None:
+def tap(needle: str, timeout: float, freeze: bool = False) -> None:
     deadline = time.time() + timeout
     scrolls = 0
     while True:
-        found = nodes()
+        found = frozen_nodes() if freeze else nodes()
         width, height = screen_size(found)
         target = next((n for n in found if n["enabled"] and has(n, needle)), None)
         if target:
@@ -350,7 +361,7 @@ def main(argv) -> None:
     if len(argv) >= 3 and argv[1] == "scroll-top":
         scroll_top(int(argv[2]))
         return
-    commands = ("wait", "wait-line", "wait-regex", "absent", "tap")
+    commands = ("wait", "wait-frozen", "wait-line", "wait-regex", "absent", "tap")
     if len(argv) < 3 or argv[1] not in commands:
         print(__doc__, file=sys.stderr)
         sys.exit(2)
@@ -358,6 +369,8 @@ def main(argv) -> None:
     timeout = float(argv[3]) if len(argv) > 3 else 30.0
     if command == "wait":
         wait(lambda n: has(n, needle), f"{needle!r} on screen", timeout)
+    elif command == "wait-frozen":
+        wait(lambda n: has(n, needle), f"{needle!r} on screen", timeout, freeze=True)
     elif command == "wait-line":
         wait(lambda n: is_line(n, needle), f"line {needle!r} on screen", timeout)
     elif command == "wait-regex":

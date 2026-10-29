@@ -32,6 +32,9 @@
 # Exit status is 0 only when phase 1 logs `ATUR_E2E RESULT PASS`, every check of phase 2 passes,
 # phase 3 logs `ATUR_E2E RESULT lossy PASS` and phase 4 logs `ATUR_E2E RESULT scroll PASS` and passes
 # every UI check.
+#
+# ATUR_E2E_PHASES selects the phases to run (default 1234; the lean scroll workflow sets 4). A phase
+# that is not selected counts as passed.
 set -uo pipefail
 
 APK="$1" LINK="$2" PORT="$3" OUT="$4" SERVER_DIR="$5"
@@ -39,6 +42,8 @@ PACKAGE=com.diatur.app
 UDP_PORT=60096
 UDP_PORT_MASK=0xfff8   # 60096-60103: the server may hold several offers at once
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PHASES="${ATUR_E2E_PHASES:-1234}"
+want() { [[ "$PHASES" == *"$1"* ]]; }
 mkdir -p "$OUT"
 LOG="$OUT/logcat.txt"
 PHASE2="$OUT/phase2.txt"
@@ -65,46 +70,49 @@ unshape() {
 }
 trap 'kill $LOGCAT 2>/dev/null; unshape' EXIT
 
-ENCODED="$(python3 -c 'import base64, sys; print(base64.urlsafe_b64encode(sys.argv[1].encode()).decode().rstrip("="))' "$LINK")"
-adb shell am start -a android.intent.action.VIEW -p "$PACKAGE" -d "'atur://direct-e2e?link64=$ENCODED'" >/dev/null
-
 seen() { grep -q "$1" "$LOG"; }
 shot() { adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null || true; }
 
-deadline=$((SECONDS + 600))
-did_background=0 did_drop=0 shot_attach=0
-while [ $SECONDS -lt $deadline ]; do
-  if grep -qE "ATUR_E2E RESULT (PASS|FAIL)" "$LOG"; then break; fi
-  if [ $shot_attach = 0 ] && seen "ATUR_E2E STEP echo"; then shot attached; shot_attach=1; fi
-  if [ $did_background = 0 ] && seen "ATUR_E2E WAIT background"; then
-    did_background=1
-    shot before-background
-    echo "host: app to the background for 40 s"
-    adb shell input keyevent KEYCODE_HOME
-    sleep 40
-    adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "$PACKAGE/.MainActivity" >/dev/null
-    echo "host: app back in front"
-  fi
-  if [ $did_drop = 0 ] && seen "ATUR_E2E WAIT drop"; then
-    did_drop=1
-    echo "host: resetting connections to port $PORT"
-    sudo iptables -I INPUT -p tcp --dport "$PORT" -j REJECT --reject-with tcp-reset
-    sleep 8
-    sudo iptables -D INPUT -p tcp --dport "$PORT" -j REJECT --reject-with tcp-reset
-    echo "host: connections allowed again"
-  fi
-  sleep 1
-done
-shot final
-sleep 2
+PHASE1=0
+if want 1; then
+  ENCODED="$(python3 -c 'import base64, sys; print(base64.urlsafe_b64encode(sys.argv[1].encode()).decode().rstrip("="))' "$LINK")"
+  adb shell am start -a android.intent.action.VIEW -p "$PACKAGE" -d "'atur://direct-e2e?link64=$ENCODED'" >/dev/null
 
-echo "--- ATUR_E2E lines"
-grep -o "ATUR_E2E.*" "$LOG" | tee "$OUT/e2e-lines.txt"
-grep -q "ATUR_E2E RESULT PASS" "$LOG"
-PHASE1=$?
-if [ $PHASE1 -ne 0 ]; then
-  echo "::error::phase 1 (direct-e2e scenario) did not log ATUR_E2E RESULT PASS"
-  grep -o "ATUR_E2E FAILURE.*" "$LOG" || true
+  deadline=$((SECONDS + 600))
+  did_background=0 did_drop=0 shot_attach=0
+  while [ $SECONDS -lt $deadline ]; do
+    if grep -qE "ATUR_E2E RESULT (PASS|FAIL)" "$LOG"; then break; fi
+    if [ $shot_attach = 0 ] && seen "ATUR_E2E STEP echo"; then shot attached; shot_attach=1; fi
+    if [ $did_background = 0 ] && seen "ATUR_E2E WAIT background"; then
+      did_background=1
+      shot before-background
+      echo "host: app to the background for 40 s"
+      adb shell input keyevent KEYCODE_HOME
+      sleep 40
+      adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "$PACKAGE/.MainActivity" >/dev/null
+      echo "host: app back in front"
+    fi
+    if [ $did_drop = 0 ] && seen "ATUR_E2E WAIT drop"; then
+      did_drop=1
+      echo "host: resetting connections to port $PORT"
+      sudo iptables -I INPUT -p tcp --dport "$PORT" -j REJECT --reject-with tcp-reset
+      sleep 8
+      sudo iptables -D INPUT -p tcp --dport "$PORT" -j REJECT --reject-with tcp-reset
+      echo "host: connections allowed again"
+    fi
+    sleep 1
+  done
+  shot final
+  sleep 2
+
+  echo "--- ATUR_E2E lines"
+  grep -o "ATUR_E2E.*" "$LOG" | tee "$OUT/e2e-lines.txt"
+  grep -q "ATUR_E2E RESULT PASS" "$LOG"
+  PHASE1=$?
+  if [ $PHASE1 -ne 0 ]; then
+    echo "::error::phase 1 (direct-e2e scenario) did not log ATUR_E2E RESULT PASS"
+    grep -o "ATUR_E2E FAILURE.*" "$LOG" || true
+  fi
 fi
 
 # --- Phase 2: signed out, from a clean install ---------------------------------------------------
@@ -183,10 +191,13 @@ phase2() {
   shot phase2-terminal
 }
 
-phase2
-PHASE2_STATUS=$?
-if [ $PHASE2_STATUS -eq 0 ]; then
-  echo "PASS phase 2" | tee -a "$PHASE2"
+PHASE2_STATUS=0
+if want 2; then
+  phase2
+  PHASE2_STATUS=$?
+  if [ $PHASE2_STATUS -eq 0 ]; then
+    echo "PASS phase 2" | tee -a "$PHASE2"
+  fi
 fi
 
 # --- Phase 3: a lossy link, TLS against UDP ---------------------------------------------------------
@@ -258,12 +269,15 @@ phase3() {
   }
 }
 
-phase3
-PHASE3_STATUS=$?
-unshape
-shot phase3-final
-echo "--- phase 3 lines"
-cat "$LOSSY"
+PHASE3_STATUS=0
+if want 3; then
+  phase3
+  PHASE3_STATUS=$?
+  unshape
+  shot phase3-final
+  echo "--- phase 3 lines"
+  cat "$LOSSY"
+fi
 
 # --- Phase 4: scrolling back while the pane keeps printing --------------------------------------------
 
@@ -302,7 +316,7 @@ phase4() {
   must "12 swipes of 70% of the screen go back at least 400 rows, and the rows then stay put for 5 s of live output" \
     ui scroll-up 12 400 5 || return 1
   shot phase4-scrolled-up
-  must "the jump-to-bottom button is on screen while scrolled up" ui wait "Jump to bottom" 10 || return 1
+  must "the jump-to-bottom button is on screen while scrolled up" ui wait-frozen "Jump to bottom" 20 || return 1
   must "more swipes reach the first row of the scrollback" ui scroll-top 200 || return 1
   shot phase4-top
   must "the jump-to-bottom button brings the live rows back and the view follows the output" \
@@ -311,15 +325,18 @@ phase4() {
   grep -o "ATUR_E2E RESULT scroll.*" "$LOG" | tail -1 | tee -a "$PHASE4"
 }
 
-phase4
-PHASE4_STATUS=$?
-if [ $PHASE4_STATUS -eq 0 ]; then
-  echo "PASS phase 4" | tee -a "$PHASE4"
+PHASE4_STATUS=0
+if want 4; then
+  phase4
+  PHASE4_STATUS=$?
+  if [ $PHASE4_STATUS -eq 0 ]; then
+    echo "PASS phase 4" | tee -a "$PHASE4"
+  fi
+  # The scenario's own lines: from its last `STEP pair` on, with the host's UI metrics.
+  { grep -o "ATUR_E2E.*" "$LOG" | tac | sed '/ATUR_E2E STEP pair/q' | tac; grep -h "^ATUR_E2E METRIC" "$PHASE4"; } > "$OUT/scroll-lines.txt" || true
+  echo "--- phase 4 lines"
+  cat "$OUT/scroll-lines.txt"
 fi
-# The scenario's own lines: from its last `STEP pair` on, with the host's UI metrics.
-{ grep -o "ATUR_E2E.*" "$LOG" | tac | sed '/ATUR_E2E STEP pair/q' | tac; grep -h "^ATUR_E2E METRIC" "$PHASE4"; } > "$OUT/scroll-lines.txt" || true
-echo "--- phase 4 lines"
-cat "$OUT/scroll-lines.txt"
 
 kill $LOGCAT 2>/dev/null
 [ $PHASE1 -eq 0 ] && [ $PHASE2_STATUS -eq 0 ] && [ $PHASE3_STATUS -eq 0 ] && [ $PHASE4_STATUS -eq 0 ]

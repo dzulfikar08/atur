@@ -9,6 +9,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { TERMINAL_PALETTE } from "@/components/terminal/palette";
 import { TerminalRow } from "@/components/terminal/terminal-row";
 import { Text } from "@/components/ui";
+import { scrollCount, scrollTrace } from "@/lib/scroll-trace";
 import { CELL_WIDTH_EM, clampFontSize, LINE_HEIGHT_EM } from "@/lib/terminal-metrics";
 import type { TerminalScreen } from "@/lib/terminal-screen";
 
@@ -73,6 +74,7 @@ export function TerminalView({
     screen.subscribe,
     screen.getState,
   );
+  scrollCount("view_render");
   // Newest row first, for an inverted list: offset 0 is the bottom of the pane,
   // so rows changing, appearing or going at the bottom while an agent streams
   // need no scroll correction at all. Keys: a scrollback row keeps
@@ -172,6 +174,7 @@ export function TerminalView({
   const nearTop = useCallback(() => {
     const { offset, content, viewport } = scroll.current;
     if (content > 0 && content - offset - viewport < NEAR_TOP_ROWS * lineHeight) {
+      scrollTrace("near_top", { offset: Math.round(offset) });
       latest.current.onNearTop();
     }
   }, [lineHeight]);
@@ -182,25 +185,50 @@ export function TerminalView({
       content: e.contentSize.height,
       viewport: e.layoutMeasurement.height,
     };
+    scrollCount("scroll_event");
+    traceScroll(e);
     // Inverted: offset 0 is the bottom.
     const atBottom = e.contentOffset.y <= STICK_SLACK;
     const isFar = e.contentOffset.y > FAR_SCREENS * e.layoutMeasurement.height;
-    if (!atBottom && (stick.current || (far.current && !isFar))) latest.current.onScrollBack();
+    if (!atBottom && (stick.current || (far.current && !isFar))) {
+      scrollTrace("scroll_back", { offset: Math.round(e.contentOffset.y) });
+      latest.current.onScrollBack();
+    }
     far.current = isFar;
     if (stick.current !== atBottom) {
+      scrollTrace("stick", { atBottom, offset: Math.round(e.contentOffset.y) });
       stick.current = atBottom;
       setAway(!atBottom);
     }
     if (!atBottom) nearTop();
   };
 
+  // Proof build only: the offset at most four times a second, and every jump of more than a screen
+  // between two events (a gesture does not make one).
+  const lastTrace = useRef({ at: 0, offset: 0 });
+  const traceScroll = (e: NativeScrollEvent) => {
+    const now = Date.now();
+    const offset = Math.round(e.contentOffset.y);
+    const jump = Math.abs(offset - lastTrace.current.offset);
+    if (now - lastTrace.current.at < 250 && jump < e.layoutMeasurement.height) return;
+    lastTrace.current = { at: now, offset };
+    scrollTrace("offset", {
+      offset,
+      content: Math.round(e.contentSize.height),
+      viewport: Math.round(e.layoutMeasurement.height),
+      jump,
+    });
+  };
+
   // Rows arriving above the reader (older scrollback) can leave them near the top still.
   const onContentSizeChange = (_width: number, height: number) => {
+    scrollTrace("content", { height: Math.round(height), was: Math.round(scroll.current.content) });
     scroll.current.content = height;
     if (!stick.current) nearTop();
   };
 
   const jumpToBottom = () => {
+    scrollTrace("jump_to_bottom", { offset: Math.round(scroll.current.offset) });
     stick.current = true;
     far.current = false;
     setAway(false);
@@ -242,6 +270,10 @@ export function TerminalView({
       <View
         style={styles.frame}
         onLayout={(event) => setViewportWidth(event.nativeEvent.layout.width)}
+        onTouchStart={(event) =>
+          scrollTrace("touch_start", { y: Math.round(event.nativeEvent.pageY) })
+        }
+        onTouchEnd={(event) => scrollTrace("touch_end", { y: Math.round(event.nativeEvent.pageY) })}
       >
         <ScrollView
           horizontal
@@ -275,6 +307,10 @@ export function TerminalView({
               autoscrollToTopThreshold: STICK_SLACK,
             }}
             onScroll={onScroll}
+            onScrollBeginDrag={() => scrollTrace("drag_begin")}
+            onScrollEndDrag={() => scrollTrace("drag_end")}
+            onMomentumScrollBegin={() => scrollTrace("momentum_begin")}
+            onMomentumScrollEnd={() => scrollTrace("momentum_end")}
             onContentSizeChange={onContentSizeChange}
             scrollEventThrottle={32}
             ListEmptyComponent={<Text style={styles.waiting}>waiting for output…</Text>}

@@ -5,6 +5,8 @@
 // block shown above the live grid. One instance per open pane, shared by the
 // native renderer and the classic WebView renderer (which replays the same frames).
 
+import { scrollCount, scrollTrace } from "./scroll-trace";
+
 export interface ScreenState {
   cols: number;
   rows: number;
@@ -171,6 +173,7 @@ export class TerminalScreen {
       }
     }
     if (!changed) return;
+    scrollCount("diff_frame");
     this.set({ ...this.state, lines });
     this.emit({ t: "diff", rows });
   }
@@ -216,6 +219,7 @@ export class TerminalScreen {
       this.lastTopUp = now;
     }
     const lines = this.windowFor(effective);
+    scrollTrace("history_ask", { mode: effective, lines });
     this.inFlight = { lines, mode: effective, at: now };
     this.historySource(lines);
   }
@@ -277,6 +281,12 @@ export class TerminalScreen {
    */
   setHistory(rows: readonly string[], visible?: number): void {
     const request = this.inFlight ?? { lines: HISTORY_FULL_LINES, mode: "full" as const, at: 0 };
+    scrollTrace("history_reply", {
+      mode: request.mode,
+      asked: request.lines,
+      rows: rows.length,
+      took: request.at ? Date.now() - request.at : -1,
+    });
     this.inFlight = null;
     const cut = Math.min(rows.length, Math.max(0, visible ?? this.state.lines.length));
     const scrollback = rows.slice(0, rows.length - cut);
