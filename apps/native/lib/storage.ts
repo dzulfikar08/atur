@@ -14,10 +14,30 @@ export async function getItem(key: string): Promise<string | null> {
   }
 }
 
-export async function setItem(key: string, value: string): Promise<void> {
+export interface SetItemOptions {
+  /**
+   * Keychain / Keystore entry that never leaves this phone: readable after the first unlock,
+   * excluded from backups and not restored onto a new device (iOS: AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY).
+   */
+  thisDeviceOnly?: boolean;
+}
+
+export async function setItem(
+  key: string,
+  value: string,
+  options: SetItemOptions = {},
+): Promise<void> {
   try {
     if (web) globalThis.localStorage?.setItem(key, value);
-    else await SecureStore.setItemAsync(key, value);
+    else {
+      await SecureStore.setItemAsync(
+        key,
+        value,
+        options.thisDeviceOnly
+          ? { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY }
+          : undefined,
+      );
+    }
   } catch {
     // Best effort: the in-memory value still applies for this run.
   }

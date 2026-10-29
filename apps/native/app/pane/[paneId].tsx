@@ -7,6 +7,8 @@ import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+import { DirectPaneMenu } from "@/components/direct/direct-pane-menu";
+import { TransportBadge } from "@/components/direct/transport-badge";
 import { KeyboardFrame } from "@/components/keyboard-frame";
 import { usePaneActions } from "@/components/pane-actions";
 import { ClassicTerminal } from "@/components/terminal/classic-terminal";
@@ -16,6 +18,9 @@ import { SelectTextSheet } from "@/components/terminal/select-text";
 import { Transcript } from "@/components/terminal/transcript";
 import { Text, type IconName } from "@/components/ui";
 import { api } from "@/lib/api";
+import { directSessionTitle } from "@/lib/direct/session-meta";
+import { parsePaneTarget } from "@/lib/direct/transport-choice";
+import { useDirect } from "@/lib/direct/use-direct";
 import { paneAttention, paneTitle } from "@/lib/pane-meta";
 import { acknowledgePane } from "@/lib/pane-seen";
 import { usePaneAttach, usePaneObserve, type PaneAttachStatus } from "@/lib/pane-streams";
@@ -42,6 +47,16 @@ export default function PaneView() {
   const { paneId } = useLocalSearchParams<{ paneId: string }>();
   const panes = useQuery({ queryKey: ["panes"], queryFn: api.panes });
   const pane = panes.data?.find((p) => p.pane_id === paneId);
+  const target = parsePaneTarget(paneId ?? "");
+  const direct = useDirect();
+  const session = direct.sessions.find((s) => s.id === target.sessionId);
+  const title = pane
+    ? paneTitle(pane)
+    : session
+      ? directSessionTitle(session)
+      : target.directOnly
+        ? `Session ${target.sessionId}`
+        : (paneId ?? "");
 
   // Looking at the pane acknowledges whatever state it is in, including one it
   // reaches while the screen stays open.
@@ -64,6 +79,10 @@ export default function PaneView() {
     void savePaneView(next);
   };
 
+  // A `direct:` pane has no transcript (that is the bridge's) and no split / close.
+  const shownView = target.directOnly && view === "transcript" ? "native" : view;
+  const [menuOpen, setMenuOpen] = useState(false);
+
   // Split opens the new pane; closing this one leaves the screen (the pane is gone).
   const actions = usePaneActions({
     onClosed: () => (router.canGoBack() ? router.back() : router.replace("/panes")),
@@ -81,36 +100,44 @@ export default function PaneView() {
   // Frames land here once and feed whichever renderer is mounted.
   const screen = useMemo(() => new TerminalScreen(), [paneId]);
 
-  const { status, sendInput, sendPaste, retry, claimKeyboard, requestHistory, requestResize } =
-    usePaneAttach(paneId ?? "", {
-      // hello carries the real pane geometry — the grid is authoritative.
-      onHello: ({ cols, rows, keyboard }) => {
-        setOwnsKeyboard(keyboard);
-        // Opening a pane means using it: take the keyboard on every (re)connect.
-        if (!keyboard) claimKeyboard();
-        const reflowed = screen.getState().cols !== cols;
-        screen.hello(cols, rows);
-        // A (re)connect: scrollback requests go to this socket. A full read
-        // still appends when it overlaps, so a reconnect never moves the rows
-        // being read; a new width rewraps every row, so that one replaces.
-        screen.setHistorySource(requestHistory);
-        screen.loadHistory(reflowed ? "replace" : "full");
-      },
-      onSnapshot: (ansi) => {
-        setBridgeError(null);
-        screen.snapshot(ansi);
-      },
-      onDiff: (rows) => screen.diff(rows),
-      onHistory: (rows, visible) => screen.setHistory(rows, visible),
-      onGeometry: ({ cols, rows }) => {
-        const reflowed = screen.getState().cols !== cols;
-        screen.hello(cols, rows);
-        if (reflowed) screen.loadHistory("replace");
-      },
-      onKeyboard: setOwnsKeyboard,
-      onError: setBridgeError,
-    });
-  const observe = usePaneObserve(paneId ?? "", view === "transcript");
+  const {
+    status,
+    transport,
+    sendInput,
+    sendPaste,
+    retry,
+    claimKeyboard,
+    requestHistory,
+    requestResize,
+  } = usePaneAttach(paneId ?? "", {
+    // hello carries the real pane geometry — the grid is authoritative.
+    onHello: ({ cols, rows, keyboard }) => {
+      setOwnsKeyboard(keyboard);
+      // Opening a pane means using it: take the keyboard on every (re)connect.
+      if (!keyboard) claimKeyboard();
+      const reflowed = screen.getState().cols !== cols;
+      screen.hello(cols, rows);
+      // A (re)connect: scrollback requests go to this socket. A full read
+      // still appends when it overlaps, so a reconnect never moves the rows
+      // being read; a new width rewraps every row, so that one replaces.
+      screen.setHistorySource(requestHistory);
+      screen.loadHistory(reflowed ? "replace" : "full");
+    },
+    onSnapshot: (ansi) => {
+      setBridgeError(null);
+      screen.snapshot(ansi);
+    },
+    onDiff: (rows) => screen.diff(rows),
+    onHistory: (rows, visible) => screen.setHistory(rows, visible),
+    onGeometry: ({ cols, rows }) => {
+      const reflowed = screen.getState().cols !== cols;
+      screen.hello(cols, rows);
+      if (reflowed) screen.loadHistory("replace");
+    },
+    onKeyboard: setOwnsKeyboard,
+    onError: setBridgeError,
+  });
+  const observe = usePaneObserve(paneId ?? "", shownView === "transcript" && !target.directOnly);
 
   if (!paneId) return null;
 
@@ -132,30 +159,33 @@ export default function PaneView() {
                 accessibilityLabel={STATUS_LABEL[status]}
               />
               <Text style={styles.title} numberOfLines={1}>
-                {pane ? paneTitle(pane) : paneId}
+                {title}
               </Text>
+              <TransportBadge transport={transport} rttMs={direct.rttMs} />
             </View>
           ),
           // One menu keeps the header clean: views, split and close all live in ⋯.
           headerRight: () => (
             <Pressable
               onPress={() =>
-                actions.open(
-                  { pane_id: paneId, title: pane ? paneTitle(pane) : paneId },
-                  {
-                    options: VIEWS,
-                    current: view,
-                    onChoose: (next) => chooseView(next as PaneView),
-                    actions: [
+                target.directOnly
+                  ? setMenuOpen(true)
+                  : actions.open(
+                      { pane_id: paneId, title },
                       {
-                        key: "select",
-                        icon: "text-outline",
-                        title: "Select text",
-                        onPress: openSelector,
+                        options: VIEWS,
+                        current: view,
+                        onChoose: (next) => chooseView(next as PaneView),
+                        actions: [
+                          {
+                            key: "select",
+                            icon: "text-outline",
+                            title: "Select text",
+                            onPress: openSelector,
+                          },
+                        ],
                       },
-                    ],
-                  },
-                )
+                    )
               }
               accessibilityRole="button"
               accessibilityLabel="Pane menu"
@@ -168,15 +198,19 @@ export default function PaneView() {
         }}
       />
       <KeyboardFrame variant="fill">
-        {bridgeError ? <Text style={styles.errorText}>Bridge error: {bridgeError}</Text> : null}
+        {bridgeError ? (
+          <Text style={styles.errorText}>
+            {transport === "direct" ? "Direct" : "Bridge"} error: {bridgeError}
+          </Text>
+        ) : null}
 
         <View style={styles.flex}>
-          {view === "native" ? (
+          {shownView === "native" ? (
             <NativeTerminal
               paneId={paneId}
               screen={screen}
               canType={canType}
-              isAgent={Boolean(pane?.agent)}
+              isAgent={Boolean(pane?.agent ?? session?.agent)}
               sendInput={sendInput}
               sendPaste={sendPaste}
               onClaimKeyboard={status === "connected" ? claimKeyboard : undefined}
@@ -184,16 +218,34 @@ export default function PaneView() {
               onSelectText={openSelector}
             />
           ) : null}
-          {view === "classic" ? (
+          {shownView === "classic" ? (
             <ClassicTerminal screen={screen} canType={canType} sendInput={sendInput} />
           ) : null}
-          {view === "transcript" ? <Transcript observe={observe} /> : null}
-          {gone && view !== "transcript" ? (
+          {shownView === "transcript" ? <Transcript observe={observe} /> : null}
+          {gone && shownView !== "transcript" ? (
             <GoneOverlay exited={status === "exited"} onRetry={retry} />
           ) : null}
         </View>
       </KeyboardFrame>
       {actions.sheet}
+      {target.directOnly ? (
+        <DirectPaneMenu
+          visible={menuOpen}
+          title={title}
+          views={VIEWS.filter((v) => v.value !== "transcript")}
+          current={shownView}
+          onChoose={(next) => chooseView(next as PaneView)}
+          onSelectText={openSelector}
+          onEnd={async () => {
+            const link = direct.connection;
+            if (!link) throw new Error("Not connected to your computer");
+            await link.endSession(target.sessionId);
+            if (router.canGoBack()) router.back();
+            else router.replace("/panes");
+          }}
+          onClose={() => setMenuOpen(false)}
+        />
+      ) : null}
       <SelectTextSheet visible={selecting} screen={screen} onClose={() => setSelecting(false)} />
     </View>
   );
@@ -202,7 +254,7 @@ export default function PaneView() {
 const styles = StyleSheet.create((theme) => ({
   screen: { flex: 1, backgroundColor: theme.colors.background },
   flex: { flex: 1 },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.sm, maxWidth: 180 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.sm, maxWidth: 240 },
   title: { fontSize: theme.fontSize.base, fontFamily: theme.fonts.bold, flexShrink: 1 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   dotLive: { backgroundColor: theme.colors.completed },

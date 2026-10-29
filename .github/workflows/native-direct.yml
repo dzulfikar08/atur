@@ -1,0 +1,227 @@
+name: Native direct
+
+# The phone's direct path to Atur Terminal (apps/native/modules/atur-direct, docs/native-direct.md):
+# repo gates, an Android emulator run against an isolated server, the bridge's loopback latency for
+# comparison, and the iOS simulator build. GitHub-hosted runners only.
+on:
+  push:
+    branches: [feat/native-direct]
+  workflow_dispatch:
+
+concurrency:
+  group: native-direct-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # The headless build the isolated test server comes from: any release with this protocol works.
+  SERVER_RELEASE: atur-v2.2.0-2
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - run: bun run fmt:check
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run test
+
+  android-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY/CodeQL"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+          targets: x86_64-linux-android
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Gradle JVM settings
+        run: |
+          mkdir -p ~/.gradle
+          printf 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\norg.gradle.parallel=true\n' >> ~/.gradle/gradle.properties
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build the Rust core for the emulator (x86_64)
+        env:
+          ATUR_ANDROID_ABIS: x86_64
+          ATUR_CORE_CACHE: /tmp/atur-terminal-core
+        run: |
+          cargo install cargo-ndk --locked --version 4.1.2
+          export ANDROID_NDK_HOME="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_ROOT}"
+          apps/native/modules/atur-direct/scripts/build-core.sh android
+          find apps/native/modules/atur-direct/android \( -name '*.so' -o -name '*.kt' \) | sort
+
+      - name: Build the proof APK (release, R8 on, x86_64)
+        working-directory: apps/native
+        env:
+          NODE_ENV: production
+          EXPO_PUBLIC_ATUR_E2E: "1"
+          EXPO_PUBLIC_SERVER_URL: https://app.diatur.com
+        run: |
+          bunx expo prebuild -p android --no-install --clean
+          cd android
+          ./gradlew --no-daemon :app:assembleRelease \
+            -PreactNativeArchitectures=x86_64 \
+            -Pandroid.enableMinifyInReleaseBuilds=true
+          ls -la app/build/outputs/apk/release/
+
+      - name: Start an isolated Atur Terminal server and print a pairing link
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$SERVER_RELEASE" --repo dzulfikar08/atur-terminal --pattern 'atur-terminal-*-linux-x86_64.tar.gz' --dir "$RUNNER_TEMP"
+          mkdir -p "$RUNNER_TEMP/server"
+          tar -xzf "$RUNNER_TEMP"/atur-terminal-*-linux-x86_64.tar.gz -C "$RUNNER_TEMP/server"
+          BIN="$(dirname "$(find "$RUNNER_TEMP/server" -name atur-term-server -type f | head -1)")"
+          export ATUR_TERM_DIR="$RUNNER_TEMP/profile"; mkdir -p "$ATUR_TERM_DIR"
+          export SHELL=/bin/bash
+          nohup "$BIN/atur-term-server" > "$RUNNER_TEMP/server.log" 2>&1 &
+          for _ in $(seq 100); do [ -S "$ATUR_TERM_DIR/server.sock" ] && break; sleep 0.1; done
+          "$BIN/atur-term" mobile enable --port 7600
+          nohup "$BIN/atur-term" mobile pair --address 10.0.2.2 > "$RUNNER_TEMP/pair.txt" 2>&1 &
+          for _ in $(seq 100); do grep -qE '^[a-z-]+://pair\?' "$RUNNER_TEMP/pair.txt" && break; sleep 0.1; done
+          grep -E '^[a-z-]+://pair\?' "$RUNNER_TEMP/pair.txt" | head -1 > "$RUNNER_TEMP/link.txt"
+          test -s "$RUNNER_TEMP/link.txt"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run the proof on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: default
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: apps/native/scripts/e2e-direct-android.sh apps/native/android/app/build/outputs/apk/release/app-release.apk "$(cat ${{ runner.temp }}/link.txt)" 7600 e2e-out
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '### Direct path on an Android emulator (x86_64, API 34), isolated server on the runner'
+            echo '```'
+            grep -h -E 'ATUR_E2E (METRIC|RESULT|FAILURE|STEP)' e2e-out/e2e-lines.txt 2>/dev/null || echo 'no result lines'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-e2e
+          path: |
+            e2e-out
+            ${{ runner.temp }}/server.log
+            ${{ runner.temp }}/pair.txt
+            apps/native/android/app/build/outputs/mapping/release/mapping.txt
+
+  bridge-latency:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - name: Isolated server, the bridge, and the loopback measurement
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$SERVER_RELEASE" --repo dzulfikar08/atur-terminal --pattern 'atur-terminal-*-linux-x86_64.tar.gz' --dir "$RUNNER_TEMP"
+          mkdir -p "$RUNNER_TEMP/server"
+          tar -xzf "$RUNNER_TEMP"/atur-terminal-*-linux-x86_64.tar.gz -C "$RUNNER_TEMP/server"
+          BIN="$(dirname "$(find "$RUNNER_TEMP/server" -name atur-term-server -type f | head -1)")"
+          export ATUR_TERM_DIR="$RUNNER_TEMP/profile"; mkdir -p "$ATUR_TERM_DIR"
+          export SHELL=/bin/bash
+          nohup "$BIN/atur-term-server" > "$RUNNER_TEMP/server.log" 2>&1 &
+          for _ in $(seq 100); do [ -S "$ATUR_TERM_DIR/server.sock" ] && break; sleep 0.1; done
+          export BRIDGE_TOKEN=bench BRIDGE_PORT=7601 BRIDGE_BACKEND=atur-terminal ATUR_TERM_BIN="$BIN/atur-term"
+          (cd apps/bridge && nohup bun run src/main.ts > "$RUNNER_TEMP/bridge.log" 2>&1 &)
+          for _ in $(seq 100); do curl -fs -H "x-bridge-token: bench" http://127.0.0.1:7601/health >/dev/null && break; sleep 0.2; done
+          PANE="$(curl -fs -X POST -H 'x-bridge-token: bench' -H 'content-type: application/json' -d "{\"cwd\":\"$HOME\"}" http://127.0.0.1:7601/workspaces | python3 -c 'import json,sys; print(json.load(sys.stdin)["pane"]["pane_id"])')"
+          echo "pane $PANE"
+          sleep 1
+          BRIDGE_URL=http://127.0.0.1:7601 bun apps/bridge/scripts/latency-bench.ts "$PANE" 30 | tee bridge-bench.txt
+          { echo '### Bridge on loopback (no Cloudflare hop)'; echo '```'; cat bridge-bench.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bridge-latency
+          path: |
+            bridge-bench.txt
+            ${{ runner.temp }}/bridge.log
+            ${{ runner.temp }}/server.log
+
+  ios-simulator:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+      - run: bun install --frozen-lockfile
+      - name: Build the Rust core for iOS (device and simulator)
+        env:
+          ATUR_CORE_CACHE: /tmp/atur-terminal-core
+        run: |
+          apps/native/modules/atur-direct/scripts/build-core.sh ios
+          ls -R apps/native/modules/atur-direct/ios | head -30
+      - name: Prebuild and build the app for the iOS Simulator
+        working-directory: apps/native
+        env:
+          NODE_ENV: production
+          EXPO_PUBLIC_ATUR_E2E: "1"
+        run: |
+          bunx expo prebuild -p ios --no-install --clean
+          cd ios
+          pod install
+          WORKSPACE="$(ls -d *.xcworkspace | head -1)"
+          SCHEME="${WORKSPACE%.xcworkspace}"
+          set -o pipefail
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=NO \
+            build 2>&1 | tee xcodebuild.log | tail -40
+          find build/Build/Products -maxdepth 2 -name '*.app'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-simulator-build
+          path: apps/native/ios/xcodebuild.log

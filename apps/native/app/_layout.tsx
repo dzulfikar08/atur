@@ -27,6 +27,9 @@ import { loadThemePref } from "@/lib/theme-pref";
 import { queryClient, restoreSession, useSession } from "@/lib/session";
 import { darkTheme } from "@/theme";
 
+// CI proof builds only: the direct-connection run (app/direct-e2e.tsx) skips the account gate.
+const E2E = process.env.EXPO_PUBLIC_ATUR_E2E === "1";
+
 void SplashScreen.preventAutoHideAsync().catch(() => {
   // Splash already hidden (web).
 });
@@ -111,9 +114,11 @@ export default function RootLayout() {
                 />
                 <Stack.Screen name="search" options={{ title: "Search" }} />
                 <Stack.Screen name="my-issues" options={{ title: "My issues" }} />
+                <Stack.Screen name="direct" options={{ title: "Direct connection" }} />
                 <Stack.Screen name="pane/[paneId]" options={{ title: "" }} />
                 <Stack.Screen name="screen" options={{ headerShown: false, animation: "fade" }} />
               </Stack.Protected>
+              {E2E ? <Stack.Screen name="direct-e2e" options={{ headerShown: false }} /> : null}
               <Stack.Protected guard={!authed}>
                 <Stack.Screen name="login" options={{ headerShown: false }} />
               </Stack.Protected>

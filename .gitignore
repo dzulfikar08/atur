@@ -24,6 +24,9 @@ worker-configuration.d.ts
 ios/
 android/
 !scripts/ios/
+# The Expo module's own native code (its generated libraries stay ignored by the module's .gitignore)
+!apps/native/modules/atur-direct/android/
+!apps/native/modules/atur-direct/ios/
 
 # Firebase config for FCM push (per-owner; CI writes it from GOOGLE_SERVICES_JSON)
 apps/native/google-services.json
