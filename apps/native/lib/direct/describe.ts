@@ -6,7 +6,7 @@ import { DirectError, type DirectErrorCode } from "@/modules/atur-direct/src/typ
 // for the codes where it is all there is to say.
 
 const ERROR_TEXT: Record<DirectErrorCode, string> = {
-  InvalidLink: "That is not a pairing code from Atur Terminal.",
+  InvalidLink: "This is not an Atur pairing code. Run atur-term mobile pair on your computer.",
   InvalidCredential: "The saved pairing is damaged. Pair this computer again.",
   Unreachable:
     "Can't reach the computer. Check that it is on, and that this phone is on the same network or Tailscale.",

@@ -1,6 +1,6 @@
 import "@/unistyles";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { router } from "expo-router";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
@@ -13,24 +13,19 @@ import { endSession } from "@/lib/session";
 // purchase buttons, prices, or links to an external purchase flow. It only
 // tells the user where the plan is managed.
 
-/** Renders `children` unless the signed-in account has no Atur Cloud plan. */
-export function PlanGate({ children }: { children: ReactNode }) {
-  const me = useQuery({ queryKey: ["me"], queryFn: api.me });
-  if (me.data?.billing?.entitled !== false) return <>{children}</>;
-  return (
-    <PlanRequired email={me.data.email} checking={me.isFetching} onCheck={() => me.refetch()} />
-  );
+/**
+ * True when the signed-in account has no Atur Cloud plan. Only the account's own screens are held
+ * back (the root layout swaps them for the plan screen); the Direct area never asks.
+ */
+export function usePlanBlocked(authed: boolean): boolean {
+  const me = useQuery({ queryKey: ["me"], queryFn: api.me, enabled: authed });
+  return authed && me.data?.billing?.entitled === false;
 }
 
-function PlanRequired({
-  email,
-  checking,
-  onCheck,
-}: {
-  email: string;
-  checking: boolean;
-  onCheck: () => void;
-}) {
+/** The plan screen: where the plan is managed, plus the way into Direct, which needs no plan. */
+export function PlanRequired() {
+  const me = useQuery({ queryKey: ["me"], queryFn: api.me });
+  const email = me.data?.email ?? "";
   const signOut = useMutation({
     mutationFn: async () => {
       await disableAgentAlerts().catch(() => undefined);
@@ -53,7 +48,12 @@ function PlanRequired({
           back and check again.
         </Text>
         <View style={styles.actions}>
-          <Button label="Check again" onPress={onCheck} loading={checking} />
+          <Button label="Check again" onPress={() => void me.refetch()} loading={me.isFetching} />
+          <Button
+            label="Use Direct without a plan"
+            variant="secondary"
+            onPress={() => router.push("/direct-home")}
+          />
           <Button
             label="Sign out"
             variant="secondary"

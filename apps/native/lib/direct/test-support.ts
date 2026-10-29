@@ -200,6 +200,13 @@ export class FakeLink implements DirectLink {
     return true;
   }
 
+  readonly images: { session: string; name: string; base64: string }[] = [];
+
+  async pasteImage(session: string, name: string, base64: string): Promise<{ path: string }> {
+    this.images.push({ session, name, base64 });
+    return { path: `/home/dev/.cache/atur/pastes/${name}` };
+  }
+
   resize(session: string, cols: number, rows: number): boolean {
     if (this.closed) return false;
     this.resizes.push({ session, cols, rows });

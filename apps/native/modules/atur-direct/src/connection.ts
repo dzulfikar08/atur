@@ -170,6 +170,14 @@ export class DirectConnection {
     return this.call("history", { session, lines });
   }
 
+  /**
+   * Saves an image on the computer (its Home project, `.cache/atur/pastes/<name>`) and returns the
+   * absolute path there, for the prompt. `name` is a plain file name; the image is at most 5 MiB.
+   */
+  pasteImage(session: string, name: string, base64: string): Promise<{ path: string }> {
+    return this.call("pasteImage", { session, name, base64 });
+  }
+
   activity(): Promise<ActivitySnapshot> {
     return this.call("activity");
   }

@@ -9,6 +9,7 @@ function fakeManager(initial: DirectLink | null = null) {
   let connection = initial;
   const listeners = new Set<() => void>();
   const snapshot = (): DirectSnapshot => ({
+    loaded: true,
     state: connection ? "connected" : "offline",
     serverId: "srv-1",
     serverName: "Desk",

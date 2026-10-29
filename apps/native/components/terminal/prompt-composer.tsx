@@ -7,11 +7,17 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { MicButton } from "@/components/mic-button";
 import { IconButton } from "@/components/ui";
 import { api } from "@/lib/api";
+import { directManager } from "@/lib/direct";
+import { describeDirectError } from "@/lib/direct/describe";
+import { pasteImageDirect } from "@/lib/direct/paste-image";
+import type { PaneTransport } from "@/lib/direct/transport-choice";
 import { insertPath } from "@/lib/terminal-keys";
 
 interface PromptComposerProps {
   paneId: string;
   enabled: boolean;
+  /** The road the pane is on: images go to the computer by the same road. */
+  transport: PaneTransport;
   /** Deliver the prompt (text, then Enter); false when it could not be sent, so the draft stays. */
   onSend: (text: string) => boolean;
   /** Present when another viewer holds the keyboard: tapping the field takes it back. */
@@ -25,7 +31,13 @@ interface PromptComposerProps {
  * machine and inserts its path, so the agent can open it (the web composer
  * does the same for pasted and dropped images).
  */
-export function PromptComposer({ paneId, enabled, onSend, onClaim }: PromptComposerProps) {
+export function PromptComposer({
+  paneId,
+  transport,
+  enabled,
+  onSend,
+  onClaim,
+}: PromptComposerProps) {
   const { theme } = useUnistyles();
   const [text, setText] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -55,8 +67,14 @@ export function PromptComposer({ paneId, enabled, onSend, onClaim }: PromptCompo
     }
     setUploading(true);
     try {
-      const png = Uint8Array.from(atob(base64), (ch) => ch.charCodeAt(0));
-      const { path } = await api.panePasteImage(paneId, png.buffer, "image/png");
+      const direct = transport === "direct";
+      const { path } = direct
+        ? await pasteImageDirect(directManager.getSnapshot().connection, paneId, base64)
+        : await api.panePasteImage(
+            paneId,
+            Uint8Array.from(atob(base64), (ch) => ch.charCodeAt(0)).buffer,
+            "image/png",
+          );
       setText((current) => {
         const next = insertPath(current, Math.min(caret.current, current.length), path);
         caret.current = next.caret;
@@ -64,7 +82,14 @@ export function PromptComposer({ paneId, enabled, onSend, onClaim }: PromptCompo
       });
       void Haptics.selectionAsync().catch(() => {});
     } catch (error) {
-      Alert.alert("Couldn't attach the image", error instanceof Error ? error.message : undefined);
+      Alert.alert(
+        "Couldn't attach the image",
+        transport === "direct"
+          ? describeDirectError(error)
+          : error instanceof Error
+            ? error.message
+            : undefined,
+      );
     } finally {
       setUploading(false);
     }

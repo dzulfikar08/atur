@@ -54,6 +54,23 @@ test("without a native module the manager is unsupported and does nothing", asyn
   expect(manager.getSnapshot().connection).toBeNull();
 });
 
+test("loaded says when the saved pairing has been read", async () => {
+  const { manager } = await setup({ stored: true });
+  expect(manager.getSnapshot().loaded).toBe(false);
+  await manager.start();
+  expect(manager.getSnapshot().loaded).toBe(true);
+  expect(manager.getSnapshot().state).not.toBe("unpaired");
+
+  const empty = await setup({ stored: false });
+  expect(empty.manager.getSnapshot().loaded).toBe(false);
+  await empty.manager.start();
+  expect(empty.manager.getSnapshot().loaded).toBe(true);
+  expect(empty.manager.getSnapshot().state).toBe("unpaired");
+
+  const none = await setup({ unsupported: true });
+  expect(none.manager.getSnapshot().loaded).toBe(true);
+});
+
 test("nothing stored: unpaired, no connect", async () => {
   const { manager, native } = await setup({ stored: false });
   await manager.start();

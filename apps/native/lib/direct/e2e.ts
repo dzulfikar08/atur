@@ -49,6 +49,10 @@ function waitFor<T>(
   });
 }
 
+/** A valid 1x1 PNG (70 bytes). */
+const TINY_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
 /** What the app would show on screen, without escape sequences. */
 function screenText(screen: TerminalScreen): string[] {
   return screen.getState().lines.map((line) => rowText(parseRow(line)));
@@ -127,6 +131,16 @@ export async function runDirectE2E(
     step("type");
     record("type_and_output_ms", await typeAndSee("echo e2e-$((40+2))", "e2e-42", "first command"));
 
+    // 3b. Image paste without the bridge: the core writes the file on the computer and answers
+    // with its path; the shell proves it is there.
+    step("paste-image");
+    const pasteStart = Date.now();
+    const pasted = await link0.pasteImage(session.id, "paste-e2e.png", TINY_PNG_BASE64);
+    record("paste_image_ms", Date.now() - pasteStart);
+    if (!pasted.path.endsWith("/.cache/atur/pastes/paste-e2e.png"))
+      throw new Error(`unexpected pasted image path: ${pasted.path}`);
+    await typeAndSee(`test -s '${pasted.path}' && echo img-ok`, "img-ok", "image on the computer");
+
     // 4. Echo latency with the predictor off and on, one key at a time into `cat`.
     step("echo");
     pane.sendInput("cat >/dev/null\r");
@@ -202,8 +216,9 @@ export async function runDirectE2E(
     if (history.rows.length < 5 || history.visible < 1) throw new Error("history came back empty");
     record("history_rows", history.rows.length);
 
+    // The session stays on the computer: the host's second phase (scripts/e2e-direct-android.sh)
+    // opens it from the Direct area of a freshly installed app.
     pane.close();
-    await (directManager.getSnapshot().connection as DirectLink).endSession(session.id);
     record("snapshots", snapshots);
     return { ok: true, metrics };
   } catch (error) {

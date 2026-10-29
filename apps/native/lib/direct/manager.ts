@@ -42,6 +42,7 @@ export type DirectLink = Pick<
   | "detach"
   | "input"
   | "paste"
+  | "pasteImage"
   | "resize"
   | "history"
   | "setEchoMode"
@@ -81,6 +82,8 @@ export interface DirectFailure {
 }
 
 export interface DirectSnapshot {
+  /** The saved pairing has been read, so `state` says whether a computer is paired. */
+  loaded: boolean;
   state: DirectState;
   serverId: string | null;
   serverName: string | null;
@@ -154,6 +157,7 @@ export class DirectManager {
     this.appState = deps.appState;
     this.timers = deps.timers ?? globalTimers;
     this.snapshot = {
+      loaded: !deps.native,
       state: deps.native ? "unpaired" : "unsupported",
       serverId: null,
       serverName: null,
@@ -199,14 +203,17 @@ export class DirectManager {
     this.foreground = this.appState.isActive();
     this.appState.subscribe((active) => this.onAppActive(active));
     this.credential = credentials[0] ?? null;
-    this.patch({ preferDirect: prefer ?? true });
-    if (this.credential) {
-      this.patch({
-        state: "idle",
-        serverId: this.credential.serverId,
-        serverName: this.credential.serverName,
-      });
-    }
+    this.patch({
+      preferDirect: prefer ?? true,
+      loaded: true,
+      ...(this.credential
+        ? {
+            state: "idle",
+            serverId: this.credential.serverId,
+            serverName: this.credential.serverName,
+          }
+        : {}),
+    });
     if (this.credential && this.foreground) await this.connect();
   }
 

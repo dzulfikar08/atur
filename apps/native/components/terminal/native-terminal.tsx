@@ -7,6 +7,7 @@ import { KeyRow } from "@/components/terminal/key-row";
 import { PromptComposer } from "@/components/terminal/prompt-composer";
 import { TerminalView } from "@/components/terminal/terminal-view";
 import { Text } from "@/components/ui";
+import type { PaneTransport } from "@/lib/direct/transport-choice";
 import { diffInput } from "@/lib/screen-keys";
 import { applyModifiers, KEY_DATA, type Modifiers } from "@/lib/terminal-keys";
 import { DEFAULT_FONT_SIZE, fitFontSize, gridForViewport } from "@/lib/terminal-metrics";
@@ -20,6 +21,8 @@ const SENTINEL = "\u200b\u200b";
 interface NativeTerminalProps {
   paneId: string;
   screen: TerminalScreen;
+  /** The road the pane is on; the prompt composer saves images on the computer by it. */
+  transport: PaneTransport;
   /** Keyboard is ours and the socket is open. */
   canType: boolean;
   /** Agent panes get the prompt composer. */
@@ -41,6 +44,7 @@ interface NativeTerminalProps {
 export function NativeTerminal({
   paneId,
   screen,
+  transport,
   canType,
   isAgent,
   sendInput,
@@ -184,6 +188,7 @@ export function NativeTerminal({
       {isAgent ? (
         <PromptComposer
           paneId={paneId}
+          transport={transport}
           enabled={canType}
           onSend={sendPrompt}
           onClaim={onClaimKeyboard}

@@ -11,7 +11,6 @@ import {
   directSessionTitle,
   openableSessions,
 } from "@/lib/direct/session-meta";
-import { directPaneId } from "@/lib/direct/transport-choice";
 import { useDirect } from "@/lib/direct/use-direct";
 import type { DirectSession } from "@/modules/atur-direct/src/types";
 
@@ -32,7 +31,7 @@ function SessionRow({ session }: { session: DirectSession }) {
       accessibilityRole="button"
       accessibilityLabel={`Open session ${session.id}, ${directSessionTitle(session)}${status ? `, ${status}` : ""}`}
       onPress={() =>
-        router.push({ pathname: "/pane/[paneId]", params: { paneId: directPaneId(session.id) } })
+        router.push({ pathname: "/direct-pane/[sessionId]", params: { sessionId: session.id } })
       }
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
@@ -52,7 +51,7 @@ function SessionRow({ session }: { session: DirectSession }) {
 
 /**
  * The Panes tab's Direct section: terminals on the paired computer, listed by the computer
- * itself, shown while connected. Each opens `/pane/direct:<id>`.
+ * itself, shown while connected. Each opens `/direct-pane/<id>`, a route that needs no account.
  */
 export function DirectSessionsSection() {
   const direct = useDirect();

@@ -25,14 +25,14 @@ files, Live Activities and voice come later (see [Next phases](#next-phases)).
 
 ## Where the code is
 
-| What                                         | Where                                                                                                                                                           |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rust core, facade, local echo                | `crates/atur-mobile` in [atur-terminal](https://github.com/dzulfikar08/atur-terminal), branch `feat/mobile-rn` (`src/direct.rs`, `src/ansi.rs`, `src/input.rs`) |
-| Native module                                | `apps/native/modules/atur-direct` (`android/`, `ios/`, `src/`)                                                                                                  |
-| Build of the core into the module            | `apps/native/modules/atur-direct/scripts/build-core.sh`, pinned by `core.ref`                                                                                   |
-| Connection manager, pane transport, fallback | `apps/native/lib/direct/*`, `usePaneAttach` in `lib/pane-streams.ts`                                                                                            |
-| Screens                                      | `app/direct.tsx` (pairing and settings), Direct section in the panes tab, badge in the pane header                                                              |
-| Proof run on a device                        | `app/direct-e2e.tsx`, `lib/direct/e2e.ts`, `scripts/e2e-direct-android.sh`, `.github/workflows/native-direct.yml`                                               |
+| What                                         | Where                                                                                                                                                                                                                                                                                   |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rust core, facade, local echo                | `crates/atur-mobile` in [atur-terminal](https://github.com/dzulfikar08/atur-terminal), branch `feat/mobile-rn` (`src/direct.rs`, `src/ansi.rs`, `src/input.rs`)                                                                                                                         |
+| Native module                                | `apps/native/modules/atur-direct` (`android/`, `ios/`, `src/`)                                                                                                                                                                                                                          |
+| Build of the core into the module            | `apps/native/modules/atur-direct/scripts/build-core.sh`, pinned by `core.ref`                                                                                                                                                                                                           |
+| Connection manager, pane transport, fallback | `apps/native/lib/direct/*`, `usePaneAttach` in `lib/pane-streams.ts`                                                                                                                                                                                                                    |
+| Screens                                      | `components/direct/direct-settings.tsx` (pairing and settings; `app/direct.tsx` signed in, `app/direct-home.tsx` for everyone), `app/pair.tsx` (a tapped link), `app/direct-pane/[sessionId].tsx`, Direct section in the panes tab, badge in the pane header                            |
+| Proof run on a device                        | `app/direct-e2e.tsx`, `lib/direct/e2e.ts`, `scripts/e2e-direct-android.sh` (phase 1: the scripted scenario; phase 2: clean install, signed out, tapped link, typed command, read through `scripts/ui-assert.py`), `scripts/start-test-server.sh`, `.github/workflows/native-direct.yml` |
 
 ## Calling the Rust core from both platforms
 
@@ -96,6 +96,16 @@ error, not a silent success. Links and credentials are never logged. Revoking th
 (`atur-term mobile revoke`) closes its connection at once; the app then shows "pair again".
 
 A scanned or pasted link is parsed by the core, never in JavaScript.
+
+**Tapping the link.** `atur-term mobile pair` prints `atur://pair?...`, and the app registers the `atur`
+scheme, so opening that link on the phone (a message to yourself, a note) opens the app on the pairing
+screen: `app/+native-intent.tsx` turns `atur://pair?...` (or the router's `/pair?...`) into
+`/pair?link=<the whole link, encoded>` (`pairRouteFor` in `lib/direct/pair-link.ts`), and `app/pair.tsx` hands
+the link to the core. It shows `host:port` and the name this phone will have, and pairs only after Confirm; a
+link the core rejects says "This is not an Atur pairing code." and pairs nothing. The screen works signed out
+and signed in. The legacy pairing link (an older server prints its own scheme) is accepted when pasted or
+scanned, where the core reads it; the app registers no extra scheme for it. A pasted `.../pair?link=...`
+wrapper is unwrapped before the core sees it.
 
 ## Which transport the phone uses
 
@@ -161,7 +171,23 @@ the rules and has unit tests):
   the direct attach, and frames still queued from it are dropped, so the two roads never interleave.
 - A pane header badge says which road is in use (Direct with the round trip, or Cloud).
 
-Account sign-in and the Atur Cloud plan gate still apply to the app as a whole in phase 1.
+## Without an Atur account
+
+Direct needs no sign-in. The root layout (`app/_layout.tsx`) keeps the account's screens (issues, inbox, cloud
+panes, profile) behind `Stack.Protected`, and puts the Direct area outside it: `direct-home` (connection,
+pairing, the computer's sessions, a row to sign in), `direct-pane/[sessionId]` (a terminal; `components/terminal/pane-screen.tsx`
+asks the account API for nothing on a `direct:` pane) and `pair`. The login screen has "Use Direct without
+signing in". When the app starts signed out and a computer is already paired, it opens `direct-home`
+instead of the login screen (`startRoute` in `lib/direct/start-route.ts`; a tapped pairing link wins). The
+Atur Cloud plan gate holds back only the account's screens: a signed-in account without a plan sees the plan
+screen, which has a button into Direct.
+
+## Images in prompts
+
+`pasteImage` of the facade writes the image into the computer's Home project at `.cache/atur/pastes/<name>`
+(the bridge's default paste directory, 5 MiB at most) and answers with the absolute path. On a direct pane
+the prompt composer's image button sends the clipboard image that way (`paste-<epoch ms>.png`,
+`lib/direct/paste-image.ts`) and inserts the returned path, exactly as the bridge path does.
 
 ## Building it
 
@@ -242,6 +268,4 @@ cannot reach the Worker).
    suspended, which direct connections cannot provide on iOS), and **voice** input into the same `input`
    call.
 
-Also open: image paste into prompts on a direct pane (`PromptComposer` still posts to the bridge), several
-paired computers in the UI (the storage already keeps one credential per server id), and a deep link for
-the pairing code.
+Also open: several paired computers in the UI (the storage already keeps one credential per server id).

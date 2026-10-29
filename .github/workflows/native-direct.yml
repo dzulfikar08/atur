@@ -93,19 +93,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download "$SERVER_RELEASE" --repo dzulfikar08/atur-terminal --pattern 'atur-terminal-[0-9]*-linux-x86_64.tar.gz' --dir "$RUNNER_TEMP"
-          mkdir -p "$RUNNER_TEMP/server"
-          tar -xzf "$RUNNER_TEMP"/atur-terminal-[0-9]*-linux-x86_64.tar.gz -C "$RUNNER_TEMP/server"
-          BIN="$(dirname "$(find "$RUNNER_TEMP/server" -name atur-term-server -type f | head -1)")"
-          export ATUR_TERM_DIR="$RUNNER_TEMP/profile"; mkdir -p "$ATUR_TERM_DIR"
-          export SHELL=/bin/bash
-          nohup "$BIN/atur-term-server" > "$RUNNER_TEMP/server.log" 2>&1 &
-          for _ in $(seq 100); do [ -S "$ATUR_TERM_DIR/server.sock" ] && break; sleep 0.1; done
-          "$BIN/atur-term" mobile enable --port 7600
-          nohup "$BIN/atur-term" mobile pair --address 10.0.2.2 > "$RUNNER_TEMP/pair.txt" 2>&1 &
-          for _ in $(seq 100); do grep -qE '^[a-z-]+://pair\?' "$RUNNER_TEMP/pair.txt" && break; sleep 0.1; done
-          grep -E '^[a-z-]+://pair\?' "$RUNNER_TEMP/pair.txt" | head -1 > "$RUNNER_TEMP/link.txt"
-          test -s "$RUNNER_TEMP/link.txt"
+          S=apps/native/scripts/start-test-server.sh
+          "$S" start "$RUNNER_TEMP/atur-server" 7600
+          "$S" pair "$RUNNER_TEMP/atur-server" 10.0.2.2 "$RUNNER_TEMP/link.txt"
 
       - name: Enable KVM
         run: |
@@ -122,15 +112,20 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
-          script: apps/native/scripts/e2e-direct-android.sh apps/native/android/app/build/outputs/apk/release/app-release.apk "$(cat ${{ runner.temp }}/link.txt)" 7600 e2e-out
+          script: apps/native/scripts/e2e-direct-android.sh apps/native/android/app/build/outputs/apk/release/app-release.apk "$(cat ${{ runner.temp }}/link.txt)" 7600 e2e-out ${{ runner.temp }}/atur-server
 
       - name: Summary
         if: always()
         run: |
           {
             echo '### Direct path on an Android emulator (x86_64, API 34), isolated server on the runner'
+            echo 'Phase 1, the scripted scenario (pair, type, paste an image, background, drop, scrollback):'
             echo '```'
             grep -h -E 'ATUR_E2E (METRIC|RESULT|FAILURE|STEP)' e2e-out/e2e-lines.txt 2>/dev/null || echo 'no result lines'
+            echo '```'
+            echo 'Phase 2, a clean install used by hand: Direct without signing in, a tapped pairing link, a typed command:'
+            echo '```'
+            grep -h -E '^(phase 2:|ok:|PASS|FAIL)' e2e-out/phase2.txt 2>/dev/null || echo 'phase 2 did not run'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -140,8 +135,8 @@ jobs:
           name: android-e2e
           path: |
             e2e-out
-            ${{ runner.temp }}/server.log
-            ${{ runner.temp }}/pair.txt
+            ${{ runner.temp }}/atur-server/server.log
+            ${{ runner.temp }}/link.txt.log
             apps/native/android/app/build/outputs/mapping/release/mapping.txt
 
   bridge-latency:
@@ -157,14 +152,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download "$SERVER_RELEASE" --repo dzulfikar08/atur-terminal --pattern 'atur-terminal-[0-9]*-linux-x86_64.tar.gz' --dir "$RUNNER_TEMP"
-          mkdir -p "$RUNNER_TEMP/server"
-          tar -xzf "$RUNNER_TEMP"/atur-terminal-[0-9]*-linux-x86_64.tar.gz -C "$RUNNER_TEMP/server"
-          BIN="$(dirname "$(find "$RUNNER_TEMP/server" -name atur-term-server -type f | head -1)")"
-          export ATUR_TERM_DIR="$RUNNER_TEMP/profile"; mkdir -p "$ATUR_TERM_DIR"
-          export SHELL=/bin/bash
-          nohup "$BIN/atur-term-server" > "$RUNNER_TEMP/server.log" 2>&1 &
-          for _ in $(seq 100); do [ -S "$ATUR_TERM_DIR/server.sock" ] && break; sleep 0.1; done
+          apps/native/scripts/start-test-server.sh start "$RUNNER_TEMP/atur-server"
+          . "$RUNNER_TEMP/atur-server/env.sh"
           export BRIDGE_TOKEN=bench BRIDGE_PORT=7601 BRIDGE_BACKEND=atur-terminal ATUR_TERM_BIN="$BIN/atur-term"
           (cd apps/bridge && nohup bun run src/main.ts > "$RUNNER_TEMP/bridge.log" 2>&1 &)
           for _ in $(seq 100); do curl -fs -H "x-bridge-token: bench" http://127.0.0.1:7601/health >/dev/null && break; sleep 0.2; done
@@ -180,7 +169,7 @@ jobs:
           path: |
             bridge-bench.txt
             ${{ runner.temp }}/bridge.log
-            ${{ runner.temp }}/server.log
+            ${{ runner.temp }}/atur-server/server.log
 
   ios-simulator:
     runs-on: macos-15
@@ -218,11 +207,17 @@ jobs:
           pod install
           WORKSPACE="$(ls -d *.xcworkspace | head -1)"
           SCHEME="${WORKSPACE%.xcworkspace}"
-          set -o pipefail
-          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release \
+          if ! xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=NO \
-            build 2>&1 | tee xcodebuild.log | tail -40
+            build > xcodebuild.log 2>&1; then
+            echo '--- last 80 lines of xcodebuild.log'
+            tail -n 80 xcodebuild.log
+            echo "--- lines with 'error:'"
+            grep -n 'error:' xcodebuild.log || echo '(none)'
+            exit 1
+          fi
+          tail -n 40 xcodebuild.log
           find build/Build/Products -maxdepth 2 -name '*.app'
       - uses: actions/upload-artifact@v4
         if: always()
