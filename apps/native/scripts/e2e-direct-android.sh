@@ -3,7 +3,7 @@
 #
 #   e2e-direct-android.sh <apk> <pairing-link> <server-port> <out-dir>
 #
-# Installs the build made with EXPO_PUBLIC_ATUR_E2E=1, opens atur://direct-e2e?link=..., and plays
+# Installs the build made with EXPO_PUBLIC_ATUR_E2E=1, opens atur://direct-e2e?link64=..., and plays
 # the host's part of the scenario in app/direct-e2e.tsx while it logs `ATUR_E2E` lines:
 #   WAIT background  -> press Home, stay away past the app's 30 s grace, bring the app back
 #   WAIT drop        -> reset the app's connection on the server side (REJECT with tcp-reset)
@@ -24,8 +24,8 @@ adb logcat -v time ReactNativeJS:V AndroidRuntime:E libc:F DEBUG:F '*:S' > "$LOG
 LOGCAT=$!
 trap 'kill $LOGCAT 2>/dev/null' EXIT
 
-ENCODED="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$LINK")"
-adb shell am start -a android.intent.action.VIEW -p "$PACKAGE" -d "'atur://direct-e2e?link=$ENCODED'" >/dev/null
+ENCODED="$(python3 -c 'import base64, sys; print(base64.urlsafe_b64encode(sys.argv[1].encode()).decode().rstrip("="))' "$LINK")"
+adb shell am start -a android.intent.action.VIEW -p "$PACKAGE" -d "'atur://direct-e2e?link64=$ENCODED'" >/dev/null
 
 seen() { grep -q "$1" "$LOG"; }
 shot() { adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null || true; }

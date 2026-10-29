@@ -5,7 +5,8 @@ import { AppState, ScrollView, Text, View } from "react-native";
 import { runDirectE2E } from "@/lib/direct/e2e";
 
 // Proof run for CI: only reachable in builds made with EXPO_PUBLIC_ATUR_E2E=1 (app/_layout.tsx
-// registers the route only then). `atur://direct-e2e?link=<pairing link>` starts it; the lines it
+// registers the route only then). `atur://direct-e2e?link64=<base64url pairing link>` starts it (the link
+// has & and ? in it, which a deep link query would split); the lines it
 // logs under ATUR_E2E are what scripts/e2e-direct-android.sh reads.
 const ENABLED = process.env.EXPO_PUBLIC_ATUR_E2E === "1";
 
@@ -16,7 +17,8 @@ export default function DirectE2E() {
 }
 
 function Run() {
-  const { link } = useLocalSearchParams<{ link?: string }>();
+  const { link64 } = useLocalSearchParams<{ link64?: string }>();
+  const link = link64 ? decodeLink(link64) : undefined;
   const [lines, setLines] = useState<string[]>([]);
   const started = useRef(false);
   const cycles = useRef(0);
@@ -54,4 +56,10 @@ function Run() {
       </ScrollView>
     </View>
   );
+}
+
+/** base64url without padding, as scripts/e2e-direct-android.sh writes it. */
+function decodeLink(encoded: string): string {
+  const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
+  return atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4));
 }

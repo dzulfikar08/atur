@@ -89,7 +89,7 @@ for (let i = 0; i < samples; i++) {
   ws.send(JSON.stringify({ type: "input", data: "q" }));
   await until(`echo of ${typed.length} keys`, () => rows.some((row) => row.includes(typed)));
   times.push(performance.now() - sent);
-  await sleep(25);
+  await sleep(100);
 }
 times.sort((a, b) => a - b);
 const at = (f: number) => times[Math.min(times.length - 1, Math.floor(times.length * f))] ?? 0;

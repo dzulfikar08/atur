@@ -144,7 +144,7 @@ export async function runDirectE2E(
           screenText(screen).some((line) => line.includes(typed)),
         );
         samples.push(Date.now() - started);
-        await sleep(30);
+        await sleep(100);
       }
       record(`echo_${mode}`, summarize(samples));
       pane.sendInput("\u0004"); // Ctrl-D ends cat; the next round starts a new one
