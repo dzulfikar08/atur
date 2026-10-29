@@ -13,6 +13,9 @@ on:
       cpu_load:
         description: "Busy loops on the emulator during the scroll (a slow phone); 0 for none"
         default: "0"
+      runs:
+        description: "How many times phase 4 is played on the same build"
+        default: "1"
 
 concurrency:
   group: native-direct-scroll-${{ github.ref }}-${{ inputs.cpu_load }}
@@ -149,6 +152,7 @@ jobs:
         env:
           ATUR_E2E_PHASES: "4"
           ATUR_E2E_CPU_LOAD: ${{ inputs.cpu_load || '0' }}
+          ATUR_E2E_PHASE4_RUNS: ${{ inputs.runs || '1' }}
         with:
           api-level: 34
           arch: x86_64

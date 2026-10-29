@@ -36,6 +36,7 @@
 # ATUR_E2E_PHASES selects the phases to run (default 1234; the lean scroll workflow sets 4). A phase
 # that is not selected counts as passed. ATUR_E2E_CPU_LOAD=<n> keeps <n> busy loops running on the
 # device during phase 4, to see scrolling on a device that is short of CPU (a slow phone).
+# ATUR_E2E_PHASE4_RUNS=<n> plays phase 4 <n> times.
 set -uo pipefail
 
 APK="$1" LINK="$2" PORT="$3" OUT="$4" SERVER_DIR="$5"
@@ -286,12 +287,16 @@ PHASE4="$OUT/phase4.txt"
 : > "$PHASE4"
 export SCROLL_STATE="$OUT/scroll-state.json"
 
+# Lines of the log before this run of the scenario: only what comes after is its own.
+P4_START=1
+seen_now() { tail -n +"$P4_START" "$LOG" | grep -q "$1"; }
+
 # Waits for a line of the scroll scenario in the log, up to <seconds>; a FAILURE line ends the wait.
 wait_scroll_line() {
   local pattern="$1" until=$((SECONDS + $2))
   while [ $SECONDS -lt $until ]; do
-    seen "$pattern" && return 0
-    if seen "ATUR_E2E RESULT scroll FAIL"; then return 1; fi
+    seen_now "$pattern" && return 0
+    if seen_now "ATUR_E2E RESULT scroll FAIL"; then return 1; fi
     sleep 1
   done
   return 1
@@ -321,10 +326,11 @@ phase4() {
   local link64
   link64="$(python3 -c 'import base64, sys; print(base64.urlsafe_b64encode(open(sys.argv[1]).read().strip().encode()).decode().rstrip("="))' "$OUT/link4.txt")"
   adb shell am force-stop "$PACKAGE"
+  P4_START=$(($(wc -l < "$LOG") + 1))
   adb shell am start -a android.intent.action.VIEW -p "$PACKAGE" -d "'atur://direct-e2e?link64=$link64&scenario=scroll'" >/dev/null
   must "the scenario puts the workload's whole scrollback in order through the pane code" \
     wait_scroll_line "ATUR_E2E STEP ui" 420 || {
-      grep -o "ATUR_E2E FAILURE.*" "$LOG" | tail -1 | tee -a "$PHASE4" || true
+      tail -n +"$P4_START" "$LOG" | grep -o "ATUR_E2E FAILURE.*" | tail -1 | tee -a "$PHASE4" || true
       return 1
     }
   # While rows scroll in at 10 Hz the UI never idles and uiautomator cannot dump it: the bottom is
@@ -341,17 +347,23 @@ phase4() {
   must "the jump-to-bottom button brings the live rows back and the view follows the output" \
     ui jump-to-bottom || return 1
   shot phase4-jumped
-  grep -o "ATUR_E2E RESULT scroll.*" "$LOG" | tail -1 | tee -a "$PHASE4"
+  tail -n +"$P4_START" "$LOG" | grep -o "ATUR_E2E RESULT scroll.*" | tail -1 | tee -a "$PHASE4"
 }
 
 PHASE4_STATUS=0
 if want 4; then
-  phase4
-  PHASE4_STATUS=$?
-  stop_load
-  if [ $PHASE4_STATUS -eq 0 ]; then
-    echo "PASS phase 4" | tee -a "$PHASE4"
-  fi
+  # ATUR_E2E_PHASE4_RUNS plays the phase more than once on the same build (how steady is it?).
+  for ((run = 1; run <= ${ATUR_E2E_PHASE4_RUNS:-1}; run++)); do
+    echo "=== phase 4, run $run" | tee -a "$PHASE4"
+    phase4
+    status=$?
+    stop_load
+    if [ $status -eq 0 ]; then
+      echo "PASS phase 4 (run $run)" | tee -a "$PHASE4"
+    else
+      PHASE4_STATUS=1
+    fi
+  done
   # The scenario's own lines: from its last `STEP pair` on, with the host's UI metrics.
   { grep -o "ATUR_E2E.*" "$LOG" | tac | sed '/ATUR_E2E STEP pair/q' | tac; grep -h "^ATUR_E2E METRIC" "$PHASE4"; } > "$OUT/scroll-lines.txt" || true
   echo "--- phase 4 lines"

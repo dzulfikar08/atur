@@ -223,9 +223,12 @@ def scroll_up(swipes: int, min_rows: int, hold: float) -> None:
             found,
         )
     print("ok: the view is at the bottom before the swipes (no jump button)")
+    swiping = time.time()
     for _ in range(swipes):
         swipe_back(width, height)
         time.sleep(0.4)
+    swiped = time.time()
+    metric("swipes_ms", int((swiped - swiping) * 1000))
     time.sleep(2.5)
     # For the record: what a dump taken while the output runs says (it has been seen to show the
     # view as it was before the swipes).
@@ -237,6 +240,19 @@ def scroll_up(swipes: int, min_rows: int, hold: float) -> None:
     if not seen:
         fail(f"after {swipes} swipes no numbered row is on screen", found)
     lowest = min(place(r) for r in seen)
+    metric("scroll_rows_reached_early", bottom - lowest)
+    # A device short of CPU carries the touches out late: the view is read again until it stops
+    # moving (two dumps agree), and how long that took is a metric of its own.
+    while True:
+        again = frozen_nodes()
+        seen_again = numbered(again)
+        if seen_again and min(place(r) for r in seen_again) == lowest:
+            break
+        if time.time() - swiped > 90:
+            fail("scroll_settle: the view was still moving 90 s after the last swipe", again)
+        if seen_again:
+            found, seen, lowest = again, seen_again, min(place(r) for r in seen_again)
+    metric("scroll_settle_ms", int((time.time() - swiped) * 1000))
     reached = bottom - lowest
     metric("scroll_rows_reached", reached)
     with open(SCROLL_STATE, "w") as state:
