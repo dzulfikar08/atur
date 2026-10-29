@@ -574,7 +574,10 @@ export async function runScrollE2E(
     const rowsLoaded = numberedRows(loadedRows(), "row");
     const rowGap = breakIn(rowsLoaded);
     if (rowGap) throw new Error(`the scrollback has a break in row-N: ${rowGap}`);
-    if (rowsLoaded.length !== SCROLL_PRINTED_ROWS)
+    // The server may keep a little less than everything that was printed (it trims its history to
+    // a budget); what is there must be one unbroken run of rows from the start.
+    record("history_row_range", `row-${rowsLoaded[0] ?? 0}..row-${rowsLoaded.at(-1) ?? 0}`);
+    if (rowsLoaded.length < SCROLL_PRINTED_ROWS * 0.9)
       throw new Error(
         `scrollback has ${rowsLoaded.length} of the ${SCROLL_PRINTED_ROWS} printed rows (row-1..row-N)`,
       );

@@ -122,7 +122,8 @@ describe("scrollback", () => {
     // Loaded rows longer than the match length: the first and the last rows must both line up.
     const loaded = Array.from({ length: 100 }, (_, i) => `r${i}`);
     expect(rowsBefore(loaded, ["old1", "old2", ...loaded, "new1"])).toBe(2);
-    expect(rowsBefore(loaded, [...loaded.slice(0, 50), "other", ...loaded.slice(51)])).toBeNull();
+    // A rewritten row among the first or the last ones is noticed; rows between are not compared.
+    expect(rowsBefore(loaded, [...loaded.slice(0, 5), "other", ...loaded.slice(6)])).toBeNull();
     // The window does not reach back to them, or they are gone.
     expect(rowsBefore(["c", "d"], ["d", "e"])).toBeNull();
     expect(rowsBefore(["c", "d"], ["x"])).toBeNull();

@@ -36,7 +36,8 @@ set -uo pipefail
 
 APK="$1" LINK="$2" PORT="$3" OUT="$4" SERVER_DIR="$5"
 PACKAGE=com.diatur.app
-UDP_PORT=60100
+UDP_PORT=60096
+UDP_PORT_MASK=0xfff8   # 60096-60103: the server may hold several offers at once
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$OUT"
 LOG="$OUT/logcat.txt"
@@ -54,8 +55,8 @@ LOGCAT=$!
 unshape_cut() {
   while sudo iptables -D INPUT -p tcp --dport "$PORT" -j DROP 2>/dev/null; do :; done
   while sudo iptables -D INPUT -p tcp --sport "$PORT" -j DROP 2>/dev/null; do :; done
-  while sudo iptables -D INPUT -p udp --dport "$UDP_PORT" -j DROP 2>/dev/null; do :; done
-  while sudo iptables -D INPUT -p udp --sport "$UDP_PORT" -j DROP 2>/dev/null; do :; done
+  while sudo iptables -D INPUT -p udp --dport "$UDP_PORT:$((UDP_PORT + 7))" -j DROP 2>/dev/null; do :; done
+  while sudo iptables -D INPUT -p udp --sport "$UDP_PORT:$((UDP_PORT + 7))" -j DROP 2>/dev/null; do :; done
 }
 # Lifts everything phase 3 did to the host's network.
 unshape() {
@@ -198,13 +199,15 @@ shape() {
   sudo modprobe sch_netem sch_prio 2>/dev/null || true
   sudo tc qdisc add dev lo root handle 1: prio || return 1
   sudo tc qdisc add dev lo parent 1:3 handle 30: netem delay 400ms 200ms loss 5% || return 1
-  local port dir family
+  local port dir mask
   for port in "$PORT" "$UDP_PORT"; do
+    mask=0xffff
+    [ "$port" = "$UDP_PORT" ] && mask="$UDP_PORT_MASK"
     for dir in dport sport; do
       sudo tc filter add dev lo protocol ip parent 1:0 prio 3 u32 \
-        match ip "$dir" "$port" 0xffff flowid 1:3 || return 1
+        match ip "$dir" "$port" "$mask" flowid 1:3 || return 1
       sudo tc filter add dev lo protocol ipv6 parent 1:0 prio 4 u32 \
-        match ip6 "$dir" "$port" 0xffff flowid 1:3 || return 1
+        match ip6 "$dir" "$port" "$mask" flowid 1:3 || return 1
     done
   done
 }
@@ -212,8 +215,8 @@ shape() {
 cut_ports() {
   sudo iptables -I INPUT -p tcp --dport "$PORT" -j DROP
   sudo iptables -I INPUT -p tcp --sport "$PORT" -j DROP
-  sudo iptables -I INPUT -p udp --dport "$UDP_PORT" -j DROP
-  sudo iptables -I INPUT -p udp --sport "$UDP_PORT" -j DROP
+  sudo iptables -I INPUT -p udp --dport "$UDP_PORT:$((UDP_PORT + 7))" -j DROP
+  sudo iptables -I INPUT -p udp --sport "$UDP_PORT:$((UDP_PORT + 7))" -j DROP
 }
 
 phase3() {

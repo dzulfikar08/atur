@@ -5,7 +5,7 @@
 #       Starts the server found in <bin-dir> (atur-term and atur-term-server, built by the `server`
 #       job of the workflow from the atur-terminal commit in modules/atur-direct/core.ref, so it
 #       has the UDP offer) in its own profile under <dir>, and with a port also turns on phone
-#       access on that port. The server offers UDP on ATUR_TERM_UDP_PORTS (default 60100-60100,
+#       access on that port. The server offers UDP on ATUR_TERM_UDP_PORTS (default 60096-60103,
 #       the port the lossy-link proof shapes) and nothing else is opened.
 #       Writes <dir>/env.sh, which exports BIN, ATUR_TERM_DIR, ATUR_TERM_UDP_PORTS and SHELL for
 #       the next steps.
@@ -26,7 +26,7 @@ start() {
   {
     echo "export BIN='$bin'"
     echo "export ATUR_TERM_DIR='$dir/profile'"
-    echo "export ATUR_TERM_UDP_PORTS='${ATUR_TERM_UDP_PORTS:-60100-60100}'"
+    echo "export ATUR_TERM_UDP_PORTS='${ATUR_TERM_UDP_PORTS:-60096-60103}'"
     echo "export SHELL=/bin/bash"
   } > "$dir/env.sh"
   # shellcheck disable=SC1091
