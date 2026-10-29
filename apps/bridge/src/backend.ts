@@ -1,6 +1,6 @@
 /**
  * The terminal multiplexer the bridge drives. Everything the hubs need from
- * herdr, tmux or Muxy goes through this one interface, so the wire protocol to the
+ * herdr, tmux or Atur Terminal goes through this one interface, so the wire protocol to the
  * app (hub.ts, observe.ts) and the push-event poller (agent-events.ts) never
  * learn which backend is underneath.
  */
@@ -58,7 +58,7 @@ export class InputError extends Error {
 
 export type SplitDirection = "right" | "down";
 
-/** A herdr workspace / tmux session / Muxy project, folded from its panes. */
+/** A herdr workspace / tmux session / Atur Terminal project, folded from its panes. */
 export interface WorkspaceSummary {
   id: string;
   label: string;
@@ -92,7 +92,7 @@ export function workspacesOf(panes: readonly PaneSummary[]): WorkspaceSummary[] 
 }
 
 export interface PaneBackend {
-  readonly kind: "herdr" | "tmux" | "muxy";
+  readonly kind: "herdr" | "tmux" | "atur-terminal";
   /** Every pane with its workspace label, for `GET /panes`. */
   listPanes(): Promise<PaneSummary[]>;
   /** Cheapest full pane list, for the event poller; `workspaceLabel` may be empty. */
@@ -120,7 +120,7 @@ export interface PaneBackend {
   release(holder: unknown): void;
   /**
    * Daemon shutdown: give every borrowed size back. A backend that has to talk to
-   * its server to do that (Muxy) returns a promise; a caller about to exit awaits it.
+   * its server to do that (Atur Terminal) returns a promise; a caller about to exit awaits it.
    */
   stop(): void | Promise<void>;
 }

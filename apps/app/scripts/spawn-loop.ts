@@ -363,7 +363,7 @@ async function spawnAgent(
       ``,
       `Observe: ${BASE}/panes/<pane id>`,
       ``,
-      `(<pane id> is $HERDR_PANE_ID in herdr, $MUXY_SESSION_ID in Muxy — humans`,
+      `(<pane id> is $HERDR_PANE_ID in herdr, $ATUR_TERM_SESSION_ID in Atur Terminal — humans`,
       `click that URL to watch your live terminal in the browser.)`,
       ``,
       ...worktreeLines,

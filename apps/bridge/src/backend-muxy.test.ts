@@ -1,7 +1,7 @@
 /**
  * Muxy backend: pure units, then the pane list and reconnect behaviour against
  * a scripted socket server speaking the real protocol, then an integration run
- * against an isolated Muxy server (own MUXY_DIR, never the user's). The
+ * against an isolated Muxy server (own ATUR_TERM_DIR, never the user's). The
  * integration block is skipped when the muxy CLI is not installed.
  */
 import {
@@ -30,6 +30,7 @@ import {
   findOmpTranscripts,
   muxyBinary,
   muxyChildEnv,
+  muxySocketExists,
   muxySocketPath,
   summarizePanes,
 } from "./backend-muxy";
@@ -191,13 +192,22 @@ describe("muxyChildEnv", () => {
         HOME: "/h",
         PATH: "/bin",
         MUXY_DIR: "/m",
+        ATUR_TERM_DIR: "/a",
+        ATUR_TERM_BIN: "/bin/atur-term",
         ATUR_CONNECT_TOKEN: "atb_x",
         ATUR_URL: "https://x",
         BRIDGE_TOKEN: "t",
         HERDR_BRIDGE_TOKEN: "t",
         MUXY_SESSION_ID: "7",
+        ATUR_TERM_SESSION_ID: "8",
       }),
-    ).toEqual({ HOME: "/h", PATH: "/bin", MUXY_DIR: "/m" });
+    ).toEqual({
+      HOME: "/h",
+      PATH: "/bin",
+      MUXY_DIR: "/m",
+      ATUR_TERM_DIR: "/a",
+      ATUR_TERM_BIN: "/bin/atur-term",
+    });
   });
 });
 
@@ -260,25 +270,68 @@ describe("summarizePanes", () => {
   });
 });
 
+describe("muxyBinary", () => {
+  test("ATUR_TERM_BIN wins over the old MUXY_BIN", () => {
+    expect(muxyBinary({ ATUR_TERM_BIN: "/a/atur-term", MUXY_BIN: "/m/muxy" })).toBe("/a/atur-term");
+  });
+});
+
 describe("muxySocketPath", () => {
-  test("MUXY_DIR wins on every platform", () => {
-    expect(muxySocketPath({ MUXY_DIR: "/x", HOME: "/h" }, "linux")).toBe("/x/server.sock");
-    expect(muxySocketPath({ MUXY_DIR: "/x", HOME: "/h" }, "darwin")).toBe("/x/server.sock");
+  test("ATUR_TERM_DIR wins on every platform", () => {
+    expect(muxySocketPath({ ATUR_TERM_DIR: "/x", HOME: "/h" }, "linux")).toBe("/x/server.sock");
+    expect(muxySocketPath({ ATUR_TERM_DIR: "/x", HOME: "/h" }, "darwin")).toBe("/x/server.sock");
   });
 
   test("Linux uses an absolute XDG_STATE_HOME, else ~/.local/state", () => {
     expect(muxySocketPath({ HOME: "/h", XDG_STATE_HOME: "/s" }, "linux")).toBe(
-      "/s/muxy/server.sock",
+      "/s/atur-terminal/server.sock",
     );
     expect(muxySocketPath({ HOME: "/h", XDG_STATE_HOME: "rel" }, "linux")).toBe(
-      "/h/.local/state/muxy/server.sock",
+      "/h/.local/state/atur-terminal/server.sock",
     );
   });
 
-  test("macOS uses Application Support/Muxy 2 and ignores XDG", () => {
+  test("macOS uses Application Support/Atur Terminal and ignores XDG", () => {
     expect(muxySocketPath({ HOME: "/h", XDG_STATE_HOME: "/s" }, "darwin")).toBe(
-      "/h/Library/Application Support/Muxy 2/server.sock",
+      "/h/Library/Application Support/Atur Terminal/server.sock",
     );
+  });
+
+  describe("fallback to the pre-rename Muxy server", () => {
+    const home = mkdtempSync(join(tmpdir(), "atur-sock-"));
+    afterAll(() => rmSync(home, { recursive: true, force: true }));
+    const sock = (dir: string) => {
+      mkdirSync(join(home, dir), { recursive: true });
+      writeFileSync(join(home, dir, "server.sock"), "");
+    };
+    const env = (extra: Record<string, string> = {}) => ({ HOME: home, ...extra });
+    const atur = join(home, ".local/state/atur-terminal/server.sock");
+    const muxy = join(home, ".local/state/muxy/server.sock");
+
+    test("nothing running: the Atur Terminal path, where a started server will be", () => {
+      expect(muxySocketPath(env(), "linux")).toBe(atur);
+      expect(muxySocketExists(env(), "linux")).toBe(false);
+    });
+
+    test("only the old Muxy socket exists: it is used", () => {
+      sock(".local/state/muxy");
+      expect(muxySocketPath(env(), "linux")).toBe(muxy);
+      expect(muxySocketExists(env(), "linux")).toBe(true);
+      expect(muxySocketPath(env({ MUXY_DIR: join(home, ".local/state/muxy") }), "linux")).toBe(
+        muxy,
+      );
+    });
+
+    test("both exist: Atur Terminal wins", () => {
+      sock(".local/state/atur-terminal");
+      expect(muxySocketPath(env(), "linux")).toBe(atur);
+    });
+
+    test("an explicit ATUR_TERM_DIR never falls back to Muxy", () => {
+      const pinned = env({ ATUR_TERM_DIR: join(home, "isolated") });
+      expect(muxySocketPath(pinned, "linux")).toBe(join(home, "isolated/server.sock"));
+      expect(muxySocketExists(pinned, "linux")).toBe(false);
+    });
   });
 });
 
@@ -293,7 +346,7 @@ describe("findOmpTranscripts", () => {
     for (const [fd, target] of Object.entries(fds)) symlinkSync(target, join(root, pid, "fd", fd));
   }
 
-  test("links a Muxy session to the transcript its omp process holds open", async () => {
+  test("links a terminal session to the transcript its omp process holds open (either env name)", async () => {
     const sessions = join(root, "home/.omp/agent/sessions/-proj");
     mkdirSync(join(sessions, "2026_abc"), { recursive: true });
     const main = join(sessions, "2026_abc.jsonl");
@@ -309,6 +362,17 @@ describe("findOmpTranscripts", () => {
     writeFileSync(join(root, "notapid"), "");
     const found = await findOmpTranscripts(new Set(["555", "777"]), root);
     expect([...found]).toEqual([["555", main]]);
+
+    // A process of the renamed build carries ATUR_TERM_SESSION_ID instead.
+    proc("105", ["HOME=/h", "ATUR_TERM_SESSION_ID=777"], { "3": other });
+    proc("106", ["ATUR_TERM_SESSION_ID=7770"], { "3": other }); // not 777
+    const both = await findOmpTranscripts(new Set(["555", "777"]), root);
+    expect(new Map(both)).toEqual(
+      new Map([
+        ["555", main],
+        ["777", other],
+      ]),
+    );
   });
 });
 
@@ -499,7 +563,7 @@ describe("MuxyBackend pane list over the protocol", () => {
     ];
     server.agents = [{ session: "11", provider: 11, state: 2 }];
     server.start();
-    const backend = new MuxyBackend({ env: { MUXY_DIR: server.dir, HOME: server.dir } });
+    const backend = new MuxyBackend({ env: { ATUR_TERM_DIR: server.dir, HOME: server.dir } });
     servers.push(server);
     backends.push(backend);
     return { server, backend };
@@ -580,7 +644,7 @@ describe("MuxyBackend pane list over the protocol", () => {
 
   test("no socket, no server: nothing to list, nothing started", async () => {
     const backend = new MuxyBackend({
-      env: { MUXY_DIR: join(tmpdir(), "atur-none-" + Date.now()), HOME: "/h" },
+      env: { ATUR_TERM_DIR: join(tmpdir(), "atur-none-" + Date.now()), HOME: "/h" },
     });
     expect(await backend.listPanes()).toEqual([]);
     expect(await backend.pollPanes()).toEqual([]);
@@ -627,7 +691,7 @@ describe("MuxyBackend pane list over the protocol", () => {
       },
     });
     try {
-      const backend = new MuxyBackend({ env: { MUXY_DIR: dir, HOME: dir } });
+      const backend = new MuxyBackend({ env: { ATUR_TERM_DIR: dir, HOME: dir } });
       await expect(backend.listPanes()).rejects.toThrow(/unsupported Muxy protocol/);
       await backend.stop();
     } finally {
@@ -639,7 +703,7 @@ describe("MuxyBackend pane list over the protocol", () => {
 
 // ── A real Muxy server ────────────────────────────────────────────────────
 
-const hasMuxy = muxyBinary() !== "muxy";
+const hasMuxy = muxyBinary() !== "atur-term";
 /** Styling escape sequences (built from a string: the pattern is an ESC). */
 const SGR = new RegExp(`${String.fromCharCode(27)}\\[[0-9;:]*m`, "g");
 
@@ -649,10 +713,11 @@ describe.skipIf(!hasMuxy)("MuxyBackend against a real Muxy server", () => {
   const work = join(root, "work");
   const env: Record<string, string | undefined> = {
     ...process.env,
-    MUXY_DIR: join(root, "state"),
+    ATUR_TERM_DIR: join(root, "state"),
     ATUR_CONNECT_TOKEN: "atb_leak_check",
   };
   delete env.MUXY_SESSION_ID;
+  delete env.ATUR_TERM_SESSION_ID;
   delete env.MUXY_SERVER_ID;
   const backend = new MuxyBackend({ env, timing: { debounceMs: 20, graceMs: 150 } });
   let paneId = "";
@@ -977,7 +1042,7 @@ describe.skipIf(!hasMuxy)("MuxyBackend against a real Muxy server", () => {
   test("a crashed server is not restarted by polling or pane commands", async () => {
     const socket = muxySocketPath(env);
     const serverPids = () =>
-      Bun.spawnSync(["pgrep", "-f", `muxy-server --socket ${socket}`])
+      Bun.spawnSync(["pgrep", "-f", `(atur-term|muxy)-server --socket ${socket}`])
         .stdout.toString()
         .split("\n")
         .filter(Boolean)

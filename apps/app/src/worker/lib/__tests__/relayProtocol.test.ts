@@ -26,6 +26,9 @@ describe("parseBridgeFrame", () => {
     expect(
       parse({ t: "hello", v: 1, hostname: "mac", backend: "muxy", version: "0.9.0" }),
     ).toMatchObject({ t: "hello", backend: "muxy" });
+    expect(
+      parse({ t: "hello", v: 1, hostname: "mac", backend: "atur-terminal", version: "0.9.0" }),
+    ).toMatchObject({ t: "hello", backend: "atur-terminal" });
     expect(parse({ t: "res", id: "r1", status: 200, headers: { a: "b" }, b64: "e30=" })).toEqual({
       t: "res",
       id: "r1",

@@ -4,10 +4,10 @@
 
 ```
 Atur Cloud (customers):
-phone / browser -> Atur Worker (auth, audit) -> BridgeRelay Durable Object <== wss (the bridge dials out) == atur-bridge -> herdr, tmux or Muxy
+phone / browser -> Atur Worker (auth, audit) -> BridgeRelay Durable Object <== wss (the bridge dials out) == atur-bridge -> herdr, tmux or Atur Terminal
 
 Self-host / tunnel:
-phone / browser -> Atur Worker (auth, audit) -> tunnel -> atur-bridge (127.0.0.1:7601) -> herdr, tmux or Muxy
+phone / browser -> Atur Worker (auth, audit) -> tunnel -> atur-bridge (127.0.0.1:7601) -> herdr, tmux or Atur Terminal
                                                      atur-bridge -> POST /api/bridge/agent-events -> Worker -> push
 ```
 
@@ -15,11 +15,11 @@ The bridge binds `127.0.0.1` only. It drives one terminal multiplexer, called th
 
 - **tmux**: works with any agent running in a tmux pane (Claude Code, Codex, omp, anything else). No extra software.
 - **herdr**: herdr (a terminal multiplexer for agents) detects agents and their state by itself.
-- **Muxy**: [Muxy 2](https://muxy.app) (a desktop terminal multiplexer, macOS and Linux) detects agents and their state by itself; the bridge keeps one connection to its server socket and speaks Muxy's native protocol (Muxy 2.2 or newer).
+- **Atur Terminal**: a fork of [Muxy 2](https://muxy.app) (a desktop terminal multiplexer, macOS and Linux; CLI `atur-term`, server `atur-term-server`) detects agents and their state by itself; the bridge keeps one connection to its server socket and speaks its native protocol (Muxy 2.2 protocol). A not-yet-upgraded Muxy 2.2+ server is still found and driven (see `ATUR_TERM_DIR`); `muxy` stays an accepted alias of the backend name.
 
 ## Connect a machine to Atur Cloud
 
-Needs an Atur plan (Solo or Team) and tmux, herdr or Muxy on the machine. No tunnel, no open port, no Bun: the bridge is a single binary that dials out to `app.diatur.com`.
+Needs an Atur plan (Solo or Team) and tmux, herdr or Atur Terminal on the machine. No tunnel, no open port, no Bun: the bridge is a single binary that dials out to `app.diatur.com`.
 
 1. In [app.diatur.com](https://app.diatur.com), open the **Machines** page and create a machine. Copy its install command. The token (`atb_...`) is shown once.
 2. Run it on the machine whose terminals you want to reach:
@@ -64,7 +64,7 @@ This is the path for your own Worker (`HERDR_BRIDGE_URL` / `HERDR_BRIDGE_TOKEN`,
 ## Requirements
 
 - [Bun](https://bun.sh) 1.2 or newer.
-- tmux 3.1 or newer (for the tmux backend), herdr, or Muxy 2.2 or newer.
+- tmux 3.1 or newer (for the tmux backend), herdr, or Atur Terminal (or Muxy 2.2 or newer).
 - Git, only for worktree-aware pane binding.
 
 ## Install and run
@@ -76,7 +76,7 @@ bun install
 BRIDGE_TOKEN=$(openssl rand -hex 24) bun run src/main.ts
 ```
 
-It prints `terminal backend: tmux` (or `herdr`, `muxy`) and `atur-bridge listening on 127.0.0.1:7601`. Check it:
+It prints `terminal backend: tmux` (or `herdr`, `atur-terminal`) and `atur-bridge listening on 127.0.0.1:7601`. Check it:
 
 ```bash
 curl -s -H "x-bridge-token: $BRIDGE_TOKEN" http://127.0.0.1:7601/panes
@@ -88,20 +88,21 @@ On the self-host path, a pane only appears in the app when its working directory
 
 ### Environment
 
-| Variable             | Default                      | Meaning                                                                                                                                                                                                                                                                      |
-| -------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BRIDGE_PORT`        | `7601`                       | Local port (always bound on `127.0.0.1`).                                                                                                                                                                                                                                    |
-| `BRIDGE_TOKEN`       | random per run               | Shared secret. Clients must send it as `x-bridge-token`. Unset: a random one is generated at startup, so the loopback server is never open. For the tunnel setup also the key for push events: **no token, no notifications.** Must equal the Worker's `HERDR_BRIDGE_TOKEN`. |
-| `ATUR_CONNECT_TOKEN` | empty                        | Machine token (`atb_...`) from the Machines page. Set: the bridge dials out to Atur Cloud (see above) and sends agent events over that socket. `atur-bridge connect <token>` writes it to `~/.config/atur/bridge.env`.                                                       |
-| `ATUR_BRIDGE_ENV`    | `~/.config/atur/bridge.env`  | Settings file. On a foreground run the bridge reads it for every variable not already in the environment.                                                                                                                                                                    |
-| `BRIDGE_BACKEND`     | auto                         | `herdr`, `tmux`, `muxy` or `auto`. Auto picks herdr when its socket exists, then Muxy when its server socket exists, otherwise tmux when the `tmux` binary is on `PATH`. Pin it in a service, so a herdr or Muxy that is slow to start never flips you to tmux.              |
-| `HERDR_SOCKET`       | `~/.config/herdr/herdr.sock` | herdr socket path.                                                                                                                                                                                                                                                           |
-| `TMUX_SOCKET`        | tmux default server          | Socket of the tmux server to drive. A value containing `/` is a path (`tmux -S`), a bare name is a socket name (`tmux -L`).                                                                                                                                                  |
-| `MUXY_DIR`           | Muxy's data directory        | Muxy profile to drive: the bridge connects to its `server.sock`. Default: `~/Library/Application Support/Muxy 2` on macOS, `$XDG_STATE_HOME/muxy` (or `~/.local/state/muxy`) on Linux. Its `server.sock` is what auto-detection looks for.                                   |
-| `MUXY_BIN`           | `muxy` on `PATH`             | The `muxy` CLI, run only to start a server when a workspace is created and none runs (`muxy server start`). Falls back to the binary inside `/Applications/Muxy.app` on macOS, where the app does not put it on `PATH`. Everything else goes over the socket.                |
-| `ATUR_URL`           | `https://app.diatur.com`     | Atur server: the relay endpoint (`/api/bridge/connect`) and the target of agent events. Set it to your own server when self-hosting.                                                                                                                                         |
-| `AGENT_POLL_MS`      | `2000`                       | How often the bridge looks at agent states for push events.                                                                                                                                                                                                                  |
-| `ATUR_PASTE_DIR`     | `~/.cache/atur/pastes`       | Where images pasted from the phone are saved before their path goes into the prompt.                                                                                                                                                                                         |
+| Variable               | Default                      | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `BRIDGE_PORT`          | `7601`                       | Local port (always bound on `127.0.0.1`).                                                                                                                                                                                                                                                                                                                                                                                |
+| `BRIDGE_TOKEN`         | random per run               | Shared secret. Clients must send it as `x-bridge-token`. Unset: a random one is generated at startup, so the loopback server is never open. For the tunnel setup also the key for push events: **no token, no notifications.** Must equal the Worker's `HERDR_BRIDGE_TOKEN`.                                                                                                                                             |
+| `ATUR_CONNECT_TOKEN`   | empty                        | Machine token (`atb_...`) from the Machines page. Set: the bridge dials out to Atur Cloud (see above) and sends agent events over that socket. `atur-bridge connect <token>` writes it to `~/.config/atur/bridge.env`.                                                                                                                                                                                                   |
+| `ATUR_BRIDGE_ENV`      | `~/.config/atur/bridge.env`  | Settings file. On a foreground run the bridge reads it for every variable not already in the environment.                                                                                                                                                                                                                                                                                                                |
+| `BRIDGE_BACKEND`       | auto                         | `herdr`, `tmux`, `atur-terminal` (alias `muxy`) or `auto`. Auto picks herdr when its socket exists, then Atur Terminal when its server socket exists (the old Muxy socket counts as a fallback, Atur Terminal first), otherwise tmux when the `tmux` binary is on `PATH`. Pin it in a service, so a herdr or Atur Terminal that is slow to start never flips you to tmux.                                                |
+| `HERDR_SOCKET`         | `~/.config/herdr/herdr.sock` | herdr socket path.                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `TMUX_SOCKET`          | tmux default server          | Socket of the tmux server to drive. A value containing `/` is a path (`tmux -S`), a bare name is a socket name (`tmux -L`).                                                                                                                                                                                                                                                                                              |
+| `ATUR_TERM_DIR`        | Atur Terminal's data dir     | Profile to drive: the bridge connects to its `server.sock`. Default: `~/Library/Application Support/Atur Terminal` on macOS, `$XDG_STATE_HOME/atur-terminal` (or `~/.local/state/atur-terminal`) on Linux. When unset and no socket exists there, the old Muxy directory (`MUXY_DIR`, else `~/Library/Application Support/Muxy 2` / `$XDG_STATE_HOME/muxy`) is tried. Setting it pins the instance: no fallback to Muxy. |
+| `ATUR_TERM_BIN`        | `atur-term` on `PATH`        | The `atur-term` CLI, run only to start a server when a workspace is created and none runs (`atur-term server start`). Falls back to the binary inside `/Applications/Atur Terminal.app`, then to the old `MUXY_BIN` / `muxy` / `/Applications/Muxy.app`. Everything else goes over the socket.                                                                                                                           |
+| `MUXY_DIR`, `MUXY_BIN` | (old names)                  | Still honoured for a not-yet-upgraded Muxy build, as the fallback described above.                                                                                                                                                                                                                                                                                                                                       |
+| `ATUR_URL`             | `https://app.diatur.com`     | Atur server: the relay endpoint (`/api/bridge/connect`) and the target of agent events. Set it to your own server when self-hosting.                                                                                                                                                                                                                                                                                     |
+| `AGENT_POLL_MS`        | `2000`                       | How often the bridge looks at agent states for push events.                                                                                                                                                                                                                                                                                                                                                              |
+| `ATUR_PASTE_DIR`       | `~/.cache/atur/pastes`       | Where images pasted from the phone are saved before their path goes into the prompt.                                                                                                                                                                                                                                                                                                                                     |
 
 Desktop sharing (`/screen`) has its own `SCREEN_*` options, see [DEPLOY.md](DEPLOY.md#6-screen-desktop-sharing) and the next section.
 
@@ -202,9 +203,13 @@ For local development, `HERDR_BRIDGE_URL=http://127.0.0.1:7601` in `apps/app/.de
 
 The Worker holds one bridge URL, so one Worker talks to one bridge (one machine).
 
-## herdr, tmux or Muxy
+## Switching from Muxy to Atur Terminal
 
-| Feature                          | herdr                                            | tmux                                                                                              | Muxy                                                                                            |
+Atur Terminal is the renamed Muxy fork. The bridge finds either: with `BRIDGE_BACKEND` unset it uses the Atur Terminal socket if it exists, else the old Muxy one, and `BRIDGE_BACKEND=muxy` keeps working as an alias. To switch a machine: install Atur Terminal, stop the old server, start the new one (it copies your Muxy projects and settings on first start and leaves the Muxy directory untouched), then restart the bridge so it reconnects to the new socket. Pin `BRIDGE_BACKEND=atur-terminal` once the old build is gone. Deploy the Worker/app first when upgrading: a bridge reporting `atur-terminal` to an older Worker is refused, while the new Worker accepts both names.
+
+## herdr, tmux or Atur Terminal
+
+| Feature                          | herdr                                            | tmux                                                                                              | Atur Terminal                                                                                   |
 | -------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | Live pane mirror, typing, paste  | yes                                              | yes                                                                                               | yes                                                                                             |
 | Images pasted into prompts       | yes                                              | yes                                                                                               | yes                                                                                             |
@@ -221,7 +226,7 @@ The Worker holds one bridge URL, so one Worker talks to one bridge (one machine)
 
 With tmux the resize is visible on the desktop: a terminal attached to that window shows it at phone size while the phone is open. The bridge puts the window back (and your own `window-size` setting, if you had one) 15 seconds after the last phone viewer leaves, or when the bridge stops.
 
-With Muxy, tabs and splits belong to the desktop app, not the server, so the bridge sees each terminal (session) on its own. The bridge keeps one connection to the server socket (`<MUXY_DIR>/server.sock`, protocol version 2) and runs no `muxy` command per request. The server pushes session, project and agent changes, so listing panes and polling for push events answer from a cache without asking Muxy. A pane's `title` is the title its terminal set (omp's included) and its `cwd` the directory the session is in now, not the one it started in.
+With Atur Terminal, tabs and splits belong to the desktop app, not the server, so the bridge sees each terminal (session) on its own. The bridge keeps one connection to the server socket (`<ATUR_TERM_DIR>/server.sock`, protocol version 2) and runs no `atur-term` command per request. The server pushes session, project and agent changes, so listing panes and polling for push events answer from a cache without asking Muxy. A pane's `title` is the title its terminal set (omp's included) and its `cwd` the directory the session is in now, not the one it started in.
 
 Keys reach the session as key events that the Muxy server encodes with the terminal's own modes (application cursor keys, kitty keyboard, ...). Typed text goes in as typed. Multi-line text goes in as a paste: the server wraps it in bracketed-paste markers when the program asked for them, and otherwise sends the newlines as Enter. Paste markers inside pasted text are removed.
 
@@ -229,9 +234,9 @@ A terminal is attached the first time the app reads or types into it, and stays 
 
 The phone grid works like tmux's: a session has one PTY shared by every window showing it, so while the phone is open the Muxy window shows the session at phone size. The bridge puts the size back 15 seconds after the last phone viewer leaves, or when the bridge stops, unless something else resized the session in between (you dragged the Muxy window): that size wins. A bridge that is killed instead of stopped leaves the session phone-sized until its Muxy window is resized.
 
-Push text for omp panes needs the transcript path, which Muxy does not report. On Linux the bridge reads it from `/proc`: the omp process of a Muxy terminal inherits that terminal's `MUXY_SESSION_ID` and holds its session file open. Other agents, and macOS, have no push text.
+Push text for omp panes needs the transcript path, which Muxy does not report. On Linux the bridge reads it from `/proc`: the omp process of a Muxy terminal inherits that terminal's `ATUR_TERM_SESSION_ID` (`MUXY_SESSION_ID` on the old Muxy build) and holds its session file open. Other agents, and macOS, have no push text.
 
-Starting a Muxy server is the one thing the socket cannot do, and the server hands its environment to every terminal it opens. The bridge therefore never starts one to list or poll: only creating a workspace does (`muxy server start`, run without the bridge's own settings `ATUR_*` and `BRIDGE_*`, so a server it starts never hands the machine token to your agents). While no server answers on the socket (stopped, or crashed and left a stale socket file), `/panes` is empty and pane commands answer 404; the bridge reconnects by itself when one answers again. A server this bridge cannot talk to (older than Muxy 2.2, or another protocol version) is not treated as a stopped one: `/panes` and the pane commands fail with `unsupported Muxy protocol: ...` naming both versions, and the log says so.
+Starting a Muxy server is the one thing the socket cannot do, and the server hands its environment to every terminal it opens. The bridge therefore never starts one to list or poll: only creating a workspace does (`atur-term server start`, run without the bridge's own settings `ATUR_*` and `BRIDGE_*` (but keeping the terminal's own `ATUR_TERM_*`, except `ATUR_TERM_SESSION_ID`), so a server it starts never hands the machine token to your agents). While no server answers on the socket (stopped, or crashed and left a stale socket file), `/panes` is empty and pane commands answer 404; the bridge reconnects by itself when one answers again. A server this bridge cannot talk to (older than Muxy 2.2, or another protocol version) is not treated as a stopped one: `/panes` and the pane commands fail with `unsupported Muxy protocol: ...` naming both versions, and the log says so.
 
 ## Managing panes
 
@@ -251,7 +256,7 @@ Besides watching panes, the phone app can open a workspace, split a pane and clo
 - **No focus change.** The new workspace or pane does not take focus on the desktop (herdr `focus: false`, tmux `-d`; Muxy sessions created over the socket never take focus).
 - **herdr.** `workspace.create`, `pane.split` and `pane.close` over the socket. Closing the last pane of a workspace closes the workspace (herdr's rule).
 - **tmux.** A workspace is a detached session (`new-session -d -s <label> -c <cwd>`; the label defaults to the folder name, and tmux turns `.` and `:` into `_`). A split is `split-window -d -h` (right) or `-v` (down); close is `kill-pane`. Closing a session's last pane ends the session.
-- **Muxy.** A workspace is a project: a folder Muxy already knows opens in its existing project (the label then stays the project's name), any other folder becomes a new project named after the label or the folder; it gets a new 80x24 session. A blank label is refused with `400`. A split is a new session in the source pane's project, whatever the direction; the desktop app lists it under Existing Terminals rather than as a split. Close ends the session, which keeps the session's saved output in Muxy.
+- **Atur Terminal.** A workspace is a project: a folder Muxy already knows opens in its existing project (the label then stays the project's name), any other folder becomes a new project named after the label or the folder; it gets a new 80x24 session. A blank label is refused with `400`. A split is a new session in the source pane's project, whatever the direction; the desktop app lists it under Existing Terminals rather than as a split. Close ends the session, which keeps the session's saved output in Muxy.
 - **Over the relay** these are ordinary `req` frames to the machine's bridge, so no relay protocol change was needed. A bridge that predates these routes answers its generic `404 {"error":"not found"}`; the Worker turns that into `501` "this bridge is too old to manage panes; update atur-bridge".
 - There is no route to close a whole workspace: close its panes, or use `herdr workspace close`.
 
@@ -467,8 +472,8 @@ Any agent that can run a command on its own events can call `tmux-status.sh <nam
 
 - The machine stays offline on the Machines page: read the log (`journalctl --user -u atur-bridge -f`). `relay: offline, ...; retrying` is a network problem (the line is printed once, not per retry). `the machine token was rejected` means the token was revoked or mistyped: create a new one and run `atur-bridge connect <token>`, then `systemctl --user restart atur-bridge`. `needs an active plan` means the account has no Solo or Team plan.
 - `replaced by another connection using this token`: two bridges are using the same machine token. Give each machine its own token.
-- `no terminal backend found`: no herdr socket, no Muxy server socket and no `tmux` binary were found. Install tmux, start herdr or Muxy, or set `BRIDGE_BACKEND` (and `HERDR_SOCKET` or `MUXY_DIR`).
-- `/panes` is empty with Muxy: Muxy is not running (the bridge never starts it just to list panes), or the bridge drives another Muxy profile than the app. The app's server runs with `--socket <dir>/server.sock` (`ps aux | grep muxy-server`); point `MUXY_DIR` at that `<dir>`.
+- `no terminal backend found`: no herdr socket, no Atur Terminal (or Muxy) server socket and no `tmux` binary were found. Install tmux, start herdr or Atur Terminal, or set `BRIDGE_BACKEND` (and `HERDR_SOCKET` or `ATUR_TERM_DIR`).
+- `/panes` is empty with Atur Terminal: it is not running (the bridge never starts it just to list panes), or the bridge drives another profile than the app. The app's server runs with `--socket <dir>/server.sock` (`ps aux | grep -e atur-term-server -e muxy-server`); point `ATUR_TERM_DIR` at that `<dir>`.
 - `unsupported Muxy protocol` (log, and as the error of `/panes`): the Muxy server speaks another protocol version than this bridge, or is older than Muxy 2.2 (no server-side terminal input). The message names both. Update Muxy or the bridge.
 - `/panes` is empty with tmux: the bridge talks to a different tmux server than your session. Compare `tmux display -p '#{socket_path}'` (run inside your session) with `TMUX_SOCKET`, and make sure both run as the same user.
 - Creating, splitting or closing from the app fails with "too old to manage panes": the machine runs a bridge from before these routes. Update it (re-run the install command, or `git pull` and restart `atur-bridge.service`).

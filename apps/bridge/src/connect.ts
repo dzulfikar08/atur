@@ -66,7 +66,7 @@ export interface RelayConfig {
   localPort: number;
   /** Sent as `x-bridge-token` to the loopback server. */
   localToken: string;
-  backend: "herdr" | "tmux" | "muxy";
+  backend: "herdr" | "tmux" | "atur-terminal";
   version: string;
   hostname?: string;
   log?: (msg: string) => void;
