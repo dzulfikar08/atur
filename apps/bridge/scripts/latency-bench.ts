@@ -77,7 +77,9 @@ await until("the first snapshot", () => firstSnapshotAt > 0);
 console.log(`bridge attach_ms=${(firstSnapshotAt - started).toFixed(2)}`);
 
 ws.send(JSON.stringify({ type: "claim" }));
-await until("the keyboard", () => keyboard);
+await until("the keyboard", () => keyboard, 3000).catch(() => {
+  console.error(`bridge: no keyboard grant, typing anyway; frames: ${seen.join(",")}`);
+});
 ws.send(JSON.stringify({ type: "input", data: "cat >/dev/null\r" }));
 await sleep(1200);
 

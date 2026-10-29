@@ -159,9 +159,9 @@ export async function runDirectE2E(
     // 5. Background and foreground: the host presses Home, waits, and brings the app back.
     step("background");
     const cyclesBefore = appCycles();
+    const attachedBefore = attached;
     say(`${TAG} WAIT background`);
     await waitFor("the app to leave and return", () => appCycles() > cyclesBefore, 180_000);
-    const attachedBefore = attached;
     await waitFor("connected again", () => directManager.getSnapshot().state === "connected");
     await waitFor("reattached", () => attached > attachedBefore);
     record(
