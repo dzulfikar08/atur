@@ -41,6 +41,9 @@ import time
 import xml.etree.ElementTree as ET
 
 REMOTE = "/sdcard/ui.xml"
+# The workload (lib/direct/e2e.ts) stops printing while this file exists, so the screen can idle:
+# uiautomator cannot dump a UI that changes ten times a second. The server runs on this host.
+PAUSE_FILE = "/tmp/atur-live-pause"
 BOUNDS = re.compile(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]")
 
 
@@ -48,6 +51,16 @@ def adb(*args: str) -> str:
     return subprocess.run(
         ["adb", *args], check=False, capture_output=True, text=True
     ).stdout
+
+
+def pause_output() -> None:
+    open(PAUSE_FILE, "w").close()
+    time.sleep(2)
+
+
+def resume_output() -> None:
+    if os.path.exists(PAUSE_FILE):
+        os.remove(PAUSE_FILE)
 
 
 def nodes():
@@ -182,7 +195,9 @@ def swipe_back(width: int, height: int) -> None:
 
 
 def scroll_up(swipes: int, min_rows: int, hold: float) -> None:
+    pause_output()
     found = nodes()
+    resume_output()
     width, height = screen_size(found)
     start = numbered(found)
     if not start:
@@ -258,6 +273,9 @@ def jump_to_bottom() -> None:
     with open(SCROLL_STATE) as state:
         before = json.load(state)
     tap("Jump to bottom", 20)
+    # Output goes on while the view settles at the bottom, then stops for the dump.
+    time.sleep(3)
+    pause_output()
     deadline = time.time() + 120
     while True:
         found = nodes()
@@ -276,8 +294,11 @@ def jump_to_bottom() -> None:
     print(f"ok: back at the bottom, newest row live-{newest_live(rows)}")
     # At the bottom the view follows the output again.
     first = newest_live(rows)
+    resume_output()
     time.sleep(3)
+    pause_output()
     found = nodes()
+    resume_output()
     later = newest_live(numbered(found))
     if later <= first:
         fail(f"following: newest live row {later} after 3 s, was {first}", found)

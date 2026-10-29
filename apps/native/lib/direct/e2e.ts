@@ -448,7 +448,7 @@ export async function runLossyE2E(link: string, say: Say): Promise<E2EReport> {
 export const SCROLL_PRINTED_ROWS = 2500;
 const SCROLL_WORKLOAD =
   `seq -f 'row-%g' 1 ${SCROLL_PRINTED_ROWS}; ` +
-  'i=0; while :; do i=$((i+1)); echo "live-$i"; sleep 0.1; done';
+  'i=0; while :; do if [ ! -e /tmp/atur-live-pause ]; then i=$((i+1)); echo "live-$i"; fi; sleep 0.1; done';
 
 /** The numbers of the rows named `<kind>-N` in `rows`, in the order they appear. */
 function numberedRows(rows: readonly string[], kind: "row" | "live"): number[] {
