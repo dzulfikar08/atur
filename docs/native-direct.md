@@ -273,31 +273,27 @@ above it are read on request (`history` of the facade, answered by the core from
 `TerminalScreen` (`lib/terminal-screen.ts`) keeps them next to the grid; `TerminalView` shows both in one
 inverted list.
 
-What was wrong on a direct pane running an agent that prints all the time. The first two are proven on an
-emulator (phase 4 below, with `ATUR_E2E SCROLL` diagnostics from the proof build); the rest come from reading
-the code and are exercised by the same run.
+What was wrong on a direct pane running an agent that prints all the time. Only the first bullet is proven on
+a device (phase 4 below, with `ATUR_E2E SCROLL` diagnostics from the proof build); the others come from
+reading the code, are exercised by the same run, and were not separately shown to matter.
 
-- **A list that cannot keep up with ten frames a second.** Each frame rebuilt the item object of every row of
-  the list, handed it a new `renderItem`, `getItemLayout` and pinch gesture, and re-rendered the whole
-  `NativeTerminal` (the keyboard input, the composer, the key row), because it subscribed to the whole screen
-  state for one number. On an idle emulator that is harmless: the list as it was before this work scrolled
-  736 rows with 12 swipes. With two busy loops on the emulator's two cores (a phone short of CPU, the
-  `cpu_load` input of `native-direct-scroll.yml`) the same 12 swipes had moved the view 80 rows when it was
-  read 2.5 s after the last one, and over 300 when a screenshot was taken seconds later: the touches queue
-  behind the render work on the UI thread and are carried out late, which on a phone reads as "I cannot
-  scroll". With the changes below the same run goes 850 rows and holds still for 5 s of output. Scrollback
-  items are built only when scrollback changes, a live item is reused while its row is unchanged,
-  `renderItem` and the gesture keep their identity, `NativeTerminal` reads `cols` only, and the horizontal
-  scroller around the list is switched off when the pane fits the phone (it competed for the vertical swipes
-  of the list inside it).
 - **The view left the bottom by itself and stayed there.** Live rows were keyed by their place from the top of
   the grid. The pane opens at 80x24 and is laid out at the phone's size a moment later (44 rows on the
   emulator): the cell that had been the bottom row became the 20th from the bottom, and the list's
   `maintainVisibleContentPosition` kept _that_ cell where it was, which moved the reader 300 px above the
-  bottom with nothing following the output (the diagnostics show `offset=300` with no touch, the jump button
-  on in the first screenshot). Live rows are now keyed by their distance from the bottom, so the bottom row
-  stays the same cell when the grid grows or shrinks; phase 4 now fails when the view is not at the bottom
+  bottom with nothing following the output (the diagnostics show `offset=300` with no touch, and the jump
+  button on in the first screenshot). Live rows are now keyed by their distance from the bottom, so the bottom
+  row stays the same cell when the grid grows or shrinks; phase 4 fails when the view is not at the bottom
   before the first swipe.
+- **Frames rebuilt the whole list.** Each frame (ten a second) rebuilt the item object of every row, handed
+  the list a new `renderItem`, `getItemLayout` and pinch gesture, and re-rendered the whole `NativeTerminal`
+  (the keyboard input, the composer, the key row), because it subscribed to the whole screen state for one
+  number. Scrollback items are now built only when scrollback changes, a live item is reused while its row is
+  unchanged, `renderItem` and the gesture keep their identity, `NativeTerminal` reads `cols` only, and the
+  horizontal scroller around the list is switched off when the pane fits the phone (it competed for the
+  vertical swipes of the list inside it). On the emulator this made no measurable difference: the list as it
+  was before this work scrolled 736 rows with 12 swipes on an idle emulator, and under load (below) both lists
+  lag the same.
 - **One slow queue for every call.** The Android and iOS modules ran every `call` (attach, detach, session
   list, ping, history) on a single thread. A first read of 3000 rows is many page round trips, each served
   by the session's owner thread that is also busy parsing the agent's output, so the read held up everything
@@ -324,10 +320,18 @@ the code and are exercised by the same run.
 A note on measuring: `uiautomator dump` of a screen that changes ten times a second can return the tree of an
 earlier moment. The first phase 4 run read it right after 12 swipes and saw the bottom rows it had seen before
 them (`live-74..116`, 76 rows "reached") while a screenshot taken a moment later showed `row-1800`, 800 rows
-back; with the dump unfrozen the run still reports about 80 rows against 750 to 850 read with the workload
-paused for the dump (`scroll_rows_reached_unfrozen_dump` next to `scroll_rows_reached`). The workload
-therefore stops printing while the host dumps (`/tmp/atur-live-pause`, see `scripts/ui-assert.py`) and runs
-on for the 5 s that the view has to hold still.
+back: the swipes had worked, the harness had not seen it. With the dump unfrozen the runs still report 43 to 83
+rows against 640 to 880 read with the workload paused for the dump (`scroll_rows_reached_unfrozen_dump` next to
+`scroll_rows_reached`). The workload therefore stops printing while the host dumps (`/tmp/atur-live-pause`, see
+`scripts/ui-assert.py`) and runs on for the 5 s that the view has to hold still.
+
+On a device short of CPU the touches themselves are carried out late. With two busy loops on the emulator's two
+cores (`cpu_load=2`) the 12 swipes take 11 s to inject, the view has moved 43 to 83 rows when read 2.5 s after the
+last of them (`scroll_rows_reached_early`), settles after 37 to 43 s (`scroll_settle_ms`) and has then moved 524
+to 775 rows (`scroll_rows_reached`; the harness waits for it to settle before it judges). In one run the frames that reach the screen dropped from 10
+to 2 to 5 a second during that time. The list as it was before this work and the one now
+behave alike there (early 43 to 77 and 74 to 83, settle 37 to 43 s for both), so a slow phone's lag is not
+something the list changes could be shown to cure here; what that run proves is that the swipes are not lost.
 
 Checked and found fine: the facade exposes no mouse tracking and no scroll forwarding, and nothing in
 `TerminalView`, `NativeTerminal` or `lib/screen-gestures.ts` (the Screen tab's) takes a vertical pan; the
@@ -348,9 +352,11 @@ before the first swipe; then more swipes until the first row is in reach, and a 
 bring `live-N` rows newer than before the swipes, remove the button and keep following the output.
 
 `.github/workflows/native-direct-scroll.yml` runs this phase alone (`ATUR_E2E_PHASES=4`: a push that changes
-`.github/scroll-trigger`, or run it by hand; its `cpu_load` input starts that many busy loops on the emulator).
-Results on the emulator (12 swipes, rows reached / rows held for 5 s): idle, 643 to 755 and held; with
-`cpu_load=2`, 850 and held, against 80 for the list as it was before this work. The proof build logs what the
+`.github/scroll-trigger`, or run it by hand; its `cpu_load` input starts that many busy loops on the emulator, `runs` plays the phase that many times).
+Results on the emulator (12 swipes, rows reached / held for 5 s), idle: 643, 755 and 879, held; with
+`cpu_load=2` and three runs each, 775, 703 and 760 (the list before this work: 524, 701 and 525, which also
+reach the 400 rows once the view has settled).
+The proof build logs what the
 list does (`ATUR_E2E SCROLL` lines in `logcat.txt` of the artifact: offsets, content size changes, stick
 changes, history requests and replies, frames and renders per second).
 
