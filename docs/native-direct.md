@@ -176,7 +176,47 @@ Every build and test runs on GitHub-hosted runners: `.github/workflows/mobile.ym
 checks and tests, Android libraries, iOS XCFramework) and `.github/workflows/native-direct.yml` here (repo
 gates, Android emulator proof, bridge latency, iOS Simulator build).
 
-RESULTS_PLACEHOLDER
+## What was proven
+
+All of it on GitHub-hosted runners (nothing was compiled on the laptop), against isolated servers, never the
+live one.
+
+|                                                                                                                                                                                                                                                                                                             | Evidence                                                                                                                                      |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core compiles, lints (`clippy -D warnings`) and passes its tests, including the facade tests (pair, attach, type, rows, history, ping, paste, errors, disconnect) against a real in-process TLS server                                                                                                      | atur-terminal `mobile` workflow, job `core`, branch `feat/mobile-rn`                                                                          |
+| Android libraries (arm64-v8a, armeabi-v7a, x86_64) and Kotlin bindings; iOS XCFramework (device, simulator arm64 and x86_64) and Swift bindings                                                                                                                                                             | same workflow, jobs `android` and `ios`                                                                                                       |
+| Android: the release APK (R8 on, so the keep rules are exercised) installed on an API 34 x86_64 emulator, paired by link, connected, listed, attached through `usePaneAttach`'s direct pane code, typed into, survived the app going to the background for 40 s and a connection reset, and read scrollback | `native-direct` workflow, job `android-e2e` (log lines and screenshots in the `android-e2e` artifact)                                         |
+| iOS: module and app build for the simulator with Xcode 26                                                                                                                                                                                                                                                   | `native-direct` workflow, job `ios-simulator` (compile only: there is no simulator run, no XCTest; JS tests cover the logic above the module) |
+| JS: formatting, lint, typecheck and the 100+ new unit tests (manager backoff, background grace, forget, pane event translation and reattach, transport choice, credentials)                                                                                                                                 | `gates` job; the job is red only because of `TmuxBackend ... creates a workspace` in `apps/bridge`, which fails the same way on master's CI   |
+
+Android emulator run (isolated server on the runner, reached at 10.0.2.2, release build):
+
+| Step                                                                            | Result                                                                                                                                                  |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pair and connect (TLS handshake, pinning, sign-in)                              | 0.49 to 0.59 s                                                                                                                                          |
+| Ping to the server                                                              | p50 1.9 ms (emulator to host)                                                                                                                           |
+| Attach to first snapshot                                                        | 2 to 9 ms                                                                                                                                               |
+| `echo e2e-$((40+2))` typed, output on screen                                    | 0.17 to 0.30 s (includes shell start)                                                                                                                   |
+| After 40 s in the background                                                    | connection survived on this emulator, next command echoed in 35 ms                                                                                      |
+| Connection reset by the server host (`iptables REJECT --reject-with tcp-reset`) | state went offline, reconnected and reattached in 7.6 s (1 s + 2 s + 5 s backoff steps while the port was still blocked for 8 s), next command in 19 ms |
+| Scrollback request                                                              | 24 rows                                                                                                                                                 |
+
+Direct versus bridge, both on loopback with the same measurement (30 keys, typed 100 ms apart into `cat`):
+
+|                                                                 | Attach to first screen | Key to echo on screen, p50 / p90                                                                                               |
+| --------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Rust core, facade, loopback TLS (`cargo test ... bench_facade`) | 1.9 ms                 | 1.07 / 3.7 ms with local echo off; **0.34 / 0.38 ms with local echo on** (39 of 40 guesses confirmed, 0 wrong)                 |
+| Android emulator, JS to native to core and back                 | 2 to 9 ms              | 17 ms either way; this is the 16 ms JS timer tick of the measuring loop, not the path (local echo cannot show below that here) |
+| Bridge on loopback, no Cloudflare                               | 2.9 to 4.5 ms          | 100 ms (the bridge mirrors a pane in about 100 ms steps)                                                                       |
+
+The Cloudflare hop adds its own 70 to 230 ms round trip to the bridge numbers (measured earlier, see
+`docs/bridge.md`), so the real gap on a phone is larger than the table. These are loopback numbers: they show
+the cost of each software path, not of a network. A real phone over Tailscale pays the network round trip
+once on the direct path.
+
+Not proven: a real device, Tailscale, a long background on a real phone (the emulator kept the connection),
+iOS at runtime, UDP, and the bridge fallback end to end (its decision rules are unit tested; the proof run
+cannot reach the Worker).
 
 ## Trying it on your phone
 
