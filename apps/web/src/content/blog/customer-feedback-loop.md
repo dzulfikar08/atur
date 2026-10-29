@@ -1,23 +1,23 @@
 ---
 title: "How to close the customer feedback loop"
-description: "Closing feedback means more than listening. Collect, triage, route, act, then tell customers what changed — the skipped step that builds trust."
+description: "Closing feedback means more than listening. Collect, triage, route, act, then tell customers what changed, the skipped step that builds trust."
 pubDate: 2026-08-19
 category: "support"
 tags: ["feedback", "helpdesk"]
 keywords: ["customer feedback loop", "customer feedback process"]
 ---
 
-Most teams collect feedback well enough — a survey here, a tweet there — but few close the loop. And by "close the loop" I mean the part nobody plans for: telling customers what you actually did with their words. That final step is usually skipped, not by accident, but because there is no clear owner for it. Yet it is the only step that converts input into trust.
+Most teams collect feedback well enough (a survey here, a tweet there) but few close the loop. And by "close the loop" I mean the part nobody plans for: telling customers what you actually did with their words. That final step is usually skipped, not by accident, but because there is no clear owner for it. Yet it is the only step that converts input into trust.
 
 ## The five stages, briefly
 
-The feedback loop is collect → triage → route → act → tell them. Four of those stages are easy to automate. The fifth — "tell them" — requires a promise made and a promise kept. A team that does all five turns one-off complaints into repeat customers; a team that stops at four turns complaints into churn.
+The feedback loop is collect → triage → route → act → tell them. Four of those stages are easy to automate. The fifth ("tell them") requires a promise made and a promise kept. A team that does all five turns one-off complaints into repeat customers; a team that stops at four turns complaints into churn.
 
 Collect feedback from everywhere it lands: support replies, renewal calls, cancel surveys, and product usage. The mistake is not the channel mix but the duplication. One software company was surveying the same customers six times a year across three tools and saw response rates collapse from 44% to 9% in eight months.
 
 ## Triage and theme, not ticket
 
-Triage should group, not just log. Every piece of feedback gets tagged to a theme — onboarding, billing, sync speed, whatever dominates the last month — and those themes should be visible to the whole team, not hidden in a spreadsheet.
+Triage should group, not just log. Every piece of feedback gets tagged to a theme: onboarding, billing, sync speed, whatever dominates the last month, and those themes should be visible to the whole team, not hidden in a spreadsheet.
 
 A useful rule of thumb: if a single theme accounts for 15% or more of feedback over two weeks, it earns a spot on the next planning cycle. That threshold is high enough to survive a vocal minority and low enough to catch real erosion before it becomes a retention problem.
 
@@ -25,7 +25,7 @@ A useful rule of thumb: if a single theme accounts for 15% or more of feedback o
 
 Feedback that lands in a support queue and stays there is feedback that has already failed. The routing step is where support, product, and sales each take ownership of the themes they can move. Support owns process and communication gaps, product owns feature requests and bugs, sales owns pricing and packaging concerns.
 
-That handoff is where most loops break. Teams route feedback by email, which means it lives in someone's inbox and decays. The durable fix is to convert each theme into a tracked issue with a clear owner, priority, and exit criteria — the same model used for product bugs.
+That handoff is where most loops break. Teams route feedback by email, which means it lives in someone's inbox and decays. The durable fix is to convert each theme into a tracked issue with a clear owner, priority, and exit criteria, the same model used for product bugs.
 
 ## Act, then tell them
 

@@ -1,6 +1,6 @@
 ---
 title: "MCP for project management: AI agents in your tracker"
-description: "MCP lets AI agents act on your tracker, not just read it. Triage inboxes, write release notes, and answer what-is-blocked — practical uses today."
+description: "MCP lets AI agents act on your tracker, not just read it. Triage inboxes, write release notes, and answer what-is-blocked: practical uses today."
 pubDate: 2026-08-20
 category: "ai"
 tags: ["mcp", "ai"]
@@ -11,7 +11,7 @@ Most integrations between AI assistants and project management tools top out at 
 
 ## What MCP is, and why it matters here
 
-MCP is a protocol, not a product. It defines how an AI assistant discovers a tool, authenticates to it, and calls it — and crucially, how it reads back the result. A server built on MCP advertises 70+ tools the same way your team does: create issue, list tickets, update a deal, append to a page. The agent sees the same shape the human would see, so the handoff between agent and human is a natural pause, not a translation layer.
+MCP is a protocol, not a product. It defines how an AI assistant discovers a tool, authenticates to it, and calls it, and crucially, how it reads back the result. A server built on MCP advertises 70+ tools the same way your team does: create issue, list tickets, update a deal, append to a page. The agent sees the same shape the human would see, so the handoff between agent and human is a natural pause, not a translation layer.
 
 That matters for project management because the work is collaborative and stateful. An agent that can only read your board cannot reduce the noise in your inbox; an agent that can create, assign, and close the same issues you can, can.
 
@@ -19,7 +19,7 @@ That matters for project management because the work is collaborative and statef
 
 The practical uses are smaller than the hype suggests, and that is the point. Three that teams actually keep running:
 
-- **Triage an inbox.** An agent reads support mail, drafts a reply that a human reviews, and creates a linked issue when the thread needs engineering input — all in the project's own states.
+- **Triage an inbox.** An agent reads support mail, drafts a reply that a human reviews, and creates a linked issue when the thread needs engineering input, all in the project's own states.
 - **Release notes from done issues.** At the end of a cycle, an agent scans issues in the Done state, drafts a changelog grouped by component, and opens a page for the release.
 - **"What is blocked?" queries.** An agent can answer "which deals are stuck waiting on legal?" or "which issues have been in review for over three days?" faster than building a saved view, because it can ask follow-up questions about the same data.
 

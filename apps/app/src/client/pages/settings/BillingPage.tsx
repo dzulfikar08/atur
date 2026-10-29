@@ -4,13 +4,18 @@ import { useSearchParams } from "react-router-dom";
 import { apiFetch, type Billing } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+// Refreshed from Polar by the diatur.com build (apps/web/src/lib/polar-plans.ts).
+import PLAN_DATA from "../../../shared/atur-plans.json";
 
 const CHECKOUT_URL = "https://buy.polar.sh/polar_cl_bObfAZXGCAqKpziWXocIz32SyN3crYmadyYq700u26t";
 const PORTAL_URL = "https://polar.sh/joyo-digitama-solusi/portal";
 const PRODUCTS = {
-  solo: "c86b15e8-e91b-464e-a6d0-e5d3f70d7b83",
-  team: "ddd252b0-6cf2-4a91-8757-2fd057f8bf51",
+  solo: PLAN_DATA.solo.productId,
+  team: PLAN_DATA.team.productId,
 } as const;
+
+const monthly = (amount: number) =>
+  `$${amount % 100 === 0 ? amount / 100 : (amount / 100).toFixed(2)} / month`;
 
 interface BillingMe {
   id: string;
@@ -31,13 +36,13 @@ const PLANS = [
   {
     key: "solo",
     name: "Solo",
-    price: "$9 / month",
+    price: monthly(PLAN_DATA.solo.amount),
     blurb: "For one person. Unlocks the iOS and Android app on your account.",
   },
   {
     key: "team",
     name: "Team",
-    price: "$29 / month",
+    price: monthly(PLAN_DATA.team.amount),
     blurb:
       "Unlocks the iOS and Android app for everyone in the workspaces you own. Members need no plan of their own.",
   },

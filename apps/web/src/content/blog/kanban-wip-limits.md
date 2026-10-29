@@ -9,7 +9,7 @@ keywords: ["kanban wip limits", "work in progress limits", "limit work in progre
 
 Most kanban boards die the same quiet death. Work flows in from every
 direction, every column fills up, and the board becomes a wall of sticky notes
-nobody wants to look at. Plenty is _in progress_ — almost nothing is _done_.
+nobody wants to look at. Plenty is _in progress_: almost nothing is _done_.
 Cycle time creeps up, blockers hide in plain sight, and the team's calendar
 fills with status meetings that exist only to compensate for a board no one
 trusts.
@@ -23,12 +23,12 @@ mechanism that forces finishing over starting.
 A WIP limit is a maximum number of items allowed in a column (or across the
 whole board) at once. When the column is full, nobody pulls new work into it.
 The rule is blunt on purpose: an over-full column is not a scheduling problem,
-it is a signal — of a bottleneck, unclear acceptance criteria, or too much
+it is a signal of a bottleneck, unclear acceptance criteria, or too much
 parallel work for the team's capacity.
 
 The effect is that attention concentrates. Instead of twelve items each
 getting a small slice of everyone's week, three items get finished. Lead time
-— the number customers and stakeholders actually feel — drops, even though
+(the number customers and stakeholders actually feel) drops, even though
 total throughput stays the same or improves.
 
 ## How to pick a number
@@ -43,7 +43,7 @@ Don't overthink the starting value. Rules of thumb that work:
   doing anything. You want it to occasionally say "no".
 
 The limit is not a promise about velocity. It's a pressure gauge. A column
-that sits at its limit for days is telling you exactly where work gets stuck —
+that sits at its limit for days is telling you exactly where work gets stuck:
 that's the diagnostic you bought by setting the limit.
 
 ## What to do when you hit the limit
@@ -55,7 +55,7 @@ This is where most teams waver, so decide the policy up front:
    both working separately.
 2. **Surface the blocker.** If the item is stuck for an external reason, move
    it to a Blocked state with a note. A blocked item doesn't count against the
-   limit — hiding it in "In Progress" does.
+   limit. Hiding it in "In Progress" does.
 3. **Finish, don't start.** The one thing you may _not_ do is pull new work
    into a full column. Every workaround that violates this turns the limit
    into decoration.
@@ -64,7 +64,7 @@ This is where most teams waver, so decide the policy up front:
 
 - **Column inflation.** When a team keeps hitting limits, the tempting fix is
   adding "In Progress 2" or "Almost Done". That's cheating the metric. If a
-  limit is genuinely too tight, raise it deliberately — don't route around it.
+  limit is genuinely too tight, raise it deliberately: don't route around it.
 - **Infinite "done-ish" states.** An item isn't done until a customer could
   use it. Done-ish states are where WIP goes to hide.
 - **Limits without ownership.** If nobody feels allowed to say "the column is
@@ -78,7 +78,7 @@ longest?_ The answers tell you whether to adjust a limit, fix an upstream
 problem (unclear specs? slow reviews?), or add capacity to a genuine
 bottleneck.
 
-Boards in Atur support custom states per project — so a Blocked state that
+Boards in Atur support custom states per project, so a Blocked state that
 keeps WIP honest costs nothing to set up, and limits pair naturally with
 [cycles][c] when your team is ready for a timeboxed rhythm. If you're coming
 from a tool where every card sat in one giant "In Progress" column, the

@@ -18,11 +18,11 @@ We built Atur to collapse that stack into one workspace.
 
 Atur brings the tools your team actually uses into a single app:
 
-- **Issues & projects** — kanban boards with custom workflows and states
-- **Support portal** — turn emails into tracked tickets with SLAs
-- **CRM & deals** — contacts, companies, and a sales pipeline
-- **Timesheets** — billable hours and reports from one source of truth
-- **Pages** — documentation with wikilinks and a knowledge graph
+- **Issues & projects**: kanban boards with custom workflows and states
+- **Support portal**: turn emails into tracked tickets with SLAs
+- **CRM & deals**: contacts, companies, and a sales pipeline
+- **Timesheets**: billable hours and reports from one source of truth
+- **Pages**: documentation with wikilinks and a knowledge graph
 
 ## No servers to manage
 
@@ -32,11 +32,11 @@ encrypted in transit and at rest.
 
 ## AI-native from day one
 
-Atur ships a built-in MCP server. Any AI agent — Claude Code, Cursor, Copilot —
+Atur ships a built-in MCP server. Any AI agent (Claude Code, Cursor, Copilot)
 can create issues, answer tickets, and update deals through the same 70+ tools
 your team uses every day.
 
-Curious how the product itself is put together — the Astro marketing site, the
+Curious how the product itself is put together: the Astro marketing site, the
 Bun monorepo, the single Cloudflare Worker? Read
 [how Atur is built][h].
 
