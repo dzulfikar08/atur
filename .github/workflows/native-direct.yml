@@ -93,9 +93,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download "$SERVER_RELEASE" --repo dzulfikar08/atur-terminal --pattern 'atur-terminal-*-linux-x86_64.tar.gz' --dir "$RUNNER_TEMP"
+          gh release download "$SERVER_RELEASE" --repo dzulfikar08/atur-terminal --pattern 'atur-terminal-[0-9]*-linux-x86_64.tar.gz' --dir "$RUNNER_TEMP"
           mkdir -p "$RUNNER_TEMP/server"
-          tar -xzf "$RUNNER_TEMP"/atur-terminal-*-linux-x86_64.tar.gz -C "$RUNNER_TEMP/server"
+          tar -xzf "$RUNNER_TEMP"/atur-terminal-[0-9]*-linux-x86_64.tar.gz -C "$RUNNER_TEMP/server"
           BIN="$(dirname "$(find "$RUNNER_TEMP/server" -name atur-term-server -type f | head -1)")"
           export ATUR_TERM_DIR="$RUNNER_TEMP/profile"; mkdir -p "$ATUR_TERM_DIR"
           export SHELL=/bin/bash
@@ -157,9 +157,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download "$SERVER_RELEASE" --repo dzulfikar08/atur-terminal --pattern 'atur-terminal-*-linux-x86_64.tar.gz' --dir "$RUNNER_TEMP"
+          gh release download "$SERVER_RELEASE" --repo dzulfikar08/atur-terminal --pattern 'atur-terminal-[0-9]*-linux-x86_64.tar.gz' --dir "$RUNNER_TEMP"
           mkdir -p "$RUNNER_TEMP/server"
-          tar -xzf "$RUNNER_TEMP"/atur-terminal-*-linux-x86_64.tar.gz -C "$RUNNER_TEMP/server"
+          tar -xzf "$RUNNER_TEMP"/atur-terminal-[0-9]*-linux-x86_64.tar.gz -C "$RUNNER_TEMP/server"
           BIN="$(dirname "$(find "$RUNNER_TEMP/server" -name atur-term-server -type f | head -1)")"
           export ATUR_TERM_DIR="$RUNNER_TEMP/profile"; mkdir -p "$ATUR_TERM_DIR"
           export SHELL=/bin/bash

@@ -25,14 +25,14 @@ files, Live Activities and voice come later (see [Next phases](#next-phases)).
 
 ## Where the code is
 
-| What | Where |
-| --- | --- |
-| Rust core, facade, local echo | `crates/atur-mobile` in [atur-terminal](https://github.com/dzulfikar08/atur-terminal), branch `feat/mobile-rn` (`src/direct.rs`, `src/ansi.rs`, `src/input.rs`) |
-| Native module | `apps/native/modules/atur-direct` (`android/`, `ios/`, `src/`) |
-| Build of the core into the module | `apps/native/modules/atur-direct/scripts/build-core.sh`, pinned by `core.ref` |
-| Connection manager, pane transport, fallback | `apps/native/lib/direct/*`, `usePaneAttach` in `lib/pane-streams.ts` |
-| Screens | `app/direct.tsx` (pairing and settings), Direct section in the panes tab, badge in the pane header |
-| Proof run on a device | `app/direct-e2e.tsx`, `lib/direct/e2e.ts`, `scripts/e2e-direct-android.sh`, `.github/workflows/native-direct.yml` |
+| What                                         | Where                                                                                                                                                           |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rust core, facade, local echo                | `crates/atur-mobile` in [atur-terminal](https://github.com/dzulfikar08/atur-terminal), branch `feat/mobile-rn` (`src/direct.rs`, `src/ansi.rs`, `src/input.rs`) |
+| Native module                                | `apps/native/modules/atur-direct` (`android/`, `ios/`, `src/`)                                                                                                  |
+| Build of the core into the module            | `apps/native/modules/atur-direct/scripts/build-core.sh`, pinned by `core.ref`                                                                                   |
+| Connection manager, pane transport, fallback | `apps/native/lib/direct/*`, `usePaneAttach` in `lib/pane-streams.ts`                                                                                            |
+| Screens                                      | `app/direct.tsx` (pairing and settings), Direct section in the panes tab, badge in the pane header                                                              |
+| Proof run on a device                        | `app/direct-e2e.tsx`, `lib/direct/e2e.ts`, `scripts/e2e-direct-android.sh`, `.github/workflows/native-direct.yml`                                               |
 
 ## Calling the Rust core from both platforms
 
@@ -116,14 +116,14 @@ Why not the UDP transport (`muxy-protocol` `transport/udp`, designed for bad lin
 
 What the phone does about the things a transport has to survive:
 
-| Situation | Behaviour |
-| --- | --- |
-| App goes to the background | iOS suspends sockets; Android may keep them for a while. The manager keeps the connection 30 s, then closes it, so nothing wakes the radio for a terminal nobody is looking at. Sessions live in the server, nothing is lost. |
-| App comes back | The manager connects at once, open terminals attach again (`openDirectPane` re-attaches on the new connection without remounting the screen), and the server sends a full snapshot. |
-| Network drops or changes | The core reports `disconnected` (reset, or the server stopped answering). The manager retries after 1, 2, 5 s and then every 10 s while the app is in front. The core never reconnects by itself, so there is one policy in one place. |
-| Server restarts | `restarting` event: retry after 2 s. |
-| Revoked, identity changed, incompatible | No retry; the screen says what the user has to do. |
-| Battery | No traffic in the background; in front, one ping every few seconds keeps the round trip fresh for the local echo and the latency readout. |
+| Situation                               | Behaviour                                                                                                                                                                                                                              |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| App goes to the background              | iOS suspends sockets; Android may keep them for a while. The manager keeps the connection 30 s, then closes it, so nothing wakes the radio for a terminal nobody is looking at. Sessions live in the server, nothing is lost.          |
+| App comes back                          | The manager connects at once, open terminals attach again (`openDirectPane` re-attaches on the new connection without remounting the screen), and the server sends a full snapshot.                                                    |
+| Network drops or changes                | The core reports `disconnected` (reset, or the server stopped answering). The manager retries after 1, 2, 5 s and then every 10 s while the app is in front. The core never reconnects by itself, so there is one policy in one place. |
+| Server restarts                         | `restarting` event: retry after 2 s.                                                                                                                                                                                                   |
+| Revoked, identity changed, incompatible | No retry; the screen says what the user has to do.                                                                                                                                                                                     |
+| Battery                                 | No traffic in the background; in front, one ping every few seconds keeps the round trip fresh for the local echo and the latency readout.                                                                                              |
 
 Phase 2 replaces the TCP leg with the UDP stream, bootstrapped over the authenticated TLS connection
 instead of SSH: a request on the paired connection asks the server to start a UDP listener and returns its
