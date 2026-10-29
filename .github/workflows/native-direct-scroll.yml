@@ -15,7 +15,7 @@ on:
         default: "0"
 
 concurrency:
-  group: native-direct-scroll-${{ github.ref }}
+  group: native-direct-scroll-${{ github.ref }}-${{ inputs.cpu_load }}
   cancel-in-progress: true
 
 permissions:

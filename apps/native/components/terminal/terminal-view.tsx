@@ -9,7 +9,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { TERMINAL_PALETTE } from "@/components/terminal/palette";
 import { TerminalRow } from "@/components/terminal/terminal-row";
 import { Text } from "@/components/ui";
-import { scrollCount, scrollTrace } from "@/lib/scroll-trace";
+import { SCROLL_TRACE, scrollCount, scrollTrace } from "@/lib/scroll-trace";
 import { CELL_WIDTH_EM, clampFontSize, LINE_HEIGHT_EM } from "@/lib/terminal-metrics";
 import type { TerminalScreen } from "@/lib/terminal-screen";
 
@@ -107,10 +107,6 @@ export function TerminalView({
     return live.concat(historyItems);
   }, [historyItems, lines]);
   useEffect(() => scrollTrace("grid_rows", { n: lines.length }), [lines.length]);
-  useEffect(
-    () => scrollTrace("history_rows", { n: history.length, base: historyBase }),
-    [history, historyBase],
-  );
   const stick = useRef(true);
   /** Scrolled away from the bottom: the jump button shows and nothing follows the output. */
   const [away, setAway] = useState(false);
@@ -196,7 +192,7 @@ export function TerminalView({
       viewport: e.layoutMeasurement.height,
     };
     scrollCount("scroll_event");
-    traceScroll(e);
+    if (SCROLL_TRACE) traceScroll(e);
     // Inverted: offset 0 is the bottom.
     const atBottom = e.contentOffset.y <= STICK_SLACK;
     const isFar = e.contentOffset.y > FAR_SCREENS * e.layoutMeasurement.height;
@@ -232,7 +228,12 @@ export function TerminalView({
 
   // Rows arriving above the reader (older scrollback) can leave them near the top still.
   const onContentSizeChange = (_width: number, height: number) => {
-    scrollTrace("content", { height: Math.round(height), was: Math.round(scroll.current.content) });
+    if (SCROLL_TRACE) {
+      scrollTrace("content", {
+        height: Math.round(height),
+        was: Math.round(scroll.current.content),
+      });
+    }
     scroll.current.content = height;
     if (!stick.current) nearTop();
   };
@@ -280,10 +281,6 @@ export function TerminalView({
       <View
         style={styles.frame}
         onLayout={(event) => setViewportWidth(event.nativeEvent.layout.width)}
-        onTouchStart={(event) =>
-          scrollTrace("touch_start", { y: Math.round(event.nativeEvent.pageY) })
-        }
-        onTouchEnd={(event) => scrollTrace("touch_end", { y: Math.round(event.nativeEvent.pageY) })}
       >
         <ScrollView
           horizontal
@@ -317,10 +314,6 @@ export function TerminalView({
               autoscrollToTopThreshold: STICK_SLACK,
             }}
             onScroll={onScroll}
-            onScrollBeginDrag={() => scrollTrace("drag_begin")}
-            onScrollEndDrag={() => scrollTrace("drag_end")}
-            onMomentumScrollBegin={() => scrollTrace("momentum_begin")}
-            onMomentumScrollEnd={() => scrollTrace("momentum_end")}
             onContentSizeChange={onContentSizeChange}
             scrollEventThrottle={32}
             ListEmptyComponent={<Text style={styles.waiting}>waiting for output…</Text>}
