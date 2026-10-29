@@ -25,7 +25,7 @@ LOGCAT=$!
 trap 'kill $LOGCAT 2>/dev/null' EXIT
 
 ENCODED="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$LINK")"
-adb shell am start -a android.intent.action.VIEW -d "'atur://direct-e2e?link=$ENCODED'" "$PACKAGE" >/dev/null
+adb shell am start -a android.intent.action.VIEW -p "$PACKAGE" -d "'atur://direct-e2e?link=$ENCODED'" >/dev/null
 
 seen() { grep -q "$1" "$LOG"; }
 shot() { adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null || true; }
@@ -48,7 +48,7 @@ while [ $SECONDS -lt $deadline ]; do
     did_drop=1
     echo "host: resetting connections to port $PORT"
     sudo iptables -I INPUT -p tcp --dport "$PORT" -j REJECT --reject-with tcp-reset
-    sleep 6
+    sleep 8
     sudo iptables -D INPUT -p tcp --dport "$PORT" -j REJECT --reject-with tcp-reset
     echo "host: connections allowed again"
   fi

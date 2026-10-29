@@ -130,7 +130,7 @@ export async function runDirectE2E(
     // 4. Echo latency with the predictor off and on, one key at a time into `cat`.
     step("echo");
     pane.sendInput("cat >/dev/null\r");
-    await sleep(500);
+    await sleep(1200);
     for (const mode of ["never", "always"] as const) {
       await link0.setEchoMode(mode);
       const letter = mode === "never" ? "q" : "w";
@@ -148,12 +148,12 @@ export async function runDirectE2E(
       }
       record(`echo_${mode}`, summarize(samples));
       pane.sendInput("\u0004"); // Ctrl-D ends cat; the next round starts a new one
-      await sleep(300);
+      await sleep(1200);
       pane.sendInput("cat >/dev/null\r");
-      await sleep(500);
+      await sleep(1200);
     }
     pane.sendInput("\u0004");
-    await sleep(300);
+    await sleep(1200);
     await link0.setEchoMode("auto");
 
     // 5. Background and foreground: the host presses Home, waits, and brings the app back.

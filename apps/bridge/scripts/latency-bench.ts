@@ -69,7 +69,7 @@ console.log(`bridge attach_ms=${(firstSnapshotAt - started).toFixed(2)}`);
 ws.send(JSON.stringify({ type: "claim" }));
 await until(() => keyboard);
 ws.send(JSON.stringify({ type: "input", data: "cat >/dev/null\r" }));
-await sleep(500);
+await sleep(1200);
 
 const times: number[] = [];
 let typed = "";
