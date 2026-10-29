@@ -2,9 +2,10 @@ import { Hono } from "hono";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { authMiddleware } from "../middleware/auth";
-import { requireWorkspaceMember } from "../middleware/workspace";
+import { requireWorkspaceAdmin, requireWorkspaceMember } from "../middleware/workspace";
 import { paginationParams, paginatedResponse } from "../lib/pagination";
 import * as projectService from "../services/projects";
+import { moveProjectSchema, moveProjectToWorkspace } from "../services/projectMove";
 
 export const projectRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   .get("/", authMiddleware, requireWorkspaceMember, async (c) => {
@@ -71,4 +72,18 @@ export const projectRoutes = new Hono<{ Bindings: Env }>({ strict: false })
     const memberId = c.req.param("memberId")!;
     await projectService.removeMember(db, slug, projectId, memberId);
     return c.body(null, 204);
+  })
+  // Re-parent the project (issues, states, modules, … everything under it) into
+  // another workspace. Owner/admin of BOTH workspaces only; see services/projectMove.ts.
+  .post("/:projectId/move-workspace", authMiddleware, requireWorkspaceAdmin, async (c) => {
+    const db = getDb(c.env.DB);
+    const body = moveProjectSchema.parse(await c.req.json());
+    const result = await moveProjectToWorkspace(db, {
+      sourceWorkspaceId: c.get("workspace").id,
+      projectId: c.req.param("projectId")!,
+      targetWorkspaceSlug: body.target_workspace,
+      actorId: c.get("user").sub,
+      pageIds: body.page_ids,
+    });
+    return c.json(result);
   });

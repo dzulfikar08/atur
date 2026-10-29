@@ -104,6 +104,28 @@ sub-issues remain in the source project — move the sub-issues first, then the 
 projects. REST: `POST /api/workspaces/:slug/projects/:projectId/issues/:issueId/move`
 `{ target_project_id, state_id? }`.
 
+**Move a whole project to another workspace (owner/admin of BOTH):**
+
+```
+move_project_to_workspace(
+  workspace="<source slug>",
+  project_id="<uuid>",
+  target_workspace="<destination slug>",
+  page_ids=["<page uuid>", ...]            // optional: pages (no project link) that travel along
+)
+→ { projectId, identifier, fromWorkspace, toWorkspace, moved: {table: n}, detached: {...}, copiedLabels: [...], addedMemberIds: [...] }
+```
+
+One atomic D1 batch re-parents the project and every workspace-scoped row under it (issues, states,
+labels, modules, sprints/cycles, custom fields, time entries, feedback board + attachments, …). Ids and
+issue keys (JRG-123) stay as they are. Links that would span two workspaces are cut and counted in
+`detached`: sub-issue parents (cleared, with an activity entry), issue relations (soft-deleted) and
+sprint/cycle/module memberships shared with another project. Workspace-wide labels in use are copied into the
+target; the project leaves its folder; a portal support-project pointer moves with it; source members the
+project refers to are added to the target. Refused (409) for pipeline projects/deals, support tickets, a Polar
+pipeline pointing at the project, or an identifier already used in the target. REST:
+`POST /api/workspaces/:slug/projects/:projectId/move-workspace` `{ target_workspace, page_ids? }`.
+
 **Link issues:**
 
 ```
@@ -289,7 +311,7 @@ add_comment(
 | Category              | Tools                                                                                                                                                                                               |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Workspace             | `list_workspaces`, `create_workspace`, `update_workspace`, `delete_workspace`, `list_workspace_members`                                                                                             |
-| Projects              | `list_projects`, `get_project`, `create_project`                                                                                                                                                    |
+| Projects              | `list_projects`, `get_project`, `create_project`, `move_project_to_workspace`                                                                                                                       |
 | Issues                | `list_issues`, `create_issue`, `get_issue`, `update_issue`, `move_issue`, `delete_issue`, `search_issues`, `add_comment`, `update_comment`, `delete_comment`, `list_comments`, `get_issue_feedback` |
 | Issue Relations       | `list_issue_relations`, `add_issue_relation`, `remove_issue_relation`                                                                                                                               |
 | Sprints               | `list_sprints`, `create_sprint`, `get_sprint`, `update_sprint`, `add_issue_to_sprint`, `remove_issue_from_sprint`, `get_sprint_progress`                                                            |

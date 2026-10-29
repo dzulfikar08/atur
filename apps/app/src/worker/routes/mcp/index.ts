@@ -21,6 +21,7 @@ import * as workspaceService from "../../services/workspaces";
 import * as assetsService from "../../services/assets";
 import * as commentsService from "../../services/comments";
 import * as issueMoveService from "../../services/issueMove";
+import * as projectMoveService from "../../services/projectMove";
 import { fieldSettingsSchema, withSettings } from "../../services/customFields";
 import * as valuesRepo from "../../repositories/customFieldValues";
 import * as workspaceRepo from "../../repositories/workspaces";
@@ -254,6 +255,25 @@ export const TOOLS = [
         },
       },
       required: ["workspace", "issue_id", "target_project_id"],
+    },
+  },
+  {
+    name: "move_project_to_workspace",
+    description:
+      "Move a whole project to another workspace (owner/admin of BOTH). The project, issues (keys unchanged), comments, activity, time entries, attachments, states, labels, modules, sprints/cycles, custom fields and feedback board come along in one atomic batch. Cross-project links that would span two workspaces are cut and counted in `detached`: sub-issue parents (cleared, activity logged), issue relations, sprint/cycle/module memberships. Workspace-wide labels in use are copied into the target. Optional page_ids move those pages too (pages have no project link). Refused for pipeline projects/deals, support tickets, or an identifier already used in the target.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string", description: "Source workspace slug" },
+        project_id: { type: "string", description: "Project UUID to move" },
+        target_workspace: { type: "string", description: "Destination workspace slug" },
+        page_ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional source-workspace page UUIDs that travel with the project",
+        },
+      },
+      required: ["workspace", "project_id", "target_workspace"],
     },
   },
   {
@@ -1986,6 +2006,29 @@ async function handleToolRaw(
         key: moved.key,
         droppedLabels: moved.droppedLabels,
       };
+    }
+    case "move_project_to_workspace": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      const parsed = projectMoveService.moveProjectSchema.safeParse({
+        target_workspace: params.target_workspace,
+        page_ids: params.page_ids,
+      });
+      if (!parsed.success || typeof params.project_id !== "string") {
+        throw new HTTPException(400, {
+          message: parsed.success
+            ? "project_id is required"
+            : parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
+        });
+      }
+      // Admin of both ends is enforced inside the service; the project is
+      // bound to the named source workspace there (cross-workspace → 404).
+      return projectMoveService.moveProjectToWorkspace(db, {
+        sourceWorkspaceId: workspaceId,
+        projectId: params.project_id,
+        targetWorkspaceSlug: parsed.data.target_workspace,
+        actorId: userId,
+        pageIds: parsed.data.page_ids,
+      });
     }
     case "get_issue": {
       // Accept issue_id (UUID) or sequence_id (human number within a project).
