@@ -76,7 +76,7 @@ function NewMachineToken({
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Runs on Linux and macOS. Works with herdr, tmux or Muxy.{" "}
+          Runs on Linux and macOS. Works with herdr, tmux or Atur Terminal.{" "}
           <a href={DOCS_URL} target="_blank" rel="noreferrer" className="underline">
             Setup guide
           </a>
@@ -98,7 +98,12 @@ function MachineRow({ machine }: { machine: BridgeMachine }) {
     },
     onError: (err) => toast.error(errorText(err)),
   });
-  const detail = [machine.hostname, machine.backend, lastSeen(machine)].filter(Boolean).join(" · ");
+  // "muxy" is the pre-rename backend name; both show as Atur Terminal.
+  const backend =
+    machine.backend === "atur-terminal" || machine.backend === "muxy"
+      ? "Atur Terminal"
+      : machine.backend;
+  const detail = [machine.hostname, backend, lastSeen(machine)].filter(Boolean).join(" · ");
 
   return (
     <div className="flex items-center gap-3 rounded-md border px-3 py-2.5">
@@ -183,7 +188,7 @@ export default function MachinesPage() {
           <div className="space-y-1.5">
             <CardTitle className="text-base">Your machines</CardTitle>
             <CardDescription>
-              Runs on Linux and macOS. Works with herdr, tmux or Muxy.{" "}
+              Runs on Linux and macOS. Works with herdr, tmux or Atur Terminal.{" "}
               <a href={DOCS_URL} target="_blank" rel="noreferrer" className="underline">
                 Setup guide
               </a>

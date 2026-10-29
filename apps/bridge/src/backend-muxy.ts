@@ -1,7 +1,8 @@
 /**
- * Muxy backend: one persistent connection to a Muxy 2 server's socket,
- * speaking its native protocol (muxy-wire.ts), so agents running in Muxy
- * tabs show up in the web and phone app.
+ * Atur Terminal backend (a fork of Muxy 2; kind `atur-terminal`, alias `muxy`):
+ * one persistent connection to the server's socket, speaking its native
+ * protocol (muxy-wire.ts), so agents running in its tabs show up in the web and
+ * phone app. A pre-rename Muxy server is found and driven the same way.
  *
  * Mapping: workspace = Muxy project, tab = pane = Muxy session (a decimal
  * 64-bit id). Muxy keeps tabs and splits in its UI clients; the server, and so
@@ -60,7 +61,9 @@ import {
 import { SizeHolders, type GridSize, type SizeTiming } from "./sizer";
 
 const SESSION_ID = /^[1-9][0-9]{0,19}$/;
-const MAC_APP_BINARY = "/Applications/Muxy.app/Contents/MacOS/muxy";
+const MAC_APP_BINARY = "/Applications/Atur Terminal.app/Contents/MacOS/atur-term";
+/** The pre-rename Muxy build, still accepted until a machine upgrades. */
+const LEGACY_MAC_APP_BINARY = "/Applications/Muxy.app/Contents/MacOS/muxy";
 /** Muxy's CLI default for a session nobody has opened in a window yet. */
 const NEW_SESSION_SIZE = { cols: 80, rows: 24 };
 /** How long a metadata window waits for every session to report. */
@@ -93,8 +96,23 @@ const PROJECT_COLORS = [
   "#d6409f",
 ];
 
-/** Muxy's data directory, resolved the way Muxy itself does (stable channel). */
-export function muxyDirectory(
+/** Atur Terminal's data directory (`ATUR_TERM_DIR`, else the platform default). */
+export function aturTerminalDirectory(
+  env: Record<string, string | undefined>,
+  platform: string = process.platform,
+): string {
+  if (env.ATUR_TERM_DIR) return env.ATUR_TERM_DIR;
+  if (platform === "linux") {
+    const state = env.XDG_STATE_HOME;
+    return state?.startsWith("/")
+      ? join(state, "atur-terminal")
+      : join(`${env.HOME}`, ".local/state/atur-terminal");
+  }
+  return join(`${env.HOME}`, "Library/Application Support/Atur Terminal");
+}
+
+/** The pre-rename Muxy data directory (`MUXY_DIR`, else the platform default). */
+export function legacyMuxyDirectory(
   env: Record<string, string | undefined>,
   platform: string = process.platform,
 ): string {
@@ -106,35 +124,69 @@ export function muxyDirectory(
   return join(`${env.HOME}`, "Library/Application Support/Muxy 2");
 }
 
-/** Muxy server socket; shared by the backend and auto-detection. */
+/**
+ * Data directories to look in, preferred first. An explicit `ATUR_TERM_DIR`
+ * pins the instance: it never falls back to a Muxy server, so an isolated
+ * instance cannot end up driving someone's real one.
+ */
+function candidateDirectories(env: Record<string, string | undefined>, platform: string): string[] {
+  const current = aturTerminalDirectory(env, platform);
+  if (env.ATUR_TERM_DIR) return [current];
+  return [current, legacyMuxyDirectory(env, platform)];
+}
+
+/**
+ * The server socket to use: the first candidate directory whose `server.sock`
+ * exists (Atur Terminal before the old Muxy), else the Atur Terminal path, where
+ * a server this bridge starts will create it.
+ */
 export function muxySocketPath(
   env: Record<string, string | undefined> = process.env,
   platform: string = process.platform,
 ): string {
-  return join(muxyDirectory(env, platform), "server.sock");
+  const sockets = candidateDirectories(env, platform).map((dir) => join(dir, "server.sock"));
+  return sockets.find((socket) => existsSync(socket)) ?? sockets[0]!;
 }
 
-/** `MUXY_BIN`, else `muxy` on PATH, else the binary inside the macOS app bundle. Only used to start a server. */
-export function muxyBinary(env: Record<string, string | undefined> = process.env): string {
-  if (env.MUXY_BIN) return env.MUXY_BIN;
-  const onPath = Bun.which("muxy");
-  if (onPath) return onPath;
-  return existsSync(MAC_APP_BINARY) ? MAC_APP_BINARY : "muxy";
+/** True when an Atur Terminal or (legacy) Muxy server socket exists. */
+export function muxySocketExists(
+  env: Record<string, string | undefined> = process.env,
+  platform: string = process.platform,
+): boolean {
+  return candidateDirectories(env, platform).some((dir) => existsSync(join(dir, "server.sock")));
 }
 
 /**
- * Environment for the `muxy` CLI. Starting the Muxy server is the one thing
+ * `ATUR_TERM_BIN`, else `atur-term` on PATH, else the binary in the macOS app
+ * bundle; then the same for the old Muxy names (`MUXY_BIN`, `muxy`). Only used
+ * to start a server. With nothing installed it returns `atur-term`.
+ */
+export function muxyBinary(env: Record<string, string | undefined> = process.env): string {
+  if (env.ATUR_TERM_BIN) return env.ATUR_TERM_BIN;
+  const onPath = Bun.which("atur-term");
+  if (onPath) return onPath;
+  if (existsSync(MAC_APP_BINARY)) return MAC_APP_BINARY;
+  if (env.MUXY_BIN) return env.MUXY_BIN;
+  const legacy = Bun.which("muxy");
+  if (legacy) return legacy;
+  return existsSync(LEGACY_MAC_APP_BINARY) ? LEGACY_MAC_APP_BINARY : "atur-term";
+}
+
+/**
+ * Environment for the `atur-term` CLI. Starting the server is the one thing
  * the protocol cannot do, and that server hands its environment to every
  * terminal it opens: the bridge's own settings (machine token, loopback
- * token) must not reach them, nor the id of a Muxy terminal the bridge itself
- * may have been started from.
+ * token) must not reach them, nor the id of a terminal the bridge itself may
+ * have been started from. `ATUR_TERM_*` is the terminal's own configuration
+ * (`ATUR_TERM_DIR` picks the server) and passes, except the session id.
  */
 export function muxyChildEnv(
   env: Record<string, string | undefined>,
 ): Record<string, string | undefined> {
   const out: Record<string, string | undefined> = {};
   for (const [key, value] of Object.entries(env)) {
-    if (/^(ATUR_|BRIDGE_|HERDR_BRIDGE_)/.test(key) || key === "MUXY_SESSION_ID") continue;
+    if (/^(ATUR_(?!TERM_)|BRIDGE_|HERDR_BRIDGE_)/.test(key)) continue;
+    if (key === "ATUR_TERM_SESSION_ID" || key === "MUXY_SESSION_ID") continue;
     out[key] = value;
   }
   return out;
@@ -207,11 +259,12 @@ export function summarizePanes(sources: PaneSources): PaneSummary[] {
 
 /** An omp session file: `.../sessions/<project dir>/<timestamp>_<id>.jsonl`; sub-agent files sit one level deeper. */
 const OMP_TRANSCRIPT = /\/sessions\/[^/]+\/[^/]+\.jsonl$/;
-const SESSION_ENV = /(?:^|\0)MUXY_SESSION_ID=([0-9]+)(?:\0|$)/;
+const SESSION_ENV = /(?:^|\0)(?:ATUR_TERM|MUXY)_SESSION_ID=([0-9]+)(?:\0|$)/;
 
 /**
  * omp keeps its session transcript open for appending, and a process started
- * in a Muxy terminal has that terminal's id in `MUXY_SESSION_ID`. Linux only:
+ * in a terminal has that terminal's id in `ATUR_TERM_SESSION_ID` (`MUXY_SESSION_ID`
+ * before the rename). Linux only:
  * it reads `/proc/<pid>/environ` and `/proc/<pid>/fd`. Muxy does not report
  * the pid of a terminal's foreground process, so this is the only link
  * between a session and its transcript.
@@ -245,9 +298,9 @@ export async function findOmpTranscripts(
 // ── Backend ───────────────────────────────────────────────────────────────
 
 export interface MuxyOptions {
-  /** The `muxy` CLI, used only to start a server when a workspace is created and none runs. */
+  /** The `atur-term` CLI, used only to start a server when a workspace is created and none runs. */
   bin?: string;
-  /** Environment the backend runs in (e.g. `MUXY_DIR` selects the server); the process env when unset. */
+  /** Environment the backend runs in (e.g. `ATUR_TERM_DIR` selects the server); the process env when unset. */
   env?: Record<string, string | undefined>;
   /** Phone-size timing (tests shorten it). */
   timing?: SizeTiming;
@@ -256,10 +309,10 @@ export interface MuxyOptions {
 type RefreshName = "sessions" | "catalog" | "activity";
 
 export class MuxyBackend implements PaneBackend {
-  readonly kind = "muxy";
+  readonly kind = "atur-terminal";
   private readonly bin: string;
   private readonly env: Record<string, string | undefined>;
-  private readonly socket: string;
+  private readonly socketEnv: Record<string, string | undefined>;
   private readonly timing: SizeTiming | undefined;
 
   private conn: MuxyConnection | null = null;
@@ -300,8 +353,11 @@ export class MuxyBackend implements PaneBackend {
   constructor(opts: MuxyOptions = {}) {
     const env = opts.env ?? process.env;
     this.bin = opts.bin ?? muxyBinary(env);
-    this.env = muxyChildEnv(env);
-    this.socket = muxySocketPath(env);
+    const child = muxyChildEnv(env);
+    // A pre-rename `muxy` binary reads MUXY_DIR, so an explicit ATUR_TERM_DIR must reach it too.
+    if (child.ATUR_TERM_DIR && !child.MUXY_DIR) child.MUXY_DIR = child.ATUR_TERM_DIR;
+    this.env = child;
+    this.socketEnv = env;
     this.timing = opts.timing;
   }
 
@@ -325,7 +381,8 @@ export class MuxyBackend implements PaneBackend {
     if (this.connecting) return this.connecting;
     if (this.conn?.isOpen) return this.conn;
     if (this.unsupported && Date.now() - this.unsupported.at < 5_000) throw this.unsupported.error;
-    if (!existsSync(this.socket)) return null;
+    // Resolved per attempt: a server started later may live in the Atur Terminal or the old Muxy directory.
+    if (!existsSync(muxySocketPath(this.socketEnv))) return null;
     this.connecting ??= this.connect().finally(() => {
       this.connecting = null;
     });
@@ -334,21 +391,21 @@ export class MuxyBackend implements PaneBackend {
 
   private async requireConnection(): Promise<MuxyConnection> {
     const conn = await this.connection();
-    if (!conn) throw new PaneGoneError("muxy server is not running");
+    if (!conn) throw new PaneGoneError("atur-term server is not running");
     return conn;
   }
 
   private async connect(): Promise<MuxyConnection | null> {
     let conn: MuxyConnection;
     try {
-      conn = await MuxyConnection.open(this.socket, {
+      conn = await MuxyConnection.open(muxySocketPath(this.socketEnv), {
         onMessage: (message) => this.onMessage(message),
         onClose: (reason) => this.onClose(reason),
       });
     } catch (e) {
       if (e instanceof MuxyUnsupportedError) {
         this.unsupported = { error: e, at: Date.now() };
-        this.logOnce(`unsupported:${e.message}`, `muxy: ${e.message}`);
+        this.logOnce(`unsupported:${e.message}`, `atur-term: ${e.message}`);
         throw e;
       }
       // Refused or vanished: no server is answering on that socket.
@@ -362,7 +419,7 @@ export class MuxyBackend implements PaneBackend {
       await this.resolveTranscripts();
     } catch (e) {
       conn.close();
-      this.logOnce(`prime:${String(e)}`, "muxy: reading the server's state failed:", e);
+      this.logOnce(`prime:${String(e)}`, "atur-term: reading the server's state failed:", e);
       return null;
     }
     this.logged.delete("closed");
@@ -386,7 +443,7 @@ export class MuxyBackend implements PaneBackend {
     if (this.stopping) return;
     this.logOnce(
       "closed",
-      `muxy: connection lost (${reason.message}); will reconnect when it answers`,
+      `atur-term: connection lost (${reason.message}); will reconnect when it answers`,
     );
   }
 
@@ -449,7 +506,11 @@ export class MuxyBackend implements PaneBackend {
         } catch (e) {
           // A connection that is gone is reported once by onClose.
           if (this.conn?.isOpen) {
-            this.logOnce(`refresh:${name}:${String(e)}`, `muxy: refreshing ${name} failed:`, e);
+            this.logOnce(
+              `refresh:${name}:${String(e)}`,
+              `atur-term: refreshing ${name} failed:`,
+              e,
+            );
           }
         }
       } while (state.dirty);
@@ -546,7 +607,7 @@ export class MuxyBackend implements PaneBackend {
       await conn.request((id) => requests.syncSessionReferences(id, ids));
       await promise;
     } catch (e) {
-      this.logOnce(`meta:${String(e)}`, "muxy: reading session titles failed:", e);
+      this.logOnce(`meta:${String(e)}`, "atur-term: reading session titles failed:", e);
     } finally {
       clearTimeout(timer);
       this.metaWaiter = null;
@@ -573,7 +634,7 @@ export class MuxyBackend implements PaneBackend {
         for (const id of wanted) this.transcripts.set(id, { path: paths.get(id) ?? null, at });
       })
       .catch((e: unknown) =>
-        this.logOnce(`transcripts:${String(e)}`, "muxy: finding transcripts failed:", e),
+        this.logOnce(`transcripts:${String(e)}`, "atur-term: finding transcripts failed:", e),
       )
       .finally(() => {
         this.transcriptRun = null;
@@ -803,7 +864,9 @@ export class MuxyBackend implements PaneBackend {
     });
     const [stderr, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
     if (code !== 0) {
-      throw new Error(`muxy server start: ${stderr.trim().replace(/^muxy:\s*/, "") || "failed"}`);
+      throw new Error(
+        `atur-term server start: ${stderr.trim().replace(/^(?:atur-term|muxy):\s*/, "") || "failed"}`,
+      );
     }
   }
 
@@ -830,7 +893,7 @@ export class MuxyBackend implements PaneBackend {
   async createWorkspace(opts: { cwd: string; label?: string }): Promise<CreatedWorkspace> {
     const label = opts.label?.trim();
     if (opts.label !== undefined && !label)
-      throw new InputError("a Muxy project name cannot be blank");
+      throw new InputError("an Atur Terminal project name cannot be blank");
     let directory: string;
     try {
       directory = realpathSync(opts.cwd);
@@ -842,7 +905,8 @@ export class MuxyBackend implements PaneBackend {
     if (!conn) {
       await this.startServer();
       conn = await this.connection();
-      if (!conn) throw new Error("muxy: the server did not come up after `muxy server start`");
+      if (!conn)
+        throw new Error("atur-term: the server did not come up after `atur-term server start`");
     }
     await this.refreshCatalog();
     let project = this.projects.find(
@@ -868,7 +932,7 @@ export class MuxyBackend implements PaneBackend {
       }
       await this.refreshCatalog();
       project = this.projects.find((p) => p.id === created.id);
-      if (!project) throw new Error("muxy: the new project did not appear in the catalog");
+      if (!project) throw new Error("atur-term: the new project did not appear in the catalog");
     }
     const pane = await this.createSession(project.id, opts.cwd);
     const siblings = [...this.sessions.values()].filter((s) => s.project === project.id);
@@ -890,7 +954,7 @@ export class MuxyBackend implements PaneBackend {
   async splitPane(id: string, _direction: SplitDirection, cwd?: string): Promise<PaneSummary> {
     const source = await this.getPane(id);
     const start = cwd ?? source.cwd;
-    if (!start) throw new Error(`muxy: no directory for a session next to ${id}`);
+    if (!start) throw new Error(`atur-term: no directory for a session next to ${id}`);
     return this.createSession(source.workspaceId, start);
   }
 
@@ -946,9 +1010,9 @@ export class MuxyBackend implements PaneBackend {
         applied: size,
       });
       await this.setSize(terminal, size);
-      console.log(`sizer: muxy session ${id} resized to ${size.cols}x${size.rows}`);
+      console.log(`sizer: terminal session ${id} resized to ${size.cols}x${size.rows}`);
     } catch (e) {
-      console.error(`sizer: could not resize muxy session ${id}:`, e);
+      console.error(`sizer: could not resize terminal session ${id}:`, e);
     }
   }
 
@@ -972,12 +1036,12 @@ export class MuxyBackend implements PaneBackend {
       (restored) =>
         console.log(
           restored
-            ? `sizer: muxy session ${id} restored to ${original.cols}x${original.rows}`
-            : `sizer: muxy session ${id} was resized by someone else; left as it is`,
+            ? `sizer: terminal session ${id} restored to ${original.cols}x${original.rows}`
+            : `sizer: terminal session ${id} was resized by someone else; left as it is`,
         ),
       (e: unknown) => {
         if (!(e instanceof PaneGoneError))
-          console.error(`sizer: could not restore muxy session ${id}:`, e);
+          console.error(`sizer: could not restore terminal session ${id}:`, e);
       },
     );
     this.restoring.add(done);
@@ -987,7 +1051,7 @@ export class MuxyBackend implements PaneBackend {
 
   private setSize(terminal: MuxyTerminal, size: GridSize): Promise<unknown> {
     const conn = this.conn;
-    if (!conn?.isOpen) return Promise.reject(new PaneGoneError("muxy server is not running"));
+    if (!conn?.isOpen) return Promise.reject(new PaneGoneError("atur-term server is not running"));
     return conn.request((rid) => requests.resize(rid, terminal.channel, size.cols, size.rows));
   }
 

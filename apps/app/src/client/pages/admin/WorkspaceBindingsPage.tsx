@@ -150,7 +150,7 @@ function BindingEditDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Label htmlFor="binding-herdr">
-                Terminal workspace (herdr workspace / Muxy project)
+                Terminal workspace (herdr workspace / Atur Terminal project)
               </Label>
               <Input
                 id="binding-herdr"
@@ -313,7 +313,7 @@ export default function WorkspaceBindingsPage() {
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
           Control-plane bindings: which repo(s), local checkout, branch, and terminal workspace
-          (herdr workspace or Muxy project) back each workspace's agents.
+          (herdr workspace or Atur Terminal project) back each workspace's agents.
           {!canEdit && " Read-only — ask a workspace admin to make changes."}
         </p>
       </div>

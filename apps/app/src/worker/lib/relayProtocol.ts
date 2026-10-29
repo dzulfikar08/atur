@@ -11,7 +11,8 @@
 // Durable Object's auto-response, never parsed here.
 
 export const RELAY_PROTOCOL_VERSION = 1;
-export const RELAY_BACKENDS = ["herdr", "tmux", "muxy"] as const;
+// "muxy" is the pre-rename name of "atur-terminal"; bridges not yet upgraded still say it.
+export const RELAY_BACKENDS = ["herdr", "tmux", "atur-terminal", "muxy"] as const;
 export type RelayBackend = (typeof RELAY_BACKENDS)[number];
 
 /** Worker gives up on a bridge `res` after this long (504). */

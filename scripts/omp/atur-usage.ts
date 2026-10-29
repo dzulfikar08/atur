@@ -11,7 +11,7 @@
 //   ATUR_API_KEY      X-API-Key value; falls back to ATUR_API_KEY_FILE, then
 //   ATUR_API_KEY_FILE key file path; falls back to ~/.config/atur/crew-api-key
 //   ATUR_BASE_URL     default https://app.diatur.com
-//   ATUR_AGENT_NAME  default omp/muxy-<MUXY_SESSION_ID> (in Muxy) | omp/pane-<HERDR_PANE_ID> | omp/<session-id8>
+//   ATUR_AGENT_NAME  default omp/atur-term-<ATUR_TERM_SESSION_ID> (in Atur Terminal; omp/muxy-<MUXY_SESSION_ID> in the old Muxy) | omp/pane-<HERDR_PANE_ID> | omp/<session-id8>
 //
 // Failure model: every handler swallows its own errors — a broken report
 // must never block a tool call or crash a session. Failed POSTs keep the
@@ -50,9 +50,12 @@ function apiKey(): string {
 function agentName(sessionFile: string | undefined): string {
   const env = process.env;
   if (env.ATUR_AGENT_NAME) return env.ATUR_AGENT_NAME;
-  // The innermost multiplexer names the pane. Muxy sets TERM_PROGRAM=muxy (herdr
-  // sets its own), and a Muxy server started from a herdr pane passes
-  // HERDR_PANE_ID into every Muxy terminal, so Muxy is checked first.
+  // The innermost multiplexer names the pane. Atur Terminal sets
+  // TERM_PROGRAM=atur-terminal (the old Muxy: muxy; herdr sets its own), and a
+  // server started from a herdr pane passes HERDR_PANE_ID into every terminal,
+  // so these are checked first.
+  if (env.TERM_PROGRAM === "atur-terminal" && env.ATUR_TERM_SESSION_ID)
+    return `omp/atur-term-${env.ATUR_TERM_SESSION_ID}`;
   if (env.TERM_PROGRAM === "muxy" && env.MUXY_SESSION_ID) return `omp/muxy-${env.MUXY_SESSION_ID}`;
   if (env.HERDR_PANE_ID) return `omp/pane-${env.HERDR_PANE_ID}`;
   const m = /([0-9a-f]{8})\.jsonl$/i.exec(sessionFile || "");

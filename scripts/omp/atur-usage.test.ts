@@ -73,12 +73,16 @@ afterAll(() => {
   else process.env.HERDR_PANE_ID = savedPaneId;
   if (savedMuxyId === undefined) delete process.env.MUXY_SESSION_ID;
   else process.env.MUXY_SESSION_ID = savedMuxyId;
+  if (savedTermId === undefined) delete process.env.ATUR_TERM_SESSION_ID;
+  else process.env.ATUR_TERM_SESSION_ID = savedTermId;
 });
 // HERDR_PANE_ID / MUXY_SESSION_ID are set inside herdr panes and Muxy terminals
 // and would win the agent_name fallback chain — isolate the session-file path
 // for assertions.
 const savedPaneId = process.env.HERDR_PANE_ID;
 const savedMuxyId = process.env.MUXY_SESSION_ID;
+const savedTermId = process.env.ATUR_TERM_SESSION_ID;
+delete process.env.ATUR_TERM_SESSION_ID;
 delete process.env.HERDR_PANE_ID;
 delete process.env.MUXY_SESSION_ID;
 
@@ -146,10 +150,18 @@ describe("atur-usage hook", () => {
       } finally {
         delete process.env.HERDR_PANE_ID;
         delete process.env.MUXY_SESSION_ID;
+        delete process.env.ATUR_TERM_SESSION_ID;
         if (saved.term === undefined) delete process.env.TERM_PROGRAM;
         else process.env.TERM_PROGRAM = saved.term;
       }
     };
+    expect(
+      await nameFor({
+        TERM_PROGRAM: "atur-terminal",
+        ATUR_TERM_SESSION_ID: "804218",
+        HERDR_PANE_ID: "w1:p2",
+      }),
+    ).toBe("omp/atur-term-804218");
     // A Muxy server started from a herdr pane leaks HERDR_PANE_ID into its terminals.
     expect(
       await nameFor({ TERM_PROGRAM: "muxy", MUXY_SESSION_ID: "804218", HERDR_PANE_ID: "w1:p2" }),

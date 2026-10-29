@@ -442,7 +442,7 @@ wrangler d1 execute atur-db --remote --command "INSERT INTO api_keys (id,key_has
 
 ### Control Plane — Agent Claim/Evidence Convention (DEV-29)
 
-Atur is the control plane; the harness (herdr or Muxy + omp) is the execution plane.
+Atur is the control plane; the harness (herdr or Atur Terminal + omp) is the execution plane.
 Harness = source of truth for live state. Atur = source of truth for intent
 (issues) + history (evidence). Never gate on Atur reflecting live state.
 
@@ -460,8 +460,8 @@ Observe: https://app.diatur.com/panes/<pane-id> — live terminal of the pane
 in the browser (Atur Worker authenticates; requires the atur-bridge daemon
 running on the agent host with its Cloudflare Tunnel up). On the agent host
 itself, `herdr pane read <pane-id> --format ansi` (herdr; pane id =
-$HERDR_PANE_ID) or `muxy session read-screen <pane-id>` (Muxy; pane id =
-$MUXY_SESSION_ID) reads the current screen."
+$HERDR_PANE_ID) or `atur-term session read-screen <pane-id>` (Atur Terminal; pane id =
+$ATUR_TERM_SESSION_ID; `muxy` / $MUXY_SESSION_ID on a not-yet-upgraded build) reads the current screen."
 update_issue: state_id = In Progress
 ```
 
