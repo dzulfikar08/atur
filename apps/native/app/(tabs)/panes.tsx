@@ -7,6 +7,7 @@ import { Pressable, ScrollView, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { AgentAlertsCard } from "@/components/agent-alerts";
+import { DirectSessionsSection } from "@/components/direct/direct-section";
 import { usePaneActions } from "@/components/pane-actions";
 import { usePaneCreate } from "@/components/pane-create";
 import { RowListSkeleton } from "@/components/skeletons";
@@ -257,6 +258,7 @@ export default function Panes() {
       ) : null}
 
       <AgentAlertsCard />
+      <DirectSessionsSection />
 
       {panes.isPending ? (
         <RowListSkeleton />

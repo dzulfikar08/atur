@@ -1,13 +1,15 @@
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { FlatList, ScrollView, View, type NativeScrollEvent } from "react-native";
+import { FlatList, Pressable, ScrollView, View, type NativeScrollEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native-unistyles";
 
 import { TERMINAL_PALETTE } from "@/components/terminal/palette";
 import { TerminalRow } from "@/components/terminal/terminal-row";
 import { Text } from "@/components/ui";
+import { SCROLL_TRACE, scrollCount, scrollTrace } from "@/lib/scroll-trace";
 import { CELL_WIDTH_EM, clampFontSize, LINE_HEIGHT_EM } from "@/lib/terminal-metrics";
 import type { TerminalScreen } from "@/lib/terminal-screen";
 
@@ -15,6 +17,21 @@ import type { TerminalScreen } from "@/lib/terminal-screen";
 const STICK_SLACK = 48;
 /** Vertical padding of the list content; getItemLayout offsets include it. */
 const ROW_PAD = 4;
+/** Closer than this many rows to the oldest loaded one, the reader gets older scrollback. */
+const NEAR_TOP_ROWS = 80;
+/**
+ * Further than this many screens above the live grid, the rows that output pushes into scrollback
+ * are not fetched (nobody sees them, and each one that arrives moves the list under the reader);
+ * a top-up reads them when the reader comes back within reach.
+ */
+const FAR_SCREENS = 3;
+
+interface Row {
+  key: string;
+  line: string;
+}
+
+const keyOf = (item: Row) => item.key;
 
 interface TerminalViewProps {
   screen: TerminalScreen;
@@ -27,6 +44,8 @@ interface TerminalViewProps {
   onTapText: () => void;
   /** The reader left the bottom: fetch scrollback to show above the live grid. */
   onScrollBack: () => void;
+  /** The reader is near the oldest scrollback loaded: read further back. */
+  onNearTop: () => void;
   /** Long-press on the text: the owner opens the text selector. */
   onSelectText: () => void;
 }
@@ -37,7 +56,9 @@ interface TerminalViewProps {
  * and vertically when taller. Pinch scales the font; the view follows the
  * bottom of the screen until the reader scrolls up. Scrollback (loaded by the
  * owner on connect) sits above the live grid; each scroll away from the
- * bottom asks for a fresh copy, since output keeps scrolling into it.
+ * bottom asks for a fresh copy, since output keeps scrolling into it, and
+ * getting near the oldest loaded row asks for older rows. A button jumps back
+ * to the bottom, and only there does the view follow new output.
  */
 export function TerminalView({
   screen,
@@ -46,26 +67,52 @@ export function TerminalView({
   onFontSizeCommit,
   onTapText,
   onScrollBack,
+  onNearTop,
   onSelectText,
 }: TerminalViewProps) {
   const { cols, lines, history, historyBase } = useSyncExternalStore(
     screen.subscribe,
     screen.getState,
   );
+  scrollCount("view_render");
   // Newest row first, for an inverted list: offset 0 is the bottom of the pane,
   // so rows changing, appearing or going at the bottom while an agent streams
   // need no scroll correction at all. Keys: a scrollback row keeps
-  // historyBase + index (appends below it never shift it); live rows are keyed
-  // by grid row.
-  const rows = useMemo(() => {
-    const items: { key: string; line: string }[] = [];
-    for (let i = lines.length - 1; i >= 0; i--) items.push({ key: `l${i}`, line: lines[i]! });
+  // historyBase + index (appends below it never shift it); a live row is keyed by its
+  // distance from the bottom of the grid, so the grid growing or shrinking (the pane is laid
+  // out at the phone's size after it opens) adds or removes cells above the bottom row and the
+  // bottom row stays the same cell: keyed from the top, the cell that was the bottom row ends
+  // up 20 rows above it, and the list keeps *that* one in place, which leaves the reader that
+  // far from the bottom, with nothing following the output.
+  // The scrollback items are built only when scrollback changes, and a live item is reused
+  // while its row is unchanged: a frame (ten a second while an agent prints) then touches only
+  // the rows that changed instead of every cell.
+  const historyItems = useMemo(() => {
+    const items: Row[] = [];
     for (let j = history.length - 1; j >= 0; j--) {
       items.push({ key: `h${historyBase + j}`, line: history[j]! });
     }
     return items;
-  }, [history, historyBase, lines]);
+  }, [history, historyBase]);
+  const liveItems = useRef<Row[]>([]);
+  const rows = useMemo(() => {
+    const previous = liveItems.current;
+    const live: Row[] = [];
+    for (let fromBottom = 0; fromBottom < lines.length; fromBottom++) {
+      const line = lines[lines.length - 1 - fromBottom]!;
+      const kept = previous[fromBottom];
+      live.push(kept?.line === line ? kept : { key: `l${fromBottom}`, line });
+    }
+    liveItems.current = live;
+    return live.concat(historyItems);
+  }, [historyItems, lines]);
+  useEffect(() => scrollTrace("grid_rows", { n: lines.length }), [lines.length]);
   const stick = useRef(true);
+  /** Scrolled away from the bottom: the jump button shows and nothing follows the output. */
+  const [away, setAway] = useState(false);
+  const list = useRef<FlatList<Row>>(null);
+  const scroll = useRef({ offset: 0, content: 0, viewport: 0 });
+  const far = useRef(false);
   const [viewportWidth, setViewportWidth] = useState(0);
 
   const lineHeight = Math.round(fontSize * LINE_HEIGHT_EM);
@@ -73,58 +120,161 @@ export function TerminalView({
   // A little slack: fallback fonts and rounding can make a row a hair wider than cols cells.
   const contentWidth = Math.max(viewportWidth, Math.ceil(cols * cellWidth * 1.03) + 12);
 
+  // The latest props for callbacks that must keep their identity: the list re-renders every cell
+  // when `renderItem` changes, and the pinch gesture must not change mid-pinch.
+  const latest = useRef({
+    fontSize,
+    onFontSize,
+    onFontSizeCommit,
+    onTapText,
+    onScrollBack,
+    onNearTop,
+    onSelectText,
+  });
+  latest.current = {
+    fontSize,
+    onFontSize,
+    onFontSizeCommit,
+    onTapText,
+    onScrollBack,
+    onNearTop,
+    onSelectText,
+  };
+
   const onLongPress = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    onSelectText();
-  }, [onSelectText]);
+    latest.current.onSelectText();
+  }, []);
 
-  const onTap = useCallback(
-    (url: string | null) => {
-      if (url) {
-        void Haptics.selectionAsync().catch(() => {});
-        void WebBrowser.openBrowserAsync(url);
-      } else {
-        onTapText();
-      }
-    },
-    [onTapText],
-  );
+  const onTap = useCallback((url: string | null) => {
+    if (url) {
+      void Haptics.selectionAsync().catch(() => {});
+      void WebBrowser.openBrowserAsync(url);
+    } else {
+      latest.current.onTapText();
+    }
+  }, []);
 
-  // Pinch → font size, relative to the size when the gesture began. The handlers
-  // read the latest props through a ref so the gesture object never changes
-  // mid-pinch (every size change re-renders this component).
-  const latest = useRef({ fontSize, onFontSize, onFontSizeCommit });
-  latest.current = { fontSize, onFontSize, onFontSizeCommit };
+  // Pinch → font size, relative to the size when the gesture began.
   const pinchBase = useRef(fontSize);
   const lastSize = useRef(fontSize);
-  const pinch = Gesture.Pinch()
-    .runOnJS(true)
-    .onStart(() => {
-      pinchBase.current = latest.current.fontSize;
-      lastSize.current = latest.current.fontSize;
-    })
-    .onUpdate((event) => {
-      const next = clampFontSize(pinchBase.current * event.scale);
-      if (next !== lastSize.current) {
-        lastSize.current = next;
-        latest.current.onFontSize(next);
-      }
-    })
-    .onEnd(() => latest.current.onFontSizeCommit(lastSize.current));
+  const pinch = useMemo(
+    () =>
+      Gesture.Pinch()
+        .runOnJS(true)
+        .onStart(() => {
+          pinchBase.current = latest.current.fontSize;
+          lastSize.current = latest.current.fontSize;
+        })
+        .onUpdate((event) => {
+          const next = clampFontSize(pinchBase.current * event.scale);
+          if (next !== lastSize.current) {
+            lastSize.current = next;
+            latest.current.onFontSize(next);
+          }
+        })
+        .onEnd(() => latest.current.onFontSizeCommit(lastSize.current)),
+    [],
+  );
+
+  const nearTop = useCallback(() => {
+    const { offset, content, viewport } = scroll.current;
+    if (content > 0 && content - offset - viewport < NEAR_TOP_ROWS * lineHeight) {
+      scrollTrace("near_top", { offset: Math.round(offset) });
+      latest.current.onNearTop();
+    }
+  }, [lineHeight]);
 
   const onScroll = ({ nativeEvent: e }: { nativeEvent: NativeScrollEvent }) => {
+    scroll.current = {
+      offset: e.contentOffset.y,
+      content: e.contentSize.height,
+      viewport: e.layoutMeasurement.height,
+    };
+    scrollCount("scroll_event");
+    if (SCROLL_TRACE) traceScroll(e);
     // Inverted: offset 0 is the bottom.
     const atBottom = e.contentOffset.y <= STICK_SLACK;
-    if (stick.current && !atBottom) onScrollBack();
-    stick.current = atBottom;
+    const isFar = e.contentOffset.y > FAR_SCREENS * e.layoutMeasurement.height;
+    if (!atBottom && (stick.current || (far.current && !isFar))) {
+      scrollTrace("scroll_back", { offset: Math.round(e.contentOffset.y) });
+      latest.current.onScrollBack();
+    }
+    far.current = isFar;
+    if (stick.current !== atBottom) {
+      scrollTrace("stick", { atBottom, offset: Math.round(e.contentOffset.y) });
+      stick.current = atBottom;
+      setAway(!atBottom);
+    }
+    if (!atBottom) nearTop();
+  };
+
+  // Proof build only: the offset at most four times a second, and every jump of more than a screen
+  // between two events (a gesture does not make one).
+  const lastTrace = useRef({ at: 0, offset: 0 });
+  const traceScroll = (e: NativeScrollEvent) => {
+    const now = Date.now();
+    const offset = Math.round(e.contentOffset.y);
+    const jump = Math.abs(offset - lastTrace.current.offset);
+    if (now - lastTrace.current.at < 250 && jump < e.layoutMeasurement.height) return;
+    lastTrace.current = { at: now, offset };
+    scrollTrace("offset", {
+      offset,
+      content: Math.round(e.contentSize.height),
+      viewport: Math.round(e.layoutMeasurement.height),
+      jump,
+    });
+  };
+
+  // Rows arriving above the reader (older scrollback) can leave them near the top still.
+  const onContentSizeChange = (_width: number, height: number) => {
+    if (SCROLL_TRACE) {
+      scrollTrace("content", {
+        height: Math.round(height),
+        was: Math.round(scroll.current.content),
+      });
+    }
+    scroll.current.content = height;
+    if (!stick.current) nearTop();
+  };
+
+  const jumpToBottom = () => {
+    scrollTrace("jump_to_bottom", { offset: Math.round(scroll.current.offset) });
+    stick.current = true;
+    far.current = false;
+    setAway(false);
+    list.current?.scrollToOffset({ offset: 0, animated: false });
   };
 
   // Output while the reader is scrolled up pushes rows off the top of the live
   // grid into scrollback: top it up (the screen throttles) so they appear in
   // place, below what is being read, instead of leaving a gap.
   useEffect(() => {
-    if (!stick.current) onScrollBack();
-  }, [lines, onScrollBack]);
+    if (!stick.current && !far.current) latest.current.onScrollBack();
+  }, [lines]);
+
+  const renderItem = useCallback(
+    ({ item }: { item: Row }) => (
+      <TerminalRow
+        line={item.line}
+        fontSize={fontSize}
+        lineHeight={lineHeight}
+        cellWidth={cellWidth}
+        onTap={onTap}
+        onLongPress={onLongPress}
+      />
+    ),
+    [fontSize, lineHeight, cellWidth, onTap, onLongPress],
+  );
+
+  const getItemLayout = useCallback(
+    (_: unknown, index: number) => ({
+      length: lineHeight,
+      offset: ROW_PAD + lineHeight * index,
+      index,
+    }),
+    [lineHeight],
+  );
 
   return (
     <GestureDetector gesture={pinch}>
@@ -136,29 +286,20 @@ export function TerminalView({
           horizontal
           showsHorizontalScrollIndicator
           nestedScrollEnabled
+          // A pane that fits has nothing to scroll sideways, and a horizontal scroller that is
+          // enabled anyway competes for the vertical swipes of the list inside it.
+          scrollEnabled={contentWidth - viewportWidth > 2}
           contentContainerStyle={{ width: contentWidth }}
         >
           <FlatList
+            ref={list}
             style={{ width: contentWidth }}
             inverted
             data={rows}
-            keyExtractor={(item) => item.key}
+            keyExtractor={keyOf}
             extraData={fontSize}
-            renderItem={({ item }) => (
-              <TerminalRow
-                line={item.line}
-                fontSize={fontSize}
-                lineHeight={lineHeight}
-                cellWidth={cellWidth}
-                onTap={onTap}
-                onLongPress={onLongPress}
-              />
-            )}
-            getItemLayout={(_, index) => ({
-              length: lineHeight,
-              offset: ROW_PAD + lineHeight * index,
-              index,
-            })}
+            renderItem={renderItem}
+            getItemLayout={getItemLayout}
             initialNumToRender={60}
             windowSize={9}
             maxToRenderPerBatch={30}
@@ -173,11 +314,23 @@ export function TerminalView({
               autoscrollToTopThreshold: STICK_SLACK,
             }}
             onScroll={onScroll}
+            onContentSizeChange={onContentSizeChange}
             scrollEventThrottle={32}
             ListEmptyComponent={<Text style={styles.waiting}>waiting for output…</Text>}
             contentContainerStyle={styles.content}
           />
         </ScrollView>
+        {away ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Jump to bottom"
+            onPress={jumpToBottom}
+            hitSlop={8}
+            style={styles.jump}
+          >
+            <Ionicons name="arrow-down" size={20} color="#e5e5e5" />
+          </Pressable>
+        ) : null}
       </View>
     </GestureDetector>
   );
@@ -186,6 +339,17 @@ export function TerminalView({
 const styles = StyleSheet.create((theme) => ({
   frame: { flex: 1, backgroundColor: TERMINAL_PALETTE.background },
   content: { paddingHorizontal: 6, paddingVertical: ROW_PAD },
+  jump: {
+    position: "absolute",
+    alignSelf: "center",
+    bottom: theme.spacing.md,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
   waiting: {
     color: "#a3a3a3",
     fontFamily: theme.fonts.mono,

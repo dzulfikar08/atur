@@ -2,6 +2,7 @@ import "@/unistyles";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
+import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
@@ -26,6 +27,8 @@ import {
 import { DELETE_ACCOUNT_INFO_URL, DELETE_CONFIRMATION, deleteAccount } from "@/lib/account";
 import { api } from "@/lib/api";
 import { SERVER_URL } from "@/lib/config";
+import { DIRECT_STATE_LABEL } from "@/lib/direct/describe";
+import { useDirect } from "@/lib/direct/use-direct";
 import { displayName } from "@/lib/format";
 import { OTA_ENABLED, useOtaUpdate, type OtaPhase } from "@/lib/ota";
 import { AGENT_ALERTS_SUPPORTED, disableAgentAlerts } from "@/lib/push";
@@ -55,6 +58,7 @@ export default function Profile() {
   const [themePref, setThemePref] = useState<ThemePref>("system");
   const report = useReportSheet();
   const ota = useOtaUpdate();
+  const direct = useDirect();
   const otaBusy = ota.phase === "checking" || ota.phase === "downloading";
 
   useEffect(() => {
@@ -147,6 +151,18 @@ export default function Profile() {
             busy: alerts.busy,
             disabled: !AGENT_ALERTS_SUPPORTED || !alerts.loaded,
           }}
+        />
+      </ListGroup>
+
+      <SectionTitle title="Computer" />
+      <ListGroup>
+        <ListRow
+          icon="swap-horizontal-outline"
+          title="Direct connection"
+          subtitle={direct.serverName ?? "Connect straight to Atur Terminal"}
+          value={DIRECT_STATE_LABEL[direct.state]}
+          chevron
+          onPress={() => router.push("/direct")}
         />
       </ListGroup>
 

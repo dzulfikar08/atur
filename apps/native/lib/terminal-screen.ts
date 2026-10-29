@@ -5,6 +5,8 @@
 // block shown above the live grid. One instance per open pane, shared by the
 // native renderer and the classic WebView renderer (which replays the same frames).
 
+import { scrollCount, scrollTrace } from "./scroll-trace";
+
 export interface ScreenState {
   cols: number;
   rows: number;
@@ -21,43 +23,77 @@ export interface ScreenState {
 }
 
 /** How a scrollback request is meant: see `TerminalScreen.loadHistory`. */
-export type HistoryMode = "top-up" | "full" | "replace";
+export type HistoryMode = "top-up" | "older" | "full" | "replace";
 
-/** Rows matched to place a fresh read after what is already loaded. */
+/** Rows matched to place a fresh read after (or before) what is already loaded. */
 const OVERLAP_ROWS = 24;
-/** Scrollback kept on the phone; past this the oldest rows go. */
-const MAX_HISTORY_ROWS = 5000;
+/**
+ * Most rows a read can return, scrollback and visible grid together: the computer's own cap on one
+ * `history` request, and what the phone keeps; past this the oldest rows go.
+ */
+export const HISTORY_MAX_LINES = 20_000;
 /** A top-up read: far more than a refresh interval of output, with room to overlap. */
 export const HISTORY_TOP_UP_LINES = 400;
-/** A full read: on connect, after a reflow, or when a top-up no longer overlaps. */
-export const HISTORY_FULL_LINES = 3000;
+/**
+ * A full read: on connect, after a reflow, or when a top-up no longer overlaps. Small on purpose:
+ * on a phone link every page of it is a round trip, and the first screenful of scrollback must
+ * not wait for thousands of rows; `loadOlder` reads further back as the reader gets there.
+ */
+export const HISTORY_FULL_LINES = 1000;
+/** The least a read for older rows adds beyond what is loaded (it doubles past that). */
+export const HISTORY_OLDER_STEP = 3000;
 /** At most one top-up per this long; a trailing one catches the last change. */
 const TOP_UP_INTERVAL_MS = 1500;
 /** A reply this late is presumed lost (the socket dropped): ask again. */
 const REQUEST_TIMEOUT_MS = 8000;
+/** Each row of a big read is a page share on the computer: a long read is allowed longer. */
+const REQUEST_TIMEOUT_PER_LINE_MS = 4;
 
 /**
  * The rows of `incoming` that come after the end of `loaded`, found by
  * matching `loaded`'s last rows inside `incoming` (latest match wins). Null
  * when they do not overlap: the scrollback moved on further than `incoming`
- * reaches, or was rewritten (cleared, reflowed).
+ * reaches, or was rewritten (cleared, reflowed). With `fromStart` (`incoming`
+ * is the pane's whole scrollback and `loaded` is shorter than the rows matched,
+ * so blank or repeated rows could match anywhere) the earliest match wins.
  */
 export function rowsAfter(
   loaded: readonly string[],
   incoming: readonly string[],
+  fromStart = false,
 ): readonly string[] | null {
   const m = Math.min(loaded.length, OVERLAP_ROWS);
   if (m === 0) return null;
   const tail = loaded.slice(loaded.length - m);
-  for (let p = incoming.length - m; p >= 0; p--) {
+  const hitAt = (p: number): boolean => {
+    for (let j = 0; j < m; j++) if (incoming[p + j] !== tail[j]) return false;
+    return true;
+  };
+  if (fromStart) {
+    for (let p = 0; p + m <= incoming.length; p++) if (hitAt(p)) return incoming.slice(p + m);
+    return null;
+  }
+  for (let p = incoming.length - m; p >= 0; p--) if (hitAt(p)) return incoming.slice(p + m);
+  return null;
+}
+
+/**
+ * Where `loaded` sits inside `incoming`, a read of a longer window that ends later: the index in
+ * `incoming` of `loaded[0]`, found by matching the first and the last rows of `loaded` (scrollback
+ * rows do not change once written, so rows between are not compared). Null when `loaded` is not
+ * inside `incoming`: the scrollback was rewritten (cleared, reflowed) or `incoming` does not reach
+ * back to it.
+ */
+export function rowsBefore(loaded: readonly string[], incoming: readonly string[]): number | null {
+  const n = loaded.length;
+  if (n === 0) return null;
+  const m = Math.min(n, OVERLAP_ROWS);
+  for (let p = incoming.length - n; p >= 0; p--) {
     let hit = true;
-    for (let j = 0; j < m; j++) {
-      if (incoming[p + j] !== tail[j]) {
-        hit = false;
-        break;
-      }
+    for (let j = 0; j < m && hit; j++) {
+      hit = incoming[p + j] === loaded[j] && incoming[p + n - m + j] === loaded[n - m + j];
     }
-    if (hit) return incoming.slice(p + m);
+    if (hit) return p;
   }
   return null;
 }
@@ -82,6 +118,8 @@ export class TerminalScreen {
   private inFlight: { lines: number; mode: HistoryMode; at: number } | null = null;
   private queued: HistoryMode | null = null;
   private historyLoaded = false;
+  /** The loaded scrollback begins at the pane's first row: there is nothing older to read. */
+  private reachedStart = false;
   private lastTopUp = 0;
   private topUpTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -135,6 +173,7 @@ export class TerminalScreen {
       }
     }
     if (!changed) return;
+    scrollCount("diff_frame");
     this.set({ ...this.state, lines });
     this.emit({ t: "diff", rows });
   }
@@ -153,14 +192,16 @@ export class TerminalScreen {
   /**
    * Ask for scrollback. `top-up` (scrolling back, output while reading) reads
    * a short window and appends only the rows that are new, throttled with a
-   * trailing call; `full` reads the whole window and still appends when it
+   * trailing call; `older` reads a window longer than what is loaded and puts
+   * the rows before it above (see `loadOlder`); `full` reads the first window
+   * (or one reaching back past what is loaded) and still appends when it
    * overlaps (a reconnect must not move the rows being read); `replace`
    * discards what is loaded (the pane reflowed to a new width).
    */
   loadHistory(mode: HistoryMode = "top-up"): void {
     if (!this.historySource) return;
     const now = Date.now();
-    if (this.inFlight && now - this.inFlight.at < REQUEST_TIMEOUT_MS) {
+    if (this.inFlight && now - this.inFlight.at < requestTimeout(this.inFlight.lines)) {
       this.queued = strongest(this.queued, mode);
       return;
     }
@@ -177,9 +218,59 @@ export class TerminalScreen {
       }
       this.lastTopUp = now;
     }
-    const lines = effective === "top-up" ? HISTORY_TOP_UP_LINES : HISTORY_FULL_LINES;
+    const lines = this.windowFor(effective);
+    scrollTrace("history_ask", { mode: effective, lines });
     this.inFlight = { lines, mode: effective, at: now };
     this.historySource(lines);
+  }
+
+  /**
+   * The reader is near the oldest loaded row: read further back. Each read is a longer window
+   * than the last (the computer answers with its newest `lines` rows, pages of them), so it
+   * grows past what is loaded by a step that doubles, up to `HISTORY_MAX_LINES`; the rows before
+   * the loaded ones are put above them without moving anything on screen. Cheap to call on every
+   * scroll event: nothing is asked once the pane's first row is loaded or the cap reached.
+   */
+  loadOlder(): void {
+    if (!this.historyLoaded) {
+      this.loadHistory("full");
+      return;
+    }
+    if (this.reachedStart) return;
+    const { history, lines } = this.state;
+    if (this.olderWindow() <= history.length + lines.length) return;
+    this.loadHistory("older");
+  }
+
+  /** A read failed (not a slow one: it is never coming): free the slot for the next. */
+  historyFailed(): void {
+    this.inFlight = null;
+  }
+
+  private olderWindow(): number {
+    const { history, lines } = this.state;
+    const loaded = history.length + lines.length;
+    return Math.min(HISTORY_MAX_LINES, loaded + Math.max(HISTORY_OLDER_STEP, history.length));
+  }
+
+  private windowFor(mode: HistoryMode): number {
+    const { history, lines } = this.state;
+    switch (mode) {
+      case "top-up":
+        return HISTORY_TOP_UP_LINES;
+      case "older":
+        return this.olderWindow();
+      case "full":
+        // Once something is loaded the window must reach back over it, or it cannot be appended.
+        return this.historyLoaded
+          ? Math.min(
+              HISTORY_MAX_LINES,
+              Math.max(HISTORY_FULL_LINES, history.length + lines.length + HISTORY_TOP_UP_LINES),
+            )
+          : HISTORY_FULL_LINES;
+      case "replace":
+        return HISTORY_FULL_LINES;
+    }
   }
 
   /**
@@ -190,17 +281,40 @@ export class TerminalScreen {
    */
   setHistory(rows: readonly string[], visible?: number): void {
     const request = this.inFlight ?? { lines: HISTORY_FULL_LINES, mode: "full" as const, at: 0 };
+    scrollTrace("history_reply", {
+      mode: request.mode,
+      asked: request.lines,
+      rows: rows.length,
+      took: request.at ? Date.now() - request.at : -1,
+    });
     this.inFlight = null;
     const cut = Math.min(rows.length, Math.max(0, visible ?? this.state.lines.length));
     const scrollback = rows.slice(0, rows.length - cut);
     // Fewer rows than asked for: this is all the scrollback the pane has.
+    if (rows.length < request.lines) this.reachedStart = true;
+    else if (request.mode !== "top-up") this.reachedStart = false;
     const complete = request.mode !== "top-up" || rows.length < request.lines;
+    const loaded = this.historyLoaded && request.mode !== "replace";
+    // A longer window that ends later than the loaded rows: it holds them, with older ones before.
+    const reach =
+      loaded && request.mode === "older" ? rowsBefore(this.state.history, scrollback) : null;
     const added =
-      request.mode === "replace" || !this.historyLoaded
-        ? null
-        : rowsAfter(this.state.history, scrollback);
+      loaded && request.mode !== "older"
+        ? rowsAfter(
+            this.state.history,
+            scrollback,
+            this.state.history.length < OVERLAP_ROWS && rows.length < request.lines,
+          )
+        : null;
 
-    if (added) {
+    if (reach !== null) {
+      // Same rows keep the same identity: the base moves down by what was put before them.
+      this.set({
+        ...this.state,
+        history: scrollback,
+        historyBase: this.state.historyBase - reach,
+      });
+    } else if (added) {
       if (added.length > 0) this.append(added);
     } else if (complete) {
       const { history, historyBase } = this.state;
@@ -221,7 +335,7 @@ export class TerminalScreen {
   private append(rows: readonly string[]): void {
     let history = [...this.state.history, ...rows];
     let historyBase = this.state.historyBase;
-    const over = history.length - MAX_HISTORY_ROWS;
+    const over = history.length - HISTORY_MAX_LINES;
     if (over > 0) {
       history = history.slice(over);
       historyBase += over;
@@ -239,7 +353,11 @@ export class TerminalScreen {
   }
 }
 
-const RANK: Record<HistoryMode, number> = { "top-up": 0, full: 1, replace: 2 };
+const RANK: Record<HistoryMode, number> = { "top-up": 0, older: 1, full: 2, replace: 3 };
+
+function requestTimeout(lines: number): number {
+  return REQUEST_TIMEOUT_MS + lines * REQUEST_TIMEOUT_PER_LINE_MS;
+}
 
 function strongest(a: HistoryMode | null, b: HistoryMode): HistoryMode {
   return a && RANK[a] > RANK[b] ? a : b;

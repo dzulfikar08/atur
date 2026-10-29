@@ -1,6 +1,7 @@
 import "@/unistyles";
 import { useMutation } from "@tanstack/react-query";
 import * as AppleAuthentication from "expo-apple-authentication";
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -186,6 +187,18 @@ export default function Login() {
               />
             </View>
           ) : null}
+
+          <View style={styles.form}>
+            <Text style={styles.directNote}>
+              The terminals on your computer work without an Atur account.
+            </Text>
+            <Button
+              variant="secondary"
+              icon="terminal-outline"
+              label="Use Direct without signing in"
+              onPress={() => router.push("/direct-home")}
+            />
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -224,4 +237,9 @@ const styles = StyleSheet.create((theme) => ({
   dividerRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.md },
   divider: { flex: 1, height: 1, backgroundColor: theme.colors.hairline },
   dividerLabel: { fontSize: theme.fontSize.xs, color: theme.colors.mutedForeground },
+  directNote: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.mutedForeground,
+    textAlign: "center",
+  },
 }));

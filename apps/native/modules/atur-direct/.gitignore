@@ -1,0 +1,4 @@
+android/src/main/jniLibs/
+android/src/main/java/uniffi/
+ios/Generated/
+ios/Frameworks/

@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { directManager } from "@/lib/direct";
+import { openDirectPane, type DirectPaneHandle } from "@/lib/direct/pane-direct";
+import {
+  availabilityOf,
+  directPaneStatus,
+  fallbackDelay,
+  parsePaneTarget,
+  shouldReturnToDirect,
+  shouldUseDirect,
+  type DirectPhase,
+  type PaneTransport,
+} from "@/lib/direct/transport-choice";
 import { openAuthedSocket } from "@/lib/socket";
 import { applyChatFrame, type ChatState } from "@/lib/transcript";
 
@@ -42,6 +54,8 @@ export interface PaneAttachHandlers {
    * (absent from older bridges).
    */
   onHistory?: (rows: string[], visible?: number) => void;
+  /** A direct `requestHistory` failed (the bridge never fails one: it just stays silent). */
+  onHistoryFailed?: () => void;
   /** The pane was re-laid out (another client became active, or the phone sizer attached). */
   onGeometry?: (size: { cols: number; rows: number }) => void;
   onError?: (message: string) => void;
@@ -51,21 +65,46 @@ export interface PaneAttachHandlers {
  * bridge → app: hello · keyboard · snapshot · diff · geometry · history · pong · error · exit
  * app → bridge: input {data} · paste {text, submit} · claim · history {lines} · resize {cols, rows} · ping
  * A bridge `exit` means the pane died; reconnecting cannot revive it.
+ *
+ * Two roads lead to the same pane. `direct:<id>` panes are direct only. Any other pane goes
+ * straight to the paired computer when the user prefers it and the computer lists the pane as a
+ * session, and falls back to the bridge when direct is not attached within 4 s, refuses the
+ * attach, or drops and does not return within 6 s. On the bridge it goes back to direct as soon
+ * as the computer is connected again; the bridge socket is closed first, so frames of the two
+ * roads never interleave. The rules are in lib/direct/transport-choice.ts.
  */
 export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
   const wsRef = useRef<WebSocket | null>(null);
+  const directRef = useRef<DirectPaneHandle | null>(null);
+  // The grid the screen last asked for, so a pane that moves roads attaches at the same size.
+  const gridRef = useRef({ cols: 80, rows: 24 });
+  // The direct connection on which attaching this pane failed: not retried on that one.
+  const failedOnRef = useRef<string | null>(null);
   const [status, setStatus] = useState<PaneAttachStatus>("connecting");
   const [retryKey, setRetryKey] = useState(0);
+  const [choice, setChoice] = useState<{ paneId: string; transport: PaneTransport }>(() => ({
+    paneId,
+    transport: chooseTransport(paneId, null),
+  }));
+  const transport = choice.paneId === paneId ? choice.transport : chooseTransport(paneId, null);
 
-  const retry = useCallback(() => {
-    setStatus("connecting");
-    setRetryKey((k) => k + 1);
+  useEffect(() => {
+    void directManager.start();
   }, []);
 
-  /** Raw keyboard input; dropped (returns false) unless the socket is open. */
+  const retry = useCallback(() => {
+    failedOnRef.current = null;
+    setStatus("connecting");
+    setChoice({ paneId, transport: chooseTransport(paneId, null) });
+    setRetryKey((k) => k + 1);
+  }, [paneId]);
+
+  /** Raw keyboard input; dropped (returns false) unless the road is open. */
   const sendInput = useCallback((data: string): boolean => {
+    const direct = directRef.current;
+    if (direct) return direct.sendInput(data);
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
     ws.send(JSON.stringify({ type: "input", data }));
@@ -77,13 +116,15 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
    * optionally submitted with Enter. Needs a bridge that knows `paste`.
    */
   const sendPaste = useCallback((text: string, submit: boolean): boolean => {
+    const direct = directRef.current;
+    if (direct) return direct.sendPaste(text, submit);
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
     ws.send(JSON.stringify({ type: "paste", text, submit }));
     return true;
   }, []);
 
-  /** Request (or steal) keyboard ownership; the bridge arbitrates. */
+  /** Request (or steal) keyboard ownership; the bridge arbitrates. Direct input needs no claim. */
   const claimKeyboard = useCallback(() => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "claim" }));
@@ -91,19 +132,108 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
 
   /** Ask for the last `lines` rows including scrollback; answered by `onHistory`. Read-only. */
   const requestHistory = useCallback((lines: number) => {
+    const direct = directRef.current;
+    if (direct) {
+      direct.requestHistory(lines);
+      return;
+    }
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "history", lines }));
   }, []);
 
   /** Lay the pane out at this grid (keyboard owner only; the bridge attaches a phone-sized herdr client). */
   const requestResize = useCallback((cols: number, rows: number) => {
+    gridRef.current = { cols, rows };
+    const direct = directRef.current;
+    if (direct) {
+      direct.requestResize(cols, rows);
+      return;
+    }
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: "resize", cols, rows }));
     }
   }, []);
 
+  // The direct road.
   useEffect(() => {
+    if (transport !== "direct") return;
+    setChoice((prev) => (prev.paneId === paneId ? prev : { paneId, transport }));
+    const target = parsePaneTarget(paneId);
+    let disposed = false;
+    let phase: DirectPhase = "waiting";
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const enter = (next: DirectPhase) => {
+      if (disposed) return;
+      phase = next;
+      clearTimeout(timer);
+      timer = undefined;
+      const delay = fallbackDelay(next, target.directOnly);
+      if (delay === 0) {
+        setChoice({ paneId, transport: "bridge" });
+        return;
+      }
+      if (delay !== null) {
+        timer = setTimeout(() => {
+          if (disposed) return;
+          // Connected yet never attached: do not come back on this connection.
+          if (next === "waiting") {
+            failedOnRef.current = directManager.getSnapshot().connection?.id ?? null;
+          }
+          setChoice({ paneId, transport: "bridge" });
+        }, delay);
+      }
+      setStatus(directPaneStatus(next, directManager.getSnapshot().state));
+    };
+
+    const handle = openDirectPane(
+      directManager,
+      target.sessionId,
+      {
+        onHello: (pane) => handlersRef.current.onHello?.(pane),
+        onSnapshot: (ansi) => handlersRef.current.onSnapshot?.(ansi),
+        onDiff: (rows) => handlersRef.current.onDiff?.(rows),
+        onHistory: (rows, visible) => handlersRef.current.onHistory?.(rows, visible),
+        onHistoryFailed: () => handlersRef.current.onHistoryFailed?.(),
+        onGeometry: (size) => handlersRef.current.onGeometry?.(size),
+        onError: (message) => handlersRef.current.onError?.(message),
+        onAttached: () => enter("attached"),
+        onLost: () => enter("lost"),
+        onFailed: (message) => {
+          if (disposed) return;
+          if (target.directOnly) handlersRef.current.onError?.(message);
+          else failedOnRef.current = directManager.getSnapshot().connection?.id ?? null;
+          enter("failed");
+        },
+        onExit: () => enter("exited"),
+      },
+      gridRef.current,
+    );
+    directRef.current = handle;
+    enter("waiting");
+
+    // The manager giving up (no pairing left, incompatible) ends the wait on a `direct:` pane.
+    const unsubscribe = directManager.subscribe(() => {
+      if (phase === "waiting" || phase === "lost") {
+        setStatus(directPaneStatus(phase, directManager.getSnapshot().state));
+      }
+    });
+
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+      unsubscribe();
+      handle.close();
+      if (directRef.current === handle) directRef.current = null;
+    };
+  }, [paneId, retryKey, transport]);
+
+  // The bridge road.
+  useEffect(() => {
+    if (transport !== "bridge") return;
+    setChoice((prev) => (prev.paneId === paneId ? prev : { paneId, transport }));
+    const target = parsePaneTarget(paneId);
     let disposed = false;
     let attempts = 0;
     let gotExit = false;
@@ -114,6 +244,15 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
       clearInterval(pingTimer);
       pingTimer = undefined;
     };
+
+    /** Direct is back: leave the bridge (its cleanup closes the socket) and attach there. */
+    const returnToDirect = (): boolean => {
+      const availability = availabilityOf(directManager.getSnapshot(), failedOnRef.current);
+      if (disposed || gotExit || !shouldReturnToDirect(target, availability)) return false;
+      setChoice({ paneId, transport: "direct" });
+      return true;
+    };
+    const unsubscribeDirect = directManager.subscribe(() => void returnToDirect());
 
     const connect = () => {
       if (disposed) return;
@@ -135,7 +274,8 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
       };
 
       ws.onmessage = (event) => {
-        if (typeof event.data !== "string") return;
+        // Frames still queued when the pane moved to direct must not reach the screen.
+        if (disposed || typeof event.data !== "string") return;
         let msg: Record<string, unknown>;
         try {
           msg = JSON.parse(event.data) as Record<string, unknown>;
@@ -202,6 +342,8 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
         stopPing();
         if (wsRef.current === ws) wsRef.current = null;
         if (disposed || gotExit) return;
+        // A reconnect point: the right moment to take the direct road if it is back.
+        if (returnToDirect()) return;
         if (attempts + 1 >= MAX_ATTEMPTS) {
           setStatus("unreachable");
           return;
@@ -219,13 +361,32 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
       disposed = true;
       clearTimeout(reconnectTimer);
       stopPing();
+      unsubscribeDirect();
       const ws = wsRef.current;
       wsRef.current = null;
       ws?.close(1000, "unmount");
     };
-  }, [paneId, retryKey]);
+  }, [paneId, retryKey, transport]);
 
-  return { status, sendInput, sendPaste, retry, claimKeyboard, requestHistory, requestResize };
+  return {
+    status,
+    transport,
+    sendInput,
+    sendPaste,
+    retry,
+    claimKeyboard,
+    requestHistory,
+    requestResize,
+  };
+}
+
+function chooseTransport(paneId: string, failedOn: string | null): PaneTransport {
+  return shouldUseDirect(
+    parsePaneTarget(paneId),
+    availabilityOf(directManager.getSnapshot(), failedOn),
+  )
+    ? "direct"
+    : "bridge";
 }
 
 // --- observe: structured transcript ------------------------------------------

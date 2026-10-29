@@ -1,0 +1,110 @@
+# An installable arm64 release APK of the real app from feat/native-direct: the Rust core for the direct
+# path (apps/native/modules/atur-direct) built in, R8 on, the live API (https://app.diatur.com), and no
+# proof route (EXPO_PUBLIC_ATUR_E2E is not set). GitHub-hosted runner only.
+#
+# Signing: this branch cannot read the `release` environment (it deploys from master and v* tags only), so no
+# release keystore is used here. Expo's template signs its release build with the template's debug keystore, so
+# the APK installs on a phone with "install unknown apps" but cannot be installed over a Play install of
+# com.diatur.app (different signing key); uninstall that one first. Docs: docs/ci-release.md.
+#
+# Run it: commit a change to `.github/release-apk-trigger` on feat/native-direct (a workflow only shows up in
+# the Actions tab for workflow_dispatch once it exists on the default branch), or dispatch it from there once merged.
+name: Native direct Android APK
+
+on:
+  push:
+    branches: [feat/native-direct]
+    paths: [".github/release-apk-trigger"]
+  workflow_dispatch:
+
+concurrency:
+  group: native-direct-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY/CodeQL"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+          targets: aarch64-linux-android
+      - uses: gradle/actions/setup-gradle@v4
+      # The template's 2 GB heap runs out of memory in R8 on a release build.
+      - name: Gradle JVM settings
+        run: |
+          mkdir -p ~/.gradle
+          printf 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\norg.gradle.parallel=true\n' >> ~/.gradle/gradle.properties
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build the Rust core for arm64-v8a
+        env:
+          ATUR_ANDROID_ABIS: arm64-v8a
+          ATUR_CORE_CACHE: /tmp/atur-terminal-core
+        run: |
+          cargo install cargo-ndk --locked --version 4.1.2
+          export ANDROID_NDK_HOME="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_ROOT}"
+          apps/native/modules/atur-direct/scripts/build-core.sh android
+          find apps/native/modules/atur-direct/android \( -name '*.so' -o -name '*.kt' \) | sort
+
+      # versionCode as scripts/build-native-aab.sh: minutes since 2024-01-01 UTC, so a newer build installs over an older one.
+      - name: Build the release APK (arm64-v8a, R8 on)
+        working-directory: apps/native
+        env:
+          NODE_ENV: production
+          EXPO_PUBLIC_SERVER_URL: https://app.diatur.com
+        run: |
+          [ -z "${EXPO_PUBLIC_ATUR_E2E:-}" ] || { echo "EXPO_PUBLIC_ATUR_E2E must not be set for a real build" >&2; exit 1; }
+          bunx expo prebuild -p android --no-install --clean
+          VERSION_CODE="$(( ($(date -u +%s) - 1704067200) / 60 ))"
+          sed -i -E "s/versionCode [0-9]+/versionCode $VERSION_CODE/" android/app/build.gradle
+          grep -n "versionCode $VERSION_CODE" android/app/build.gradle
+          cd android
+          ./gradlew --no-daemon :app:assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a \
+            -Pandroid.enableMinifyInReleaseBuilds=true
+          ls -la app/build/outputs/apk/release/
+
+      - name: Check the APK
+        run: |
+          APK=apps/native/android/app/build/outputs/apk/release/app-release.apk
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          unzip -l "$APK" | grep -E 'lib/[^/]+/libatur_mobile\.so'
+          unzip -l "$APK" | grep -q 'lib/arm64-v8a/libatur_mobile\.so' || { echo "no arm64 Rust core in the APK" >&2; exit 1; }
+          "$BT/aapt2" dump badging "$APK" | grep -E "^package:|native-code"
+          {
+            echo '### Atur direct APK (arm64-v8a, live API, debug-signed)'
+            echo '```'
+            ls -la "$APK" | awk '{print $5 " bytes  app-release.apk"}'
+            sha256sum "$APK"
+            "$BT/apksigner" verify --verbose --print-certs "$APK" | grep -E 'Signer #1 certificate (DN|SHA-256)'
+            echo '```'
+            echo 'Signed with the Expo template debug keystore: cannot be installed over a Play install of com.diatur.app.'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atur-android-arm64-apk
+          path: apps/native/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14

@@ -7,6 +7,7 @@ import { KeyRow } from "@/components/terminal/key-row";
 import { PromptComposer } from "@/components/terminal/prompt-composer";
 import { TerminalView } from "@/components/terminal/terminal-view";
 import { Text } from "@/components/ui";
+import type { PaneTransport } from "@/lib/direct/transport-choice";
 import { diffInput } from "@/lib/screen-keys";
 import { applyModifiers, KEY_DATA, type Modifiers } from "@/lib/terminal-keys";
 import { DEFAULT_FONT_SIZE, fitFontSize, gridForViewport } from "@/lib/terminal-metrics";
@@ -20,6 +21,8 @@ const SENTINEL = "\u200b\u200b";
 interface NativeTerminalProps {
   paneId: string;
   screen: TerminalScreen;
+  /** The road the pane is on; the prompt composer saves images on the computer by it. */
+  transport: PaneTransport;
   /** Keyboard is ours and the socket is open. */
   canType: boolean;
   /** Agent panes get the prompt composer. */
@@ -41,6 +44,7 @@ interface NativeTerminalProps {
 export function NativeTerminal({
   paneId,
   screen,
+  transport,
   canType,
   isAgent,
   sendInput,
@@ -52,7 +56,9 @@ export function NativeTerminal({
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const [box, setBox] = useState({ width: 0, height: 0 });
   const width = box.width;
-  const { cols } = useSyncExternalStore(screen.subscribe, screen.getState);
+  // Only the width: the whole state changes with every frame, and the keyboard, the composer and
+  // the key row have no business re-rendering ten times a second while an agent prints.
+  const cols = useSyncExternalStore(screen.subscribe, () => screen.getState().cols);
   const [mods, setMods] = useState<Modifiers>({ ctrl: false, alt: false });
   const input = useRef<TextInput>(null);
 
@@ -89,6 +95,7 @@ export function NativeTerminal({
   }, [canType, box.width, paneHeight, fontSize, requestResize]);
 
   const loadMoreHistory = useCallback(() => screen.loadHistory(), [screen]);
+  const loadOlderHistory = useCallback(() => screen.loadOlder(), [screen]);
 
   /** Send data with any armed Ctrl/Alt folded in, then disarm them. */
   const send = (data: string) => {
@@ -139,6 +146,7 @@ export function NativeTerminal({
       >
         <TerminalView
           onScrollBack={loadMoreHistory}
+          onNearTop={loadOlderHistory}
           onSelectText={onSelectText}
           screen={screen}
           fontSize={fontSize}
@@ -184,6 +192,7 @@ export function NativeTerminal({
       {isAgent ? (
         <PromptComposer
           paneId={paneId}
+          transport={transport}
           enabled={canType}
           onSend={sendPrompt}
           onClaim={onClaimKeyboard}

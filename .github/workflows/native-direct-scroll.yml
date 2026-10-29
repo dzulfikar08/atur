@@ -1,0 +1,184 @@
+name: Native direct scroll
+
+# The scrolling proof alone (phase 4 of scripts/e2e-direct-android.sh, docs/native-direct.md "Scrolling
+# back"): the same server, core, APK and emulator steps as native-direct.yml, without the other
+# phases and jobs, so a scrolling change can be iterated on quickly. Run it by hand, or push a change
+# to .github/scroll-trigger on feat/native-direct.
+on:
+  push:
+    branches: [feat/native-direct]
+    paths: [".github/scroll-trigger"]
+  workflow_dispatch:
+    inputs:
+      cpu_load:
+        description: "Busy loops on the emulator during the scroll (a slow phone); 0 for none"
+        default: "0"
+      runs:
+        description: "How many times phase 4 is played on the same build"
+        default: "1"
+
+concurrency:
+  group: native-direct-scroll-${{ github.ref }}-${{ inputs.cpu_load }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  ATUR_CORE_CACHE: /tmp/atur-terminal-core
+
+jobs:
+  server:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      LIBGHOSTTY_VT_SYS_OPTIMIZE: ReleaseFast
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out atur-terminal at the commit pinned in core.ref
+        id: core
+        run: |
+          REF="$(tr -d '[:space:]' < apps/native/modules/atur-direct/core.ref)"
+          git clone --quiet https://github.com/dzulfikar08/atur-terminal.git "$ATUR_CORE_CACHE"
+          git -C "$ATUR_CORE_CACHE" fetch --quiet origin "$REF" 2>/dev/null || git -C "$ATUR_CORE_CACHE" fetch --quiet origin
+          git -C "$ATUR_CORE_CACHE" checkout --quiet --detach "$REF"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+      - run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.ATUR_CORE_CACHE }}
+          key: server-${{ steps.core.outputs.ref }}
+          cache-on-failure: true
+      - name: Point the build at the pinned Zig through the baseline-CPU wrapper
+        run: |
+          echo "ATUR_TERM_ZIG=$(command -v zig)" >> "$GITHUB_ENV"
+          echo "$ATUR_CORE_CACHE/scripts/zig" >> "$GITHUB_PATH"
+      - name: Build the server and the command-line client
+        working-directory: ${{ env.ATUR_CORE_CACHE }}
+        run: |
+          cargo build --release --locked -p muxy-server -p muxy-cli
+          mkdir -p "$RUNNER_TEMP/atur-term-bins"
+          install -m 755 target/release/atur-term target/release/atur-term-server "$RUNNER_TEMP/atur-term-bins/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atur-term-bins
+          path: ${{ runner.temp }}/atur-term-bins
+          if-no-files-found: error
+
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY/CodeQL"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+          targets: x86_64-linux-android
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Gradle JVM settings
+        run: |
+          mkdir -p ~/.gradle
+          printf 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\norg.gradle.parallel=true\n' >> ~/.gradle/gradle.properties
+      - run: bun install --frozen-lockfile
+      - name: Build the Rust core for the emulator (x86_64)
+        env:
+          ATUR_ANDROID_ABIS: x86_64
+        run: |
+          cargo install cargo-ndk --locked --version 4.1.2
+          export ANDROID_NDK_HOME="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_ROOT}"
+          apps/native/modules/atur-direct/scripts/build-core.sh android
+      - name: Build the proof APK (release, R8 on, x86_64)
+        working-directory: apps/native
+        env:
+          NODE_ENV: production
+          EXPO_PUBLIC_ATUR_E2E: "1"
+          EXPO_PUBLIC_SERVER_URL: https://app.diatur.com
+        run: |
+          bunx expo prebuild -p android --no-install --clean
+          cd android
+          ./gradlew --no-daemon :app:assembleRelease \
+            -PreactNativeArchitectures=x86_64 \
+            -Pandroid.enableMinifyInReleaseBuilds=true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scroll-apk
+          path: apps/native/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+
+  scroll-e2e:
+    needs: [server, apk]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: atur-term-bins
+          path: ${{ runner.temp }}/atur-term-bins
+      - uses: actions/download-artifact@v4
+        with:
+          name: scroll-apk
+          path: ${{ runner.temp }}/apk
+      - name: Start an isolated Atur Terminal server and print a pairing link
+        run: |
+          S=apps/native/scripts/start-test-server.sh
+          "$S" start "$RUNNER_TEMP/atur-server" "$RUNNER_TEMP/atur-term-bins" 7600
+          "$S" pair "$RUNNER_TEMP/atur-server" 10.0.2.2 "$RUNNER_TEMP/link.txt"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Phase 4 on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ATUR_E2E_PHASES: "4"
+          ATUR_E2E_CPU_LOAD: ${{ inputs.cpu_load || '0' }}
+          ATUR_E2E_PHASE4_RUNS: ${{ inputs.runs || '1' }}
+        with:
+          api-level: 34
+          arch: x86_64
+          target: default
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: apps/native/scripts/e2e-direct-android.sh ${{ runner.temp }}/apk/app-release.apk "$(cat ${{ runner.temp }}/link.txt)" 7600 e2e-out ${{ runner.temp }}/atur-server
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '### Scrolling back on an Android emulator (phase 4)'
+            echo '```'
+            grep -h -E 'ATUR_E2E (METRIC|RESULT|FAILURE|STEP)' e2e-out/scroll-lines.txt 2>/dev/null || echo 'no result lines'
+            grep -h -E '^(phase 4:|ok:|PASS|FAIL)' e2e-out/phase4.txt 2>/dev/null || true
+            echo '```'
+            echo 'Scroll diagnostics (last 40 lines, full log in the artifact):'
+            echo '```'
+            grep -h 'ATUR_E2E SCROLL' e2e-out/logcat.txt 2>/dev/null | tail -40 | cut -c1-200 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scroll-e2e
+          path: |
+            e2e-out
+            ${{ runner.temp }}/atur-server/server.log

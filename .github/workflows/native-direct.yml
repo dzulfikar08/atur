@@ -1,0 +1,292 @@
+name: Native direct
+
+# The phone's direct path to Atur Terminal (apps/native/modules/atur-direct, docs/native-direct.md):
+# repo gates, an Android emulator run against an isolated server, the bridge's loopback latency for
+# comparison, and the iOS simulator build. GitHub-hosted runners only.
+on:
+  push:
+    branches: [feat/native-direct]
+  workflow_dispatch:
+
+concurrency:
+  group: native-direct-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # The checkout of atur-terminal at the commit in core.ref: the Rust core is built from it and so
+  # is the isolated test server, so both speak the same protocol (including the UDP offer).
+  ATUR_CORE_CACHE: /tmp/atur-terminal-core
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - run: bun run fmt:check
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run test
+
+  server:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      LIBGHOSTTY_VT_SYS_OPTIMIZE: ReleaseFast
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out atur-terminal at the commit pinned in core.ref
+        id: core
+        run: |
+          REF="$(tr -d '[:space:]' < apps/native/modules/atur-direct/core.ref)"
+          git clone --quiet https://github.com/dzulfikar08/atur-terminal.git "$ATUR_CORE_CACHE"
+          git -C "$ATUR_CORE_CACHE" fetch --quiet origin "$REF" 2>/dev/null || git -C "$ATUR_CORE_CACHE" fetch --quiet origin
+          git -C "$ATUR_CORE_CACHE" checkout --quiet --detach "$REF"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+      - run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.ATUR_CORE_CACHE }}
+          key: server-${{ steps.core.outputs.ref }}
+          cache-on-failure: true
+      - name: Point the build at the pinned Zig through the baseline-CPU wrapper
+        run: |
+          echo "ATUR_TERM_ZIG=$(command -v zig)" >> "$GITHUB_ENV"
+          echo "$ATUR_CORE_CACHE/scripts/zig" >> "$GITHUB_PATH"
+      - name: Build the server and the command-line client
+        working-directory: ${{ env.ATUR_CORE_CACHE }}
+        run: |
+          cargo build --release --locked -p muxy-server -p muxy-cli
+          mkdir -p "$RUNNER_TEMP/atur-term-bins"
+          install -m 755 target/release/atur-term target/release/atur-term-server "$RUNNER_TEMP/atur-term-bins/"
+          ls -la "$RUNNER_TEMP/atur-term-bins"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atur-term-bins
+          path: ${{ runner.temp }}/atur-term-bins
+          if-no-files-found: error
+
+  android-e2e:
+    needs: server
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY/CodeQL"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+          targets: x86_64-linux-android
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Gradle JVM settings
+        run: |
+          mkdir -p ~/.gradle
+          printf 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\norg.gradle.parallel=true\n' >> ~/.gradle/gradle.properties
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build the Rust core for the emulator (x86_64)
+        env:
+          ATUR_ANDROID_ABIS: x86_64
+        run: |
+          cargo install cargo-ndk --locked --version 4.1.2
+          export ANDROID_NDK_HOME="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_ROOT}"
+          apps/native/modules/atur-direct/scripts/build-core.sh android
+          find apps/native/modules/atur-direct/android \( -name '*.so' -o -name '*.kt' \) | sort
+
+      - name: Build the proof APK (release, R8 on, x86_64)
+        working-directory: apps/native
+        env:
+          NODE_ENV: production
+          EXPO_PUBLIC_ATUR_E2E: "1"
+          EXPO_PUBLIC_SERVER_URL: https://app.diatur.com
+        run: |
+          bunx expo prebuild -p android --no-install --clean
+          cd android
+          ./gradlew --no-daemon :app:assembleRelease \
+            -PreactNativeArchitectures=x86_64 \
+            -Pandroid.enableMinifyInReleaseBuilds=true
+          ls -la app/build/outputs/apk/release/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: atur-term-bins
+          path: ${{ runner.temp }}/atur-term-bins
+
+      - name: Start an isolated Atur Terminal server and print a pairing link
+        run: |
+          S=apps/native/scripts/start-test-server.sh
+          "$S" start "$RUNNER_TEMP/atur-server" "$RUNNER_TEMP/atur-term-bins" 7600
+          "$S" pair "$RUNNER_TEMP/atur-server" 10.0.2.2 "$RUNNER_TEMP/link.txt"
+
+      - name: Traffic shaping modules for the lossy-link phase
+        run: |
+          sudo apt-get install -y --no-install-recommends "linux-modules-extra-$(uname -r)" || true
+          sudo modprobe sch_netem
+          sudo modprobe sch_prio
+          sudo modprobe cls_u32
+          command -v tc
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run the proof on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: default
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: apps/native/scripts/e2e-direct-android.sh apps/native/android/app/build/outputs/apk/release/app-release.apk "$(cat ${{ runner.temp }}/link.txt)" 7600 e2e-out ${{ runner.temp }}/atur-server
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '### Direct path on an Android emulator (x86_64, API 34), isolated server on the runner'
+            echo 'Phase 1, the scripted scenario (pair, type, paste an image, background, drop, scrollback):'
+            echo '```'
+            grep -h -E 'ATUR_E2E (METRIC|RESULT|FAILURE|STEP)' e2e-out/e2e-lines.txt 2>/dev/null || echo 'no result lines'
+            echo '```'
+            echo 'Phase 2, a clean install used by hand: Direct without signing in, a tapped pairing link, a typed command:'
+            echo '```'
+            grep -h -E '^(phase 2:|ok:|PASS|FAIL)' e2e-out/phase2.txt 2>/dev/null || echo 'phase 2 did not run'
+            echo '```'
+            echo 'Phase 3, the same APK on a lossy link (tc netem on the TLS and the UDP port: 400 ms +- 200 ms and 5% loss each way, about 800 ms round trip), TLS against UDP, then a 10 s outage:'
+            echo '```'
+            grep -h -E 'ATUR_E2E (METRIC|RESULT|FAILURE|STEP)' e2e-out/lossy-lines.txt 2>/dev/null || echo 'phase 3 did not run'
+            echo '```'
+            echo 'Phase 4, scrolling back in a pane that prints all the time (2500 numbered rows, then one live row per 100 ms): the whole scrollback in order through the pane code, then 12 swipes of 70% of the screen on the pane screen, the rows holding still for 5 s of live output, the start of the scrollback in reach, and the jump-to-bottom button:'
+            echo '```'
+            grep -h -E 'ATUR_E2E (METRIC|RESULT|FAILURE|STEP)' e2e-out/scroll-lines.txt 2>/dev/null || echo 'phase 4 did not run'
+            grep -h -E '^(phase 4:|ok:|PASS|FAIL)' e2e-out/phase4.txt 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-e2e
+          path: |
+            e2e-out
+            ${{ runner.temp }}/atur-server/server.log
+            ${{ runner.temp }}/link.txt.log
+            apps/native/android/app/build/outputs/mapping/release/mapping.txt
+
+  bridge-latency:
+    needs: server
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: atur-term-bins
+          path: ${{ runner.temp }}/atur-term-bins
+      - name: Isolated server, the bridge, and the loopback measurement
+        run: |
+          apps/native/scripts/start-test-server.sh start "$RUNNER_TEMP/atur-server" "$RUNNER_TEMP/atur-term-bins"
+          . "$RUNNER_TEMP/atur-server/env.sh"
+          export BRIDGE_TOKEN=bench BRIDGE_PORT=7601 BRIDGE_BACKEND=atur-terminal ATUR_TERM_BIN="$BIN/atur-term"
+          (cd apps/bridge && nohup bun run src/main.ts > "$RUNNER_TEMP/bridge.log" 2>&1 &)
+          for _ in $(seq 100); do curl -fs -H "x-bridge-token: bench" http://127.0.0.1:7601/health >/dev/null && break; sleep 0.2; done
+          PANE="$(curl -fs -X POST -H 'x-bridge-token: bench' -H 'content-type: application/json' -d "{\"cwd\":\"$HOME\"}" http://127.0.0.1:7601/workspaces | python3 -c 'import json,sys; print(json.load(sys.stdin)["pane"]["pane_id"])')"
+          echo "pane $PANE"
+          sleep 1
+          BRIDGE_URL=http://127.0.0.1:7601 bun apps/bridge/scripts/latency-bench.ts "$PANE" 30 | tee bridge-bench.txt
+          { echo '### Bridge on loopback (no Cloudflare hop)'; echo '```'; cat bridge-bench.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bridge-latency
+          path: |
+            bridge-bench.txt
+            ${{ runner.temp }}/bridge.log
+            ${{ runner.temp }}/atur-server/server.log
+
+  ios-simulator:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      # Expo's precompiled JSI package needs Swift tools 6.2 (Xcode 26); the runner default is 16.4.
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+      - run: bun install --frozen-lockfile
+      - name: Build the Rust core for iOS (device and simulator)
+        run: |
+          apps/native/modules/atur-direct/scripts/build-core.sh ios
+          ls -R apps/native/modules/atur-direct/ios | head -30
+      - name: Prebuild and build the app for the iOS Simulator
+        working-directory: apps/native
+        env:
+          NODE_ENV: production
+          EXPO_PUBLIC_ATUR_E2E: "1"
+        run: |
+          bunx expo prebuild -p ios --no-install --clean
+          cd ios
+          pod install
+          WORKSPACE="$(ls -d *.xcworkspace | head -1)"
+          SCHEME="${WORKSPACE%.xcworkspace}"
+          if ! xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=NO \
+            build > xcodebuild.log 2>&1; then
+            echo '--- last 80 lines of xcodebuild.log'
+            tail -n 80 xcodebuild.log
+            echo "--- lines with 'error:'"
+            grep -n 'error:' xcodebuild.log || echo '(none)'
+            exit 1
+          fi
+          tail -n 40 xcodebuild.log
+          find build/Build/Products -maxdepth 2 -name '*.app'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-simulator-build
+          path: apps/native/ios/xcodebuild.log

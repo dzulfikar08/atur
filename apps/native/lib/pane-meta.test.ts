@@ -191,6 +191,8 @@ describe("paneTitle", () => {
   test("falls back to the agent or shell name", () => {
     expect(paneTitle({ ...pane("a", "idle"), title: "π > hello" })).toBe("hello");
     expect(paneTitle({ ...pane("a", "idle"), title: "π ⠋" })).toBe("omp session");
+    expect(paneTitle({ ...pane("a", "idle", "Oh My Pi"), title: "π ⠋" })).toBe("omp session");
+    expect(paneTitle({ ...pane("a", "idle", "claude"), title: null })).toBe("claude session");
     expect(paneTitle(pane("a", null, null))).toBe("shell");
   });
 });
