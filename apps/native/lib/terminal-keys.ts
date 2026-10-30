@@ -41,19 +41,55 @@ const CTRL_ALIASES: Readonly<Record<string, string>> = {
 
 /** A key press as a hardware keyboard reports it: the key's base character plus held modifiers. */
 export interface KeyChord {
-  /** One character ("a", "[", " ") or "Backspace". */
+  /**
+   * One character ("a", "[", " "), "Backspace", or a navigation key: ArrowUp/Down/Left/Right,
+   * Escape, Tab, Home, End, PageUp, PageDown, Delete (iOS reports these; Android's text field
+   * already handles them).
+   */
   key: string;
   ctrl: boolean;
   alt: boolean;
   meta: boolean;
+  /** Reported by iOS only; matters for navigation keys (Shift+Tab, Shift+Arrow). */
+  shift?: boolean;
+}
+
+/** xterm names for the CSI navigation keys: final byte, or the number of a `CSI n ~` key. */
+const CSI_KEYS: Readonly<Record<string, { final: string } | { code: number }>> = {
+  ArrowUp: { final: "A" },
+  ArrowDown: { final: "B" },
+  ArrowRight: { final: "C" },
+  ArrowLeft: { final: "D" },
+  Home: { final: "H" },
+  End: { final: "F" },
+  Delete: { code: 3 },
+  PageUp: { code: 5 },
+  PageDown: { code: 6 },
+};
+
+/** A navigation key, with xterm's modifier parameter (1 + Shift + 2 Alt/Meta + 4 Ctrl) when modified. */
+function encodeNavigation({ key, ctrl, alt, meta, shift }: KeyChord): string | null {
+  const param = 1 + (shift ? 1 : 0) + (alt || meta ? 2 : 0) + (ctrl ? 4 : 0);
+  if (key === "Escape") return alt || meta ? "\x1b\x1b" : KEY_DATA.esc;
+  if (key === "Tab") {
+    if (ctrl) return null;
+    if (shift) return "\x1b[Z";
+    return alt || meta ? `\x1b${KEY_DATA.tab}` : KEY_DATA.tab;
+  }
+  const csi = CSI_KEYS[key];
+  if (!csi) return null;
+  if ("final" in csi) return param === 1 ? `\x1b[${csi.final}` : `\x1b[1;${param}${csi.final}`;
+  return param === 1 ? `\x1b[${csi.code}~` : `\x1b[${csi.code};${param}~`;
 }
 
 /**
- * The bytes a terminal sends for a chord with Ctrl, Alt or Meta held: Ctrl turns the key into
+ * The bytes a terminal sends for a chord with Ctrl, Alt or Meta held, or a navigation key: Ctrl turns the key into
  * its control byte (^A..^Z, ^[, ^\\, ^], ^^, ^_), Alt and Meta prefix ESC. Null when the chord has
  * no terminal form (Ctrl+5), so nothing is sent.
  */
-export function encodeChord({ key, ctrl, alt, meta }: KeyChord): string | null {
+export function encodeChord(chord: KeyChord): string | null {
+  const { key, ctrl, alt, meta } = chord;
+  if (key in CSI_KEYS || key === "Escape" || key === "Tab") return encodeNavigation(chord);
   let base: string | null;
   if (key === "Backspace") base = ctrl ? "\x08" : KEY_DATA.backspace;
   else if (Array.from(key).length !== 1) return null;
@@ -165,5 +201,8 @@ export function insertPath(
   const lead = before === "" || /\s$/.test(before) ? "" : " ";
   const trail = after.startsWith(" ") ? "" : " ";
   const inserted = `${lead}${path}${trail}`;
-  return { text: before + inserted + after, caret: before.length + inserted.length };
+  return {
+    text: before + inserted + after,
+    caret: before.length + inserted.length,
+  };
 }

@@ -8,12 +8,13 @@ interface NativeAturKeys {
   addListener(event: "key", listener: (chord: KeyChord) => void): { remove(): void };
 }
 
-/** Android only, and only in binaries built with the module (an OTA update can run on older ones). */
+/** Android and iOS, and only in binaries built with the module (an OTA update can run on older ones). */
 const native = requireOptionalNativeModule<NativeAturKeys>("AturKeys");
 
 /**
- * While `active`, hardware key chords with Ctrl, Alt or Meta held are taken from the focused
- * text field and handed to `onChord`. Without the native module nothing is captured.
+ * While `active`, hardware key chords with Ctrl, Alt or Meta held (and, on iOS, the navigation
+ * keys: arrows, Esc, Tab, Home/End, Page Up/Down) are taken from the focused text field and
+ * handed to `onChord`. Without the native module nothing is captured.
  */
 export function useHardwareChords(active: boolean, onChord: (chord: KeyChord) => void): void {
   const latest = useRef(onChord);
