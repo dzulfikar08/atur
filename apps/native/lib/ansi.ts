@@ -331,27 +331,37 @@ export function rowText(row: ParsedRow): string {
 export interface CellChunk {
   text: string;
   cells: number;
-  /** One icon glyph, drawn with the symbols font. */
+  /** One icon glyph, drawn with the symbols font; `cells` is 2 when it took the space after it. */
   icon?: true;
 }
 
 /**
  * Split a span into chunks that each own a fixed number of cells: runs of
  * single-width characters stay together, every double-width character stands
- * alone, every icon glyph stands alone (one cell, in the symbols font), and zero-width marks join
- * the character before them. Rendering each
+ * alone, every icon glyph stands alone in the symbols font, and zero-width marks join the
+ * character before them. An icon is a full em wide, nearly two cells: one followed by a space takes
+ * that space (two cells), as kitty and WezTerm do, so the glyph is drawn whole. Rendering each
  * chunk at `cells * cellWidth` keeps columns aligned even though a fallback
  * font's CJK/emoji glyph is not exactly two monospace cells wide.
  */
 export function chunkSpan(span: Span): CellChunk[] {
   const chunks: CellChunk[] = [];
   let run: CellChunk | null = null;
+  let chunkAfterIcon: CellChunk | null = null;
   for (const ch of span.text) {
     const cp = ch.codePointAt(0) ?? 0;
     const width = charWidth(cp);
+    if (chunkAfterIcon && ch === " ") {
+      chunkAfterIcon.cells = 2;
+      chunkAfterIcon = null;
+      run = null;
+      continue;
+    }
+    chunkAfterIcon = null;
     if (isIconGlyph(cp)) {
       run = null;
-      chunks.push({ text: ch, cells: 1, icon: true });
+      chunkAfterIcon = { text: ch, cells: 1, icon: true };
+      chunks.push(chunkAfterIcon);
       continue;
     }
     if (width === 0) {

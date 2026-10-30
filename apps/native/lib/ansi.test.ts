@@ -274,14 +274,17 @@ describe("chunkSpan", () => {
     expect(chunkSpan(span)).toEqual([{ text: "e\u0301x", cells: 2 }]);
   });
 
-  test("Nerd Font icons are one-cell chunks of their own, in the symbols font", () => {
+  test("Nerd Font icons are chunks of their own, taking one following space", () => {
     const span = parseRow("a\ue0b0 \udb80\udc00b").spans[0]!;
     expect(chunkSpan(span)).toEqual([
       { text: "a", cells: 1 },
-      { text: "\ue0b0", cells: 1, icon: true },
-      { text: " ", cells: 1 },
+      { text: "\ue0b0", cells: 2, icon: true },
       { text: "\u{f0000}", cells: 1, icon: true },
       { text: "b", cells: 1 },
+    ]);
+    expect(chunkSpan(parseRow("\uf013\uf09b ").spans[0]!)).toEqual([
+      { text: "\uf013", cells: 1, icon: true },
+      { text: "\uf09b", cells: 2, icon: true },
     ]);
   });
 

@@ -77,19 +77,33 @@ export const TerminalRow = memo(function TerminalRow({
           // glyphs come from the symbols font, so every chunk is pinned to its cell count to keep
           // columns true.
           row.spans.flatMap((span, s) =>
-            chunkSpan(span).map((chunk, c) => (
-              <Text
-                key={`${s}:${c}`}
-                numberOfLines={1}
-                style={[
-                  spanStyle(span, metrics),
-                  chunk.icon && styles.icon,
-                  { width: chunk.cells * cellWidth },
-                ]}
-              >
-                {chunk.text}
-              </Text>
-            )),
+            chunkSpan(span).map((chunk, c) =>
+              chunk.icon ? (
+                // The wrapper owns the cells; the glyph (a full em) is laid out two cells wide and
+                // spills past the wrapper instead of being clipped to it.
+                <View
+                  key={`${s}:${c}`}
+                  style={{ width: chunk.cells * cellWidth, height: lineHeight }}
+                >
+                  <Text
+                    numberOfLines={1}
+                    ellipsizeMode="clip"
+                    style={[spanStyle(span, metrics), styles.icon, { width: 2 * cellWidth }]}
+                  >
+                    {chunk.text}
+                  </Text>
+                </View>
+              ) : (
+                <Text
+                  key={`${s}:${c}`}
+                  numberOfLines={1}
+                  ellipsizeMode="clip"
+                  style={[spanStyle(span, metrics), { width: chunk.cells * cellWidth }]}
+                >
+                  {chunk.text}
+                </Text>
+              ),
+            ),
           )
         ) : (
           <Text
@@ -122,6 +136,6 @@ const styles = StyleSheet.create((theme) => ({
   bold: { fontFamily: theme.fonts.monoBold },
   italic: { fontStyle: "italic" },
   // JetBrains Mono stays primary; icon glyphs (Nerd Font private-use area) come from the symbols font.
-  icon: { fontFamily: theme.fonts.symbols, fontWeight: "normal" },
+  icon: { position: "absolute", left: 0, fontFamily: theme.fonts.symbols, fontWeight: "normal" },
   underline: { textDecorationLine: "underline" },
 }));
