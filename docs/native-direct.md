@@ -348,6 +348,27 @@ reading the code, are exercised by the same run, and were not separately shown t
   the bottom when none moves the view. At the bottom a press first tops the scrollback up. The two round buttons
   (`Previous prompt` / `Next prompt`, `testID`s `prompt-prev` / `prompt-next`) sit at the top right of the native
   view and show once the pane has prompts; a button with nothing to do is dimmed.
+- **A pane with one screen of rows has nothing to swipe, and nothing asked for its scrollback.** Scrollback was
+  asked for by scroll events (the view leaving the bottom) and kept fresh only while the reader was away from
+  the bottom. A pane opened before its output began, or whose first read failed or never answered (nothing
+  retried it), was exactly one screen of rows: Android's scroll view does not take a drag it cannot scroll, so
+  the swipes sent no scroll event, and no scroll event meant no read, so they never would. The same rows
+  overflow the moment the soft keyboard shortens the view, which is why "tap the terminal, then swipe" worked
+  (the focus was never part of it; the keyboard was). Phase 5 below shows it: with the pane opened before the
+  output, 43 swipes sent `touch_start` and `touch_end` and not one `drag_begin`, and 43 swipes after a tap
+  that opened the keyboard went back 276 rows. Now:
+  - `TerminalScreen` asks again for a read that failed (`historyFailed`) or that nothing answered (a watchdog
+    at the request timeout), after 1 s, doubling to 8 s, while nothing is loaded, and `setHistorySource(null)`
+    (a pane screen that closes) stops it;
+  - at the bottom, output tops the scrollback up while under a screenful (and the grid's rows) is loaded
+    (`keepScrollable`, called on every frame, throttled like any top-up, quiet for 5 s after a read that added
+    nothing); a top-up with no scrollback loaded reads the first window at once instead of being followed by one;
+  - while the scrollback may be missing rows (`ScreenState.behind`: none read yet, or output since the last
+    read) and under a screenful is loaded, the list has scroll room (`STICK_SLACK` and two rows, a
+    `minHeight` on the content) and a "loading earlier output…" footer, so a drag that finds nothing loaded
+    still scrolls and its scroll event reads the scrollback.
+    The pane view takes no part in focus: a tap on the text focuses the hidden input and opens the keyboard, a
+    swipe never does.
 
 A note on measuring: `uiautomator dump` of a screen that changes ten times a second can return the tree of an
 earlier moment. The first phase 4 run read it right after 12 swipes and saw the bottom rows it had seen before
@@ -395,6 +416,32 @@ reach the 400 rows once the view has settled).
 The proof build logs what the
 list does (`ATUR_E2E SCROLL` lines in `logcat.txt` of the artifact: offsets, content size changes, stick
 changes, history requests and replies, frames and renders per second).
+
+Phase 5 (`scripts/e2e-direct-android.sh`, `ui-assert.py focus-matrix`, options `agent`, `late`, `failreads`,
+`wide` of `scenario=scroll`): does a swipe scroll the pane whatever has the focus? The workload runs as a
+copy of bash named `omp`, so the computer reports an agent (it recognises it by the executable's name, not by
+`exec -a`) and the pane screen shows the prompt composer; the emulator shows its soft keyboard. From the
+bottom of the pane the host swipes back with `adb shell input swipe` (inside the terminal's rows, never on the
+keyboard) and needs at least 200 rows between the newest row it saw at the bottom and the oldest one on screen
+afterwards, the first swipe taking the view off the bottom (the jump button), and the soft keyboard exactly as
+it was. Cells: nothing focused; a tap on the text (it must open the keyboard); that input still focused
+with the keyboard hidden (Back, as with a hardware keyboard); the composer focused. Four runs, each from a fresh
+app launch: the pane screen opened after the output; opened _before_ it (`late`: the scrollback it read on
+connect is empty and 2500 rows go into it while the view sits at the bottom); its first two scrollback reads
+dropped (`failreads=2`); and a second client laying the pane out at 160x50 (`wide`, swipes drifting sideways).
+Before and after, on the emulator (rows reached, swipes needed):
+
+| Run and cell                            | Before                                                | After                                |
+| --------------------------------------- | ----------------------------------------------------- | ------------------------------------ |
+| output first: idle, tap, hwkb, composer | 324 (7), 217 (19), 236 (7), 259 (25)                  | 339 (7), 251 (19), 325 (7), 213 (19) |
+| `late`: idle                            | **-492 in 43 swipes, the view never left the bottom** | 306 (7)                              |
+| `late`: tap (keyboard up)               | 236 (19)                                              | 236 (19)                             |
+| `failreads=2`: idle                     | **-494 in 43 swipes**                                 | 274 (7)                              |
+| `wide`: idle                            | 308 (7)                                               | 249 (7)                              |
+
+The proof build's touch trace says why: in the `late` run before, the first native drag began only after 45
+touches (the idle cell's 43 swipes started none: the list had nothing to scroll, so Android never took the
+gesture), 113 touches and 26 drags in all; after, 42 touches and 40 drags.
 
 ## Building it
 
