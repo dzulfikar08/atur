@@ -16,6 +16,9 @@ on:
       runs:
         description: "How many times phase 4 is played on the same build"
         default: "1"
+      phases:
+        description: "Phases of scripts/e2e-direct-android.sh to run (4: scrolling back, 5: swipes with whatever has the focus)"
+        default: "45"
 
 concurrency:
   group: native-direct-scroll-${{ github.ref }}-${{ inputs.cpu_load }}
@@ -150,7 +153,7 @@ jobs:
       - name: Phase 4 on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         env:
-          ATUR_E2E_PHASES: "4"
+          ATUR_E2E_PHASES: ${{ inputs.phases || '45' }}
           ATUR_E2E_CPU_LOAD: ${{ inputs.cpu_load || '0' }}
           ATUR_E2E_PHASE4_RUNS: ${{ inputs.runs || '1' }}
         with:
@@ -169,6 +172,11 @@ jobs:
             echo '```'
             grep -h -E 'ATUR_E2E (METRIC|RESULT|FAILURE|STEP)' e2e-out/scroll-lines.txt 2>/dev/null || echo 'no result lines'
             grep -h -E '^(phase 4:|ok:|PASS|FAIL)' e2e-out/phase4.txt 2>/dev/null || true
+            echo '```'
+            echo 'Phase 5, a swipe with whatever has the focus (nothing, the terminal, the terminal without the soft keyboard, the composer), the first scrollback reads dropped, a pane wider than the phone:'
+            echo '```'
+            grep -h -E '^(=== |ATUR_E2E (METRIC|RESULT|FAILURE|STEP))' e2e-out/focus-lines.txt 2>/dev/null || echo 'phase 5 did not run'
+            grep -h -E '^(phase 5|ok:|FAIL|PASS)' e2e-out/phase5.txt 2>/dev/null || true
             echo '```'
             echo 'Scroll diagnostics (last 40 lines, full log in the artifact):'
             echo '```'

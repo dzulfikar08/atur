@@ -543,6 +543,34 @@ const SCROLL_WORKLOAD =
   "n=$((n+1)); printf '\\033]133;A\\007msg-%s\\n' $n; done; " +
   'i=0; while :; do if [ ! -e /tmp/atur-live-pause ]; then i=$((i+1)); echo "live-$i"; fi; sleep 0.1; done';
 
+/**
+ * How the scroll scenario sets the pane up for the host's focus checks (phase 5): `agent` runs the
+ * workload under the name `omp`, so the computer reports an agent session and the pane screen
+ * shows the prompt composer; `late` opens the pane screen first and starts the workload after it
+ * (the scrollback the pane screen read on connect is empty, and then 2500 rows go into it);
+ * `failReads` makes the pane screen's first scrollback reads fail (the link dropped them, or the
+ * computer could not serve them); `wide` has a second client lay the pane out at 160x50 once the
+ * pane screen is open (the desktop app attached at its own size), so the phone shows a pane wider
+ * than itself.
+ */
+export interface ScrollOptions {
+  agent: boolean;
+  late: boolean;
+  failReads: number;
+  wide: boolean;
+}
+
+export const PLAIN_SCROLL: ScrollOptions = { agent: false, late: false, failReads: 0, wide: false };
+
+/**
+ * `workload` typed into a shell so that the process running it is called `omp`: the computer
+ * recognises an agent by the executable's name (a copy of bash under that name; changing only argv[0]
+ * with `exec -a` is not seen).
+ */
+function asAgent(workload: string): string {
+  return `d=$(mktemp -d) && ln -s "$(command -v bash)" "$d/omp" && exec "$d/omp" -c '${workload.replace(/'/g, `'\\''`)}'`;
+}
+
 /** The text of absolute row `row` of the loaded scrollback and grid; empty when it is not loaded. */
 function textOfRow(state: ScreenState, row: number): string {
   const index = row - state.historyBase;
@@ -603,6 +631,7 @@ export async function runScrollE2E(
   link: string,
   say: Say,
   openPane: (session: string) => void,
+  options: ScrollOptions = PLAIN_SCROLL,
 ): Promise<E2EReport> {
   const metrics: E2EReport["metrics"] = {};
   const step = (name: string) => say(`${TAG} STEP ${name}`);
@@ -657,8 +686,30 @@ export async function runScrollE2E(
     pane = handle;
     await waitFor("first snapshot", () => snapshots > 0);
 
+    if (options.late) {
+      // The pane screen opens on a pane that has printed nothing yet and the workload starts after
+      // that: the view sits at the bottom while 2500 rows go into the scrollback. The workload is an
+      // `omp` that waits for a line first.
+      step("workload");
+      const waiting = asAgent(`read -r _; ${SCROLL_WORKLOAD}`);
+      if (!handle.sendInput(`${waiting}\r`)) throw new Error("workload: input was refused");
+      await sleep(4000);
+      step("ui");
+      openPane(session.id);
+      // The pane screen attaches, lays the pane out at the phone's size and reads its scrollback.
+      await sleep(15_000);
+      if (!handle.sendInput("go\r")) throw new Error("workload: the start was refused");
+      await waitFor("the workload's live rows on screen", () =>
+        screenText(screen).some((line) => /^live-\d+$/.test(line.trim())),
+      );
+      await sleep(8000);
+      step("late");
+      return { ok: true, metrics };
+    }
+
     step("workload");
-    if (!handle.sendInput(`${SCROLL_WORKLOAD}\r`)) throw new Error("workload: input was refused");
+    const workload = options.agent ? asAgent(SCROLL_WORKLOAD) : SCROLL_WORKLOAD;
+    if (!handle.sendInput(`${workload}\r`)) throw new Error("workload: input was refused");
     const visibleRows = () => screenText(screen);
     await waitFor("the workload's live rows on screen", () =>
       visibleRows().some((line) => /^live-\d+$/.test(line.trim())),
@@ -732,8 +783,27 @@ export async function runScrollE2E(
 
     // The app's own pane screen takes over; the host scrolls it from here.
     handle.close();
+    if (options.failReads > 0) {
+      // The pane screen's own first scrollback reads fail (its link dropped them): the host must
+      // still be able to scroll the pane once they are served.
+      let failing = options.failReads;
+      const original = connection.history.bind(connection);
+      connection.history = (session, lines) =>
+        failing-- > 0 ? Promise.reject(new Error("e2e: a dropped read")) : original(session, lines);
+      record("history_reads_failing", options.failReads);
+    }
     step("ui");
     openPane(session.id);
+    if (options.wide) {
+      // The pane screen lays the pane out at the phone's size; then a second client, as the desktop
+      // app would, lays it out wide. The phone follows the pane's size and shows a wider pane.
+      await sleep(15_000);
+      const desk = openDirectPane(directManager, session.id, {}, { cols: 160, rows: 50 });
+      await sleep(2000);
+      desk.requestResize(160, 50);
+      await sleep(3000);
+      step("wide");
+    }
     return { ok: true, metrics };
   } catch (error) {
     const failure = error instanceof Error ? error.message : String(error);

@@ -2,13 +2,23 @@ import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { AppState, ScrollView, Text, View } from "react-native";
 
-import { runDirectE2E, runLossyE2E, runScrollE2E, type E2EScenario } from "@/lib/direct/e2e";
+import {
+  runDirectE2E,
+  runLossyE2E,
+  runScrollE2E,
+  type E2EScenario,
+  type ScrollOptions,
+} from "@/lib/direct/e2e";
 
 // Proof run for CI: only reachable in builds made with EXPO_PUBLIC_ATUR_E2E=1 (app/_layout.tsx
 // registers the route only then). `atur://direct-e2e?link64=<base64url pairing link>` starts it (the link
 // has & and ? in it, which a deep link query would split); `&scenario=lossy` plays the lossy-link
 // scenario (phase 3) instead of the scripted one, `&scenario=scroll` the scrollback scenario
-// (phase 4), which ends by opening the app's own pane screen for the host to scroll. The lines it logs under ATUR_E2E are what
+// (phase 4), which ends by opening the app's own pane screen for the host to scroll; phase 5 plays it
+// again with `&agent=1` (the workload runs as `omp`: the pane has the prompt composer), `&late=1` (the
+// pane screen opens before the workload starts), `&failreads=N` (the pane screen's first N scrollback
+// reads fail) or `&wide=1` (a second client lays the pane out wide). The lines it logs under ATUR_E2E
+// are what
 // scripts/e2e-direct-android.sh reads.
 const ENABLED = process.env.EXPO_PUBLIC_ATUR_E2E === "1";
 
@@ -19,10 +29,27 @@ export default function DirectE2E() {
 }
 
 function Run() {
-  const { link64, scenario: scenarioParam } = useLocalSearchParams<{
+  const {
+    link64,
+    scenario: scenarioParam,
+    agent,
+    late,
+    failreads,
+    wide,
+  } = useLocalSearchParams<{
     link64?: string;
     scenario?: string;
+    agent?: string;
+    late?: string;
+    failreads?: string;
+    wide?: string;
   }>();
+  const scroll: ScrollOptions = {
+    agent: agent === "1",
+    late: late === "1",
+    failReads: Number(failreads) > 0 ? Number(failreads) : 0,
+    wide: wide === "1",
+  };
   const scenario: E2EScenario =
     scenarioParam === "lossy" ? "lossy" : scenarioParam === "scroll" ? "scroll" : "base";
   const link = link64 ? decodeLink(link64) : undefined;
@@ -51,8 +78,15 @@ function Run() {
       scenario === "lossy"
         ? runLossyE2E(link, say)
         : scenario === "scroll"
-          ? runScrollE2E(link, say, (session) =>
-              router.push({ pathname: "/direct-pane/[sessionId]", params: { sessionId: session } }),
+          ? runScrollE2E(
+              link,
+              say,
+              (session) =>
+                router.push({
+                  pathname: "/direct-pane/[sessionId]",
+                  params: { sessionId: session },
+                }),
+              scroll,
             )
           : runDirectE2E(link, say, () => cycles.current);
     void run.then((report) => {

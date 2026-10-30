@@ -2,7 +2,14 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { FlatList, Pressable, ScrollView, View, type NativeScrollEvent } from "react-native";
+import {
+  FlatList,
+  Pressable,
+  ScrollView,
+  View,
+  type GestureResponderEvent,
+  type NativeScrollEvent,
+} from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native-unistyles";
 
@@ -42,6 +49,23 @@ interface Row {
 }
 
 const keyOf = (item: Row) => item.key;
+
+/** Proof build only: the touches that reach the view and the drags the list starts, as JS sees them. */
+const TOUCH_TRACE = SCROLL_TRACE
+  ? {
+      onTouchStart: (event: GestureResponderEvent) =>
+        scrollTrace("touch_start", { y: Math.round(event.nativeEvent.pageY) }),
+      onTouchEnd: (event: GestureResponderEvent) =>
+        scrollTrace("touch_end", { y: Math.round(event.nativeEvent.pageY) }),
+      onTouchCancel: () => scrollTrace("touch_cancel"),
+    }
+  : {};
+const DRAG_TRACE = SCROLL_TRACE
+  ? {
+      onScrollBeginDrag: () => scrollTrace("drag_begin"),
+      onScrollEndDrag: () => scrollTrace("drag_end"),
+    }
+  : {};
 
 interface TerminalViewProps {
   screen: TerminalScreen;
@@ -394,6 +418,7 @@ export function TerminalView({
       <View
         style={styles.frame}
         onLayout={(event) => setViewportWidth(event.nativeEvent.layout.width)}
+        {...TOUCH_TRACE}
       >
         <ScrollView
           horizontal
@@ -431,6 +456,7 @@ export function TerminalView({
               refreshPrevious();
             }}
             onScroll={onScroll}
+            {...DRAG_TRACE}
             onContentSizeChange={onContentSizeChange}
             scrollEventThrottle={32}
             ListEmptyComponent={<Text style={styles.waiting}>waiting for output…</Text>}

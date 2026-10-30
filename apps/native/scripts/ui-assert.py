@@ -35,6 +35,17 @@ and 2500 + N for a `live`; the commands share their state in $SCROLL_STATE:
                                              the first rows at the top of the terminal, tap it again
                                              and need `msg-(N-1)` there, then tap "Next prompt" and
                                              need `msg-N` again; prints `jump_ok=1` when all hold
+  ui-assert.py focus-matrix <cells> <max-swipes> <min-rows> <drift-px>
+                                             phase 5: from the bottom of the pane, swipe back with
+                                             each of the comma-separated <cells> (idle: nothing
+                                             focused; tap: a tap on the text focuses the terminal
+                                             and opens the soft keyboard; hwkb: that input still
+                                             focused, no soft keyboard; composer: the prompt composer
+                                             focused) and need <min-rows> rows back within
+                                             <max-swipes>, the first swipe already moving the view,
+                                             and the soft keyboard as it was; <drift-px> is the
+                                             sideways travel of a swipe. Every cell runs; the exit
+                                             status says whether all of them held
 
 The timeout is in seconds (default 30). A failure prints what was on screen and exits 1, so the
 job log says why. `ANDROID_SERIAL` selects the device as with adb.
@@ -433,6 +444,209 @@ def tap(needle: str, timeout: float, freeze: bool = False) -> None:
         time.sleep(1)
 
 
+# --- Phase 5: does a swipe scroll whatever has the focus? ---------------------------------------------
+#
+# A pane showing the scrollback is swiped back with nothing focused, with the terminal's input
+# focused (a tap on the text: the soft keyboard opens), with that input focused and no soft keyboard
+# (Back hides it, the focus stays: a hardware keyboard), and with the prompt composer focused. Each
+# starts at the bottom of the pane and must go back at least <min-rows> rows; the first swipe must
+# already move the view; and a swipe must not change whether the soft keyboard is up.
+
+KEY_ROW_BUTTONS = ("Toggle keyboard", "More keys", "Fewer keys")
+SHOT_DIR = os.environ.get("SHOT_DIR", "")
+# A soft keyboard moves the key row (it rides above it) by far more than anything else does.
+KEYBOARD_MIN_PX = 300
+
+
+def shot(name: str) -> None:
+    if not SHOT_DIR:
+        return
+    png = subprocess.run(
+        ["adb", "exec-out", "screencap", "-p"], check=False, capture_output=True
+    ).stdout
+    with open(os.path.join(SHOT_DIR, f"{name}.png"), "wb") as out:
+        out.write(png)
+
+
+def key_row_top(found):
+    """Top edge of one of the key row's buttons (a shell pane has the keyboard key, an agent pane's
+    slim row the more-keys one). The key row rides above the soft keyboard, so how far it has moved
+    up from where it rests says whether the keyboard is on screen."""
+    node = next((n for n in found if any(has(n, label) for label in KEY_ROW_BUTTONS)), None)
+    return node["box"][1] if node else None
+
+
+def keyboard_up(found, rest) -> bool:
+    top = key_row_top(found)
+    return top is not None and rest - top >= KEYBOARD_MIN_PX
+
+
+def terminal_rows(found):
+    """The nodes of the terminal's numbered rows (row-N, live-N, msg-N), top to bottom."""
+    rows = []
+    for node in found:
+        x1, y1, x2, y2 = node["box"]
+        if y2 <= y1:
+            continue
+        for value in values(node):
+            if any(TERMINAL_ROW.match(part.strip()) for part in [value] + re.split(r"[\n,]", value)):
+                rows.append(node)
+                break
+    return sorted(rows, key=lambda n: n["box"][1])
+
+
+def swipe_in(region, width: int, drift: int) -> None:
+    """One finger swipe downwards over 70% of the terminal's rows (and `drift` px sideways, as a
+    thumb does): the pane scrolls back in time. Never starts on the soft keyboard."""
+    top, bottom = region
+    span = bottom - top
+    x = width // 2
+    adb(
+        "shell", "input", "swipe",
+        str(x - drift // 2), str(top + int(span * 0.15)),
+        str(x + drift // 2), str(top + int(span * 0.85)), "350",
+    )
+
+
+def to_bottom():
+    """Tap the jump button until it is gone; the nodes of the pane at the bottom."""
+    for _ in range(6):
+        found = frozen_nodes()
+        if not any(has(n, "Jump to bottom") for n in found):
+            return found
+        tap("Jump to bottom", 20, freeze=True)
+        time.sleep(3)
+    return frozen_nodes()
+
+
+def settled():
+    """The nodes and the lowest place on screen once the view has stopped moving (two dumps agree)."""
+    time.sleep(2.5)
+    found = frozen_nodes()
+    deadline = time.time() + 90
+    while True:
+        lowest = min((place(r) for r in numbered(found)), default=None)
+        again = frozen_nodes()
+        lowest_again = min((place(r) for r in numbered(again)), default=None)
+        if lowest_again == lowest or time.time() > deadline:
+            return again, lowest_again
+        found = again
+
+
+def swipe_cell(name, expect_keyboard, rest, swipes_max, min_rows, drift):
+    """One cell of the matrix: None when it holds, otherwise what went wrong."""
+    found = to_bottom()
+    seen = numbered(found)
+    if not seen:
+        return "no numbered row on screen at the bottom of the pane"
+    # Rows between the newest row at the bottom of the view and the oldest one on screen after the
+    # swipes (the view's own height counts; output going on meanwhile only lowers it).
+    bottom_before = max(place(r) for r in seen)
+    width, _ = screen_size(found)
+    region = None
+    rows = terminal_rows(found)
+    if rows:
+        region = (rows[0]["box"][1], rows[-1]["box"][3])
+    if region is None:
+        return "the terminal's rows are not on screen"
+    before = keyboard_up(found, rest)
+    if before != expect_keyboard:
+        return f"the soft keyboard was {'up' if before else 'down'} before the swipes, not {'up' if expect_keyboard else 'down'}"
+    shot(f"focus-{name}-before")
+    done = 0
+    reached = 0
+    away_first = None
+    while done < swipes_max and reached < min_rows:
+        batch = 1 if done == 0 else 6
+        for _ in range(batch):
+            swipe_in(region, width, drift)
+            done += 1
+            time.sleep(0.4)
+        found, lowest = settled()
+        reached = bottom_before - lowest if lowest is not None else 0
+        if away_first is None:
+            # The jump-to-bottom button shows once the view has left the bottom: the swipe took.
+            away_first = any(has(n, "Jump to bottom") for n in found)
+    metric(f"focus_{name}_first_swipe_left_bottom", 1 if away_first else 0)
+    metric(f"focus_{name}_reached", reached)
+    metric(f"focus_{name}_swipes", done)
+    after = keyboard_up(found, rest)
+    metric(f"focus_{name}_keyboard", "up" if after else "down")
+    shot(f"focus-{name}-after")
+    if after != before:
+        return f"the swipes {'opened' if after else 'closed'} the soft keyboard"
+    if reached < min_rows:
+        return (
+            f"{done} swipes went back only {reached} rows from where the view started (need "
+            f"{min_rows}): the pane did not scroll"
+        )
+    if not away_first:
+        return "the first swipe did not move the view off the bottom"
+    return None
+
+
+def hide_keyboard(rest) -> bool:
+    adb("shell", "input", "keyevent", "4")
+    time.sleep(1.5)
+    return not keyboard_up(frozen_nodes(), rest)
+
+
+def focus_matrix(cells, swipes_max: int, min_rows: int, drift: int) -> None:
+    print("ATUR_E2E STEP focus")
+    adb("shell", "settings", "put", "secure", "show_ime_with_hard_keyboard", "1")
+    found = to_bottom()
+    rest = key_row_top(found)
+    if rest is None:
+        fail(f"none of the key row's buttons {KEY_ROW_BUTTONS} is on screen", found)
+    print(f"ok: the key row rests at y={rest}")
+    results = []
+
+    def run(name, expect_keyboard):
+        problem = swipe_cell(name, expect_keyboard, rest, swipes_max, min_rows, drift)
+        results.append((name, problem))
+        print(f"{'ok' if problem is None else 'FAIL'}: {name}" + (f": {problem}" if problem else ""))
+
+    for cell in cells:
+        if cell == "idle":
+            run("idle", False)
+        elif cell == "tap":
+            rows = terminal_rows(to_bottom())
+            if not rows:
+                results.append(("tap", "no terminal row to tap"))
+                continue
+            x1, y1, x2, y2 = rows[len(rows) // 2]["box"]
+            adb("shell", "input", "tap", str((x1 + x2) // 2), str((y1 + y2) // 2))
+            time.sleep(2.5)
+            if not keyboard_up(frozen_nodes(), rest):
+                results.append(("tap", "a stationary tap on the terminal's text did not open the soft keyboard"))
+                print(f"FAIL: tap: {results[-1][1]}")
+                continue
+            print("ok: a stationary tap on the terminal's text opened the soft keyboard")
+            run("tap", True)
+        elif cell == "hwkb":
+            if not hide_keyboard(rest):
+                results.append(("hwkb", "Back did not hide the soft keyboard"))
+                print(f"FAIL: hwkb: {results[-1][1]}")
+                continue
+            run("hwkb", False)
+        elif cell == "composer":
+            to_bottom()
+            tap("Prompt", 30, freeze=True)
+            time.sleep(2.5)
+            if not keyboard_up(frozen_nodes(), rest):
+                results.append(("composer", "a tap on the prompt composer did not open the soft keyboard"))
+                print(f"FAIL: composer: {results[-1][1]}")
+                continue
+            run("composer", True)
+    if keyboard_up(frozen_nodes(), rest):
+        hide_keyboard(rest)
+    failed = [(name, problem) for name, problem in results if problem]
+    metric("focus_cells", ",".join(f"{name}={'ok' if not problem else 'FAIL'}" for name, problem in results))
+    if failed:
+        fail("; ".join(f"{name}: {problem}" for name, problem in failed), [])
+    print("ok: every cell scrolled")
+
+
 def main(argv) -> None:
     if len(argv) >= 2 and argv[1] == "dump":
         print(describe(nodes()))
@@ -452,6 +666,9 @@ def main(argv) -> None:
         return
     if len(argv) >= 3 and argv[1] == "scroll-top":
         scroll_top(int(argv[2]))
+        return
+    if len(argv) >= 6 and argv[1] == "focus-matrix":
+        focus_matrix(argv[2].split(","), int(argv[3]), int(argv[4]), int(argv[5]))
         return
     commands = ("wait", "wait-frozen", "wait-line", "wait-regex", "absent", "tap")
     if len(argv) < 3 or argv[1] not in commands:

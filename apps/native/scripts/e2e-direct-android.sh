@@ -32,11 +32,21 @@
 # button bringing the live rows back, after which the view follows the output again, and the
 # prompt buttons: "Previous prompt" brings a `msg-N` row to the top, again `msg-(N-1)`, and
 # "Next prompt" returns to `msg-N` (`STEP jump`, `jump_ok=1` in ui-assert.py).
+# Phase 5 is whether a swipe scrolls the pane whatever has the focus (an agent pane: the prompt
+# composer is there too). Four runs of the scroll scenario, each from a fresh app launch: (1) swipe
+# back from the bottom with nothing focused, with the terminal focused (a tap on its text opens the
+# soft keyboard: the swipes must not close or open it), with it focused and the soft keyboard hidden
+# (a hardware keyboard), and with the composer focused; (2) the pane screen is open before the agent
+# prints anything (`&late=1`) and the view sits at the bottom while 2500 rows go into the scrollback,
+# then swipes with nothing focused and after a tap; (3) the pane screen's first two scrollback
+# reads fail (`&failreads=2`), and nothing is focused; (4) a second client lays the pane out at
+# 160x50 (`&wide=1`), as the desktop app would, and the swipes drift sideways as a thumb's do.
+# Every cell needs >= 200 rows back, and the first swipe must already move the view.
 # Exit status is 0 only when phase 1 logs `ATUR_E2E RESULT PASS`, every check of phase 2 passes,
-# phase 3 logs `ATUR_E2E RESULT lossy PASS` and phase 4 logs `ATUR_E2E RESULT scroll PASS` and passes
-# every UI check.
+# phase 3 logs `ATUR_E2E RESULT lossy PASS`, phase 4 logs `ATUR_E2E RESULT scroll PASS` and passes
+# every UI check, and every run of phase 5 passes.
 #
-# ATUR_E2E_PHASES selects the phases to run (default 1234; the lean scroll workflow sets 4). A phase
+# ATUR_E2E_PHASES selects the phases to run (default 12345; the lean scroll workflow sets 45). A phase
 # that is not selected counts as passed. ATUR_E2E_CPU_LOAD=<n> keeps <n> busy loops running on the
 # device during phase 4, to see scrolling on a device that is short of CPU (a slow phone).
 # ATUR_E2E_PHASE4_RUNS=<n> plays phase 4 <n> times.
@@ -47,7 +57,7 @@ PACKAGE=com.diatur.app
 UDP_PORT=60096
 UDP_PORT_MASK=0xfff8   # 60096-60103: the server may hold several offers at once
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PHASES="${ATUR_E2E_PHASES:-1234}"
+PHASES="${ATUR_E2E_PHASES:-12345}"
 want() { [[ "$PHASES" == *"$1"* ]]; }
 mkdir -p "$OUT"
 LOG="$OUT/logcat.txt"
@@ -395,5 +405,70 @@ if want 4; then
   cat "$OUT/scroll-lines.txt"
 fi
 
+# --- Phase 5: a swipe scrolls whatever has the focus -----------------------------------------------------
+
+PHASE5="$OUT/phase5.txt"
+: > "$PHASE5"
+FOCUS_LINES="$OUT/focus-lines.txt"
+: > "$FOCUS_LINES"
+
+# phase5_run <label> <scenario query> <step to wait for> <cells> <drift px> [agent]: plays the scroll
+# scenario with the given options (an app launch of its own, a pairing link of its own), then runs
+# the host's focus matrix (ui-assert.py focus-matrix) on the pane screen it opened.
+phase5_run() {
+  local label="$1" query="$2" ready="$3" cells="$4" drift="$5" agent="${6:-}" link64
+  PHASE_LABEL="phase 5 ($label)" PHASE_FILE="$PHASE5" PHASE_SHOT="phase5-$label"
+  must "ask the server for a pairing link (10.0.2.2)" \
+    "$HERE/start-test-server.sh" pair "$SERVER_DIR" 10.0.2.2 "$OUT/link5-$label.txt" || return 1
+  link64="$(python3 -c 'import base64, sys; print(base64.urlsafe_b64encode(open(sys.argv[1]).read().strip().encode()).decode().rstrip("="))' "$OUT/link5-$label.txt")"
+  adb shell am force-stop "$PACKAGE"
+  P4_START=$(($(wc -l < "$LOG") + 1))
+  adb shell am start -a android.intent.action.VIEW -p "$PACKAGE" -d "'atur://direct-e2e?link64=$link64&scenario=scroll$query'" >/dev/null
+  local status=0
+  must "the scenario fills the pane's scrollback and opens the pane screen" \
+    wait_scroll_line "ATUR_E2E STEP $ready" 480 || status=1
+  if [ $status -eq 0 ]; then
+    sleep 5
+    shot "phase5-$label-open"
+    if [ -n "$agent" ]; then
+      must "the computer reports an agent: the pane shows the prompt composer" \
+        ui wait-frozen "Prompt" 120 || status=1
+    fi
+    if [ "$ready" = wide ] && [ $status -eq 0 ]; then
+      must "the pane is wider than the phone: the view offers Fit width" \
+        ui wait-frozen "Fit terminal width" 60 || status=1
+    fi
+  else
+    tail -n +"$P4_START" "$LOG" | grep -o "ATUR_E2E FAILURE.*" | tail -1 | tee -a "$PHASE5" || true
+  fi
+  if [ $status -eq 0 ]; then
+    must "from the bottom a swipe goes back at least 200 rows with each of: $cells" \
+      ui focus-matrix "$cells" 42 200 "$drift" || status=1
+  fi
+  { echo "=== $label"; tail -n +"$P4_START" "$LOG" | grep -o "ATUR_E2E [A-Z]*.*" | grep -v "ATUR_E2E SCROLL"; grep -h "^ATUR_E2E METRIC focus" "$PHASE5"; } >> "$FOCUS_LINES" || true
+  return $status
+}
+
+PHASE5_STATUS=0
+if want 5; then
+  # The soft keyboard must be able to appear on the emulator (it has a hardware keyboard).
+  adb shell settings put secure show_ime_with_hard_keyboard 1
+  export SHOT_DIR="$OUT"
+  # A pane of an agent: nothing focused, the terminal focused (soft keyboard up), focused without
+  # the soft keyboard, the composer focused.
+  phase5_run focus "&agent=1" ui "idle,tap,hwkb,composer" 0 agent || PHASE5_STATUS=1
+  # The pane screen is open before the agent prints anything, the view stays at the bottom while
+  # 2500 rows go into the scrollback, and then it is swiped back, nothing focused (the way a pane
+  # is watched), then with a tap that opens the keyboard.
+  phase5_run late-output "&agent=1&late=1" late "idle,tap" 0 agent || PHASE5_STATUS=1
+  # The pane screen's first two scrollback reads fail; it must still be scrollable with nothing focused.
+  phase5_run dropped-reads "&agent=1&failreads=2" ui "idle" 0 agent || PHASE5_STATUS=1
+  # The desktop app laid the pane out wider than the phone; swipes drift sideways as a thumb's do.
+  phase5_run wide "&agent=1&wide=1" wide "idle" 90 agent || PHASE5_STATUS=1
+  if [ $PHASE5_STATUS -eq 0 ]; then echo "PASS phase 5" | tee -a "$PHASE5"; fi
+  echo "--- phase 5 lines"
+  cat "$FOCUS_LINES"
+fi
+
 kill $LOGCAT 2>/dev/null
-[ $PHASE1 -eq 0 ] && [ $PHASE2_STATUS -eq 0 ] && [ $PHASE3_STATUS -eq 0 ] && [ $PHASE4_STATUS -eq 0 ]
+[ $PHASE1 -eq 0 ] && [ $PHASE2_STATUS -eq 0 ] && [ $PHASE3_STATUS -eq 0 ] && [ $PHASE4_STATUS -eq 0 ] && [ $PHASE5_STATUS -eq 0 ]
