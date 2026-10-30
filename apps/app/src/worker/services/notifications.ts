@@ -1,4 +1,4 @@
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, inArray, isNull } from "drizzle-orm";
 import type { DbClient } from "../db/index";
 import * as schema from "../db/schema";
 import * as notificationsRepo from "../repositories/notifications";
@@ -10,9 +10,67 @@ export async function list(db: DbClient, userId: string, offset: number, limit: 
   return notificationsRepo.listByUser(db, userId, offset, limit);
 }
 
-export async function markRead(db: DbClient, id: string, _userId: string) {
+export interface McpNotification {
+  id: string;
+  title: string | null;
+  message: string | null;
+  entityName: string | null;
+  entityIdentifier: string | null;
+  issueId: string | null;
+  workspaceSlug: string | null;
+  workspaceName: string | null;
+  projectId: string | null;
+  read: boolean;
+  createdAt: string | null;
+}
+
+/** The `{issue_id}` JSON payload notify.ts stores in `data`; tolerant of junk. */
+function parseIssueId(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    const id = (parsed as { issue_id?: unknown } | null)?.issue_id;
+    return typeof id === "string" ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `list` flattened for MCP: parsed payload plus the owning workspace's slug and name. */
+export async function listForMcp(db: DbClient, userId: string, offset: number, limit: number) {
+  const { data, total } = await list(db, userId, offset, limit);
+  const workspaceIds = [...new Set(data.map((n) => n.workspaceId))];
+  const workspaces = workspaceIds.length
+    ? await db
+        .select({
+          id: schema.workspaces.id,
+          slug: schema.workspaces.slug,
+          name: schema.workspaces.name,
+        })
+        .from(schema.workspaces)
+        .where(inArray(schema.workspaces.id, workspaceIds))
+    : [];
+  const byId = new Map(workspaces.map((w) => [w.id, w]));
+  const results: McpNotification[] = data.map((n) => ({
+    id: n.id,
+    title: n.title,
+    message: n.message,
+    entityName: n.entityName,
+    entityIdentifier: n.entityIdentifier,
+    issueId: parseIssueId(n.data),
+    workspaceSlug: byId.get(n.workspaceId)?.slug ?? null,
+    workspaceName: byId.get(n.workspaceId)?.name ?? null,
+    projectId: n.projectId,
+    read: n.readAt != null,
+    createdAt: n.createdAt,
+  }));
+  return { results, total };
+}
+
+export async function markRead(db: DbClient, id: string, userId: string) {
   const notification = await notificationsRepo.findById(db, id);
-  if (!notification) throw new HTTPException(404, { message: "Notification not found" });
+  if (!notification || notification.receiverId !== userId)
+    throw new HTTPException(404, { message: "Notification not found" });
   await notificationsRepo.markRead(db, id);
 }
 
@@ -27,11 +85,12 @@ export async function unreadCount(db: DbClient, userId: string) {
 export async function update(
   db: DbClient,
   id: string,
-  _userId: string,
+  userId: string,
   data: { read?: boolean; archived?: boolean },
 ) {
   const notification = await notificationsRepo.findById(db, id);
-  if (!notification) throw new HTTPException(404, { message: "Notification not found" });
+  if (!notification || notification.receiverId !== userId)
+    throw new HTTPException(404, { message: "Notification not found" });
   await notificationsRepo.update(db, id, data);
 }
 

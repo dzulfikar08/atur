@@ -4,39 +4,17 @@
 // links and group by workspace. Mounted at /api/me (authed globally via
 // app.use('/api/*', authMiddleware)).
 import { Hono } from "hono";
-import {
-  type AnyColumn,
-  type SQL,
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  getTableColumns,
-  gte,
-  inArray,
-  isNotNull,
-  isNull,
-  like,
-  lt,
-  lte,
-  notInArray,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull, like, lt, or, sql } from "drizzle-orm";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { paginationParams, paginatedResponse } from "../lib/pagination";
 import * as schema from "../db/schema";
 import * as workspaceRepo from "../repositories/workspaces";
-import { issueTextCondition } from "../repositories/issues";
-import * as issuesService from "../services/issues";
 import * as hiddenWorkspaces from "../services/hiddenWorkspaces";
+import { dateOnly, isOpen, listMyIssues, todayBuckets, todayDates } from "../services/meIssues";
 import { parseOr400 } from "../lib/validate";
 import * as pushTokens from "../repositories/pushTokens";
 import { z } from "zod";
-
-type Db = ReturnType<typeof getDb>;
 
 const pushTokenSchema = z.object({
   token: z
@@ -45,146 +23,6 @@ const pushTokenSchema = z.object({
     .regex(/^Expo(nent)?PushToken\[[^\]]+\]$/),
   platform: z.enum(["ios", "android"]),
 });
-
-/** YYYY-MM-DD prefix of a date/datetime text column. */
-const dateOnly = (col: AnyColumn) => sql<string>`substr(${col}, 1, 10)`;
-
-function todayDates(raw: string | undefined): {
-  today: string;
-  weekEnd: string;
-} {
-  const today =
-    raw && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : new Date().toISOString().slice(0, 10);
-  const end = new Date(`${today}T00:00:00Z`);
-  end.setUTCDate(end.getUTCDate() + 7);
-  return { today, weekEnd: end.toISOString().slice(0, 10) };
-}
-
-/** Accepts a workspace slug or id; only workspaces the user belongs to resolve. */
-async function resolveWorkspaceId(db: Db, ids: string[], slugOrId: string) {
-  const [row] = await db
-    .select({ id: schema.workspaces.id })
-    .from(schema.workspaces)
-    .where(
-      and(
-        inArray(schema.workspaces.id, ids),
-        or(eq(schema.workspaces.id, slugOrId), eq(schema.workspaces.slug, slugOrId)),
-      ),
-    )
-    .limit(1);
-  return row?.id ?? null;
-}
-
-const liveAssignments = (db: Db) =>
-  db
-    .select({ id: schema.issueAssignees.issueId })
-    .from(schema.issueAssignees)
-    .where(isNull(schema.issueAssignees.deletedAt));
-
-function assignedToMe(db: Db, userId: string) {
-  return inArray(
-    schema.issues.id,
-    db
-      .select({ id: schema.issueAssignees.issueId })
-      .from(schema.issueAssignees)
-      .where(
-        and(eq(schema.issueAssignees.assigneeId, userId), isNull(schema.issueAssignees.deletedAt)),
-      ),
-  );
-}
-
-function unassignedInOwnedWorkspace(db: Db, userId: string) {
-  return and(
-    notInArray(schema.issues.id, liveAssignments(db)),
-    inArray(
-      schema.issues.workspaceId,
-      db
-        .select({ id: schema.workspaces.id })
-        .from(schema.workspaces)
-        .where(eq(schema.workspaces.ownerId, userId)),
-    ),
-  );
-}
-
-/** Not in a completed or cancelled state group (a stateless issue counts as open). */
-function isOpen(db: Db): SQL {
-  return sql`${or(
-    isNull(schema.issues.stateId),
-    notInArray(
-      schema.issues.stateId,
-      db
-        .select({ id: schema.states.id })
-        .from(schema.states)
-        .where(inArray(schema.states.groupName, ["completed", "cancelled"])),
-    ),
-  )}`;
-}
-
-const SORT_COLUMNS = {
-  updated_at: schema.issues.updatedAt,
-  created_at: schema.issues.createdAt,
-  sequence_id: schema.issues.sequenceId,
-  target_date: schema.issues.targetDate,
-  start_date: schema.issues.startDate,
-  name: schema.issues.name,
-} as const;
-
-function orderFor(sort: string | undefined) {
-  const [field, dir] = (sort ?? "updated_at:desc").split(":");
-  const col = SORT_COLUMNS[field as keyof typeof SORT_COLUMNS] ?? schema.issues.updatedAt;
-  const ordered = dir === "asc" ? asc(col) : desc(col);
-  // Dated sorts keep undated issues last in both directions.
-  return field === "target_date" || field === "start_date"
-    ? [sql`${col} is null`, ordered]
-    : [ordered];
-}
-
-// Lean projection: list rows never need the description bodies.
-const {
-  descriptionHtml: _html,
-  descriptionJson: _json,
-  descriptionStripped: _stripped,
-  descriptionBinary: _binary,
-  ...LEAN_ISSUE_COLUMNS
-} = getTableColumns(schema.issues);
-
-function selectIssueRows(
-  db: Db,
-  where: ReturnType<typeof and>,
-  order: ReturnType<typeof orderFor>,
-  offset: number,
-  limit: number,
-) {
-  return db
-    .select({
-      issue: LEAN_ISSUE_COLUMNS,
-      projectName: schema.projects.name,
-      projectIdentifier: schema.projects.identifier,
-      workspaceSlug: schema.workspaces.slug,
-      workspaceName: schema.workspaces.name,
-    })
-    .from(schema.issues)
-    .innerJoin(schema.projects, eq(schema.projects.id, schema.issues.projectId))
-    .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.issues.workspaceId))
-    .where(where)
-    .orderBy(...order)
-    .offset(offset)
-    .limit(limit);
-}
-
-async function enrichRows(db: Db, rows: Awaited<ReturnType<typeof selectIssueRows>>) {
-  const enriched = await issuesService.enrichIssues(
-    db,
-    rows.map((r) => r.issue),
-  );
-  return enriched.map((e, i) => ({
-    ...e,
-    projectName: rows[i].projectName,
-    projectIdentifier: rows[i].projectIdentifier,
-    workspaceSlug: rows[i].workspaceSlug,
-    workspaceName: rows[i].workspaceName,
-  }));
-}
 
 export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
 
@@ -232,163 +70,36 @@ export const meRoutes = new Hono<{ Bindings: Env }>({ strict: false })
   // state_key (comma list), sort=<field>:<asc|desc>, q|search, today=YYYY-MM-DD.
   .get("/issues", async (c) => {
     const db = getDb(c.env.DB);
-    const user = c.get("user");
-    const ids = await workspaceRepo.listIdsByUser(db, user.sub);
-    if (!ids.length) return c.json(paginatedResponse([], 0, 0, 50));
-
-    const state = c.req.query("state");
-    const priority = c.req.query("priority");
-    const search = c.req.query("q") ?? c.req.query("search");
-    const workspace = c.req.query("workspace"); // workspace slug or id
-    const project = c.req.query("project"); // project id
-    const stateKeys = (c.req.query("state_key") ?? "").split(",").filter(Boolean);
-    const group = c.req.query("group"); // backlog|started|completed|cancelled
-    const assignee = c.req.query("assignee");
-    const due = c.req.query("due");
     const { offset, limit } = paginationParams(c);
-    const dates = todayDates(c.req.query("today"));
-
-    const conditions = [inArray(schema.issues.workspaceId, ids), isNull(schema.issues.deletedAt)];
-    if (workspace) {
-      const wsId = await resolveWorkspaceId(db, ids, workspace);
-      // An unknown or foreign workspace matches nothing rather than everything.
-      if (!wsId) return c.json(paginatedResponse([], 0, offset, limit));
-      conditions.push(eq(schema.issues.workspaceId, wsId));
-    }
-    if (state) conditions.push(eq(schema.issues.stateId, state));
-    // Canonical filters (ATUR-3): state UUIDs are per-project rows, so
-    // cross-workspace filtering must resolve through the states table.
-    if (stateKeys.length)
-      conditions.push(
-        inArray(
-          schema.issues.stateId,
-          db
-            .select({ id: schema.states.id })
-            .from(schema.states)
-            .where(and(inArray(schema.states.key, stateKeys), isNull(schema.states.deletedAt))),
-        ),
-      );
-    if (group)
-      conditions.push(
-        inArray(
-          schema.issues.stateId,
-          db
-            .select({ id: schema.states.id })
-            .from(schema.states)
-            .where(and(eq(schema.states.groupName, group), isNull(schema.states.deletedAt))),
-        ),
-      );
-    if (priority) conditions.push(eq(schema.issues.priority, priority));
-    if (search?.trim()) conditions.push(issueTextCondition(search));
-    if (project) conditions.push(eq(schema.issues.projectId, project));
-    if (assignee === "me") conditions.push(assignedToMe(db, user.sub));
-    if (due === "overdue" || due === "today" || due === "week") {
-      const target = dateOnly(schema.issues.targetDate);
-      if (due === "overdue") {
-        conditions.push(lt(target, dates.today), isOpen(db));
-      } else if (due === "today") {
-        conditions.push(eq(target, dates.today));
-      } else {
-        conditions.push(gte(target, dates.today), lte(target, dates.weekEnd));
-      }
-    }
-    const where = and(...conditions);
-
-    // Count without the display joins — every condition is issues-scoped, and
-    // total must describe the full filtered set, not just this page.
-    const [countRow] = await db
-      .select({ total: sql<number>`count(*)` })
-      .from(schema.issues)
-      .where(where);
-
-    const rows = await selectIssueRows(db, where, orderFor(c.req.query("sort")), offset, limit);
-    return c.json(paginatedResponse(await enrichRows(db, rows), countRow.total, offset, limit));
+    const { member, results, total } = await listMyIssues(db, c.get("user").sub, {
+      state: c.req.query("state"),
+      priority: c.req.query("priority"),
+      search: c.req.query("q") ?? c.req.query("search"),
+      workspace: c.req.query("workspace"),
+      project: c.req.query("project"),
+      stateKeys: (c.req.query("state_key") ?? "").split(",").filter(Boolean),
+      group: c.req.query("group"),
+      assignee: c.req.query("assignee"),
+      due: c.req.query("due"),
+      sort: c.req.query("sort"),
+      today: c.req.query("today"),
+      offset,
+      limit,
+    });
+    if (!member) return c.json(paginatedResponse([], 0, 0, 50));
+    return c.json(paginatedResponse(results, total, offset, limit));
   })
 
-  // The owner's "what do I do today" buckets. Scope: issues assigned to me, or
-  // unassigned in workspaces I own. Each open issue lands in exactly one bucket,
-  // by precedence: overdue > due_today > needs_you > need_review > in_progress
-  // > due_this_week. `today` is the client's local date (YYYY-MM-DD).
+  // The owner's "what do I do today" buckets (see services/meIssues.ts).
+  // `today` is the client's local date (YYYY-MM-DD).
   .get("/today", async (c) => {
     const db = getDb(c.env.DB);
-    const user = c.get("user");
-    const empty = {
-      overdue: [],
-      due_today: [],
-      needs_you: [],
-      need_review: [],
-      in_progress: [],
-      due_this_week: [],
-      counts: {
-        overdue: 0,
-        due_today: 0,
-        needs_you: 0,
-        need_review: 0,
-        in_progress: 0,
-        due_this_week: 0,
-        total: 0,
-      },
-    };
-    const ids = await workspaceRepo.listIdsByUser(db, user.sub);
-    if (!ids.length) return c.json(empty);
-
-    const dates = todayDates(c.req.query("today"));
-    const workspace = c.req.query("workspace");
-    const scope = [inArray(schema.issues.workspaceId, ids), isNull(schema.issues.deletedAt)];
-    if (workspace && workspace !== "all") {
-      const wsId = await resolveWorkspaceId(db, ids, workspace);
-      if (!wsId) return c.json(empty);
-      scope.push(eq(schema.issues.workspaceId, wsId));
-    }
-
-    const target = dateOnly(schema.issues.targetDate);
-    const start = dateOnly(schema.issues.startDate);
-    const where = and(
-      ...scope,
-      isOpen(db),
-      or(assignedToMe(db, user.sub), unassignedInOwnedWorkspace(db, user.sub)),
-      or(
-        lte(target, dates.weekEnd),
-        lte(start, dates.today),
-        inArray(
-          schema.issues.stateId,
-          db
-            .select({ id: schema.states.id })
-            .from(schema.states)
-            .where(
-              and(
-                inArray(schema.states.key, ["needs_you", "need_review", "in_progress"]),
-                isNull(schema.states.deletedAt),
-              ),
-            ),
-        ),
-      ),
+    return c.json(
+      await todayBuckets(db, c.get("user").sub, {
+        workspace: c.req.query("workspace"),
+        today: c.req.query("today"),
+      }),
     );
-
-    const rows = await selectIssueRows(db, where, orderFor("target_date:asc"), 0, 500);
-    const issues = await enrichRows(db, rows);
-
-    const out = structuredClone(empty) as unknown as Record<string, unknown[]> & {
-      counts: Record<string, number>;
-    };
-    for (const issue of issues) {
-      const key = issue.state?.key ?? null;
-      const t = typeof issue.targetDate === "string" ? issue.targetDate.slice(0, 10) : null;
-      const s = typeof issue.startDate === "string" ? issue.startDate.slice(0, 10) : null;
-      let bucket: string | null = null;
-      if (t && t < dates.today) bucket = "overdue";
-      else if (t === dates.today) bucket = "due_today";
-      else if (key === "needs_you") bucket = "needs_you";
-      else if (key === "need_review") bucket = "need_review";
-      else if (key === "in_progress" || (s && s <= dates.today && (!t || t >= dates.today)))
-        bucket = "in_progress";
-      else if (t && t <= dates.weekEnd) bucket = "due_this_week";
-      if (!bucket) continue;
-      out[bucket].push(issue);
-      out.counts[bucket]++;
-      out.counts.total++;
-    }
-    return c.json(out);
   })
 
   // Per-workspace, per-canonical-state issue counts plus the oldest

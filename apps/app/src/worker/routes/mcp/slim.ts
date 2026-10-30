@@ -19,6 +19,8 @@
 // `slim`/`include` fields advertised in tools/list, so the wire schema cannot
 // drift from the behavior.
 
+import { TODAY_BUCKETS } from "../../services/meIssues";
+
 export const SLIM_STRING_LIMIT = 500;
 const TRUNCATION_MARKER = "…[truncated]";
 
@@ -44,7 +46,40 @@ type ToolSchema = {
 const ISSUE = ["id", "name", "sequenceId", "stateId", "priority", "projectId"];
 const MOVED_ISSUE = [...ISSUE, "previousKey", "key", "droppedLabels"];
 const PROJECT = ["id", "name", "identifier", "folderId"];
-const WORKSPACE = ["id", "name", "slug"];
+const WORKSPACE = ["id", "name", "slug", "logo"];
+// my_issues / my_today rows (built by toMcpIssueRow in services/meIssues.ts).
+const MY_ISSUE = [
+  "id",
+  "name",
+  "sequenceId",
+  "key",
+  "priority",
+  "stateId",
+  "stateKey",
+  "stateName",
+  "stateGroup",
+  "projectId",
+  "projectName",
+  "projectIdentifier",
+  "workspaceSlug",
+  "workspaceName",
+  "targetDate",
+  "updatedAt",
+  "assignees",
+];
+const NOTIFICATION = [
+  "id",
+  "title",
+  "message",
+  "entityName",
+  "entityIdentifier",
+  "issueId",
+  "workspaceSlug",
+  "workspaceName",
+  "projectId",
+  "read",
+  "createdAt",
+];
 const FOLDER = ["id", "name", "color", "sortOrder"];
 const STATE = ["id", "name", "groupName", "color", "key", "sequence"];
 const LABEL = ["id", "name", "color"];
@@ -151,6 +186,10 @@ const SLIM_TOOLS: Record<string, string[]> = {
   record_fact: FACT,
   list_facts: FACT,
   list_activities: ACTIVITY,
+  // My work / inbox
+  my_issues: MY_ISSUE,
+  my_today: MY_ISSUE,
+  list_notifications: NOTIFICATION,
 };
 
 function isPlainObject(v: unknown): v is Row {
@@ -211,6 +250,14 @@ export function slimResponse(toolName: string, args: Record<string, unknown>, re
   if (Array.isArray(result)) return result.map((row) => projectRow(row, fields, include));
   if (isPlainObject(result)) {
     if (toolName === "get_contact") return projectContactBundle(result, include);
+    if (toolName === "my_today") {
+      const out: Row = { ...result };
+      for (const bucket of TODAY_BUCKETS) {
+        const rows = result[bucket];
+        if (Array.isArray(rows)) out[bucket] = rows.map((row) => projectRow(row, fields, include));
+      }
+      return out;
+    }
     // { results: [...], total, ... } pagination wrappers keep their envelope,
     // only the rows are projected.
     if (Array.isArray(result.results)) {
