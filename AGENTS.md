@@ -492,6 +492,18 @@ update_issue: state_id = In Progress
 One claim comment per task. No progress spam — edit or reply only when there
 is a decision or a blocker.
 
+**Pane ↔ issue link.** The claim comment is machine-read: `Picked up by <agent> (pane <id>)`
+links that terminal pane to the issue (the Panes page, the phone and Atur Terminal then show the
+issue next to the pane). Keep the exact `Picked up by … (pane …)` wording. Other sources: the
+`atur-usage` hook (the issue the session's MCP calls touch, reported with the pane id and session
+id), `link_session_issue` (MCP) / `PUT /api/agent-sessions/link`, and the "Link issue" button on a
+pane in the web app. Read it back with `get_session_issue(pane_id)` or `list_agent_sessions(workspace)`
+(REST: `GET /api/agent-sessions?pane=<id>`, `GET /api/workspaces/:slug/agent-sessions`). When the
+bridge reports an agent as Done / Needs you, the Worker records it on the link and, per workspace
+(`GET|PUT /api/workspaces/:slug/agent-sessions/settings`, `on_blocked` / `on_done` = `off` |
+`comment` | `suggest` | `auto`), posts a comment, suggests a state, or moves the issue. Defaults:
+`on_blocked: comment`, `on_done: off`; nothing changes state unless you set `auto`.
+
 **Evidence** (agent finishes):
 
 ```

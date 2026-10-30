@@ -20,6 +20,8 @@ import * as activitiesService from "../../services/crm_activities";
 import * as workspaceService from "../../services/workspaces";
 import * as assetsService from "../../services/assets";
 import * as commentsService from "../../services/comments";
+import * as agentSessionsService from "../../services/agentSessions";
+import * as bridgeMachines from "../../services/bridgeMachines";
 import * as issueMoveService from "../../services/issueMove";
 import * as projectMoveService from "../../services/projectMove";
 import { fieldSettingsSchema, withSettings } from "../../services/customFields";
@@ -62,6 +64,51 @@ export const TOOLS = [
     name: "list_workspaces",
     description: "List all workspaces",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_session_issue",
+    description:
+      "The Atur issue an agent terminal is working on (pane or agent session -> issue link). Pass pane_id (the id GET /api/panes shows: `<machine>~<id>` or the bare id; $ATUR_TERM_SESSION_ID / $HERDR_PANE_ID) and/or session_id. Returns { session: null } when the pane is not linked. state: working|done|blocked (needs you)|idle|unknown.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pane_id: { type: "string" },
+        machine_id: { type: "string", description: "Bridge machine id when pane_id is bare" },
+        session_id: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "list_agent_sessions",
+    description:
+      "Agent terminal sessions linked to issues, newest activity first. workspace (slug) omitted = every workspace you belong to. active=true hides ended sessions and ones idle for over a day.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string", description: "Workspace slug (omit for all)" },
+        state: { type: "string", enum: ["working", "done", "blocked", "idle", "unknown"] },
+        active: { type: "boolean" },
+        limit: { type: "integer" },
+      },
+    },
+  },
+  {
+    name: "link_session_issue",
+    description:
+      "Link an agent terminal pane to an issue (replaces the pane's current link). issue_id is the issue uuid, a key like ATUR-12, or a sequence number with project_id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspace: { type: "string" },
+        issue_id: { type: "string" },
+        project_id: { type: "string" },
+        pane_id: { type: "string" },
+        machine_id: { type: "string" },
+        session_id: { type: "string" },
+        agent: { type: "string" },
+      },
+      required: ["workspace", "issue_id", "pane_id"],
+    },
   },
   {
     name: "create_workspace",
@@ -2302,6 +2349,23 @@ async function handleToolRaw(
         createdAt: now,
         updatedAt: now,
       });
+      const [claimed] = await db
+        .select({
+          id: schema.issues.id,
+          projectId: schema.issues.projectId,
+          workspaceId: schema.issues.workspaceId,
+        })
+        .from(schema.issues)
+        .where(eq(schema.issues.id, params.issue_id as string))
+        .limit(1);
+      if (claimed) {
+        await agentSessionsService.linkFromComment(
+          db,
+          claimed,
+          userId,
+          params.comment_html as string,
+        );
+      }
       return db.select().from(schema.issueComments).where(eq(schema.issueComments.id, id)).limit(1);
     }
     case "list_comments": {
@@ -2627,6 +2691,48 @@ async function handleToolRaw(
         .where(eq(schema.states.id, id))
         .limit(1);
       return created;
+    }
+    case "get_session_issue": {
+      const paneId = params.pane_id as string | undefined;
+      const sessionId = params.session_id as string | undefined;
+      if (!paneId && !sessionId) {
+        throw new HTTPException(400, { message: "pane_id or session_id is required" });
+      }
+      const key = paneId
+        ? agentSessionsService.paneKey(paneId, params.machine_id as string | undefined)
+        : null;
+      const [session] = await agentSessionsService.list(db, {
+        workspaceIds: await workspaceRepo.listIdsByUser(db, userId),
+        panes: key ? [agentSessionsService.clientPaneId(key.machineId, key.paneId)] : undefined,
+        sessionId,
+        limit: 1,
+      });
+      return { session: session ?? null };
+    }
+    case "list_agent_sessions": {
+      const slug = params.workspace as string | undefined;
+      const workspaceIds = slug
+        ? [(await agentSessionsService.requireMemberOf(db, slug, userId)).id]
+        : await workspaceRepo.listIdsByUser(db, userId);
+      const sessions = await agentSessionsService.list(db, {
+        workspaceIds,
+        state: params.state as agentSessionsService.SessionState | undefined,
+        activeOnly: params.active === true,
+        limit: typeof params.limit === "number" ? params.limit : undefined,
+      });
+      return { sessions };
+    }
+    case "link_session_issue": {
+      const body = agentSessionsService.linkSchema.parse(params);
+      return {
+        session: await agentSessionsService.linkForUser(
+          db,
+          userId,
+          body,
+          "mcp",
+          async (machineId) => Boolean(await bridgeMachines.findOwned(db, userId, machineId)),
+        ),
+      };
     }
     case "list_modules": {
       await assertProjectAccess(db, params.project_id as string, userId);

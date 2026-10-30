@@ -10,6 +10,7 @@ import { ArrowLeft, Code2, FileText } from "@/lib/icons";
 import { usePaneAttach, type PaneAttachStatus } from "@/hooks/usePaneAttach";
 import { usePaneObserve } from "@/hooks/usePaneObserve";
 import TranscriptView from "@/components/panes/TranscriptView";
+import { PaneIssue, useAgentSessions } from "@/components/panes/IssueLink";
 import { PromptComposer } from "@/components/panes/PromptComposer";
 import { TerminalKeyRow } from "@/components/panes/TerminalKeyRow";
 import { applyModifiers, fitFontSize, type Modifiers } from "@/lib/terminalKeys";
@@ -60,6 +61,7 @@ export default function PaneViewPage() {
   // view still works if the list is unavailable — the id is the fallback title.
   const panesQuery = useQuery({ queryKey: ["panes"], queryFn: api.listPanes });
   const pane = panesQuery.data?.panes.find((p) => p.pane_id === paneId);
+  const session = useAgentSessions().get(paneId ?? "");
 
   const { status, sendInput, sendPaste, retry, claimKeyboard } = usePaneAttach(paneId ?? "", {
     // hello carries the real pane geometry — the grid is authoritative.
@@ -181,6 +183,7 @@ export default function PaneViewPage() {
               .join(" · ") || paneId}
           </p>
         </div>
+        <PaneIssue paneId={paneId} session={session} />
         {ownsKeyboard ? (
           <Badge variant="default">Keyboard: yours</Badge>
         ) : (

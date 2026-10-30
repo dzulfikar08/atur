@@ -3,6 +3,7 @@ import type { DbClient } from "../db/index";
 import * as commentsRepo from "../repositories/comments";
 import * as subscribersRepo from "../repositories/subscribers";
 import * as issuesRepo from "../repositories/issues";
+import { linkFromComment } from "./agentSessions";
 import { notifyCommentAdded, notifyMentioned, resolveMentionsInHtml } from "./issue_notifications";
 import type { Env } from "../lib/env";
 import { HTTPException } from "hono/http-exception";
@@ -40,6 +41,8 @@ export async function create(
   await subscribersRepo.autoFollow(db, issueId, actorId);
 
   if (comment) {
+    // "Picked up by <agent> (pane <id>)" links that pane to this issue.
+    await linkFromComment(db, issue, actorId, data.comment_html);
     const actorName = user?.displayName || undefined;
     // Notify followers (excludes the comment author).
     await notifyCommentAdded(db, env, issue, comment, actorName);

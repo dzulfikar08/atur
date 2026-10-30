@@ -6,6 +6,7 @@ import {
   attentionCount,
   cleanPaneTitle,
   paneAttention,
+  paneIssueKey,
   paneSummary,
   paneTitle,
   pruneSeen,
@@ -194,5 +195,20 @@ describe("paneTitle", () => {
     expect(paneTitle({ ...pane("a", "idle", "Oh My Pi"), title: "π ⠋" })).toBe("omp session");
     expect(paneTitle({ ...pane("a", "idle", "claude"), title: null })).toBe("claude session");
     expect(paneTitle(pane("a", null, null))).toBe("shell");
+  });
+});
+
+describe("paneIssueKey with a linked session", () => {
+  const linked = {
+    pane_id: "p1",
+    state: "working",
+    issue: { key: "ATUR-12", name: "Link panes", workspace_slug: "diatur" },
+  } as const;
+
+  test("the link wins over the pane title", () => {
+    const p = { ...pane("p1", "working"), title: "ATUR-99 something" };
+    expect(paneIssueKey(p, linked)).toBe("ATUR-12");
+    expect(paneIssueKey(p)).toBe("ATUR-99");
+    expect(paneIssueKey(pane("p1", null, null))).toBeNull();
   });
 });

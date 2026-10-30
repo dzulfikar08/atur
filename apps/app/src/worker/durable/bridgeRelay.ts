@@ -24,6 +24,7 @@ import {
   type RelayResponse,
 } from "../lib/relayProtocol";
 import { agentEventSchema, pushAgentEvent } from "../services/agentPush";
+import { recordSessionEvent } from "../services/agentSessions";
 import * as machines from "../services/bridgeMachines";
 
 // One BridgeRelay per user (`user:<userId>`). It holds the WebSocket of each of
@@ -447,6 +448,7 @@ export class BridgeRelay extends DurableObject<Env> {
     if (!parsed.success) return;
     // The pane id the app opens is the namespaced one, not the bridge-local id.
     const event = { ...parsed.data, pane_id: prefixPaneId(att.machineId, parsed.data.pane_id) };
+    await recordSessionEvent(getDb(this.env.DB), att.machineId, parsed.data);
     try {
       await pushAgentEvent(getDb(this.env.DB), this.env, [att.userId], event, att.machineName);
     } catch (err) {

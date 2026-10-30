@@ -11,6 +11,7 @@ import {
   agentEventsConfigFromEnv,
   cleanAgentTitle,
   readSessionDetail,
+  sessionIdFromPath,
   type AgentStatus,
   type TrackedPane,
 } from "./agent-events";
@@ -94,6 +95,16 @@ describe("AgentStateTracker", () => {
     t.observe([pane("working", "w:p2", null)], 0);
     t.observe([pane("done", "w:p2", null)], 10);
     expect(t.observe([pane("done", "w:p2", null)], 20)).toEqual([]);
+  });
+});
+
+describe("sessionIdFromPath", () => {
+  test("takes the part after the timestamp, without the extension", () => {
+    expect(sessionIdFromPath("/s/2026-09-01T14-13-16-934Z_01a05d51-3006.jsonl")).toBe(
+      "01a05d51-3006",
+    );
+    expect(sessionIdFromPath("/s/plain.jsonl")).toBe("plain");
+    expect(sessionIdFromPath(null)).toBeNull();
   });
 });
 

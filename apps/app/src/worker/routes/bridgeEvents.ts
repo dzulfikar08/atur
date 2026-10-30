@@ -3,6 +3,7 @@ import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { parseOr400, publicJsonError } from "../lib/validate";
 import { agentEventSchema, pushAgentEvent } from "../services/agentPush";
+import { recordSessionEvent } from "../services/agentSessions";
 import { and, eq, isNull } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { SCREEN_AUDIT_PANE } from "./screen";
@@ -42,6 +43,9 @@ bridgeEventRoutes.post("/agent-events", async (c) => {
 
   const event = parseOr400(agentEventSchema, await c.req.json().catch(() => undefined));
   const db = getDb(c.env.DB);
+
+  // Link the pane to its issue first: it works for panes unbound to a workspace too.
+  await recordSessionEvent(db, "", event);
 
   const slug = await workspaceSlugForPane(db, c.env, {
     pane_id: event.pane_id,

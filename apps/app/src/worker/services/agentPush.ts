@@ -22,6 +22,8 @@ export const agentEventSchema = z.object({
   cwd: optionalText(1024),
   title: optionalText(200),
   detail: optionalText(500),
+  /** Agent session id (omp: transcript file name after the timestamp), when known. */
+  session_id: optionalText(128),
 });
 export type AgentEvent = z.infer<typeof agentEventSchema>;
 

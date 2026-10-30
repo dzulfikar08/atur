@@ -59,6 +59,12 @@ export function PaneScreen({ paneId }: { paneId: string }) {
     enabled: account.status === "authed" && !target.directOnly,
   });
   const pane = panes.data?.find((p) => p.pane_id === paneId);
+  const linked = useQuery({
+    queryKey: ["agent-sessions"],
+    queryFn: api.agentSessions,
+    enabled: account.status === "authed" && !target.directOnly,
+  });
+  const issue = linked.data?.find((s) => s.pane_id === paneId)?.issue;
   const leave = () =>
     router.canGoBack()
       ? router.back()
@@ -173,23 +179,30 @@ export function PaneScreen({ paneId }: { paneId: string }) {
         options={{
           headerBackTitle: "Panes",
           headerTitle: () => (
-            <View style={styles.titleRow} accessibilityRole="header">
-              <View
-                style={[
-                  styles.dot,
-                  status === "connected" ? styles.dotLive : gone ? styles.dotBad : styles.dotWait,
-                ]}
-                accessibilityLabel={STATUS_LABEL[status]}
-              />
-              <Text style={styles.title} numberOfLines={1}>
-                {title}
-              </Text>
-              {shownLabel ? <Text style={styles.attention}>{shownLabel}</Text> : null}
-              <TransportBadge
-                transport={transport}
-                rttMs={direct.rttMs}
-                wire={direct.connection?.transport}
-              />
+            <View style={styles.titleBlock} accessibilityRole="header">
+              <View style={styles.titleRow}>
+                <View
+                  style={[
+                    styles.dot,
+                    status === "connected" ? styles.dotLive : gone ? styles.dotBad : styles.dotWait,
+                  ]}
+                  accessibilityLabel={STATUS_LABEL[status]}
+                />
+                <Text style={styles.title} numberOfLines={1}>
+                  {title}
+                </Text>
+                {shownLabel ? <Text style={styles.attention}>{shownLabel}</Text> : null}
+                <TransportBadge
+                  transport={transport}
+                  rttMs={direct.rttMs}
+                  wire={direct.connection?.transport}
+                />
+              </View>
+              {issue ? (
+                <Text style={styles.issue} numberOfLines={1}>
+                  {issue.key} · {issue.name}
+                </Text>
+              ) : null}
             </View>
           ),
           // One menu keeps the header clean: views, split and close all live in ⋯.
@@ -282,6 +295,8 @@ export function PaneScreen({ paneId }: { paneId: string }) {
 const styles = StyleSheet.create((theme) => ({
   screen: { flex: 1, backgroundColor: theme.colors.background },
   flex: { flex: 1 },
+  titleBlock: { maxWidth: 240, gap: 1 },
+  issue: { fontSize: theme.fontSize.xs, color: theme.colors.mutedForeground },
   titleRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.sm, maxWidth: 240 },
   title: { fontSize: theme.fontSize.base, fontFamily: theme.fonts.bold, flexShrink: 1 },
   attention: { fontSize: theme.fontSize.xs, color: theme.colors.mutedForeground },

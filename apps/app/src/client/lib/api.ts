@@ -875,6 +875,14 @@ export const api = {
     }),
   // ── Panes (herdr execution plane, proxied by the Worker; see ATUR-2) ──
   listPanes: () => apiFetch<PanesListResponse>("/panes"),
+  // ── Agent sessions: pane <-> issue links ──
+  /** Active links in every workspace the caller belongs to. */
+  listAgentSessions: async () =>
+    (await apiFetch<{ sessions: AgentSession[] }>("/agent-sessions?active=1")).sessions,
+  linkAgentSession: (data: { pane_id: string; workspace: string; issue_id: string }) =>
+    apiFetch<AgentSession>("/agent-sessions/link", { method: "PUT", body: JSON.stringify(data) }),
+  unlinkAgentSession: (paneId: string) =>
+    apiFetch<void>(`/agent-sessions/link?pane=${encodeURIComponent(paneId)}`, { method: "DELETE" }),
   /** Save an image on the pane's machine; returns the path to put in the prompt. */
   pastePaneImage: async (paneId: string, image: Blob): Promise<{ path: string; bytes: number }> => {
     const res = await fetch(`${API_BASE}/panes/paste?pane=${encodeURIComponent(paneId)}`, {
@@ -939,6 +947,31 @@ export interface PaneListItem {
   revision: number;
   /** Only on panes from a customer-run bridge; their ids read `<machine id>~<pane>`. */
   machine?: { id: string; name: string };
+}
+
+/** An agent terminal linked to an issue (GET /api/agent-sessions; snake_case wire format). */
+export interface AgentSession {
+  id: string;
+  /** Same id GET /api/panes returns for the pane. */
+  pane_id: string;
+  machine_id: string | null;
+  agent: string | null;
+  /** blocked = the agent needs the human. */
+  state: "working" | "done" | "blocked" | "idle" | "unknown";
+  state_at: number;
+  source: "claim_comment" | "usage_hook" | "mcp" | "manual";
+  ended_at: number | null;
+  issue: {
+    id: string;
+    /** e.g. ATUR-12 */
+    key: string;
+    name: string;
+    project_id: string;
+    workspace_slug: string;
+    state_name: string | null;
+    state_group: string | null;
+    url: string;
+  };
 }
 
 export interface PanesListResponse {

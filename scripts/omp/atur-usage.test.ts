@@ -133,6 +133,35 @@ describe("atur-usage hook", () => {
     expect(posts[1].body).toMatchObject({ input_tokens: 50, output_tokens: 25 });
   });
 
+  it("links the pane to the issue it works on and ends the session on shutdown", async () => {
+    process.env.HERDR_PANE_ID = "w1:p7";
+    try {
+      const entries = makeEntries();
+      const ctx = makeCtx(entries);
+      const hook = await importHook({});
+      await hook.emit("session_start", {}, ctx);
+      await hook.emit("tool_call", toolCall(ISSUE_A), ctx);
+      await hook.emit("tool_call", toolCall(ISSUE_A), ctx); // same issue: no second link
+      const links = posts.filter((p) => p.path === "/api/agent-sessions/link");
+      expect(links).toHaveLength(1);
+      expect(links[0].body).toMatchObject({
+        pane_id: "w1:p7",
+        workspace: "demo",
+        project_id: "p1",
+        issue_id: "iA",
+        session_id: "abc12345",
+        agent: "omp/pane-w1:p7",
+        source: "usage_hook",
+      });
+      await hook.emit("session_shutdown", {}, ctx);
+      const ends = posts.filter((p) => p.path === "/api/agent-sessions/end");
+      expect(ends).toHaveLength(1);
+      expect(ends[0].body).toMatchObject({ pane_id: "w1:p7", session_id: "abc12345" });
+    } finally {
+      delete process.env.HERDR_PANE_ID;
+    }
+  });
+
   it("names the agent after the innermost multiplexer pane", async () => {
     const saved = { term: process.env.TERM_PROGRAM };
     const nameFor = async (env: Record<string, string>) => {
@@ -146,7 +175,7 @@ describe("atur-usage hook", () => {
         entries.add(assistantMsg(10, 5));
         await hook.emit("tool_call", toolCall(ISSUE_A), ctx);
         await hook.emit("session_shutdown", {}, ctx);
-        return posts[0]?.body.agent_name;
+        return posts.find((p) => p.path.endsWith("/time-entries"))?.body.agent_name;
       } finally {
         delete process.env.HERDR_PANE_ID;
         delete process.env.MUXY_SESSION_ID;

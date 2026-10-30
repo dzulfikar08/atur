@@ -225,6 +225,13 @@
       "when": 1792813743221,
       "tag": "0031_bridge_machines",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1793373759883,
+      "tag": "0032_agent_sessions",
+      "breakpoints": true
     }
   ]
 }

@@ -62,6 +62,65 @@ function agentName(sessionFile: string | undefined): string {
   return `omp/${m ? m[1] : "session"}`;
 }
 
+// The terminal pane this session runs in, by the id the bridge and GET /api/panes use.
+function paneId(): string | null {
+  const env = process.env;
+  if (env.TERM_PROGRAM === "atur-terminal" && env.ATUR_TERM_SESSION_ID)
+    return env.ATUR_TERM_SESSION_ID;
+  if (env.TERM_PROGRAM === "muxy" && env.MUXY_SESSION_ID) return env.MUXY_SESSION_ID;
+  return env.HERDR_PANE_ID || null;
+}
+
+// omp session file `<timestamp>_<uuid>.jsonl` -> uuid (same derivation as the
+// bridge's agent events, so both reports meet on one agent session).
+function sessionId(sessionFile: string | undefined): string | null {
+  const base =
+    (sessionFile || "")
+      .split("/")
+      .pop()
+      ?.replace(/\.jsonl?$/i, "") ?? "";
+  const id = base.includes("_") ? base.slice(base.indexOf("_") + 1) : base;
+  return id || null;
+}
+
+// Tell Atur which issue this pane works on (agent sessions): the Panes page,
+// the phone and Atur Terminal show it. Best effort; the usage window never waits on it.
+async function reportLink(ctx: any, issue: IssueRef): Promise<void> {
+  const pane = paneId();
+  if (!pane) return;
+  const file = ctx?.sessionManager?.getSessionFile?.();
+  const res = await fetch(`${baseUrl()}/api/agent-sessions/link`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", "x-api-key": apiKey() },
+    body: JSON.stringify({
+      pane_id: pane,
+      workspace: issue.workspace,
+      project_id: issue.projectId,
+      issue_id: issue.issueId,
+      session_id: sessionId(file) ?? undefined,
+      agent: agentName(file),
+      source: "usage_hook",
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`atur-usage: link ${pane} -> ${res.status}`);
+}
+
+// The session is over: keep the link, mark it inactive.
+async function reportEnd(ctx: any): Promise<void> {
+  const pane = paneId();
+  if (!pane) return;
+  await fetch(`${baseUrl()}/api/agent-sessions/end`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": apiKey() },
+    body: JSON.stringify({
+      pane_id: pane,
+      session_id: sessionId(ctx?.sessionManager?.getSessionFile?.()) ?? undefined,
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+}
+
 function ensureInit(ctx: any): void {
   if (initialized) return;
   initialized = true;
@@ -166,6 +225,9 @@ export default function aturUsageHook(pi: any): void {
       if (typeof projectId !== "string" || !projectId) return;
       if (typeof issueId !== "string" || !issueId) return;
       if (state.issue?.issueId === issueId) return;
+      await reportLink(ctx, { workspace, projectId, issueId }).catch((err: any) =>
+        pi.logger?.error?.(`atur-usage: ${err?.message ?? err}`),
+      );
       await flush(ctx, { issue: { workspace, projectId, issueId }, windowStart: Date.now() });
     } catch (err: any) {
       pi.logger?.error?.(`atur-usage: ${err?.message ?? err}`);
@@ -178,6 +240,7 @@ export default function aturUsageHook(pi: any): void {
       if (!apiKey()) return;
       ensureInit(ctx);
       await flush(ctx);
+      await reportEnd(ctx).catch(() => {});
     } catch (err: any) {
       pi.logger?.error?.(`atur-usage: ${err?.message ?? err}`);
     }

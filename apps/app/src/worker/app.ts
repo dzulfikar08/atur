@@ -47,6 +47,7 @@ import { ingestRoutes } from "./routes/ingest";
 import { feedbackAdminRoutes } from "./routes/feedback_admin";
 import { widgetRoutes } from "./routes/widget";
 import { paneRoutes } from "./routes/panes";
+import { agentSessionRoutes, workspaceAgentSessionRoutes } from "./routes/agentSessions";
 import { bridgeConnectRoutes } from "./routes/bridgeConnect";
 import { bridgeEventRoutes } from "./routes/bridgeEvents";
 import { screenRoutes } from "./routes/screen";
@@ -144,6 +145,7 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/api/workspaces/:slug/projects/:projectId/states", stateRoutes);
   app.route("/api/workspaces/:slug/folders", projectFolderRoutes);
   app.route("/api/workspaces/:slug/links", workspaceLinkRoutes);
+  app.route("/api/workspaces/:slug/agent-sessions", workspaceAgentSessionRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/labels", labelRoutes);
   app.route("/api/workspaces/:slug/members", memberRoutes);
   app.route("/api/workspaces/:slug/projects/:projectId/sprints", sprintRoutes);
@@ -174,6 +176,7 @@ export function createApp(): Hono<{ Bindings: Env }> {
   app.route("/api/workspaces/:slug/projects/:projectId/feedback-board", feedbackAdminRoutes);
   // Herdr execution-plane proxy: pane list + WS attach relay (ATUR-2).
   app.route("/api/panes", paneRoutes);
+  app.route("/api/agent-sessions", agentSessionRoutes);
   // Desktop sharing (noVNC ↔ bridge wayvnc), superuser-only and audited.
   app.route("/api/screen", screenRoutes);
   // One-time WebSocket tickets for the native screen WebView.

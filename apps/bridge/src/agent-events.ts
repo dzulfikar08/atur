@@ -124,6 +124,18 @@ export class AgentStateTracker {
   }
 }
 
+/**
+ * Session id of an agent transcript (omp: `<timestamp>_<uuid>.jsonl` -> the
+ * uuid), the key the Worker and the atur-usage hook share to tie a pane's
+ * events to its issue link.
+ */
+export function sessionIdFromPath(path: string | null): string | null {
+  if (!path) return null;
+  const base = (path.split("/").pop() ?? "").replace(/\.jsonl?$/i, "");
+  const id = base.includes("_") ? base.slice(base.indexOf("_") + 1) : base;
+  return id || null;
+}
+
 function collapse(text: string): string | null {
   // Notifications render plain text: drop markdown emphasis and code ticks.
   const s = text
@@ -281,6 +293,7 @@ export class AgentEventWatcher {
       cwd: t.cwd,
       title: t.title,
       detail,
+      session_id: sessionIdFromPath(t.session_path),
     };
     if (this.relay) {
       const sent = this.relay.sendEvent(body);

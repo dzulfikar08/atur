@@ -1630,6 +1630,64 @@ export const paneAudit = sqliteTable(
   (table) => [index("idx_pane_audit_user").on(table.userId, table.attachedAt)],
 );
 
+// Agent terminal <-> Atur issue links. One row per pane (machine_id + pane_id,
+// both bridge-local; machine_id is '' for the env-configured legacy bridge) and
+// replaced when the pane is re-linked. Written by the claim-comment convention,
+// the atur-usage hook, MCP link_session_issue and the UI; state follows the
+// bridge's agent events (done / blocked). See services/agentSessions.ts.
+export const agentSessions = sqliteTable(
+  "agent_sessions",
+  {
+    id: text("id").primaryKey(),
+    paneId: text("pane_id").notNull(),
+    machineId: text("machine_id").notNull().default(""),
+    sessionId: text("session_id"),
+    agent: text("agent"),
+    // working | done | blocked | idle | unknown
+    state: text("state").notNull().default("unknown"),
+    stateAt: integer("state_at").notNull(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull(),
+    issueId: text("issue_id")
+      .notNull()
+      .references(() => issues.id, { onDelete: "cascade" }),
+    // claim_comment | usage_hook | mcp | manual
+    source: text("source").notNull(),
+    cwd: text("cwd"),
+    title: text("title"),
+    linkedById: text("linked_by_id"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+    endedAt: integer("ended_at"),
+    // Dedupe for issue comments: the last event we acted on.
+    lastNotifiedState: text("last_notified_state"),
+    lastNotifiedAt: integer("last_notified_at"),
+    // State the 'suggest' setting proposed for the issue (state id); cleared on a new link.
+    suggestedStateId: text("suggested_state_id"),
+  },
+  (table) => [
+    uniqueIndex("uq_agent_sessions_pane").on(table.machineId, table.paneId),
+    index("idx_agent_sessions_workspace").on(table.workspaceId, table.updatedAt),
+    index("idx_agent_sessions_issue").on(table.issueId),
+    index("idx_agent_sessions_session").on(table.sessionId),
+  ],
+);
+
+// Per-workspace reaction to agent events on a linked issue: off | comment |
+// suggest (comment + stored suggested state) | auto (moves the issue).
+// Defaults keep the board untouched: blocked posts a comment, done stays quiet
+// (a turn ends many times per task), nothing changes state automatically.
+export const agentSessionSettings = sqliteTable("agent_session_settings", {
+  workspaceId: text("workspace_id")
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  onBlocked: text("on_blocked").notNull().default("comment"),
+  onDone: text("on_done").notNull().default("off"),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 // One-time WebSocket tickets for clients that cannot set an Authorization
 // header on a WS upgrade (the native app's noVNC WebView). Minted by an
 // authenticated POST /api/ws-tickets, redeemed exactly once on the upgrade.

@@ -54,6 +54,14 @@ export interface PaneListItem {
   workspace_slug?: string;
 }
 
+/** An agent terminal linked to an Atur issue (GET /api/agent-sessions). */
+export interface AgentSession {
+  /** The same id GET /api/panes returns. */
+  pane_id: string;
+  state: "working" | "done" | "blocked" | "idle" | "unknown";
+  issue: { key: string; name: string; workspace_slug: string };
+}
+
 export interface PaneMachine {
   id: string;
   name: string;
@@ -460,6 +468,9 @@ export const api = {
 
   me: () => request<Me>("/api/users/me"),
   panes: () => request<{ panes: PaneListItem[] }>("/api/panes").then((r) => r.panes),
+  /** Active pane <-> issue links in every workspace the caller belongs to. */
+  agentSessions: () =>
+    request<{ sessions: AgentSession[] }>("/api/agent-sessions?active=1").then((r) => r.sessions),
   /** What the caller can target when managing panes (see PaneTargets). */
   paneTargets: () => request<PaneTargets>("/api/panes/workspaces"),
   /** Split a pane; the new pane starts in the source pane's cwd. */

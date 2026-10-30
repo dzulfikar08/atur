@@ -1,4 +1,4 @@
-import type { PaneListItem } from "@/lib/api";
+import type { AgentSession, PaneListItem } from "@/lib/api";
 import { agentDisplayName } from "@/lib/direct/session-meta";
 
 // herdr agent statuses that mean the agent is mid-turn (same set as the web's
@@ -129,12 +129,12 @@ export function paneTitle(pane: PaneListItem): string {
 }
 
 /**
- * The tracker issue an agent pane is working on, when its title names one
- * (agents title their pane "ATUR-33 …"). The bridge list carries no explicit
- * claim field, so this is best-effort and null for plain shells.
+ * The tracker issue an agent pane is working on: the link Atur holds for it
+ * (claim comment, hook, or chosen by hand), else the key its title names
+ * (agents title their pane "ATUR-33 …"). Null for plain shells.
  */
-export function paneIssueKey(pane: PaneListItem): string | null {
-  return pane.title?.match(/\b[A-Z][A-Z0-9]{1,9}-\d+\b/)?.[0] ?? null;
+export function paneIssueKey(pane: PaneListItem, session?: AgentSession): string | null {
+  return session?.issue.key ?? pane.title?.match(/\b[A-Z][A-Z0-9]{1,9}-\d+\b/)?.[0] ?? null;
 }
 
 /** Last two path segments: enough to tell checkouts apart in a narrow row. */

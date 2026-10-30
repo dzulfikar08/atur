@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { api, type PaneListItem } from "@/lib/api";
+import { api, type AgentSession, type PaneListItem } from "@/lib/api";
+import { IssueSummary, useAgentSessions } from "@/components/panes/IssueLink";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Code2 } from "@/lib/icons";
 import { cn } from "@/lib/utils";
@@ -8,7 +9,7 @@ import { cn } from "@/lib/utils";
 // Agent statuses that count as an attached, working session.
 const LIVE_STATUS: Record<string, true> = { running: true, working: true, active: true };
 
-function PaneCard({ pane }: { pane: PaneListItem }) {
+function PaneCard({ pane, session }: { pane: PaneListItem; session?: AgentSession }) {
   const live = pane.agent_status !== null && pane.agent_status in LIVE_STATUS;
   const context = [pane.machine?.name, pane.workspace_label, pane.cwd].filter(Boolean).join(" · ");
   return (
@@ -45,9 +46,13 @@ function PaneCard({ pane }: { pane: PaneListItem }) {
           <span className="text-[var(--state-green)]">❯</span>{" "}
           {pane.title ?? (pane.agent ? `${pane.agent} session` : "shell")}
         </p>
-        <p className="truncate font-ops-mono text-[11.5px] leading-[17px] text-muted-foreground">
-          └─ open pane for live output
-        </p>
+        {session ? (
+          <IssueSummary session={session} />
+        ) : (
+          <p className="truncate font-ops-mono text-[11.5px] leading-[17px] text-muted-foreground">
+            └─ open pane for live output
+          </p>
+        )}
       </div>
     </Link>
   );
@@ -60,6 +65,7 @@ export default function PanesPage() {
     refetchInterval: 10_000,
   });
   const panes = panesQuery.data?.panes ?? [];
+  const sessions = useAgentSessions();
 
   return (
     <div className="-m-4 flex h-full flex-col md:-m-6 lg:-m-8">
@@ -116,7 +122,7 @@ export default function PanesPage() {
         ) : (
           <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
             {panes.map((pane) => (
-              <PaneCard key={pane.pane_id} pane={pane} />
+              <PaneCard key={pane.pane_id} pane={pane} session={sessions.get(pane.pane_id)} />
             ))}
           </div>
         )}

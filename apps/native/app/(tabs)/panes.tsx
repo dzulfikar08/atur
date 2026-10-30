@@ -24,7 +24,7 @@ import {
   Screen,
   Text,
 } from "@/components/ui";
-import { api, ApiError, type PaneListItem } from "@/lib/api";
+import { api, ApiError, type AgentSession, type PaneListItem } from "@/lib/api";
 import {
   ATTENTION_LABEL,
   paneAttention,
@@ -48,12 +48,15 @@ function openPane(pane: PaneListItem) {
 
 function PaneRow({
   pane,
+  session,
   logo,
   workspaceName,
   onLongPress,
   onClose,
 }: {
   pane: PaneListItem;
+  /** The issue Atur has linked to this pane. */
+  session?: AgentSession;
   /** The bound Atur workspace's logo and name, when known. */
   logo: string | null;
   workspaceName: string;
@@ -62,7 +65,7 @@ function PaneRow({
 }) {
   const { theme } = useUnistyles();
   const attention = paneAttention(pane);
-  const issue = paneIssueKey(pane);
+  const issue = paneIssueKey(pane, session);
   const where = [pane.workspace_label, shortCwd(pane.cwd)].filter(Boolean).join(" · ");
   const dot = {
     "needs-you": theme.colors.urgent,
@@ -96,7 +99,9 @@ function PaneRow({
         <Mono numberOfLines={1}>{[pane.pane_id, where].filter(Boolean).join(" · ")}</Mono>
         {issue ? (
           <View style={styles.issue}>
-            <Mono style={styles.issueText}>{issue}</Mono>
+            <Mono style={styles.issueText} numberOfLines={1}>
+              {session ? `${issue} · ${session.issue.name}` : issue}
+            </Mono>
           </View>
         ) : null}
       </View>
@@ -154,6 +159,12 @@ export default function Panes() {
     // The tab layout keeps the badge fresh at 10 s; poll faster while on screen.
     refetchInterval: focused ? 5_000 : false,
   });
+  const sessions = useQuery({
+    queryKey: ["agent-sessions"],
+    queryFn: api.agentSessions,
+    refetchInterval: focused ? 10_000 : false,
+  });
+  const sessionByPane = new Map((sessions.data ?? []).map((s) => [s.pane_id, s]));
   const all = panes.data;
   // Atur workspace per slug, for each row's logo.
   const workspaces = new Map((me.data?.workspaces ?? []).map((w) => [w.slug, w]));
@@ -161,6 +172,7 @@ export default function Panes() {
     const ws = pane.workspace_slug ? workspaces.get(pane.workspace_slug) : undefined;
     return {
       pane,
+      session: sessionByPane.get(pane.pane_id),
       logo: ws?.logo ?? null,
       workspaceName: ws?.name ?? pane.machine?.name ?? pane.workspace_label ?? "?",
       onLongPress: () => openActions(pane),
