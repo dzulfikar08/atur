@@ -58,6 +58,9 @@ test("the stats label names the codec, the rate and the bitrate", () => {
   expect(describeScreenStats({ ...base, codec: "h264", fps: 29.7, kbps: 840 })).toBe(
     "H.264 · 30 fps · 840 kbit/s",
   );
+  expect(describeScreenStats({ ...base, codec: "h264 (mediacodec)", fps: 30, kbps: 840 })).toBe(
+    "H.264 (mediacodec) · 30 fps · 840 kbit/s",
+  );
   expect(describeScreenStats({ ...base, codec: "zrle", fps: 4, kbps: 1500 })).toBe(
     "ZRLE · 4 fps · 1.5 Mbit/s",
   );
