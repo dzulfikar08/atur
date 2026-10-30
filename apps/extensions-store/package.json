@@ -1,0 +1,25 @@
+{
+  "name": "@atur/extensions-store",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:migrate:local": "wrangler d1 migrations apply atur-extensions-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply atur-extensions-db --remote"
+  },
+  "dependencies": {
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250430.0",
+    "@types/node": "^24.12.4",
+    "typescript": "~7.0.2",
+    "vitest": "^4.1.7",
+    "wrangler": "^4.122.0"
+  }
+}

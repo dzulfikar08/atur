@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "atur-extensions-store",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-08",
+  "account_id": "b7e6f8457bd39fa37a7eea5249799754",
+  "routes": [
+    {
+      "pattern": "extensions.diatur.com",
+      "custom_domain": true,
+    },
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atur-extensions-db",
+      "database_id": "cfe763b1-d37d-4e56-b9db-b9db4cd61549",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "r2_buckets": [{ "binding": "ARCHIVES", "bucket_name": "atur-extensions" }],
+  "vars": {
+    // Raw 32-byte Ed25519 public key (base64). Publishes whose artifact or
+    // metadata signature does not verify against it are refused.
+    "SIGNING_PUBKEY": "cyXFQ6bN1nil+fIQ7YnRE4RBDPzOxQpTlhqzw2C6CS4=",
+  },
+  "observability": { "enabled": true },
+  // Secret (wrangler secret put): EXTENSIONS_PUBLISH_TOKEN
+}

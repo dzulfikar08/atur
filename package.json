@@ -18,8 +18,9 @@
     "deploy": "bun run deploy:app",
     "deploy:app": "bun --filter @atur/app deploy",
     "deploy:web": "bun --filter @atur/web deploy",
-    "typecheck": "bun --filter @atur/app typecheck && bun --filter @atur/bridge typecheck && bun --filter @atur/native typecheck",
-    "test": "bun --filter @atur/app test && bun --filter @atur/native test && bun --filter @atur/bridge test",
+    "deploy:extensions": "bun --filter @atur/extensions-store deploy",
+    "typecheck": "bun --filter @atur/app typecheck && bun --filter @atur/bridge typecheck && bun --filter @atur/native typecheck && bun --filter @atur/extensions-store typecheck",
+    "test": "bun --filter @atur/app test && bun --filter @atur/native test && bun --filter @atur/bridge test && bun --filter @atur/extensions-store test",
     "lint": "oxlint .",
     "fmt": "oxfmt .",
     "fmt:check": "oxfmt --check ."

@@ -133,6 +133,20 @@
         "@types/bun": "^1.2.0",
       },
     },
+    "apps/extensions-store": {
+      "name": "@atur/extensions-store",
+      "version": "0.1.0",
+      "dependencies": {
+        "hono": "^4.6.0",
+      },
+      "devDependencies": {
+        "@cloudflare/workers-types": "^4.20250430.0",
+        "@types/node": "^24.12.4",
+        "typescript": "~7.0.2",
+        "vitest": "^4.1.7",
+        "wrangler": "^4.122.0",
+      },
+    },
     "apps/native": {
       "name": "@atur/native",
       "version": "1.0.0",
@@ -282,6 +296,8 @@
     "@atur/app": ["@atur/app@workspace:apps/app"],
 
     "@atur/bridge": ["@atur/bridge@workspace:apps/bridge"],
+
+    "@atur/extensions-store": ["@atur/extensions-store@workspace:apps/extensions-store"],
 
     "@atur/native": ["@atur/native@workspace:apps/native"],
 
