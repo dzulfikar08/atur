@@ -1,0 +1,20 @@
+name: KeysUITests
+options:
+  bundleIdPrefix: com.diatur
+targets:
+  KeysUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources: [Tests]
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+      PRODUCT_BUNDLE_IDENTIFIER: com.diatur.keysuitests
+      SWIFT_VERSION: "5.9"
+schemes:
+  KeysUITests:
+    build:
+      targets:
+        KeysUITests: [test]
+    test:
+      targets: [KeysUITests]

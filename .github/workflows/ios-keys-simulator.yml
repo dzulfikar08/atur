@@ -32,10 +32,27 @@ jobs:
         with:
           toolchain: 1.92.0
       - run: bun install --frozen-lockfile
+      - name: Cache the iOS Rust core
+        id: core
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            apps/native/modules/atur-direct/ios/Frameworks
+            apps/native/modules/atur-direct/ios/Generated
+          key: ios-core-${{ hashFiles('apps/native/modules/atur-direct/core.ref', 'apps/native/modules/atur-direct/scripts/build-core.sh') }}
       - name: Build the Rust core for iOS (device and simulator)
+        if: steps.core.outputs.cache-hit != 'true'
         run: |
           apps/native/modules/atur-direct/scripts/build-core.sh ios
           ls -R apps/native/modules/atur-direct/ios | head -30
+      - name: Save the iOS Rust core
+        if: steps.core.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            apps/native/modules/atur-direct/ios/Frameworks
+            apps/native/modules/atur-direct/ios/Generated
+          key: ${{ steps.core.outputs.cache-primary-key }}
       - name: Prebuild and build the app for the iOS Simulator
         working-directory: apps/native
         env:
@@ -64,3 +81,39 @@ jobs:
         with:
           name: ios-simulator-build
           path: apps/native/ios/xcodebuild.log
+      - name: Install xcodegen
+        run: brew install xcodegen
+      - name: Hardware keyboard events against the module (XCUITest)
+        working-directory: apps/native
+        run: |
+          set -euo pipefail
+          APP="$(find ios/build/Build/Products -maxdepth 2 -name '*.app' | head -1)"
+          UDID="$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPad') or x['name'].startswith('iPhone')))")"
+          echo "simulator $UDID"
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool true
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" com.diatur.app
+          sleep 8
+          xcrun simctl openurl "$UDID" "atur://e2e-keys"
+          sleep 5
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/before.png"
+          cd e2e/keys-uitest
+          xcodegen generate
+          set +e
+          xcodebuild test -project KeysUITests.xcodeproj -scheme KeysUITests \
+            -destination "id=$UDID" -resultBundlePath "$RUNNER_TEMP/keys.xcresult" > "$RUNNER_TEMP/keys-test.log" 2>&1
+          STATUS=$?
+          tail -n 60 "$RUNNER_TEMP/keys-test.log"
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/after.png"
+          exit $STATUS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: keys-uitest
+          path: |
+            ${{ runner.temp }}/keys-test.log
+            ${{ runner.temp }}/before.png
+            ${{ runner.temp }}/after.png
+            ${{ runner.temp }}/keys.xcresult

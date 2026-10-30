@@ -125,7 +125,8 @@ export default function RootLayout() {
 
 /**
  * The screens. The account's own are signed-in only; the Direct area (`direct-home`,
- * `direct-pane`, `pair`) is always reachable, with or without an account or an Atur Cloud plan.
+ * `direct-pane`, `direct-screen`, `pair`) is always reachable, with or without an account or an
+ * Atur Cloud plan.
  */
 function AppStack({ status, hasCredential }: { status: SessionStatus; hasCredential: boolean }) {
   const { theme } = useUnistyles();
@@ -164,8 +165,13 @@ function AppStack({ status, hasCredential }: { status: SessionStatus; hasCredent
         </Stack.Protected>
         <Stack.Screen name="direct-home" options={{ title: "Direct" }} />
         <Stack.Screen name="direct-pane/[sessionId]" options={{ title: "" }} />
+        <Stack.Screen
+          name="direct-screen"
+          options={{ headerShown: false, animation: "fade", gestureEnabled: false }}
+        />
         <Stack.Screen name="pair" options={{ title: "Pair a computer" }} />
         {E2E ? <Stack.Screen name="direct-e2e" options={{ headerShown: false }} /> : null}
+        {E2E ? <Stack.Screen name="e2e-keys" options={{ headerShown: false }} /> : null}
       </Stack>
       {authed && !planBlocked ? <AgentNotifications /> : null}
     </>
