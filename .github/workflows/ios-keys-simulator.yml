@@ -1,0 +1,66 @@
+name: iOS keys simulator
+
+# Compiles the iOS app (with the AturKeys hardware-keyboard module) for the Simulator. Dispatch-only
+# so a keyboard-module change does not pull in the Android/server jobs of native-direct.yml.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ios-keys-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ios-simulator:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      # Expo's precompiled JSI package needs Swift tools 6.2 (Xcode 26); the runner default is 16.4.
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+      - run: bun install --frozen-lockfile
+      - name: Build the Rust core for iOS (device and simulator)
+        run: |
+          apps/native/modules/atur-direct/scripts/build-core.sh ios
+          ls -R apps/native/modules/atur-direct/ios | head -30
+      - name: Prebuild and build the app for the iOS Simulator
+        working-directory: apps/native
+        env:
+          NODE_ENV: production
+          EXPO_PUBLIC_ATUR_E2E: "1"
+        run: |
+          bunx expo prebuild -p ios --no-install --clean
+          cd ios
+          pod install
+          WORKSPACE="$(ls -d *.xcworkspace | head -1)"
+          SCHEME="${WORKSPACE%.xcworkspace}"
+          if ! xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=NO \
+            build > xcodebuild.log 2>&1; then
+            echo '--- last 80 lines of xcodebuild.log'
+            tail -n 80 xcodebuild.log
+            echo "--- lines with 'error:'"
+            grep -n 'error:' xcodebuild.log || echo '(none)'
+            exit 1
+          fi
+          tail -n 40 xcodebuild.log
+          find build/Build/Products -maxdepth 2 -name '*.app'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-simulator-build
+          path: apps/native/ios/xcodebuild.log
