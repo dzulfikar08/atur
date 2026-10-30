@@ -63,9 +63,51 @@ export function encodeChord({ key, ctrl, alt, meta }: KeyChord): string | null {
   return alt || meta ? `\x1b${base}` : base;
 }
 
-/** Ctrl+A alone: select all in a text field, as on every desktop. */
-export function isSelectAll({ key, ctrl, alt, meta }: KeyChord): boolean {
-  return ctrl && !alt && !meta && key.toLowerCase() === "a";
+/** The result of a line-editing key on a draft: the new text and where the caret is. */
+export interface DraftEdit {
+  text: string;
+  caret: number;
+}
+
+/**
+ * Ctrl+<letter> on the prompt draft, as a terminal's line editor (readline) does it: A/E caret to
+ * the start/end of the current line, B/F caret left/right, U/K delete to the line start/end, W
+ * delete the previous word. `caret` is the caret offset. Null when the key is not an editing key
+ * (it belongs to the terminal: Ctrl+C, Ctrl+D, ...) or the draft is empty (nothing to edit, so
+ * even A/E/U... reach the terminal).
+ */
+export function editDraft(text: string, caret: number, key: string): DraftEdit | null {
+  if (text === "") return null;
+  const at = Math.max(0, Math.min(caret, text.length));
+  const lineStart = at === 0 ? 0 : text.lastIndexOf("\n", at - 1) + 1;
+  const found = text.indexOf("\n", at);
+  const lineEnd = found === -1 ? text.length : found;
+  const cut = (from: number, to: number): DraftEdit => ({
+    text: text.slice(0, from) + text.slice(to),
+    caret: from,
+  });
+  switch (key.toLowerCase()) {
+    case "a":
+      return { text, caret: lineStart };
+    case "e":
+      return { text, caret: lineEnd };
+    case "b":
+      return { text, caret: Math.max(0, at - 1) };
+    case "f":
+      return { text, caret: Math.min(text.length, at + 1) };
+    case "u":
+      return cut(lineStart, at);
+    case "k":
+      return cut(at, lineEnd);
+    case "w": {
+      let start = at;
+      while (start > 0 && /\s/.test(text[start - 1]!)) start--;
+      while (start > 0 && !/\s/.test(text[start - 1]!)) start--;
+      return cut(start, at);
+    }
+    default:
+      return null;
+  }
 }
 
 /**

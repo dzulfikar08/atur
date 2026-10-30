@@ -13,7 +13,6 @@ import { diffInput } from "@/lib/screen-keys";
 import {
   applyModifiers,
   encodeChord,
-  isSelectAll,
   KEY_DATA,
   type KeyChord,
   type Modifiers,
@@ -113,10 +112,16 @@ export function NativeTerminal({
   };
 
   // Chords from a hardware keyboard (Ctrl/Alt/Meta held): control bytes and ESC prefixes go to the
-  // pane, never into a text field. Ctrl+A in the prompt composer selects its draft instead.
+  // pane, never into a text field. With the prompt composer focused, plain Ctrl+A/E/U/K/W/B/F edit
+  // its draft as a terminal's line editor would (Ctrl+C and an empty draft still go to the pane).
   useHardwareChords(canType, (chord: KeyChord) => {
-    if (isSelectAll(chord) && composer.current?.isFocused()) {
-      composer.current.selectAll();
+    if (
+      chord.ctrl &&
+      !chord.alt &&
+      !chord.meta &&
+      composer.current?.isFocused() &&
+      composer.current.edit(chord.key)
+    ) {
       return;
     }
     const data = encodeChord(chord);
@@ -125,12 +130,7 @@ export function NativeTerminal({
 
   // A character typed on the soft keyboard into the composer while Ctrl/Alt is latched on the key row.
   const onComposerLatchedKey = (typed: string) => {
-    if (
-      mods.ctrl &&
-      !mods.alt &&
-      isSelectAll({ key: typed, ctrl: true, alt: false, meta: false })
-    ) {
-      composer.current?.selectAll();
+    if (mods.ctrl && !mods.alt && composer.current?.edit(typed)) {
       setMods({ ctrl: false, alt: false });
       return;
     }

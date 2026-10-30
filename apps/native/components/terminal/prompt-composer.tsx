@@ -11,11 +11,12 @@ import { directManager } from "@/lib/direct";
 import { describeDirectError } from "@/lib/direct/describe";
 import { pasteImageDirect } from "@/lib/direct/paste-image";
 import type { PaneTransport } from "@/lib/direct/transport-choice";
-import { insertedText, insertPath } from "@/lib/terminal-keys";
+import { editDraft, insertedText, insertPath } from "@/lib/terminal-keys";
 
-/** What the pane screen does to the draft on a chord: Ctrl+A selects all of it. */
+/** What the pane screen does to the draft on a Ctrl chord. */
 export interface PromptComposerHandle {
-  selectAll: () => void;
+  /** Ctrl+<key> as readline edits a line; false when the key belongs to the terminal. */
+  edit: (key: string) => boolean;
   isFocused: () => boolean;
 }
 
@@ -60,7 +61,15 @@ export function PromptComposer({
   const caret = useRef(0);
   const field = useRef<TextInput>(null);
   useImperativeHandle(ref, () => ({
-    selectAll: () => field.current?.setSelection(0, text.length),
+    edit: (key) => {
+      const edited = editDraft(text, caret.current, key);
+      if (!edited) return false;
+      if (edited.text !== text) setText(edited.text);
+      caret.current = edited.caret;
+      // The field takes the new text first, then the caret.
+      setTimeout(() => field.current?.setSelection(edited.caret, edited.caret), 0);
+      return true;
+    },
     isFocused: () => field.current?.isFocused() ?? false,
   }));
   const canSend = enabled && !uploading && text.trim().length > 0;

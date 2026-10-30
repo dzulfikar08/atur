@@ -6,7 +6,7 @@ import {
   encodeChord,
   insertedText,
   insertPath,
-  isSelectAll,
+  editDraft,
   KEY_DATA,
   swipeSteps,
 } from "./terminal-keys";
@@ -156,13 +156,43 @@ describe("encodeChord", () => {
   });
 });
 
-describe("isSelectAll", () => {
-  test("only plain Ctrl+A", () => {
-    expect(isSelectAll(chord("a", { ctrl: true }))).toBe(true);
-    expect(isSelectAll(chord("A", { ctrl: true }))).toBe(true);
-    expect(isSelectAll(chord("a"))).toBe(false);
-    expect(isSelectAll(chord("a", { ctrl: true, alt: true }))).toBe(false);
-    expect(isSelectAll(chord("b", { ctrl: true }))).toBe(false);
+describe("editDraft", () => {
+  test("Ctrl+A moves to the start of the current line, so typing lands before it", () => {
+    expect(editDraft("bc", 2, "a")).toEqual({ text: "bc", caret: 0 });
+    expect(editDraft("one\ntwo", 7, "A")).toEqual({ text: "one\ntwo", caret: 4 });
+    expect(editDraft("one\ntwo", 3, "a")).toEqual({ text: "one\ntwo", caret: 0 });
+    expect(editDraft("\nx", 1, "a")).toEqual({ text: "\nx", caret: 1 });
+  });
+
+  test("Ctrl+E goes to the end of the current line", () => {
+    expect(editDraft("one\ntwo", 1, "e")).toEqual({ text: "one\ntwo", caret: 3 });
+    expect(editDraft("one\ntwo", 4, "e")).toEqual({ text: "one\ntwo", caret: 7 });
+  });
+
+  test("Ctrl+B and Ctrl+F move one character, clamped", () => {
+    expect(editDraft("abc", 2, "b")?.caret).toBe(1);
+    expect(editDraft("abc", 0, "b")?.caret).toBe(0);
+    expect(editDraft("abc", 2, "f")?.caret).toBe(3);
+    expect(editDraft("abc", 3, "f")?.caret).toBe(3);
+  });
+
+  test("Ctrl+U and Ctrl+K delete to the line start and end", () => {
+    expect(editDraft("one\ntwo three", 8, "u")).toEqual({ text: "one\nthree", caret: 4 });
+    expect(editDraft("one two\nx", 3, "k")).toEqual({ text: "one\nx", caret: 3 });
+  });
+
+  test("Ctrl+W deletes the previous word and the spaces before the caret", () => {
+    expect(editDraft("fix the bug", 11, "w")).toEqual({ text: "fix the ", caret: 8 });
+    expect(editDraft("fix the   ", 10, "w")).toEqual({ text: "fix ", caret: 4 });
+    expect(editDraft("word", 4, "w")).toEqual({ text: "", caret: 0 });
+  });
+
+  test("an empty draft, Ctrl+C and other letters belong to the terminal", () => {
+    expect(editDraft("", 0, "a")).toBeNull();
+    expect(editDraft("", 0, "u")).toBeNull();
+    expect(editDraft("text", 4, "c")).toBeNull();
+    expect(editDraft("text", 4, "d")).toBeNull();
+    expect(editDraft("text", 4, "z")).toBeNull();
   });
 });
 
