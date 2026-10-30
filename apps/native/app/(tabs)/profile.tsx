@@ -5,7 +5,7 @@ import Constants from "expo-constants";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { Alert, View } from "react-native";
 import { StyleSheet, UnistylesRuntime, useUnistyles } from "react-native-unistyles";
 
 import { useAgentAlertsControl } from "@/components/agent-alerts";
@@ -50,6 +50,12 @@ const THEMES: { value: ThemePref; label: string }[] = [
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
 ];
+
+const FONT_CREDITS = [
+  "JetBrains Mono (c) The JetBrains Mono Project Authors, SIL Open Font License 1.1.",
+  "Symbols Nerd Font Mono (c) Ryan L McIntyre and the Nerd Fonts contributors, MIT License (github.com/ryanoasis/nerd-fonts).",
+  "Its icons come from Codicons and Font Awesome (CC BY 4.0), Material Design Icons (Apache 2.0), Octicons, Devicons, Seti-UI and Powerline (MIT), Pomicons (SIL OFL 1.1).",
+].join("\n\n");
 
 export default function Profile() {
   const me = useQuery({ queryKey: ["me"], queryFn: api.me });
@@ -249,6 +255,13 @@ export default function Profile() {
           icon="information-circle-outline"
           title="Version"
           value={Constants.expoConfig?.version ?? "–"}
+        />
+        <ListRow
+          icon="document-text-outline"
+          title="Font credits"
+          subtitle="JetBrains Mono, Symbols Nerd Font Mono"
+          chevron
+          onPress={() => Alert.alert("Font credits", FONT_CREDITS)}
         />
       </ListGroup>
 

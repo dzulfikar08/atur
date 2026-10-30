@@ -154,6 +154,22 @@ describe("input translation", () => {
     ]);
   });
 
+  test("^] ^^ ^_ are ctrl presses; ESC then a key is an Alt press; a lone ESC stays esc", () => {
+    expect(translateInput("\x1c\x1d\x1e\x1f")).toEqual([
+      { keys: ["ctrl+\\"] },
+      { keys: ["ctrl+]"] },
+      { keys: ["ctrl+^"] },
+      { keys: ["ctrl+_"] },
+    ]);
+    expect(translateInput("\x1bb")).toEqual([{ keys: ["alt+b"] }]);
+    expect(translateInput("x\x1bfy")).toEqual([{ text: "x" }, { keys: ["alt+f"] }, { text: "y" }]);
+    expect(translateInput("\x1b\x04")).toEqual([{ keys: ["ctrl+alt+d"] }]);
+    expect(translateInput("\x1b\x7f")).toEqual([{ keys: ["alt+backspace"] }]);
+    expect(translateInput("\x1b")).toEqual([{ keys: ["esc"] }]);
+    expect(translateInput("\x1b[A")).toEqual([{ keys: ["up"] }]);
+    expect(translateInput("\x1b[")).toEqual([{ keys: ["esc"] }, { text: "[" }]);
+  });
+
   test("paste frame sends one literal text segment, then Enter on submit", async () => {
     const a = await attach("p1");
     hub.handleMessage(a, JSON.stringify({ type: "claim" }));

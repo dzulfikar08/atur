@@ -90,6 +90,15 @@ describe("tmuxKeyName", () => {
     expect(tmuxKeyName("ctrl+\\")).toBe("C-\\");
   });
 
+  test("^] ^^ ^_ and Alt combos map to tmux names", () => {
+    expect(tmuxKeyName("ctrl+]")).toBe("C-]");
+    expect(tmuxKeyName("ctrl+^")).toBe("C-^");
+    expect(tmuxKeyName("ctrl+_")).toBe("C-_");
+    expect(tmuxKeyName("alt+b")).toBe("M-b");
+    expect(tmuxKeyName("ctrl+alt+d")).toBe("C-M-d");
+    expect(tmuxKeyName("alt+backspace")).toBe("M-BSpace");
+  });
+
   test("unknown keys throw instead of being typed as text", () => {
     expect(() => tmuxKeyName("hyper+q")).toThrow(/unsupported key/);
     expect(() => tmuxKeyName("ctrl+1")).toThrow(/unsupported key/);

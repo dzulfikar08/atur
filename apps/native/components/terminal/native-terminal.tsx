@@ -4,12 +4,20 @@ import { Alert, Platform, Pressable, TextInput, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
 import { KeyRow } from "@/components/terminal/key-row";
-import { PromptComposer } from "@/components/terminal/prompt-composer";
+import { PromptComposer, type PromptComposerHandle } from "@/components/terminal/prompt-composer";
 import { TerminalView } from "@/components/terminal/terminal-view";
 import { Text } from "@/components/ui";
 import type { PaneTransport } from "@/lib/direct/transport-choice";
+import { useHardwareChords } from "@/lib/hardware-keys";
 import { diffInput } from "@/lib/screen-keys";
-import { applyModifiers, KEY_DATA, type Modifiers } from "@/lib/terminal-keys";
+import {
+  applyModifiers,
+  encodeChord,
+  isSelectAll,
+  KEY_DATA,
+  type KeyChord,
+  type Modifiers,
+} from "@/lib/terminal-keys";
 import { DEFAULT_FONT_SIZE, fitFontSize, gridForViewport } from "@/lib/terminal-metrics";
 import { loadFontSize, saveFontSize } from "@/lib/terminal-prefs";
 import type { TerminalScreen } from "@/lib/terminal-screen";
@@ -61,6 +69,7 @@ export function NativeTerminal({
   const cols = useSyncExternalStore(screen.subscribe, () => screen.getState().cols);
   const [mods, setMods] = useState<Modifiers>({ ctrl: false, alt: false });
   const input = useRef<TextInput>(null);
+  const composer = useRef<PromptComposerHandle>(null);
 
   // The saved size applies once; the user's pinch wins from then on.
   const touched = useRef(false);
@@ -101,6 +110,31 @@ export function NativeTerminal({
   const send = (data: string) => {
     sendInput(mods.ctrl || mods.alt ? applyModifiers(data, mods) : data);
     if (mods.ctrl || mods.alt) setMods({ ctrl: false, alt: false });
+  };
+
+  // Chords from a hardware keyboard (Ctrl/Alt/Meta held): control bytes and ESC prefixes go to the
+  // pane, never into a text field. Ctrl+A in the prompt composer selects its draft instead.
+  useHardwareChords(canType, (chord: KeyChord) => {
+    if (isSelectAll(chord) && composer.current?.isFocused()) {
+      composer.current.selectAll();
+      return;
+    }
+    const data = encodeChord(chord);
+    if (data !== null) sendInput(data);
+  });
+
+  // A character typed on the soft keyboard into the composer while Ctrl/Alt is latched on the key row.
+  const onComposerLatchedKey = (typed: string) => {
+    if (
+      mods.ctrl &&
+      !mods.alt &&
+      isSelectAll({ key: typed, ctrl: true, alt: false, meta: false })
+    ) {
+      composer.current?.selectAll();
+      setMods({ ctrl: false, alt: false });
+      return;
+    }
+    send(typed);
   };
 
   const onType = (next: string) => {
@@ -191,6 +225,9 @@ export function NativeTerminal({
 
       {isAgent ? (
         <PromptComposer
+          ref={composer}
+          modsLatched={mods.ctrl || mods.alt}
+          onLatchedKey={onComposerLatchedKey}
           paneId={paneId}
           transport={transport}
           enabled={canType}

@@ -1,6 +1,6 @@
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
-import { useRef, useState } from "react";
+import { useImperativeHandle, useRef, useState, type Ref } from "react";
 import { ActivityIndicator, Alert, TextInput, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -11,9 +11,16 @@ import { directManager } from "@/lib/direct";
 import { describeDirectError } from "@/lib/direct/describe";
 import { pasteImageDirect } from "@/lib/direct/paste-image";
 import type { PaneTransport } from "@/lib/direct/transport-choice";
-import { insertPath } from "@/lib/terminal-keys";
+import { insertedText, insertPath } from "@/lib/terminal-keys";
+
+/** What the pane screen does to the draft on a chord: Ctrl+A selects all of it. */
+export interface PromptComposerHandle {
+  selectAll: () => void;
+  isFocused: () => boolean;
+}
 
 interface PromptComposerProps {
+  ref?: Ref<PromptComposerHandle>;
   paneId: string;
   enabled: boolean;
   /** The road the pane is on: images go to the computer by the same road. */
@@ -22,6 +29,12 @@ interface PromptComposerProps {
   onSend: (text: string) => boolean;
   /** Present when another viewer holds the keyboard: tapping the field takes it back. */
   onClaim?: () => void;
+  /**
+   * Ctrl or Alt is latched on the key row: the next typed character is a chord for the terminal,
+   * so it is taken out of the draft and handed here instead of being inserted.
+   */
+  modsLatched?: boolean;
+  onLatchedKey?: (typed: string) => void;
 }
 
 /**
@@ -32,16 +45,24 @@ interface PromptComposerProps {
  * does the same for pasted and dropped images).
  */
 export function PromptComposer({
+  ref,
   paneId,
   transport,
   enabled,
   onSend,
   onClaim,
+  modsLatched,
+  onLatchedKey,
 }: PromptComposerProps) {
   const { theme } = useUnistyles();
   const [text, setText] = useState("");
   const [uploading, setUploading] = useState(false);
   const caret = useRef(0);
+  const field = useRef<TextInput>(null);
+  useImperativeHandle(ref, () => ({
+    selectAll: () => field.current?.setSelection(0, text.length),
+    isFocused: () => field.current?.isFocused() ?? false,
+  }));
   const canSend = enabled && !uploading && text.trim().length > 0;
 
   const send = () => {
@@ -99,8 +120,16 @@ export function PromptComposer({
     <View style={styles.bar}>
       <View style={styles.box}>
         <TextInput
+          ref={field}
           value={text}
           onChangeText={(next) => {
+            const typed = modsLatched ? insertedText(text, next) : null;
+            if (typed !== null) {
+              // A chord for the terminal, not text: put the draft back as it was.
+              field.current?.setNativeProps({ text });
+              onLatchedKey?.(typed);
+              return;
+            }
             setText(next);
             caret.current = next.length;
           }}

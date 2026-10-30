@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   charWidth,
   chunkSpan,
+  isIconGlyph,
   paletteColor,
   parseRow,
   resolveColors,
@@ -41,11 +42,11 @@ describe("parseRow", () => {
     expect(row.spans).toHaveLength(1);
     expect(row.spans[0]).toMatchObject({ text: "hello", fg: null, bg: null, cells: 5 });
     expect(row.cells).toBe(5);
-    expect(row.hasWide).toBe(false);
+    expect(row.needsGrid).toBe(false);
   });
 
   test("empty input yields no spans", () => {
-    expect(parseRow("")).toEqual({ spans: [], cells: 0, hasWide: false });
+    expect(parseRow("")).toEqual({ spans: [], cells: 0, needsGrid: false });
     expect(parseRow(`${ESC}[0m`).spans).toEqual([]);
   });
 
@@ -153,7 +154,7 @@ describe("parseRow", () => {
   test("wide characters count two cells and flag the row", () => {
     const row = parseRow("a漢字b");
     expect(row.cells).toBe(6);
-    expect(row.hasWide).toBe(true);
+    expect(row.needsGrid).toBe(true);
     expect(row.spans[0]?.text).toBe("a漢字b");
   });
 
@@ -246,6 +247,17 @@ describe("colour resolution", () => {
   });
 });
 
+describe("isIconGlyph", () => {
+  test("private-use ranges only", () => {
+    expect(isIconGlyph(0xe000)).toBe(true);
+    expect(isIconGlyph(0xf8ff)).toBe(true);
+    expect(isIconGlyph(0xf0000)).toBe(true);
+    expect(isIconGlyph(0xdfff)).toBe(false);
+    expect(isIconGlyph(0xf900)).toBe(false);
+    expect(isIconGlyph(0x41)).toBe(false);
+  });
+});
+
 describe("chunkSpan", () => {
   test("narrow runs stay together; each wide char is its own two-cell chunk", () => {
     const span = parseRow("ab漢字cd").spans[0]!;
@@ -260,6 +272,22 @@ describe("chunkSpan", () => {
   test("zero-width marks join the preceding chunk", () => {
     const span = parseRow("e\u0301x").spans[0]!;
     expect(chunkSpan(span)).toEqual([{ text: "e\u0301x", cells: 2 }]);
+  });
+
+  test("Nerd Font icons are one-cell chunks of their own, in the symbols font", () => {
+    const span = parseRow("a\ue0b0 \udb80\udc00b").spans[0]!;
+    expect(chunkSpan(span)).toEqual([
+      { text: "a", cells: 1 },
+      { text: "\ue0b0", cells: 1, icon: true },
+      { text: " ", cells: 1 },
+      { text: "\u{f0000}", cells: 1, icon: true },
+      { text: "b", cells: 1 },
+    ]);
+  });
+
+  test("a row with an icon needs the grid layout, a plain one does not", () => {
+    expect(parseRow("x\uf013y").needsGrid).toBe(true);
+    expect(parseRow("plain").needsGrid).toBe(false);
   });
 
   test("chunk cells add up to the span's cells", () => {

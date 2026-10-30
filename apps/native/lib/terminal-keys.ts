@@ -30,6 +30,62 @@ export function controlChar(char: string): string | null {
   return code >= 0x40 && code <= 0x5f ? String.fromCharCode(code & 0x1f) : null;
 }
 
+/** Ctrl chords on keys whose character is not in @A-Z[\\]^_ but which terminals still map. */
+const CTRL_ALIASES: Readonly<Record<string, string>> = {
+  " ": "\x00",
+  "2": "\x00",
+  "6": "\x1e",
+  "-": "\x1f",
+  "/": "\x1f",
+};
+
+/** A key press as a hardware keyboard reports it: the key's base character plus held modifiers. */
+export interface KeyChord {
+  /** One character ("a", "[", " ") or "Backspace". */
+  key: string;
+  ctrl: boolean;
+  alt: boolean;
+  meta: boolean;
+}
+
+/**
+ * The bytes a terminal sends for a chord with Ctrl, Alt or Meta held: Ctrl turns the key into
+ * its control byte (^A..^Z, ^[, ^\\, ^], ^^, ^_), Alt and Meta prefix ESC. Null when the chord has
+ * no terminal form (Ctrl+5), so nothing is sent.
+ */
+export function encodeChord({ key, ctrl, alt, meta }: KeyChord): string | null {
+  let base: string | null;
+  if (key === "Backspace") base = ctrl ? "\x08" : KEY_DATA.backspace;
+  else if (Array.from(key).length !== 1) return null;
+  else if (ctrl) base = controlChar(key) ?? CTRL_ALIASES[key] ?? null;
+  else base = key;
+  if (base === null) return null;
+  return alt || meta ? `\x1b${base}` : base;
+}
+
+/** Ctrl+A alone: select all in a text field, as on every desktop. */
+export function isSelectAll({ key, ctrl, alt, meta }: KeyChord): boolean {
+  return ctrl && !alt && !meta && key.toLowerCase() === "a";
+}
+
+/**
+ * What a text field gained between two values when the change is a pure insertion
+ * (nothing deleted or replaced); null for any other edit.
+ */
+export function insertedText(prev: string, next: string): string | null {
+  if (next.length <= prev.length) return null;
+  let start = 0;
+  while (start < prev.length && prev[start] === next[start]) start++;
+  let tail = 0;
+  while (
+    tail < prev.length - start &&
+    prev[prev.length - 1 - tail] === next[next.length - 1 - tail]
+  ) {
+    tail++;
+  }
+  return start + tail === prev.length ? next.slice(start, next.length - tail) : null;
+}
+
 /**
  * Fold sticky Ctrl/Alt into outgoing data. Like a physical keyboard, a
  * modifier acts on the first key only: Ctrl turns a letter into its control

@@ -164,8 +164,10 @@ export function tmuxKeyName(key: string): string {
   const k = key.toLowerCase();
   const named = NAMED_KEYS[k];
   if (named) return named;
-  const ctrl = /^ctrl\+([a-z\\])$/.exec(k);
+  const ctrl = /^ctrl\+([a-z\\\]^_])$/.exec(k);
   if (ctrl) return `C-${ctrl[1]}`;
+  const alt = /^(ctrl\+)?alt\+([^\s+]|backspace)$/.exec(k);
+  if (alt) return `${alt[1] ? "C-" : ""}M-${alt[2] === "backspace" ? "BSpace" : alt[2]}`;
   throw new Error(`tmux: unsupported key "${key}"`);
 }
 

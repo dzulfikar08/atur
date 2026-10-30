@@ -72,15 +72,20 @@ export const TerminalRow = memo(function TerminalRow({
     >
       {/* Touches resolve to the Pressable itself, so locationX is relative to the row. */}
       <View pointerEvents="none" style={styles.line}>
-        {row.hasWide ? (
-          // Double-width glyphs from a fallback font are not exactly two cells
-          // wide, so every chunk is pinned to its cell count to keep columns true.
+        {row.needsGrid ? (
+          // Double-width glyphs from a fallback font are not exactly two cells wide, and icon
+          // glyphs come from the symbols font, so every chunk is pinned to its cell count to keep
+          // columns true.
           row.spans.flatMap((span, s) =>
             chunkSpan(span).map((chunk, c) => (
               <Text
                 key={`${s}:${c}`}
                 numberOfLines={1}
-                style={[spanStyle(span, metrics), { width: chunk.cells * cellWidth }]}
+                style={[
+                  spanStyle(span, metrics),
+                  chunk.icon && styles.icon,
+                  { width: chunk.cells * cellWidth },
+                ]}
               >
                 {chunk.text}
               </Text>
@@ -116,5 +121,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   bold: { fontFamily: theme.fonts.monoBold },
   italic: { fontStyle: "italic" },
+  // JetBrains Mono stays primary; icon glyphs (Nerd Font private-use area) come from the symbols font.
+  icon: { fontFamily: theme.fonts.symbols, fontWeight: "normal" },
   underline: { textDecorationLine: "underline" },
 }));

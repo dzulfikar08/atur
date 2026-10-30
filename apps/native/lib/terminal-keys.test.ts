@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
-import { applyModifiers, controlChar, insertPath, KEY_DATA, swipeSteps } from "./terminal-keys";
+import {
+  applyModifiers,
+  controlChar,
+  encodeChord,
+  insertedText,
+  insertPath,
+  isSelectAll,
+  KEY_DATA,
+  swipeSteps,
+} from "./terminal-keys";
 import { clampFontSize, DEFAULT_FONT_SIZE, fitFontSize, gridForViewport } from "./terminal-metrics";
 
 const none = { ctrl: false, alt: false };
@@ -97,5 +106,78 @@ describe("font size", () => {
     // The rendered row width TerminalView uses must not exceed the view.
     expect(Math.ceil(grid.cols * 11 * 0.6 * 1.03) + 12).toBeLessThanOrEqual(393);
     expect(gridForViewport(0, 0, 11)).toEqual({ cols: 0, rows: 0 });
+  });
+});
+
+const chord = (
+  key: string,
+  mods: Partial<{ ctrl: boolean; alt: boolean; meta: boolean }> = {},
+) => ({
+  key,
+  ctrl: false,
+  alt: false,
+  meta: false,
+  ...mods,
+});
+
+describe("encodeChord", () => {
+  test("Ctrl+letter is the control byte, for every letter", () => {
+    for (let i = 0; i < 26; i++) {
+      const letter = String.fromCharCode(0x61 + i);
+      expect(encodeChord(chord(letter, { ctrl: true }))).toBe(String.fromCharCode(i + 1));
+    }
+    expect(encodeChord(chord("A", { ctrl: true }))).toBe("\x01");
+  });
+
+  test("Ctrl on the punctuation range: ^[ ^\\ ^] ^^ ^_ and NUL", () => {
+    expect(encodeChord(chord("[", { ctrl: true }))).toBe("\x1b");
+    expect(encodeChord(chord("\\", { ctrl: true }))).toBe("\x1c");
+    expect(encodeChord(chord("]", { ctrl: true }))).toBe("\x1d");
+    expect(encodeChord(chord("^", { ctrl: true }))).toBe("\x1e");
+    expect(encodeChord(chord("6", { ctrl: true }))).toBe("\x1e");
+    expect(encodeChord(chord("_", { ctrl: true }))).toBe("\x1f");
+    expect(encodeChord(chord("-", { ctrl: true }))).toBe("\x1f");
+    expect(encodeChord(chord(" ", { ctrl: true }))).toBe("\x00");
+  });
+
+  test("Alt and Meta prefix ESC", () => {
+    expect(encodeChord(chord("b", { alt: true }))).toBe("\x1bb");
+    expect(encodeChord(chord("f", { meta: true }))).toBe("\x1bf");
+    expect(encodeChord(chord("Backspace", { alt: true }))).toBe("\x1b\x7f");
+  });
+
+  test("Ctrl+Alt is ESC then the control byte", () => {
+    expect(encodeChord(chord("d", { ctrl: true, alt: true }))).toBe("\x1b\x04");
+  });
+
+  test("a Ctrl chord with no terminal form sends nothing", () => {
+    expect(encodeChord(chord("5", { ctrl: true }))).toBeNull();
+    expect(encodeChord(chord("Enter", { ctrl: true }))).toBeNull();
+  });
+});
+
+describe("isSelectAll", () => {
+  test("only plain Ctrl+A", () => {
+    expect(isSelectAll(chord("a", { ctrl: true }))).toBe(true);
+    expect(isSelectAll(chord("A", { ctrl: true }))).toBe(true);
+    expect(isSelectAll(chord("a"))).toBe(false);
+    expect(isSelectAll(chord("a", { ctrl: true, alt: true }))).toBe(false);
+    expect(isSelectAll(chord("b", { ctrl: true }))).toBe(false);
+  });
+});
+
+describe("insertedText", () => {
+  test("a pure insertion anywhere is returned", () => {
+    expect(insertedText("", "a")).toBe("a");
+    expect(insertedText("bc", "bca")).toBe("a");
+    expect(insertedText("bc", "abc")).toBe("a");
+    expect(insertedText("bc", "bxc")).toBe("x");
+  });
+
+  test("deletions and replacements are not insertions", () => {
+    expect(insertedText("abc", "ab")).toBeNull();
+    expect(insertedText("abc", "axc")).toBeNull();
+    expect(insertedText("abc", "abc")).toBeNull();
+    expect(insertedText("abc", "xyzw")).toBeNull();
   });
 });

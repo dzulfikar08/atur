@@ -324,7 +324,25 @@ const SIMPLE_KEYS: [string, string[]][] = [
   ["\x04", ["ctrl+d"]],
   ["\x1a", ["ctrl+z"]],
   ["\x1c", ["ctrl+\\"]],
+  ["\x1d", ["ctrl+]"]],
+  ["\x1e", ["ctrl+^"]],
+  ["\x1f", ["ctrl+_"]],
 ];
+
+/**
+ * The key combo for the character that follows an ESC byte: Alt+letter/symbol, Alt+Ctrl+letter,
+ * Alt+Backspace. Null for anything else (a bare ESC key press); "[" and "O" are left to the
+ * escape-sequence parser, so an unfinished sequence stays a plain esc.
+ */
+function altKey(next: string | undefined): string | null {
+  if (next === undefined || next === "[" || next === "O") return null;
+  const code = next.charCodeAt(0);
+  if (code === 0x7f) return "alt+backspace";
+  if (code >= 1 && code <= 26 && next !== "\t" && next !== "\r" && next !== "\n" && next !== "\b") {
+    return `ctrl+alt+${String.fromCharCode(96 + code)}`;
+  }
+  return code > 0x20 && code < 0x7f ? `alt+${next}` : null;
+}
 
 /** CSI/SS3 final byte → herdr key combo. Params (modifiers, repeats) are
  *  intentionally degraded: a remote viewer gets plain keys. */
@@ -397,8 +415,15 @@ export function translateInput(data: string): InputSegment[] {
         if (keys) segments.push({ keys });
         i += m[0].length + 1; // matched body + the ESC byte itself
       } else {
-        segments.push({ keys: ["esc"] });
-        i += 1;
+        // ESC then one key is Alt (Meta) + that key, as the app sends it for a latched Alt.
+        const alt = altKey(data[i + 1]);
+        if (alt) {
+          segments.push({ keys: [alt] });
+          i += 2;
+        } else {
+          segments.push({ keys: ["esc"] });
+          i += 1;
+        }
       }
       continue;
     }

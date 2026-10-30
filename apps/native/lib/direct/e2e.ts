@@ -5,6 +5,7 @@ import {
   type DirectPaneHandle,
 } from "@/lib/direct";
 import { parseRow, rowText } from "@/lib/ansi";
+import { applyModifiers } from "@/lib/terminal-keys";
 import { HISTORY_FULL_LINES, TerminalScreen } from "@/lib/terminal-screen";
 import type { DirectConnection } from "@/modules/atur-direct";
 
@@ -183,6 +184,20 @@ export async function runDirectE2E(
     await sleep(1200);
     await link0.setEchoMode("auto");
 
+    // 4b. Ctrl+A is ^A, as a terminal sends it: readline moves to the start of the line, so the
+    // "a" typed after it lands before "bc". The bytes are the ones the key row and a hardware
+    // keyboard produce (lib/terminal-keys); `cat` would not do, its line editing is the tty's.
+    step("ctrl-a");
+    pane.sendInput("bash -c 'read -e -r x; echo ctrl-a-got:$x'\r");
+    await sleep(1500);
+    pane.sendInput("bc");
+    pane.sendInput(applyModifiers("a", { ctrl: true, alt: false }));
+    pane.sendInput("a");
+    pane.sendInput("\r");
+    await waitFor("ctrl-a: the line read as abc", () =>
+      screenText(screen).some((line) => line.trim() === "ctrl-a-got:abc"),
+    );
+
     // 5. Background and foreground: the host presses Home, waits, and brings the app back.
     step("background");
     const cyclesBefore = appCycles();
@@ -228,6 +243,15 @@ export async function runDirectE2E(
     );
     if (history.rows.length < 5 || history.visible < 1) throw new Error("history came back empty");
     record("history_rows", history.rows.length);
+
+    // Nerd Font icons in the last rows of the pane: phase 2 opens this session in the app and
+    // screenshots it, which shows the symbols font drawing them (no boxes).
+    step("glyphs");
+    await typeAndSee(
+      "echo '\ue0b0 \uf013 \uf09b \uf07b \uf121 \u{f0e7b} glyphs'",
+      "\ue0b0 \uf013 \uf09b \uf07b \uf121 \u{f0e7b} glyphs",
+      "icon glyphs",
+    );
 
     // The session stays on the computer: the host's second phase (scripts/e2e-direct-android.sh)
     // opens it from the Direct area of a freshly installed app.

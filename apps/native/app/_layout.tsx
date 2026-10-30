@@ -49,6 +49,7 @@ export default function RootLayout() {
     Manrope_800ExtraBold,
     JetBrainsMono_500Medium,
     JetBrainsMono_700Bold,
+    SymbolsNerdFontMono: require("../assets/fonts/SymbolsNerdFontMono-Regular.ttf"),
   });
   const pathname = usePathname();
 

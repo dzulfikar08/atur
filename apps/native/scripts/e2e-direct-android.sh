@@ -156,14 +156,30 @@ open_link() {
 
 # One key at a time: the soft keyboard's composing text doubles characters when `input text` injects
 # a whole string faster than the app's text field settles.
-type_command() {
-  local command='echo tap-pair-ok' char i
+type_text() {
+  local command="$1" char i
   for ((i = 0; i < ${#command}; i++)); do
     char="${command:i:1}"
     [ "$char" = " " ] && char='%s'
     adb shell input text "$char" || return 1
     sleep 0.25
   done
+}
+
+type_command() {
+  type_text 'echo tap-pair-ok' || return 1
+  adb shell input keyevent 66
+}
+
+# A hardware Ctrl+A (the keyboard's own chord, not the key row's Ctrl): the terminal must get ^A, so
+# readline moves to the start of the line and the "e" and "c" typed after it make `echo` of what
+# was typed before it. If the keystroke went to the text field instead, the line stays
+# `hoecctrla-ok` and bash finds no such command.
+ctrl_a_check() {
+  type_text 'ho ctrla-ok' || return 1
+  adb shell input keycombination KEYCODE_CTRL_LEFT KEYCODE_A || return 1
+  sleep 0.5
+  type_text 'ec' || return 1
   adb shell input keyevent 66
 }
 
@@ -191,6 +207,9 @@ phase2() {
   must "type a command" type_command || return 1
   must "the command's output is on screen" ui wait-line "tap-pair-ok" 30 || return 1
   shot phase2-terminal
+  must "a hardware Ctrl+A reaches the terminal as ^A (cursor to line start)" ctrl_a_check || return 1
+  must "the line ran as echo, so the cursor had moved to the start" ui wait-line "ctrla-ok" 30 || return 1
+  shot phase2-ctrl-a
 }
 
 PHASE2_STATUS=0

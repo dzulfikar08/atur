@@ -26,8 +26,8 @@ export interface ParsedRow {
   spans: Span[];
   /** Total cells across all spans. */
   cells: number;
-  /** True when any span holds a double-width character. */
-  hasWide: boolean;
+  /** True when any span holds a double-width character or an icon glyph: the row needs per-cell layout. */
+  needsGrid: boolean;
 }
 
 const DEFAULT_STYLE: SpanStyle = {
@@ -78,6 +78,14 @@ export function charWidth(cp: number): number {
     return 2;
   }
   return 1;
+}
+
+/**
+ * Private-use code points: where Nerd Font icons live (U+E000-U+F8FF and the supplementary
+ * planes from U+F0000). No text font has them; the symbols font draws them.
+ */
+export function isIconGlyph(cp: number): boolean {
+  return (cp >= 0xe000 && cp <= 0xf8ff) || cp >= 0xf0000;
 }
 
 /** Cells a string occupies. */
@@ -211,7 +219,7 @@ export function parseRow(input: string): ParsedRow {
   let text = "";
   let textCellCount = 0;
   let cells = 0;
-  let hasWide = false;
+  let needsGrid = false;
   let column = 0;
 
   const flush = () => {
@@ -229,7 +237,7 @@ export function parseRow(input: string): ParsedRow {
   };
 
   const emit = (ch: string, width: number) => {
-    if (width === 2) hasWide = true;
+    if (width === 2 || isIconGlyph(ch.codePointAt(0) ?? 0)) needsGrid = true;
     text += ch;
     textCellCount += width;
     column += width;
@@ -297,7 +305,7 @@ export function parseRow(input: string): ParsedRow {
     i += ch.length;
   }
   flush();
-  return { spans, cells, hasWide };
+  return { spans, cells, needsGrid };
 }
 
 function sameStyle(a: SpanStyle, b: SpanStyle): boolean {
@@ -323,12 +331,15 @@ export function rowText(row: ParsedRow): string {
 export interface CellChunk {
   text: string;
   cells: number;
+  /** One icon glyph, drawn with the symbols font. */
+  icon?: true;
 }
 
 /**
  * Split a span into chunks that each own a fixed number of cells: runs of
  * single-width characters stay together, every double-width character stands
- * alone, and zero-width marks join the character before them. Rendering each
+ * alone, every icon glyph stands alone (one cell, in the symbols font), and zero-width marks join
+ * the character before them. Rendering each
  * chunk at `cells * cellWidth` keeps columns aligned even though a fallback
  * font's CJK/emoji glyph is not exactly two monospace cells wide.
  */
@@ -336,7 +347,13 @@ export function chunkSpan(span: Span): CellChunk[] {
   const chunks: CellChunk[] = [];
   let run: CellChunk | null = null;
   for (const ch of span.text) {
-    const width = charWidth(ch.codePointAt(0) ?? 0);
+    const cp = ch.codePointAt(0) ?? 0;
+    const width = charWidth(cp);
+    if (isIconGlyph(cp)) {
+      run = null;
+      chunks.push({ text: ch, cells: 1, icon: true });
+      continue;
+    }
     if (width === 0) {
       const last = chunks[chunks.length - 1];
       if (last) last.text += ch;

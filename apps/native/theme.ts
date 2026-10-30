@@ -57,6 +57,8 @@ const scale = {
     heavy: "Manrope_800ExtraBold",
     mono: "JetBrainsMono_500Medium",
     monoBold: "JetBrainsMono_700Bold",
+    /** Icon glyphs (Nerd Font private-use area) the terminal text font lacks. */
+    symbols: "SymbolsNerdFontMono",
   },
 } as const;
 
