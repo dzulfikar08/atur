@@ -168,7 +168,7 @@ export class FakeLink implements DirectLink {
   readonly inputs: { session: string; data: string }[] = [];
   readonly pastes: { session: string; text: string; submit: boolean }[] = [];
   readonly resizes: { session: string; cols: number; rows: number }[] = [];
-  historyRows: HistoryReply = { rows: [], visible: 0 };
+  historyRows: HistoryReply = { rows: [], visible: 0, prompts: [] };
   /** The `lines` of every `history` call; an error in `historyError` rejects them. */
   readonly historyAsked: number[] = [];
   historyError: DirectError | null = null;

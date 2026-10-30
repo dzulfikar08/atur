@@ -11,7 +11,7 @@ export interface DirectPaneHandlers {
   onHello?: (pane: { cols: number; rows: number; keyboard: boolean }) => void;
   onSnapshot?: (ansi: string) => void;
   onDiff?: (rows: [number, string][]) => void;
-  onHistory?: (rows: string[], visible?: number) => void;
+  onHistory?: (rows: string[], visible?: number, prompts?: number[]) => void;
   /** A `requestHistory` was answered with an error: its reply is never coming. */
   onHistoryFailed?: () => void;
   onGeometry?: (size: { cols: number; rows: number }) => void;
@@ -127,7 +127,8 @@ export function openDirectPane(
       link
         .history(sessionId, lines)
         .then((reply) => {
-          if (!closed && link === current) handlers.onHistory?.(reply.rows, reply.visible);
+          if (!closed && link === current)
+            handlers.onHistory?.(reply.rows, reply.visible, reply.prompts);
         })
         .catch(() => {
           if (!closed && link === current) handlers.onHistoryFailed?.();

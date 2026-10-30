@@ -142,7 +142,7 @@ export function PaneScreen({ paneId }: { paneId: string }) {
       screen.snapshot(ansi);
     },
     onDiff: (rows) => screen.diff(rows),
-    onHistory: (rows, visible) => screen.setHistory(rows, visible),
+    onHistory: (rows, visible, prompts) => screen.setHistory(rows, visible, prompts),
     onHistoryFailed: () => screen.historyFailed(),
     onGeometry: ({ cols, rows }) => {
       const reflowed = screen.getState().cols !== cols;

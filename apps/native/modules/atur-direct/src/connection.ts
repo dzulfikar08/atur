@@ -182,7 +182,10 @@ export class DirectConnection {
 
   /** The last `lines` rows including scrollback, as ANSI. */
   history(session: string, lines: number): Promise<HistoryReply> {
-    return this.call("history", { session, lines });
+    return this.call<Omit<HistoryReply, "prompts"> & { prompts?: unknown }>("history", {
+      session,
+      lines,
+    }).then((reply) => ({ ...reply, prompts: parsePrompts(reply.prompts, reply.rows.length) }));
   }
 
   /**
@@ -324,6 +327,24 @@ export function parseRoute(value: unknown): DirectRoute | null {
 export function parseAddresses(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((host): host is string => typeof host === "string" && host !== "");
+}
+
+/**
+ * The core's `prompts` of a `history` reply of `rowCount` rows: ascending row indices inside the
+ * reply, anything else dropped. An older core sends none.
+ */
+export function parsePrompts(value: unknown, rowCount: number): number[] {
+  if (!Array.isArray(value)) return [];
+  const found: number[] = [];
+  let last = -1;
+  for (const row of value) {
+    if (typeof row !== "number" || !Number.isInteger(row) || row <= last || row >= rowCount) {
+      continue;
+    }
+    found.push(row);
+    last = row;
+  }
+  return found;
 }
 
 /** The credential with the transport preference merged in; the core ignores what it does not know. */

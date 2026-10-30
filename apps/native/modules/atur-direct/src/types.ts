@@ -98,6 +98,11 @@ export interface HistoryReply {
   rows: string[];
   /** How many trailing rows are the visible grid. */
   visible: number;
+  /**
+   * Ascending indices into `rows` where a user prompt starts. Always an array: empty when the core
+   * is older than the field (or the pane has no prompt marks).
+   */
+  prompts: number[];
 }
 
 export interface ActivityEvent {

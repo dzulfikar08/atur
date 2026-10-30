@@ -6,6 +6,8 @@ import {
   HISTORY_MAX_LINES,
   HISTORY_OLDER_STEP,
   HISTORY_TOP_UP_LINES,
+  nextPrompt,
+  previousPrompt,
   rowsAfter,
   rowsBefore,
   TerminalScreen,
@@ -23,6 +25,8 @@ describe("TerminalScreen", () => {
       lines: ["one", "two", "three"],
       history: [],
       historyBase: 0,
+      prompts: [],
+      historyReplies: 0,
     });
   });
 });
@@ -242,6 +246,95 @@ describe("paged scrollback", () => {
     screen.setHistory([...rowsNumbered(500, 2000), "g1", "g2"], 2);
     screen.loadHistory("full");
     expect(asked.at(-1)).toBe(2000 + 2 + HISTORY_TOP_UP_LINES);
+  });
+});
+
+describe("prompt rows", () => {
+  test("the first read keeps the prompts as absolute rows, scrollback and visible grid", () => {
+    const { screen } = wired("now");
+    screen.loadHistory("full");
+    screen.setHistory(["r1", "r2", "r3", "now"], 1, [1, 3]);
+    const state = screen.getState();
+    // r2 is history[1]; "now" is the grid's first row, one past the three scrollback rows.
+    expect(state.prompts).toEqual([state.historyBase + 1, state.historyBase + 3]);
+    expect(previousPrompt(state, state.historyBase + 3)).toBe(state.historyBase + 1);
+    expect(nextPrompt(state, state.historyBase + 1)).toBe(state.historyBase + 3);
+  });
+
+  test("a reply without prompts (an older core) or with bad ones leaves none", () => {
+    const { screen } = wired("now");
+    screen.loadHistory("full");
+    screen.setHistory(["r1", "r2", "now"], 1);
+    expect(screen.getState().prompts).toEqual([]);
+    screen.loadHistory("replace");
+    screen.setHistory(["r1", "r2", "now"], 1, [2, 1, 1, -1, 3, 0.5]);
+    expect(screen.getState().prompts).toHaveLength(1);
+  });
+
+  test("a top-up keeps the older prompts and replaces the ones in the window it covers", () => {
+    const { screen } = wired("now");
+    screen.loadHistory("full");
+    screen.setHistory(["r1", "r2", "r3", "now"], 1, [0, 3]);
+    const base = screen.getState().historyBase;
+    expect(screen.getState().prompts).toEqual([base, base + 3]);
+    screen.loadHistory("top-up");
+    // r4 and r5 scrolled off since; r4 holds the prompt that was on the grid ("now") and is again.
+    screen.setHistory(["r1", "r2", "r3", "r4", "r5", "now"], 1, [0, 3, 5]);
+    const after = screen.getState();
+    expect(after.historyBase).toBe(base);
+    expect(after.history).toEqual(["r1", "r2", "r3", "r4", "r5"]);
+    expect(after.prompts).toEqual([base, base + 3, base + 5]);
+  });
+
+  test("a top-up that adds no row still refreshes the prompts of the grid", () => {
+    const { screen } = wired("now");
+    screen.loadHistory("full");
+    screen.setHistory(["r1", "r2", "r3", "now"], 1, [0]);
+    const before = screen.getState();
+    screen.loadHistory("top-up");
+    screen.setHistory(["r1", "r2", "r3", "now"], 1, [0, 3]);
+    const after = screen.getState();
+    expect(after.history).toBe(before.history);
+    expect(after.prompts).toEqual([before.historyBase, before.historyBase + 3]);
+    expect(after.historyReplies).toBe(before.historyReplies + 1);
+  });
+
+  test("older rows come in above with their prompts, and the loaded prompts keep their rows", () => {
+    const { screen } = wired("g1\r\ng2");
+    screen.loadHistory("full");
+    screen.setHistory([...rowsNumbered(1500, 998), "g1", "g2"], 2, [10, 998]);
+    const before = screen.getState();
+    expect(before.prompts).toEqual([before.historyBase + 10, before.historyBase + 998]);
+    expect(screen.hasOlder()).toBe(true);
+    screen.loadOlder();
+    // 2 rows scrolled off meanwhile: the grid now begins 2 rows lower.
+    screen.setHistory([...rowsNumbered(500, 2000), "g1", "g2"], 2, [5, 1010, 2000]);
+    const after = screen.getState();
+    expect(after.history[1010]).toBe("row1510");
+    expect(after.prompts).toEqual([
+      after.historyBase + 5,
+      before.historyBase + 10,
+      after.historyBase + 2000,
+    ]);
+  });
+
+  test("hasOlder is false before anything is loaded and once the start is in", () => {
+    const { screen } = wired("now");
+    expect(screen.hasOlder()).toBe(false);
+    screen.loadHistory("full");
+    screen.setHistory(["r1", "now"], 1);
+    expect(screen.hasOlder()).toBe(false);
+  });
+
+  test("a read that cannot be placed starts the prompts over with its rows", () => {
+    const { screen } = wired("now");
+    screen.loadHistory("full");
+    screen.setHistory(["r1", "r2", "r3", "now"], 1, [0, 3]);
+    screen.loadHistory("replace");
+    screen.setHistory(["x1", "x2", "now"], 1, [1]);
+    const state = screen.getState();
+    expect(state.history).toEqual(["x1", "x2"]);
+    expect(state.prompts).toEqual([state.historyBase + 1]);
   });
 });
 

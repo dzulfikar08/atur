@@ -20,6 +20,13 @@ export interface ScreenState {
    * key on it and the rows being read never shift.
    */
   historyBase: number;
+  /**
+   * Absolute rows (the numbering of `historyBase`) where a user prompt starts, ascending: the
+   * scrollback and the visible grid as of the last read. Empty when the computer reports none.
+   */
+  prompts: readonly number[];
+  /** `history` replies taken so far: one that changes nothing else still moves this. */
+  historyReplies: number;
 }
 
 /** How a scrollback request is meant: see `TerminalScreen.loadHistory`. */
@@ -98,6 +105,73 @@ export function rowsBefore(loaded: readonly string[], incoming: readonly string[
   return null;
 }
 
+/** One past the last absolute row: the scrollback and the visible grid together. */
+function endRow(state: Pick<ScreenState, "history" | "historyBase" | "lines">): number {
+  return state.historyBase + state.history.length + state.lines.length;
+}
+
+/** The newest prompt that starts above `fromRow` (an absolute row), or null. */
+export function previousPrompt(
+  state: Pick<ScreenState, "history" | "historyBase" | "lines" | "prompts">,
+  fromRow: number,
+): number | null {
+  const { prompts } = state;
+  const end = endRow(state);
+  let low = 0;
+  let high = prompts.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (prompts[mid]! < fromRow) low = mid + 1;
+    else high = mid;
+  }
+  for (let i = low - 1; i >= 0; i--) {
+    const row = prompts[i]!;
+    if (row < end && row >= state.historyBase) return row;
+  }
+  return null;
+}
+
+/** The oldest prompt that starts below `fromRow` (an absolute row), or null. */
+export function nextPrompt(
+  state: Pick<ScreenState, "history" | "historyBase" | "lines" | "prompts">,
+  fromRow: number,
+): number | null {
+  const { prompts } = state;
+  const end = endRow(state);
+  let low = 0;
+  let high = prompts.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (prompts[mid]! <= fromRow) low = mid + 1;
+    else high = mid;
+  }
+  for (let i = low; i < prompts.length; i++) {
+    const row = prompts[i]!;
+    if (row >= state.historyBase && row < end) return row;
+  }
+  return null;
+}
+
+/**
+ * The prompt rows of a `history` reply as absolute rows: `rows` holds `count` rows and its first is
+ * absolute row `first`. Anything that is not an ascending index inside the reply is dropped (an
+ * older computer sends none).
+ */
+function promptRows(
+  prompts: readonly number[] | undefined,
+  count: number,
+  first: number,
+): number[] {
+  const found: number[] = [];
+  let last = -1;
+  for (const row of prompts ?? []) {
+    if (!Number.isInteger(row) || row <= last || row >= count) continue;
+    found.push(first + row);
+    last = row;
+  }
+  return found;
+}
+
 /** The frames a renderer must be able to replay, in the WebView page's vocabulary. */
 export type ScreenFrame =
   | { t: "hello"; cols: number; rows: number }
@@ -108,7 +182,15 @@ export type ScreenFrame =
 const MAX_ROWS = 1000;
 
 export class TerminalScreen {
-  private state: ScreenState = { cols: 80, rows: 24, lines: [], history: [], historyBase: 0 };
+  private state: ScreenState = {
+    cols: 80,
+    rows: 24,
+    lines: [],
+    history: [],
+    historyBase: 0,
+    prompts: [],
+    historyReplies: 0,
+  };
   private readonly stateListeners = new Set<() => void>();
   private readonly frameListeners = new Set<(frame: ScreenFrame) => void>();
   private helloSeen = false;
@@ -236,10 +318,15 @@ export class TerminalScreen {
       this.loadHistory("full");
       return;
     }
-    if (this.reachedStart) return;
-    const { history, lines } = this.state;
-    if (this.olderWindow() <= history.length + lines.length) return;
+    if (!this.hasOlder()) return;
     this.loadHistory("older");
+  }
+
+  /** Scrollback is loaded and a read for older rows would bring some. */
+  hasOlder(): boolean {
+    if (!this.historyLoaded || this.reachedStart) return false;
+    const { history, lines } = this.state;
+    return this.olderWindow() > history.length + lines.length;
   }
 
   /** A read failed (not a slow one: it is never coming): free the slot for the next. */
@@ -277,9 +364,10 @@ export class TerminalScreen {
    * Bridge `history` reply: the pane's last rows, ending with the visible
    * grid. `visible` is how many trailing rows that grid is (herdr trims its
    * trailing blank rows, so the grid height would cut real scrollback); older
-   * bridges omit it and the live row count stands in.
+   * bridges omit it and the live row count stands in. `prompts` are the indices in `rows` where a
+   * user prompt starts (absent from older computers).
    */
-  setHistory(rows: readonly string[], visible?: number): void {
+  setHistory(rows: readonly string[], visible?: number, prompts?: readonly number[]): void {
     const request = this.inFlight ?? { lines: HISTORY_FULL_LINES, mode: "full" as const, at: 0 };
     scrollTrace("history_reply", {
       mode: request.mode,
@@ -288,6 +376,7 @@ export class TerminalScreen {
       took: request.at ? Date.now() - request.at : -1,
     });
     this.inFlight = null;
+    const historyReplies = this.state.historyReplies + 1;
     const cut = Math.min(rows.length, Math.max(0, visible ?? this.state.lines.length));
     const scrollback = rows.slice(0, rows.length - cut);
     // Fewer rows than asked for: this is all the scrollback the pane has.
@@ -308,39 +397,62 @@ export class TerminalScreen {
         : null;
 
     if (reach !== null) {
-      // Same rows keep the same identity: the base moves down by what was put before them.
+      // Same rows keep the same identity: the base moves down by what was put before them. The
+      // window holds everything loaded, so its prompts replace the ones kept.
+      const historyBase = this.state.historyBase - reach;
       this.set({
         ...this.state,
         history: scrollback,
-        historyBase: this.state.historyBase - reach,
+        historyBase,
+        prompts: promptRows(prompts, rows.length, historyBase),
+        historyReplies,
       });
     } else if (added) {
-      if (added.length > 0) this.append(added);
+      // The window's first row sits where the loaded rows' end, less what overlaps, puts it.
+      const { history, historyBase } = this.state;
+      const first = historyBase + history.length - (scrollback.length - added.length);
+      this.append(added, promptRows(prompts, rows.length, first), first, historyReplies);
     } else if (complete) {
       const { history, historyBase } = this.state;
       // Fresh identities: these rows are not the ones on screen before.
+      const fresh = historyBase + history.length + 1;
       this.set({
         ...this.state,
         history: scrollback,
-        historyBase: historyBase + history.length + 1,
+        historyBase: fresh,
+        prompts: promptRows(prompts, rows.length, fresh),
+        historyReplies,
       });
       this.historyLoaded = true;
     } else {
       // A top-up that no longer reaches what is loaded: read the whole window.
       this.queued = strongest(this.queued, "full");
+      this.set({ ...this.state, historyReplies });
     }
     if (this.queued) this.loadHistory(this.queued);
   }
 
-  private append(rows: readonly string[]): void {
-    let history = [...this.state.history, ...rows];
+  /**
+   * Put `rows` after the loaded scrollback. `fresh` are the prompts of the window the read
+   * covered, which starts at absolute row `from`: they replace the ones kept from there on.
+   */
+  private append(
+    rows: readonly string[],
+    fresh: readonly number[],
+    from: number,
+    historyReplies: number,
+  ): void {
+    let history = rows.length > 0 ? [...this.state.history, ...rows] : this.state.history;
     let historyBase = this.state.historyBase;
     const over = history.length - HISTORY_MAX_LINES;
     if (over > 0) {
       history = history.slice(over);
       historyBase += over;
     }
-    this.set({ ...this.state, history, historyBase });
+    const prompts = [...this.state.prompts.filter((row) => row < from), ...fresh].filter(
+      (row) => row >= historyBase,
+    );
+    this.set({ ...this.state, history, historyBase, prompts, historyReplies });
   }
 
   private set(next: ScreenState): void {

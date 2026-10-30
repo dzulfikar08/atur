@@ -161,7 +161,7 @@ test("claiming the keyboard does nothing", async () => {
 
 test("history comes from the connection and reaches onHistory", async () => {
   const link = new FakeLink();
-  link.historyRows = { rows: ["one", "two", "three"], visible: 2 };
+  link.historyRows = { rows: ["one", "two", "three"], visible: 2, prompts: [0] };
   const { handlers, calls } = recorder();
   const pane = openDirectPane(fakeManager(link), "12", handlers, SIZE);
   await flush();
@@ -169,7 +169,7 @@ test("history comes from the connection and reaches onHistory", async () => {
 
   pane.requestHistory(500);
   await flush();
-  expect(calls).toEqual([["history", ["one", "two", "three"], 2]]);
+  expect(calls).toEqual([["history", ["one", "two", "three"], 2, [0]]]);
 });
 
 test("the line count of a history request reaches the connection, and a failure is reported", async () => {

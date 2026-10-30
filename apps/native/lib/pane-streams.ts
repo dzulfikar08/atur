@@ -51,9 +51,10 @@ export interface PaneAttachHandlers {
   /**
    * Reply to `requestHistory`: the pane's last rows including scrollback (ANSI,
    * oldest first); `visible` = how many trailing rows are the visible grid
-   * (absent from older bridges).
+   * (absent from older bridges); `prompts` = indices in `rows` where a user prompt starts
+   * (direct road only: the account bridge sends none).
    */
-  onHistory?: (rows: string[], visible?: number) => void;
+  onHistory?: (rows: string[], visible?: number, prompts?: number[]) => void;
   /** A direct `requestHistory` failed (the bridge never fails one: it just stays silent). */
   onHistoryFailed?: () => void;
   /** The pane was re-laid out (another client became active, or the phone sizer attached). */
@@ -194,7 +195,8 @@ export function usePaneAttach(paneId: string, handlers: PaneAttachHandlers) {
         onHello: (pane) => handlersRef.current.onHello?.(pane),
         onSnapshot: (ansi) => handlersRef.current.onSnapshot?.(ansi),
         onDiff: (rows) => handlersRef.current.onDiff?.(rows),
-        onHistory: (rows, visible) => handlersRef.current.onHistory?.(rows, visible),
+        onHistory: (rows, visible, prompts) =>
+          handlersRef.current.onHistory?.(rows, visible, prompts),
         onHistoryFailed: () => handlersRef.current.onHistoryFailed?.(),
         onGeometry: (size) => handlersRef.current.onGeometry?.(size),
         onError: (message) => handlersRef.current.onError?.(message),

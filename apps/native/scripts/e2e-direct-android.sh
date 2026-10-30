@@ -21,14 +21,17 @@
 # removed at the end, also on failure.
 # Phase 4 is scrolling back in a pane that prints all the time, the way an agent on the main screen
 # does: the app pairs again (a fourth link) and plays the scroll scenario (`&scenario=scroll`): a
-# shell prints 2500 numbered rows (`row-N`) and then one `live-N` row per 100 ms. The scenario proves
+# shell prints 2500 numbered rows (`row-N`, a distinctive `msg-N` row after every 100 of them, each
+# marked as a prompt with OSC 133;A) and then one `live-N` row per 100 ms. The scenario proves
 # at the data level that the whole scrollback comes in order through the pane screen's own
 # TerminalScreen wiring, then opens the app's pane screen (`/direct-pane/<id>`) and logs `STEP ui`.
 # The host then swipes back with `adb shell input swipe` (12 swipes of 70% of the screen), reads the
 # rows off the screen with uiautomator (ui-assert.py) and needs: rows far back in the history on
 # screen (`scroll_rows_reached`), the same rows on screen for 5 s of live output
 # (`scroll_held_ms`), the start of the scrollback within reach of more swipes, and the jump-to-bottom
-# button bringing the live rows back, after which the view follows the output again.
+# button bringing the live rows back, after which the view follows the output again, and the
+# prompt buttons: "Previous prompt" brings a `msg-N` row to the top, again `msg-(N-1)`, and
+# "Next prompt" returns to `msg-N` (`STEP jump`, `jump_ok=1` in ui-assert.py).
 # Exit status is 0 only when phase 1 logs `ATUR_E2E RESULT PASS`, every check of phase 2 passes,
 # phase 3 logs `ATUR_E2E RESULT lossy PASS` and phase 4 logs `ATUR_E2E RESULT scroll PASS` and passes
 # every UI check.
@@ -366,6 +369,9 @@ phase4() {
   must "the jump-to-bottom button brings the live rows back and the view follows the output" \
     ui jump-to-bottom || return 1
   shot phase4-jumped
+  must "previous prompt, previous again and next prompt move between the msg-N rows, each at the top of the view" \
+    ui jump-prompt || return 1
+  shot phase4-prompts
   tail -n +"$P4_START" "$LOG" | grep -o "ATUR_E2E RESULT scroll.*" | tail -1 | tee -a "$PHASE4"
 }
 

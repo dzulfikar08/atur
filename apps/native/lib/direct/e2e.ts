@@ -5,8 +5,8 @@ import {
   type DirectPaneHandle,
 } from "@/lib/direct";
 import { parseRow, rowText } from "@/lib/ansi";
-import { applyModifiers } from "@/lib/terminal-keys";
-import { HISTORY_FULL_LINES, TerminalScreen } from "@/lib/terminal-screen";
+import { applyModifiers, editDraft } from "@/lib/terminal-keys";
+import { HISTORY_FULL_LINES, TerminalScreen, type ScreenState } from "@/lib/terminal-screen";
 import type { DirectConnection } from "@/modules/atur-direct";
 
 // The on-device proof run (CI, emulator): pairs with a real server through the real native module,
@@ -197,6 +197,20 @@ export async function runDirectE2E(
     await waitFor("ctrl-a: the line read as abc", () =>
       screenText(screen).some((line) => line.trim() === "ctrl-a-got:abc"),
     );
+
+    // 4c. The prompt composer edits its draft like a terminal line (Ctrl+A = start of line), then
+    // sends it as the pane code does: the draft "cho composer-ok" becomes "echo composer-ok".
+    step("composer-ctrl-a");
+    {
+      let draft = "cho composer-ok";
+      const edited = editDraft(draft, draft.length, "a");
+      if (!edited || edited.caret !== 0) throw new Error("Ctrl+A did not move to the line start");
+      draft = `e${edited.text}`;
+      if (!pane.sendInput(`${draft}\r`)) throw new Error("composer draft refused");
+      await waitFor("composer-ctrl-a: the edited draft ran", () =>
+        screenText(screen).some((line) => line.trim() === "composer-ok"),
+      );
+    }
 
     // 5. Background and foreground: the host presses Home, waits, and brings the app back.
     step("background");
@@ -470,9 +484,36 @@ export async function runLossyE2E(link: string, say: Say): Promise<E2EReport> {
 
 /** Rows the workload prints before it goes on to print `live-N` ten times a second. */
 export const SCROLL_PRINTED_ROWS = 2500;
+/**
+ * The workload also prints a `msg-N` row after every `SCROLL_MSG_EVERY` rows, each marked as a
+ * prompt (OSC 133;A) the way an agent marks the start of a user message: `msg-1` to `msg-25`
+ * spread across the scrollback, the targets of the prompt buttons in the pane screen.
+ */
+const SCROLL_MSG_EVERY = 100;
+const SCROLL_MSGS = SCROLL_PRINTED_ROWS / SCROLL_MSG_EVERY;
 const SCROLL_WORKLOAD =
-  `seq -f 'row-%g' 1 ${SCROLL_PRINTED_ROWS}; ` +
+  `n=0; while [ $n -lt ${SCROLL_MSGS} ]; do ` +
+  `seq -f 'row-%g' $((n*${SCROLL_MSG_EVERY}+1)) $((n*${SCROLL_MSG_EVERY}+${SCROLL_MSG_EVERY})); ` +
+  "n=$((n+1)); printf '\\033]133;A\\007msg-%s\\n' $n; done; " +
   'i=0; while :; do if [ ! -e /tmp/atur-live-pause ]; then i=$((i+1)); echo "live-$i"; fi; sleep 0.1; done';
+
+/** The text of absolute row `row` of the loaded scrollback and grid; empty when it is not loaded. */
+function textOfRow(state: ScreenState, row: number): string {
+  const index = row - state.historyBase;
+  const line =
+    index < state.history.length ? state.history[index] : state.lines[index - state.history.length];
+  return line === undefined ? "" : rowText(parseRow(line)).trim();
+}
+
+/** The numbers N of the `msg-N` rows the computer reports as prompts, in order. */
+function promptedMsgs(state: ScreenState): number[] {
+  const found: number[] = [];
+  for (const row of state.prompts) {
+    const match = /^msg-(\d+)$/.exec(textOfRow(state, row));
+    if (match) found.push(Number(match[1]));
+  }
+  return found;
+}
 
 /** The numbers of the rows named `<kind>-N` in `rows`, in the order they appear. */
 function numberedRows(rows: readonly string[], kind: "row" | "live"): number[] {
@@ -562,7 +603,7 @@ export async function runScrollE2E(
           screen.snapshot(ansi);
         },
         onDiff: (rows) => screen.diff(rows),
-        onHistory: (rows, visible) => screen.setHistory(rows, visible),
+        onHistory: (rows, visible, prompts) => screen.setHistory(rows, visible, prompts),
         onHistoryFailed: () => screen.historyFailed(),
       },
       { cols: 80, rows: 24 },
@@ -612,6 +653,21 @@ export async function runScrollE2E(
       throw new Error(
         `scrollback has ${rowsLoaded.length} of the ${SCROLL_PRINTED_ROWS} printed rows (row-1..row-N)`,
       );
+
+    // The prompt marks of the workload (OSC 133;A before every msg-N) come back with the history
+    // read as prompt rows, each on its msg-N row: what the pane screen's prompt buttons jump to.
+    step("prompts");
+    await until(
+      () =>
+        `the msg-N rows as prompts (${promptedMsgs(screen.getState()).length} of ${SCROLL_MSGS})`,
+      () => promptedMsgs(screen.getState()).length >= SCROLL_MSGS * 0.8,
+      () => screen.loadHistory(),
+      60_000,
+    );
+    const msgs = promptedMsgs(screen.getState());
+    const msgGap = breakIn(msgs);
+    if (msgGap) throw new Error(`the prompt rows have a break in msg-N: ${msgGap}`);
+    record("prompt_rows", msgs.length);
 
     // Data level 3: output goes on; a top-up appends below what is loaded without a gap or repeat.
     const liveBefore = numberedRows(loadedRows(), "live");

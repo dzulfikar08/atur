@@ -29,6 +29,12 @@ and 2500 + N for a `live`; the commands share their state in $SCROLL_STATE:
   ui-assert.py jump-to-bottom                tap the jump button, then the live rows are back, newer
                                              than before the swipes, the button is gone, and the
                                              view follows the output again
+  ui-assert.py jump-prompt                   the workload also prints a `msg-N` row after every 100
+                                             `row-N`, each marked as a prompt (OSC 133;A). From the
+                                             bottom: tap "Previous prompt" and need a `msg-N` among
+                                             the first rows at the top of the terminal, tap it again
+                                             and need `msg-(N-1)` there, then tap "Next prompt" and
+                                             need `msg-N` again; prints `jump_ok=1` when all hold
 
 The timeout is in seconds (default 30). A failure prints what was on screen and exits 1, so the
 job log says why. `ANDROID_SERIAL` selects the device as with adb.
@@ -166,6 +172,10 @@ def matches(node, pattern) -> bool:
 
 ROW = re.compile(r"^(row|live)-(\d+)$")
 PRINTED_FIRST = 2500
+TERMINAL_ROW = re.compile(r"^(row|live|msg)-(\d+)$")
+# A prompt jump puts its row at the top edge; a row clipped by the edge, or the one above it, may
+# be the first to read.
+TOP_ROWS = 3
 SCROLL_STATE = os.environ.get("SCROLL_STATE", "/tmp/ui-scroll-state.json")
 
 
@@ -192,6 +202,23 @@ def place(row) -> int:
 
 def newest_live(rows) -> int:
     return max((n for kind, n in rows if kind == "live"), default=0)
+
+
+def top_numbered(found, count: int):
+    """The first `count` numbered rows (kind, N) from the top of the terminal, kind being row, live
+    or msg; only rows wholly on screen count, in the order they are laid out."""
+    _, height = screen_size(found)
+    seen = set()
+    for node in found:
+        x1, y1, x2, y2 = node["box"]
+        if y2 <= y1 or y1 < 0 or y2 > height:
+            continue
+        for value in values(node):
+            for part in [value] + re.split(r"[\n,]", value):
+                match = TERMINAL_ROW.match(part.strip())
+                if match:
+                    seen.add((y1, match.group(1), int(match.group(2))))
+    return [(kind, number) for _, kind, number in sorted(seen)[:count]]
 
 
 def metric(name: str, value) -> None:
@@ -344,6 +371,40 @@ def jump_to_bottom() -> None:
     print(f"ok: the view follows the output (live-{first} -> live-{later})")
 
 
+def press_prompt(label: str, wanted, previous) -> int:
+    """Tap the button, then wait until a msg-N row is among the first rows at the top of the terminal
+    (and, with `wanted`, until it is msg-<wanted>). Returns N."""
+    tap(label, 30, freeze=True)
+    deadline = time.time() + 60
+    while True:
+        found = frozen_nodes()
+        top = top_numbered(found, TOP_ROWS)
+        msgs = [n for kind, n in top if kind == "msg"]
+        if msgs and (wanted is None or msgs[0] == wanted) and msgs[0] != previous:
+            print(f"ok: after {label!r} msg-{msgs[0]} is at the top (first rows: {top})")
+            return msgs[0]
+        if time.time() >= deadline:
+            fail(
+                f"jump: after {label!r} no msg-"
+                f"{'N' if wanted is None else wanted} row came to the top of the terminal "
+                f"(first rows: {top})",
+                found,
+            )
+        time.sleep(1)
+
+
+def jump_prompt() -> None:
+    print("ATUR_E2E STEP jump")
+    first = press_prompt("Previous prompt", None, None)
+    if first < 2:
+        fail(f"jump: the newest prompt row is msg-{first}; the workload prints several", [])
+    earlier = press_prompt("Previous prompt", first - 1, first)
+    back = press_prompt("Next prompt", first, earlier)
+    metric("jump_from", f"msg-{first}")
+    metric("jump_ok", 1)
+    print(f"ok: previous went to msg-{first}, then msg-{earlier}; next came back to msg-{back}")
+
+
 def tap(needle: str, timeout: float, freeze: bool = False) -> None:
     deadline = time.time() + timeout
     scrolls = 0
@@ -382,6 +443,9 @@ def main(argv) -> None:
         return
     if len(argv) >= 2 and argv[1] == "jump-to-bottom":
         jump_to_bottom()
+        return
+    if len(argv) >= 2 and argv[1] == "jump-prompt":
+        jump_prompt()
         return
     if len(argv) >= 5 and argv[1] == "scroll-up":
         scroll_up(int(argv[2]), int(argv[3]), float(argv[4]))

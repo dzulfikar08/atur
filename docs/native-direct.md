@@ -316,6 +316,15 @@ reading the code, are exercised by the same run, and were not separately shown t
   button (`Jump to bottom`) shows whenever the reader is above it. Rows that output pushes into scrollback are
   topped up only while the reader is within three screens of the live grid; further up nothing below them
   changes while they read, and a top-up fetches what was missed when they come back.
+- **Previous / next prompt.** The `history` reply also carries `prompts`: ascending indices into `rows` where a
+  user prompt starts (OSC 133 marks; an older core sends none and the field defaults to `[]`). `TerminalScreen`
+  keeps them as absolute rows next to the scrollback (`ScreenState.prompts`, numbered like `historyBase`; a read
+  replaces the prompts of the window it covers, older ones stay), and `lib/prompt-jump.ts` plans a press: previous
+  puts the nearest prompt above the first row in view at the top edge, reading older scrollback first when none
+  is loaded above (at most six reads, then it stops); next puts the nearest prompt below at the top, or goes to
+  the bottom when none moves the view. At the bottom a press first tops the scrollback up. The two round buttons
+  (`Previous prompt` / `Next prompt`, `testID`s `prompt-prev` / `prompt-next`) sit at the top right of the native
+  view and show once the pane has prompts; a button with nothing to do is dimmed.
 
 A note on measuring: `uiautomator dump` of a screen that changes ten times a second can return the tree of an
 earlier moment. The first phase 4 run read it right after 12 swipes and saw the bottom rows it had seen before
@@ -350,6 +359,10 @@ host swipes back 12 times by 70% of the screen with `adb shell input swipe`, rea
 same rows on screen for 5 s of live output (`scroll_held_ms`); the view must be at the bottom (no jump button)
 before the first swipe; then more swipes until the first row is in reach, and a tap on the jump button must
 bring `live-N` rows newer than before the swipes, remove the button and keep following the output.
+The workload also prints a `msg-N` row after every 100 `row-N`, each marked as a prompt with `printf '\033]133;A\007'`;
+the scenario needs them back as prompt rows on their `msg-N` rows (`prompt_rows`), and the host taps
+`Previous prompt` (a `msg-N` row among the first rows at the top), again (`msg-(N-1)`) and `Next prompt` (`msg-N`
+again): `scripts/ui-assert.py jump-prompt`, logged as `STEP jump` and `jump_ok=1`.
 
 `.github/workflows/native-direct-scroll.yml` runs this phase alone (`ATUR_E2E_PHASES=4`: a push that changes
 `.github/scroll-trigger`, or run it by hand; its `cpu_load` input starts that many busy loops on the emulator, `runs` plays the phase that many times).

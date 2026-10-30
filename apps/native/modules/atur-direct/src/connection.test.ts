@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { connectJson, createDirect, type NativeAturDirect } from "./connection";
+import { connectJson, createDirect, parsePrompts, type NativeAturDirect } from "./connection";
 import type { DirectCredential } from "./types";
 
 const credential: DirectCredential = {
@@ -99,4 +99,23 @@ test("connect exposes the route and the addresses to keep, and ignores what is m
   const odd = await createDirect(broken.native).connect(credential);
   expect(odd.route).toBeNull();
   expect(odd.addresses).toEqual(["10.0.0.1"]);
+});
+
+test("history prompts default to none and keep only ascending indices inside the rows", async () => {
+  const answers = [
+    { rows: ["a", "b", "c"], visible: 1 },
+    { rows: ["a", "b", "c"], visible: 1, prompts: [0, 2] },
+    { rows: ["a", "b", "c"], visible: 1, prompts: [2, 1, 1, -1, 3, 1.5, "0", 2] },
+  ];
+  const replies: object[] = [];
+  const { native } = fakeNative({ serverId: "s", serverName: "Desk", serverVersion: "3" });
+  native.call = async () => JSON.stringify({ ok: answers.shift() });
+  const connection = await createDirect(native).connect(credential);
+  for (let i = 0; i < 3; i++) replies.push(await connection.history("1", 100));
+  expect(replies).toEqual([
+    { rows: ["a", "b", "c"], visible: 1, prompts: [] },
+    { rows: ["a", "b", "c"], visible: 1, prompts: [0, 2] },
+    { rows: ["a", "b", "c"], visible: 1, prompts: [2] },
+  ]);
+  expect(parsePrompts("nope", 5)).toEqual([]);
 });

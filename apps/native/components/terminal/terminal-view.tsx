@@ -9,9 +9,10 @@ import { StyleSheet } from "react-native-unistyles";
 import { TERMINAL_PALETTE } from "@/components/terminal/palette";
 import { TerminalRow } from "@/components/terminal/terminal-row";
 import { Text } from "@/components/ui";
+import { planPrompt, topRow, type ViewGeometry } from "@/lib/prompt-jump";
 import { SCROLL_TRACE, scrollCount, scrollTrace } from "@/lib/scroll-trace";
 import { CELL_WIDTH_EM, clampFontSize, LINE_HEIGHT_EM } from "@/lib/terminal-metrics";
-import type { TerminalScreen } from "@/lib/terminal-screen";
+import { previousPrompt, type TerminalScreen } from "@/lib/terminal-screen";
 
 /** Within this many px of the bottom counts as "at the bottom". */
 const STICK_SLACK = 48;
@@ -25,6 +26,15 @@ const NEAR_TOP_ROWS = 80;
  * a top-up reads them when the reader comes back within reach.
  */
 const FAR_SCREENS = 3;
+/**
+ * "Previous prompt" with none loaded above reads further back at most this many times: a pane
+ * whose computer reports no prompts must not pull the whole scrollback for a button press.
+ */
+const PROMPT_OLDER_READS = 6;
+/** A press that waits for a read of scrollback goes on with what is loaded after this long. */
+const PROMPT_WAIT_MS = 3000;
+
+type PromptDirection = "previous" | "next";
 
 interface Row {
   key: string;
@@ -70,7 +80,7 @@ export function TerminalView({
   onNearTop,
   onSelectText,
 }: TerminalViewProps) {
-  const { cols, lines, history, historyBase } = useSyncExternalStore(
+  const { cols, lines, history, historyBase, prompts, historyReplies } = useSyncExternalStore(
     screen.subscribe,
     screen.getState,
   );
@@ -114,6 +124,15 @@ export function TerminalView({
   const scroll = useRef({ offset: 0, content: 0, viewport: 0 });
   const far = useRef(false);
   const [viewportWidth, setViewportWidth] = useState(0);
+  /** "Previous prompt" has something to do: a prompt above the first row in view, or older rows to read. */
+  const [canPrevious, setCanPrevious] = useState(false);
+  /** A prompt press waiting for scrollback (a fresh top-up, or older rows) to arrive. */
+  const waiting = useRef<{
+    direction: PromptDirection;
+    replies: number;
+    reads: number;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
 
   const lineHeight = Math.round(fontSize * LINE_HEIGHT_EM);
   const cellWidth = fontSize * CELL_WIDTH_EM;
@@ -201,6 +220,7 @@ export function TerminalView({
       latest.current.onScrollBack();
     }
     far.current = isFar;
+    refreshPrevious();
     if (stick.current !== atBottom) {
       scrollTrace("stick", { atBottom, offset: Math.round(e.contentOffset.y) });
       stick.current = atBottom;
@@ -238,13 +258,103 @@ export function TerminalView({
     if (!stick.current) nearTop();
   };
 
-  const jumpToBottom = () => {
+  const jumpToBottom = useCallback(() => {
     scrollTrace("jump_to_bottom", { offset: Math.round(scroll.current.offset) });
     stick.current = true;
     far.current = false;
     setAway(false);
     list.current?.scrollToOffset({ offset: 0, animated: false });
+  }, []);
+
+  // Previous / next prompt: the prompt rows come with the scrollback (`ScreenState.prompts`); a press
+  // puts the target row at the top edge of the view. Previous with none loaded above reads older
+  // rows and goes on when they arrive; next with none below is the bottom of the pane.
+  const viewGeometry = (): ViewGeometry => ({
+    offset: scroll.current.offset,
+    viewport: scroll.current.viewport,
+    lineHeight,
+    pad: ROW_PAD,
+  });
+
+  const refreshPrevious = () => {
+    const state = screen.getState();
+    setCanPrevious(
+      previousPrompt(state, topRow(state, viewGeometry())) !== null || screen.hasOlder(),
+    );
   };
+
+  const stopWaiting = useCallback(() => {
+    if (!waiting.current) return;
+    clearTimeout(waiting.current.timer);
+    waiting.current = null;
+  }, []);
+
+  const startWaiting = (direction: PromptDirection, reads: number) => {
+    stopWaiting();
+    waiting.current = {
+      direction,
+      replies: screen.getState().historyReplies,
+      reads,
+      // No reply in time (the link dropped): go on with what is loaded.
+      timer: setTimeout(() => {
+        waiting.current = null;
+        promptRun.current(direction, PROMPT_OLDER_READS);
+      }, PROMPT_WAIT_MS),
+    };
+  };
+
+  const runPrompt = (direction: PromptDirection, reads: number) => {
+    const plan = planPrompt(
+      direction,
+      screen.getState(),
+      viewGeometry(),
+      reads < PROMPT_OLDER_READS && screen.hasOlder(),
+    );
+    scrollTrace("prompt_jump", { direction, plan: plan.kind, reads });
+    switch (plan.kind) {
+      case "scroll":
+        scroll.current.offset = plan.offset;
+        list.current?.scrollToOffset({ offset: plan.offset, animated: false });
+        break;
+      case "bottom":
+        jumpToBottom();
+        break;
+      case "older":
+        startWaiting(direction, reads + 1);
+        screen.loadOlder();
+        break;
+      case "none":
+        break;
+    }
+  };
+  const promptRun = useRef(runPrompt);
+  promptRun.current = runPrompt;
+
+  const pressPrompt = (direction: PromptDirection) => {
+    stopWaiting();
+    if (stick.current) {
+      // At the bottom the scrollback is not kept up to date: top it up, then go.
+      startWaiting(direction, 0);
+      latest.current.onScrollBack();
+      return;
+    }
+    runPrompt(direction, 0);
+  };
+
+  // The read a press waited for is here.
+  useEffect(() => {
+    const wanted = waiting.current;
+    if (!wanted || historyReplies <= wanted.replies) return;
+    stopWaiting();
+    promptRun.current(wanted.direction, wanted.reads);
+  }, [historyReplies, stopWaiting]);
+  useEffect(() => stopWaiting, [stopWaiting]);
+
+  // Prompts or rows changed: "previous prompt" may have gained or lost its target.
+  useEffect(() => {
+    refreshPrevious();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prompts, history, lines.length, historyReplies, lineHeight]);
 
   // Output while the reader is scrolled up pushes rows off the top of the live
   // grid into scrollback: top it up (the screen throttles) so they appear in
@@ -313,6 +423,10 @@ export function TerminalView({
               minIndexForVisible: 0,
               autoscrollToTopThreshold: STICK_SLACK,
             }}
+            onLayout={(event) => {
+              scroll.current.viewport = event.nativeEvent.layout.height;
+              refreshPrevious();
+            }}
             onScroll={onScroll}
             onContentSizeChange={onContentSizeChange}
             scrollEventThrottle={32}
@@ -320,6 +434,34 @@ export function TerminalView({
             contentContainerStyle={styles.content}
           />
         </ScrollView>
+        {prompts.length > 0 ? (
+          <View style={styles.prompts}>
+            <Pressable
+              testID="prompt-prev"
+              accessibilityRole="button"
+              accessibilityLabel="Previous prompt"
+              accessibilityState={{ disabled: !canPrevious }}
+              disabled={!canPrevious}
+              onPress={() => pressPrompt("previous")}
+              hitSlop={4}
+              style={[styles.promptButton, !canPrevious && styles.promptOff]}
+            >
+              <Ionicons name="chevron-up" size={20} color="#e5e5e5" />
+            </Pressable>
+            <Pressable
+              testID="prompt-next"
+              accessibilityRole="button"
+              accessibilityLabel="Next prompt"
+              accessibilityState={{ disabled: !away }}
+              disabled={!away}
+              onPress={() => pressPrompt("next")}
+              hitSlop={4}
+              style={[styles.promptButton, !away && styles.promptOff]}
+            >
+              <Ionicons name="chevron-down" size={20} color="#e5e5e5" />
+            </Pressable>
+          </View>
+        ) : null}
         {away ? (
           <Pressable
             accessibilityRole="button"
@@ -350,6 +492,21 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.18)",
   },
+  prompts: {
+    position: "absolute",
+    top: theme.spacing.md,
+    right: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  promptButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  promptOff: { opacity: 0.35 },
   waiting: {
     color: "#a3a3a3",
     fontFamily: theme.fonts.mono,
