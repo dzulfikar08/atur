@@ -58,6 +58,17 @@ export type DirectLink = Pick<
   | "history"
   | "setEchoMode"
   | "echoStats"
+  | "screen"
+  | "screenOpen"
+  | "screenClose"
+  | "screenPointer"
+  | "screenScroll"
+  | "screenKey"
+  | "screenType"
+  | "screenViewOnly"
+  | "screenClipboard"
+  | "screenReleaseAll"
+  | "screenRefresh"
 >;
 
 /** The native module's API (`AturDirect`), as far as the manager uses it. */
@@ -182,7 +193,7 @@ export function retryDelay(failures: number): number {
   return RETRY_DELAYS_MS[failures - 1] ?? RETRY_STEADY_MS;
 }
 
-const globalTimers: DirectTimers = {
+export const globalTimers: DirectTimers = {
   setTimeout: (callback, ms) => setTimeout(callback, ms),
   clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };

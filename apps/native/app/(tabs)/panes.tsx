@@ -34,6 +34,8 @@ import {
   shortCwd,
   sortPanesByAttention,
 } from "@/lib/pane-meta";
+import { screenRoute } from "@/lib/direct/screen-route";
+import { useDirect } from "@/lib/direct/use-direct";
 import { activeWorkspace, filterByWorkspace, workspaceChips } from "@/lib/pane-workspaces";
 import {
   loadPaneWorkspace,
@@ -153,6 +155,9 @@ function ShellsHeader({
 export default function Panes() {
   const focused = useIsFocused();
   const me = useQuery({ queryKey: ["me"], queryFn: api.me });
+  const direct = useDirect();
+  // Direct when the computer is connected and shares its screen; else the cloud screen (owner only).
+  const screen = screenRoute(direct, me.data?.is_superuser === true);
   const panes = useQuery({
     queryKey: ["panes"],
     queryFn: api.panes,
@@ -236,12 +241,11 @@ export default function Panes() {
         caption={all ? paneSummary(list) : undefined}
         right={
           <View style={styles.headerActions}>
-            {/* Owner-only: the server refuses everyone else (403), so don't offer it. */}
-            {me.data?.is_superuser ? (
+            {screen ? (
               <IconButton
                 icon="desktop-outline"
                 label="Open desktop screen"
-                onPress={() => router.push("/screen")}
+                onPress={() => router.push(screen)}
               />
             ) : null}
             <IconButton icon="add" label="New pane or workspace" onPress={create.open} />

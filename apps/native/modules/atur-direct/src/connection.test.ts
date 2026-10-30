@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { connectJson, createDirect, parsePrompts, type NativeAturDirect } from "./connection";
-import type { DirectCredential } from "./types";
+import { DirectError, type DirectCredential } from "./types";
 
 const credential: DirectCredential = {
   serverId: "srv-1",
@@ -118,4 +118,123 @@ test("history prompts default to none and keep only ascending indices inside the
     { rows: ["a", "b", "c"], visible: 1, prompts: [2] },
   ]);
   expect(parsePrompts("nope", 5)).toEqual([]);
+});
+
+const info = { serverId: "s", serverName: "Desk", serverVersion: "3" };
+
+test("connect reports whether the server has the screen feature; an older core says nothing", async () => {
+  const on = await createDirect(fakeNative({ ...info, screen: true }).native).connect(credential);
+  expect(on.screen).toBe(true);
+  const off = await createDirect(fakeNative({ ...info, screen: false }).native).connect(credential);
+  expect(off.screen).toBe(false);
+  const old = await createDirect(fakeNative(info).native).connect(credential);
+  expect(old.screen).toBe(false);
+  const odd = await createDirect(fakeNative({ ...info, screen: "yes" }).native).connect(credential);
+  expect(odd.screen).toBe(false);
+});
+
+test("screenH264 is the module constant, false where it is missing", () => {
+  const { native } = fakeNative(info);
+  expect(createDirect(native).screenH264).toBe(false);
+  expect(createDirect({ ...native, screenH264: true }).screenH264).toBe(true);
+  expect(createDirect({ ...native, screenH264: false }).screenH264).toBe(false);
+});
+
+test("screen requests go out under their core names: open and close as calls, input as fires", async () => {
+  const calls: { method: string; args: unknown }[] = [];
+  const fires: { method: string; args: unknown }[] = [];
+  const { native } = fakeNative(info);
+  native.call = async (_id, method, args) => {
+    calls.push({ method, args: JSON.parse(args) });
+    return JSON.stringify({ ok: {} });
+  };
+  native.fire = (_id, method, args) => {
+    fires.push({ method, args: JSON.parse(args) });
+    return JSON.stringify({ ok: null });
+  };
+  const connection = await createDirect(native).connect(credential);
+
+  await connection.screenOpen({ viewOnly: true, h264: false });
+  await connection.screenClose();
+  expect(connection.screenPointer(10.4, 20.6, 1)).toBe(true);
+  expect(connection.screenScroll(5, 6, 0, -2)).toBe(true);
+  expect(connection.screenKey(0xff0d, true)).toBe(true);
+  expect(connection.screenType("hi")).toBe(true);
+  expect(connection.screenViewOnly(false)).toBe(true);
+  expect(connection.screenClipboard("copied")).toBe(true);
+  expect(connection.screenReleaseAll()).toBe(true);
+  expect(connection.screenRefresh()).toBe(true);
+
+  expect(calls).toEqual([
+    { method: "screenOpen", args: { viewOnly: true, h264: false } },
+    { method: "screenClose", args: {} },
+  ]);
+  expect(fires).toEqual([
+    { method: "screenPointer", args: { x: 10, y: 21, buttons: 1 } },
+    { method: "screenScroll", args: { x: 5, y: 6, dx: 0, dy: -2 } },
+    { method: "screenKey", args: { keysym: 0xff0d, down: true } },
+    { method: "screenType", args: { text: "hi" } },
+    { method: "screenViewOnly", args: { viewOnly: false } },
+    { method: "screenClipboard", args: { text: "copied" } },
+    { method: "screenReleaseAll", args: {} },
+    { method: "screenRefresh", args: {} },
+  ]);
+});
+
+test("the screen refusal codes keep the server's reason, and an unknown code is Internal", async () => {
+  const answers = [
+    {
+      error: { code: "ScreenNotAllowed", reason: "Screen sharing is not allowed for this phone." },
+    },
+    { error: { code: "ScreenUnavailable", reason: "wayvnc is not installed" } },
+    { error: { code: "Unsupported", reason: "" } },
+    { error: { code: "ScreenSomethingNew", reason: "x" } },
+  ];
+  const { native } = fakeNative(info);
+  native.call = async () => JSON.stringify(answers.shift());
+  const connection = await createDirect(native).connect(credential);
+  const failures: unknown[] = [];
+  for (let i = 0; i < 4; i++) {
+    await connection.screenOpen({ viewOnly: false, h264: true }).catch((e: unknown) => {
+      failures.push(e instanceof DirectError ? { code: e.code, reason: e.reason } : e);
+    });
+  }
+  expect(failures).toEqual([
+    { code: "ScreenNotAllowed", reason: "Screen sharing is not allowed for this phone." },
+    { code: "ScreenUnavailable", reason: "wayvnc is not installed" },
+    { code: "Unsupported", reason: "" },
+    { code: "Internal", reason: "x" },
+  ]);
+});
+
+test("screen requests fire nothing once the connection is gone", async () => {
+  const fires: string[] = [];
+  const { native } = fakeNative(info);
+  native.fire = (_id, method) => {
+    fires.push(method);
+    return JSON.stringify({ ok: null });
+  };
+  const connection = await createDirect(native).connect(credential);
+  await connection.disconnect();
+  expect(connection.screenKey(1, true)).toBe(false);
+  expect(fires).toEqual([]);
+});
+
+test("screen events reach the connection's subscribers like any other", async () => {
+  let push: (payload: { connection: string; json: string }) => void = () => {};
+  const { native } = fakeNative(info);
+  native.addListener = (_event, listener) => {
+    push = listener;
+    return { remove() {} };
+  };
+  const direct = createDirect(native);
+  const connection = await direct.connect(credential);
+  const seen: unknown[] = [];
+  connection.subscribe((event) => seen.push(event));
+  const ready = { t: "screen", state: "ready", width: 1920, height: 1080, name: "wl", reason: "" };
+  const stats = { t: "screenStats", codec: "h264", fps: 30, kbps: 900, dropped: 0, decodeMs: 2 };
+  push({ connection: connection.id, json: JSON.stringify(ready) });
+  push({ connection: connection.id, json: JSON.stringify(stats) });
+  push({ connection: connection.id, json: JSON.stringify({ t: "screenClipboard", text: "hi" }) });
+  expect(seen).toEqual([ready, stats, { t: "screenClipboard", text: "hi" }]);
 });

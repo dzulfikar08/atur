@@ -7,6 +7,10 @@ on:
   push:
     branches: [feat/native-direct]
   workflow_dispatch:
+    inputs:
+      phases:
+        description: "Phases of scripts/e2e-direct-android.sh to run (1: scripted scenario, 2: clean install by hand, 3: lossy link, 4: scrolling back, 5: swipes with focus, 6: the computer's screen over Direct); 6 alone is the screen proof"
+        default: "123456"
 
 concurrency:
   group: native-direct-${{ github.ref }}
@@ -139,7 +143,9 @@ jobs:
           name: atur-term-bins
           path: ${{ runner.temp }}/atur-term-bins
 
-      - name: Start an isolated Atur Terminal server and print a pairing link
+      - name: Start an isolated Atur Terminal server (with a fake desktop to mirror) and print a pairing link
+        env:
+          ATUR_TEST_SCREEN: "1"
         run: |
           S=apps/native/scripts/start-test-server.sh
           "$S" start "$RUNNER_TEMP/atur-server" "$RUNNER_TEMP/atur-term-bins" 7600
@@ -161,6 +167,8 @@ jobs:
 
       - name: Run the proof on an emulator
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          ATUR_E2E_PHASES: ${{ inputs.phases || '123456' }}
         with:
           api-level: 34
           arch: x86_64
@@ -197,6 +205,11 @@ jobs:
             grep -h -E '^(=== |ATUR_E2E (METRIC|RESULT|FAILURE|STEP))' e2e-out/focus-lines.txt 2>/dev/null || echo 'phase 5 did not run'
             grep -h -E '^(phase 5|ok:|FAIL|PASS)' e2e-out/phase5.txt 2>/dev/null || true
             echo '```'
+            echo 'Phase 6, the computer'"'"'s screen over Direct (a fake desktop on the isolated server, scripts/fake-wayvnc.py): refused until allowed, H.264 through MediaCodec and ZRLE, taps and a long press at the mapped desktop pixels, typed keys, view only, close:'
+            echo '```'
+            grep -h -E '^ATUR_E2E (METRIC|STEP)' e2e-out/screen-lines.txt 2>/dev/null || echo 'phase 6 did not run'
+            grep -h -E '^(phase 6|ok:|FAIL|PASS)' e2e-out/phase6.txt 2>/dev/null || true
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
@@ -206,6 +219,7 @@ jobs:
           path: |
             e2e-out
             ${{ runner.temp }}/atur-server/server.log
+            ${{ runner.temp }}/atur-server/screen/input.log
             ${{ runner.temp }}/link.txt.log
             apps/native/android/app/build/outputs/mapping/release/mapping.txt
 

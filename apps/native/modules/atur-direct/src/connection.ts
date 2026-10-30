@@ -35,6 +35,8 @@ export interface NativeAturDirect {
    * core and answered at once. Called synchronously from JS.
    */
   fire(connectionId: string, method: string, argsJson: string): string;
+  /** Whether this device has a hardware H.264 decoder for the screen view (a module constant). */
+  readonly screenH264?: boolean;
   disconnect(connectionId: string): Promise<void>;
   addListener(
     event: "message",
@@ -58,6 +60,8 @@ const ERROR_CODES: ReadonlySet<string> = new Set<DirectErrorCode>([
   "Timeout",
   "Disconnected",
   "Server",
+  "ScreenNotAllowed",
+  "ScreenUnavailable",
   "Internal",
 ]);
 
@@ -104,6 +108,8 @@ export class DirectConnection {
      * ones, at most eight. Empty on a core that does not report them.
      */
     readonly addresses: readonly string[] = [],
+    /** The computer's server offers the screen channel (the handshake lists the feature). */
+    readonly screen: boolean = false,
   ) {}
 
   /** Every event of this connection. `disconnected` is always the last one. */
@@ -225,6 +231,59 @@ export class DirectConnection {
     return this.call("gitSummary", { projectId });
   }
 
+  /**
+   * Opens the computer's screen on this connection (one per connection; opening again replaces
+   * it). Resolves once the channel is open; `screen` events report the rest. `h264` only when the
+   * device can decode it: false makes the computer send plain pictures. Throws `ScreenNotAllowed`
+   * (reason = the server's text), `ScreenUnavailable` or `Unsupported` (no screen feature).
+   */
+  screenOpen(options: { viewOnly: boolean; h264: boolean }): Promise<void> {
+    return this.call("screenOpen", options);
+  }
+
+  screenClose(): Promise<void> {
+    return this.call("screenClose");
+  }
+
+  /** Pointer at framebuffer pixel (x, y); `buttons` is a mask: 1 left, 2 middle, 4 right. */
+  screenPointer(x: number, y: number, buttons: number): boolean {
+    return this.fire("screenPointer", { x: Math.round(x), y: Math.round(y), buttons });
+  }
+
+  /** Wheel notches at (x, y): positive `dy` scrolls up, positive `dx` right. */
+  screenScroll(x: number, y: number, dx: number, dy: number): boolean {
+    return this.fire("screenScroll", { x: Math.round(x), y: Math.round(y), dx, dy });
+  }
+
+  /** One X11 keysym going down or up. */
+  screenKey(keysym: number, down: boolean): boolean {
+    return this.fire("screenKey", { keysym, down });
+  }
+
+  /** Types text: each character is pressed and released. */
+  screenType(text: string): boolean {
+    return this.fire("screenType", { text });
+  }
+
+  screenViewOnly(viewOnly: boolean): boolean {
+    return this.fire("screenViewOnly", { viewOnly });
+  }
+
+  /** Puts text on the computer's clipboard. */
+  screenClipboard(text: string): boolean {
+    return this.fire("screenClipboard", { text });
+  }
+
+  /** Lets go of every key and button held. */
+  screenReleaseAll(): boolean {
+    return this.fire("screenReleaseAll", {});
+  }
+
+  /** Asks for a full update (a key frame) when the picture lost sync. */
+  screenRefresh(): boolean {
+    return this.fire("screenRefresh", {});
+  }
+
   async disconnect(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
@@ -255,7 +314,12 @@ export function createDirect(native: NativeAturDirect) {
     }
   });
 
+  const screenH264 = native.screenH264 === true;
+
   return {
+    /** The device can decode the computer's H.264 screen picture in hardware. */
+    screenH264,
+
     /** Checks a scanned or pasted link; no network. Throws `InvalidLink`. */
     async parsePairingLink(link: string): Promise<PairingTarget> {
       return unwrap<PairingTarget>(await native.parseLink(link));
@@ -284,6 +348,7 @@ export function createDirect(native: NativeAturDirect) {
         udpNote?: string;
         route?: unknown;
         addresses?: unknown;
+        screen?: unknown;
       }>(await native.connect(id, connectJson(credential, options.transport)));
       const connection = new DirectConnection(
         native,
@@ -295,6 +360,7 @@ export function createDirect(native: NativeAturDirect) {
         info.udpNote ?? "",
         parseRoute(info.route),
         parseAddresses(info.addresses),
+        info.screen === true,
       );
       connections.set(id, connection);
       for (const event of early.get(id) ?? []) connection.dispatch(event);

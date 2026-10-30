@@ -41,7 +41,19 @@ class AturDirectModule : Module() {
     ModuleDefinition {
       Name("AturDirect")
 
+      // Whether this phone has a hardware H.264 decoder (the app only offers H.264 to the computer when it does).
+      Constant("screenH264") { HardwareH264.available }
+
       Events("message")
+
+      // The computer's screen of a connection (`connection` = the id given to `connect`).
+      View(AturScreenView::class) {
+        Events("onFirstPicture", "onDecoderError")
+
+        Prop("connection") { view: AturScreenView, id: String -> view.setConnection(id) }
+
+        OnViewDestroys { view: AturScreenView -> view.destroy() }
+      }
 
       AsyncFunction("parseLink") Coroutine { link: String ->
         withContext(workerDispatcher) { guarded { directParseLink(link) } }
@@ -62,9 +74,15 @@ class AturDirectModule : Module() {
               }
             val direct = Direct(listener)
             try {
+              direct.setScreenSink(ConnectionScreenSink(id))
               val answer = direct.connect(credentialJson)
               if (answer.startsWith("{\"ok\"")) {
-                connections.put(id, direct)?.disconnect()
+                val previous = connections.put(id, direct)
+                ScreenRegistry.register(id, direct)
+                previous?.let {
+                  ScreenRegistry.unregister(id, it)
+                  it.disconnect()
+                }
               } else {
                 direct.disconnect()
               }
@@ -95,15 +113,21 @@ class AturDirectModule : Module() {
 
       AsyncFunction("disconnect") Coroutine { id: String ->
         withContext(workerDispatcher) {
-          connections.remove(id)?.let { runCatching { it.disconnect() } }
+          connections.remove(id)?.let {
+            ScreenRegistry.unregister(id, it)
+            runCatching { it.disconnect() }
+          }
           Unit
         }
       }
 
       OnDestroy {
-        val all = connections.values.toList()
+        val all = connections.entries.toList()
         connections.clear()
-        all.forEach { runCatching { it.disconnect() } }
+        all.forEach { (id, direct) ->
+          ScreenRegistry.unregister(id, direct)
+          runCatching { direct.disconnect() }
+        }
       }
     }
 }

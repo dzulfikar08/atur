@@ -1,4 +1,7 @@
 -keep class com.sun.jna.** { *; }
 -keep class * implements com.sun.jna.** { *; }
 -keep class uniffi.atur_mobile.** { *; }
+-keep class * implements uniffi.atur_mobile.ScreenSink { *; }
+-keep class * implements uniffi.atur_mobile.DirectListener { *; }
+-keep class com.diatur.direct.AturScreenView { <init>(...); }
 -dontwarn java.awt.*
