@@ -504,9 +504,15 @@ desktop and control to bring them back; closes to the Direct area; and repeats t
 refusing H.264, needing the ZRLE colour, "ZRLE" in the stats label and a mapped tap. Two-finger scrolling is
 not driven: `adb shell input` has no multi-touch. Run it alone: `gh workflow run native-direct.yml -f phases=6`.
 
-SCREEN_RESULTS_PLACEHOLDER: the numbers of the screen run (time from the tap that opens the screen to the
-picture on a screenshot, and from the phone's connection to the first update, for H.264 and for ZRLE; the
-pointer error in desktop pixels of each tap) are filled in here after CI.
+Results (Android emulator API 34 x86_64 on a GitHub runner, release APK, fake desktop 320x180 on the same host, run
+`native-direct` phase 6, all steps green): from the tap that opens the screen to the picture on a screenshot 1.43 s
+for H.264 through `MediaCodec` and 1.40 s for ZRLE (both include one screenshot and one `uiautomator` dump, so
+they are upper bounds); from the phone's connection to the first update the fake desktop saw 93 ms (H.264) and
+136 ms (ZRLE). Tap error against the mapped desktop pixel: 0 to 1 px in every case (pointer mode, direct touch,
+long press, control taken back, H.264 and ZRLE). That is the emulator, the stand-in server and a fixture of
+colour fields, so it proves the path (channel, decode, drawing, mapping, input) and not frame rates or image
+quality; the real `wayvnc` side (headless sway, TLS and UDP, ZRLE, pointer, keys, clipboard, permission taken
+away) is proven by the fork's `screen-e2e` job with `phone_probe`, which runs the same facade the app uses.
 
 Tests: `modules/atur-direct/src/connection.test.ts` (screen API under its core names, the `screen` flag, refusal
 codes keep the server's reason), `lib/direct/screen-controller.test.ts` (open, ready, refusal, decoder fallback,
