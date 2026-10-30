@@ -26,15 +26,32 @@ final class KeysTests: XCTestCase {
   }
 
   func testChordsAndNavigationKeys() {
-    // Ctrl+A, Ctrl+C, Alt+B, Cmd+K, then arrows, Esc, Tab: encoded, and nothing typed into the field.
+    // Ctrl+A, Ctrl+C, Alt+B, Cmd+K, then arrows, Tab: encoded, and nothing typed into the field.
     app.typeKey("a", modifierFlags: .control)
     app.typeKey("c", modifierFlags: .control)
     app.typeKey("b", modifierFlags: .option)
     app.typeKey("k", modifierFlags: .command)
     app.typeKey(XCUIKeyboardKey.upArrow.rawValue, modifierFlags: [])
     app.typeKey(XCUIKeyboardKey.leftArrow.rawValue, modifierFlags: [])
-    app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
     app.typeKey(XCUIKeyboardKey.tab.rawValue, modifierFlags: [])
-    expectLog("sent=01,03,1b62,1b6b,1b5b41,1b5b44,1b,09 input=[]")
+    expectLog("sent=01,03,1b62,1b6b,1b5b41,1b5b44,09 input=[]")
+  }
+
+  /// Esc is its own test: XCTest's Escape key may not reach the app as a HID press on the simulator.
+  func testEscape() {
+    let before = log()
+    app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+    var delivered = XCTWaiter().wait(
+      for: [expectation(for: NSPredicate(format: "label != %@", before), evaluatedWith: app.staticTexts["keys-log"])],
+      timeout: 5)
+    if delivered != .completed {
+      print("KEYS-E2E: XCUIKeyboardKey.escape produced no event; trying \\u{1b}")
+      app.typeKey("\u{1b}", modifierFlags: [])
+      delivered = XCTWaiter().wait(
+        for: [expectation(for: NSPredicate(format: "label != %@", before), evaluatedWith: app.staticTexts["keys-log"])],
+        timeout: 5)
+    }
+    XCTAssertEqual(delivered, .completed, "log was: \(log())")
+    XCTAssertTrue(log().contains("1b input=[]"), "log was: \(log())")
   }
 }
