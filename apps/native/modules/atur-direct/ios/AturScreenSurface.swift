@@ -345,9 +345,6 @@ final class ScreenSurface: @unchecked Sendable {
   }
 
   private func makeSession(_ format: CMVideoFormatDescription) -> VTDecompressionSession? {
-    let specification: [CFString: Any] = [
-      kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder: true
-    ]
     let attributes: [CFString: Any] = [
       kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
       kCVPixelBufferIOSurfacePropertiesKey: [String: Any](),
@@ -356,7 +353,7 @@ final class ScreenSurface: @unchecked Sendable {
     let status = VTDecompressionSessionCreate(
       allocator: kCFAllocatorDefault,
       formatDescription: format,
-      decoderSpecification: specification as CFDictionary,
+      decoderSpecification: nil,
       imageBufferAttributes: attributes as CFDictionary,
       outputCallback: nil,
       decompressionSessionOut: &newSession)

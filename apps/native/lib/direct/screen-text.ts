@@ -85,7 +85,10 @@ const CODEC_NAME: Record<string, string> = { h264: "H.264", zrle: "ZRLE", raw: "
 
 /** "H.264 · 30 fps · 1.2 Mbit/s": the codec and what is arriving. */
 export function describeScreenStats(stats: ScreenStats): string {
-  const codec = CODEC_NAME[stats.codec.toLowerCase()] ?? stats.codec.toUpperCase();
+  // The core names the decoder after the codec: "h264 (mediacodec)".
+  const [name = "", ...decoder] = stats.codec.trim().split(/\s+/);
+  const base = CODEC_NAME[name.toLowerCase()] ?? name.toUpperCase();
+  const codec = decoder.length > 0 ? `${base} ${decoder.join(" ")}` : base;
   const rate =
     stats.kbps >= 1000
       ? `${(stats.kbps / 1000).toFixed(1)} Mbit/s`
