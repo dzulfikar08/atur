@@ -46,14 +46,28 @@ and 2500 + N for a `live`; the commands share their state in $SCROLL_STATE:
                                              and the soft keyboard as it was; <drift-px> is the
                                              sideways travel of a swipe. Every cell runs; the exit
                                              status says whether all of them held
+  ui-assert.py colour <r,g,b> <tol> <min-fraction> [timeout]
+                                             phase 6: a screenshot (adb exec-out screencap, decoded
+                                             here, nothing to install) in which at least <min-fraction>
+                                             of the pixels are within <tol> of the colour on every
+                                             channel; prints the box the colour fills and seen_at_ms
+  ui-assert.py no-colour <r,g,b> <tol> [timeout]
+                                             the colour is (nearly) gone from the screen
+  ui-assert.py picture-tap --colour r,g,b ...  tap or long-press a place of the picture (found by its
+                                             colour) and check which pointer event reaches the fake
+                                             desktop's log (or that none does); see picture_tap
+  ui-assert.py log-wait <file> <from-line> <regex> [timeout]
+                                             a line of the fake desktop's log after <from-line> matches
 
 The timeout is in seconds (default 30). A failure prints what was on screen and exits 1, so the
 job log says why. `ANDROID_SERIAL` selects the device as with adb.
 """
 
+import argparse
 import json
 import os
 import re
+import struct
 import subprocess
 import sys
 import time
@@ -429,6 +443,7 @@ def tap(needle: str, timeout: float, freeze: bool = False) -> None:
             if 0 <= y < height and 0 <= x < width:
                 adb("shell", "input", "tap", str(x), str(y))
                 print(f"ok: tapped {needle!r} at {x},{y}")
+                print(f"tapped_at_ms={int(time.time() * 1000)}")
                 return
             if scrolls < 4:
                 scrolls += 1
@@ -647,7 +662,204 @@ def focus_matrix(cells, swipes_max: int, min_rows: int, drift: int) -> None:
     print("ok: every cell scrolled")
 
 
+# --- Phase 6: the computer's screen over Direct ----------------------------------------------------------
+#
+# The picture is read off a screenshot: the test server's fake desktop (scripts/fake-wayvnc.py) paints one
+# solid colour per codec, so the box of that colour is where the picture is, and a tap at a fraction of that
+# box must reach the desktop at the same fraction of its 320x180 pixels (the fake logs what it receives).
+
+LOG_POINTER = re.compile(r"^\d+ pointer (\d+) (\d+) (\d+)$")
+LOG_INPUT = re.compile(r"^\d+ (pointer|key|cut) ")
+
+
+def parse_pair(text: str, kind=int):
+    first, second = text.replace("x", ",").split(",")[:2]
+    return kind(first), kind(second)
+
+
+def parse_rgb(text: str):
+    red, green, blue = (int(v) for v in text.split(","))
+    return red, green, blue
+
+
+def capture():
+    """The screen as (width, height, RGBA bytes), or None: raw `screencap` is a header (width, height,
+    format, and on newer Androids the colour space) and then the rows."""
+    raw = subprocess.run(["adb", "exec-out", "screencap"], check=False, capture_output=True).stdout
+    if len(raw) < 12:
+        return None
+    width, height = struct.unpack("<II", raw[:8])
+    offset = len(raw) - width * height * 4
+    if width == 0 or height == 0 or not 12 <= offset <= 64:
+        return None
+    return width, height, memoryview(raw)[offset:]
+
+
+def find_colour(shot, rgb, tol: int, step: int = 4):
+    """(fraction of the sampled pixels within tol of rgb, (x1, y1, x2, y2) of where most of them are).
+    The box leaves out stray spots: a row or column counts when at least half as many pixels as the best
+    one have the colour. The box is as exact as the sampling step."""
+    width, height, pixels = shot
+    stride = width * 4
+    columns = [0] * len(range(0, width, step))
+    rows = []
+    hits = total = 0
+    for y in range(0, height, step):
+        row = bytes(pixels[y * stride:(y + 1) * stride])
+        found = 0
+        samples = zip(row[0::4 * step], row[1::4 * step], row[2::4 * step])
+        for i, (red, green, blue) in enumerate(samples):
+            if abs(red - rgb[0]) <= tol and abs(green - rgb[1]) <= tol and abs(blue - rgb[2]) <= tol:
+                found += 1
+                columns[i] += 1
+        rows.append(found)
+        hits += found
+        total += len(columns)
+    if hits == 0:
+        return 0.0, None
+    row_ids = [i for i, n in enumerate(rows) if n * 2 >= max(rows)]
+    column_ids = [i for i, n in enumerate(columns) if n * 2 >= max(columns)]
+    box = (column_ids[0] * step, row_ids[0] * step, column_ids[-1] * step, row_ids[-1] * step)
+    return hits / total, box
+
+
+def wait_colour(rgb, tol: int, minimum: float, timeout: float):
+    deadline = time.time() + timeout
+    best = 0.0
+    while True:
+        shot = capture()
+        if shot:
+            fraction, box = find_colour(shot, rgb, tol)
+            best = max(best, fraction)
+            if fraction >= minimum and box:
+                return fraction, box
+        if time.time() >= deadline:
+            fail(
+                f"colour {rgb} (within {tol}) never filled {minimum:.0%} of the screen in {timeout:g} s"
+                f" (the most it filled was {best:.1%})",
+                nodes(),
+            )
+        time.sleep(0.5)
+
+
+def colour(rgb, tol: int, minimum: float, timeout: float) -> None:
+    fraction, box = wait_colour(rgb, tol, minimum, timeout)
+    print(f"ok: colour {rgb} fills {fraction:.0%} of the screen, in the box {box}")
+    print(f"colour_box={','.join(str(v) for v in box)}")
+    print(f"seen_at_ms={int(time.time() * 1000)}")
+
+
+def no_colour(rgb, tol: int, timeout: float) -> None:
+    deadline = time.time() + timeout
+    while True:
+        shot = capture()
+        fraction = find_colour(shot, rgb, tol)[0] if shot else 1.0
+        if fraction < 0.01:
+            print(f"ok: colour {rgb} is not on the screen")
+            return
+        if time.time() >= deadline:
+            fail(f"colour {rgb} still fills {fraction:.1%} of the screen after {timeout:g} s", nodes())
+        time.sleep(0.5)
+
+
+def log_lines(path: str):
+    try:
+        with open(path, encoding="utf-8") as source:
+            return source.read().splitlines()
+    except OSError:
+        return []
+
+
+def log_wait(path: str, start: int, pattern: str, timeout: float) -> None:
+    wanted = re.compile(pattern)
+    deadline = time.time() + timeout
+    while True:
+        lines = log_lines(path)[start:]
+        hit = next((line for line in lines if wanted.search(line)), None)
+        if hit:
+            print(f"ok: the desktop's log has {hit!r}")
+            return
+        if time.time() >= deadline:
+            fail(f"no line matching {pattern!r} in the desktop's log within {timeout:g} s; it has {lines[-12:]!r}", [])
+        time.sleep(0.3)
+
+
+def picture_tap(args) -> None:
+    """Taps (or, with --hold, presses for that many ms) the place --at (fractions of the picture's width and
+    height, found by its colour), and then needs the desktop's log to show a pointer event with button
+    mask --mask within --tolerance framebuffer pixels of --expect-at (default: the same place), followed
+    by one with the mask released. With --none nothing may reach the desktop in --timeout seconds."""
+    rgb = parse_rgb(args.colour)
+    fb_width, fb_height = parse_pair(args.fb)
+    at = parse_pair(args.at, float)
+    expect = parse_pair(args.expect_at, float) if args.expect_at else at
+    _, (x1, y1, x2, y2) = wait_colour(rgb, args.tol, 0.05, 30)
+    x = round(x1 + at[0] * (x2 - x1))
+    y = round(y1 + at[1] * (y2 - y1))
+    start = len(log_lines(args.log))
+    if args.hold:
+        adb("shell", "input", "swipe", str(x), str(y), str(x), str(y), str(args.hold))
+    else:
+        adb("shell", "input", "tap", str(x), str(y))
+    print(f"tapped the picture at {x},{y} (box {x1},{y1},{x2},{y2})")
+    deadline = time.time() + args.timeout
+    if args.none:
+        time.sleep(args.timeout)
+        sent = [line for line in log_lines(args.log)[start:] if LOG_INPUT.match(line)]
+        if sent:
+            fail(f"the desktop got input although it should not have: {sent[:6]!r}", [])
+        print("ok: nothing reached the desktop")
+        return
+    want_x, want_y = expect[0] * fb_width, expect[1] * fb_height
+    while True:
+        events = [m.groups() for m in map(LOG_POINTER.match, log_lines(args.log)[start:]) if m]
+        for i, (px, py, mask) in enumerate(events):
+            px, py, mask = int(px), int(py), int(mask)
+            if mask == args.mask and abs(px - want_x) <= args.tolerance and abs(py - want_y) <= args.tolerance:
+                if any(int(m) == 0 for _, _, m in events[i + 1:]):
+                    print(
+                        f"ok: pointer mask {mask} at ({px},{py}), expected ({want_x:.0f},{want_y:.0f}), then released"
+                    )
+                    print(f"pointer_error_px={max(abs(px - want_x), abs(py - want_y)):.1f}")
+                    return
+        if time.time() >= deadline:
+            fail(
+                f"no pointer press with mask {args.mask} within {args.tolerance} px of ({want_x:.0f},{want_y:.0f})"
+                f" and a release after it in {args.timeout:g} s; the log has {events[-8:]!r}",
+                [],
+            )
+        time.sleep(0.3)
+
+
+def picture_tap_args(argv):
+    parser = argparse.ArgumentParser(prog="ui-assert.py picture-tap")
+    parser.add_argument("--colour", required=True, help="r,g,b of the picture")
+    parser.add_argument("--tol", type=int, default=70)
+    parser.add_argument("--fb", default="320x180", help="the desktop's size")
+    parser.add_argument("--at", required=True, help="fx,fy: where in the picture to tap, as fractions")
+    parser.add_argument("--expect-at", help="fx,fy: where the desktop should see it (default: --at)")
+    parser.add_argument("--hold", type=int, default=0, help="press for this many ms (a long press)")
+    parser.add_argument("--log", required=True, help="the fake desktop's input.log")
+    parser.add_argument("--mask", type=int, default=1, help="button mask of the press: 1 left, 4 right")
+    parser.add_argument("--tolerance", type=float, default=8, help="framebuffer pixels")
+    parser.add_argument("--timeout", type=float, default=10)
+    parser.add_argument("--none", action="store_true", help="nothing may reach the desktop")
+    return parser.parse_args(argv)
+
+
 def main(argv) -> None:
+    if len(argv) >= 5 and argv[1] == "colour":
+        colour(parse_rgb(argv[2]), int(argv[3]), float(argv[4]), float(argv[5]) if len(argv) > 5 else 30.0)
+        return
+    if len(argv) >= 4 and argv[1] == "no-colour":
+        no_colour(parse_rgb(argv[2]), int(argv[3]), float(argv[4]) if len(argv) > 4 else 30.0)
+        return
+    if len(argv) >= 2 and argv[1] == "picture-tap":
+        picture_tap(picture_tap_args(argv[2:]))
+        return
+    if len(argv) >= 5 and argv[1] == "log-wait":
+        log_wait(argv[2], int(argv[3]), argv[4], float(argv[5]) if len(argv) > 5 else 30.0)
+        return
     if len(argv) >= 2 and argv[1] == "dump":
         print(describe(nodes()))
         return

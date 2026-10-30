@@ -23,6 +23,8 @@ const ERROR_TEXT: Record<DirectErrorCode, string> = {
   Timeout: "The computer did not answer in time.",
   Disconnected: "The connection to the computer dropped.",
   Server: "The computer reported a problem.",
+  ScreenNotAllowed: "The computer does not let this phone view its screen.",
+  ScreenUnavailable: "The computer could not share its screen.",
   Internal: "Something went wrong inside Atur.",
 };
 

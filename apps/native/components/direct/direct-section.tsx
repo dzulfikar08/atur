@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { ListGroup, Mono, SectionTitle, Text } from "@/components/ui";
+import { ListGroup, ListRow, Mono, SectionTitle, Text } from "@/components/ui";
 import {
   DIRECT_ATTENTION_LABEL,
   directAttention,
@@ -11,6 +11,7 @@ import {
   directSessionTitle,
   openableSessions,
 } from "@/lib/direct/session-meta";
+import { directScreenAvailable } from "@/lib/direct/screen-route";
 import { useDirect } from "@/lib/direct/use-direct";
 import type { DirectSession } from "@/modules/atur-direct/src/types";
 
@@ -53,8 +54,10 @@ function SessionRow({ session }: { session: DirectSession }) {
 /**
  * The Panes tab's Direct section: terminals on the paired computer, listed by the computer
  * itself, shown while connected. Each opens `/direct-pane/<id>`, a route that needs no account.
+ * `screenRow` (the Direct area) adds the computer's desktop, `/direct-screen`, when its server
+ * offers screen sharing.
  */
-export function DirectSessionsSection() {
+export function DirectSessionsSection({ screenRow = false }: { screenRow?: boolean }) {
   const direct = useDirect();
   if (direct.state !== "connected") return null;
   const sessions = openableSessions(direct.sessions);
@@ -62,6 +65,18 @@ export function DirectSessionsSection() {
   return (
     <>
       <SectionTitle title={direct.serverName ? `Direct · ${direct.serverName}` : "Direct"} />
+      {screenRow && directScreenAvailable(direct) ? (
+        <ListGroup>
+          <ListRow
+            icon="desktop-outline"
+            title="Screen"
+            subtitle="View and control this computer's desktop"
+            chevron
+            accessibilityLabel="Open the computer's screen"
+            onPress={() => router.push("/direct-screen")}
+          />
+        </ListGroup>
+      ) : null}
       {sessions.length === 0 ? (
         <Text style={styles.empty}>No terminals open on this computer.</Text>
       ) : (

@@ -42,12 +42,30 @@
 # reads fail (`&failreads=2`), and nothing is focused; (4) a second client lays the pane out at
 # 160x50 (`&wide=1`), as the desktop app would, and the swipes drift sideways as a thumb's do.
 # Every cell needs >= 200 rows back, and the first swipe must already move the view.
+# Phase 6 is the computer's screen over Direct, the Screen row of the Direct area, on the same APK and a
+# fifth link (a clean install again): the test server was started with ATUR_TEST_SCREEN=1
+# (start-test-server.sh), so what it mirrors is scripts/fake-wayvnc.py, a real RFB 3.8 server with fixed
+# pictures that logs every pointer, key and clipboard message it receives ($SERVER_DIR/screen/input.log).
+# The host (1) opens the screen while the phone is not allowed it and needs the server's own refusal text
+# on screen and nothing at the desktop, (2) grants it as a user does (`atur-term mobile screen <device>
+# on`) and taps "Try again", (3) needs the H.264 colour on a screenshot (blue: the fixture decoded by
+# MediaCodec; ui-assert.py reads the pixels, nothing to install) and "H.264" in the stats label, (4) taps
+# the picture in the default mouse-pointer mode (the click lands where the pointer is, the middle of the
+# desktop), switches to direct touch and needs taps at two places and a long press (right button, mask
+# 4) at the mapped desktop pixels, (5) opens the keyboard and needs the keys of `adb shell input text`
+# and Enter, (6) needs view-only to stop taps reaching the desktop, and control to bring them back,
+# (7) closes to the Direct area, and (8) again with the fake refusing H.264 (mode `zrle`: what wayvnc
+# without a GPU does): the other colour, "ZRLE" in the stats, a tap at the mapped pixels. Two-finger
+# scrolling is not driven: `adb shell input` has no multi-touch. Times: from the tap that opens the
+# screen to the picture seen on a screenshot (an upper bound: a screenshot and the checks in between
+# take a second or two) and, from the fake's own log, from the phone's connection to the first update.
 # Exit status is 0 only when phase 1 logs `ATUR_E2E RESULT PASS`, every check of phase 2 passes,
 # phase 3 logs `ATUR_E2E RESULT lossy PASS`, phase 4 logs `ATUR_E2E RESULT scroll PASS` and passes
-# every UI check, and every run of phase 5 passes.
+# every UI check, every run of phase 5 passes, and every check of phase 6 passes.
 #
-# ATUR_E2E_PHASES selects the phases to run (default 12345; the lean scroll workflow sets 45). A phase
-# that is not selected counts as passed. ATUR_E2E_CPU_LOAD=<n> keeps <n> busy loops running on the
+# ATUR_E2E_PHASES selects the phases to run (default 123456; the lean scroll workflow sets 45, and
+# native-direct.yml takes a `phases` input, so `6` is the screen alone). A phase that is not selected
+# counts as passed. ATUR_E2E_CPU_LOAD=<n> keeps <n> busy loops running on the
 # device during phase 4, to see scrolling on a device that is short of CPU (a slow phone).
 # ATUR_E2E_PHASE4_RUNS=<n> plays phase 4 <n> times.
 set -uo pipefail
@@ -57,7 +75,7 @@ PACKAGE=com.diatur.app
 UDP_PORT=60096
 UDP_PORT_MASK=0xfff8   # 60096-60103: the server may hold several offers at once
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PHASES="${ATUR_E2E_PHASES:-12345}"
+PHASES="${ATUR_E2E_PHASES:-123456}"
 want() { [[ "$PHASES" == *"$1"* ]]; }
 mkdir -p "$OUT"
 LOG="$OUT/logcat.txt"
@@ -159,11 +177,12 @@ launch() {
   adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "$PACKAGE/.MainActivity" >/dev/null
 }
 
+# open_link [<file>]: the pairing link in <file> (default link2.txt) as a tap on it would open it.
 open_link() {
   # The link has & and ? in it: single quotes inside the device shell. Only the first part is
   # rewritten: a link from an older server build may carry the legacy scheme.
   local link2
-  link2="$(sed -E 's#^[a-z-]+://#atur://#' "$OUT/link2.txt")"
+  link2="$(sed -E 's#^[a-z-]+://#atur://#' "${1:-$OUT/link2.txt}")"
   adb shell am start -a android.intent.action.VIEW -p "$PACKAGE" -d "'$link2'" >/dev/null
 }
 
@@ -470,5 +489,211 @@ if want 5; then
   cat "$FOCUS_LINES"
 fi
 
+# --- Phase 6: the computer's screen over Direct ----------------------------------------------------------
+
+PHASE6="$OUT/phase6.txt"
+: > "$PHASE6"
+SCREEN_LINES="$OUT/screen-lines.txt"
+: > "$SCREEN_LINES"
+FAKE_DIR="$SERVER_DIR/screen"
+FAKE_LOG="$FAKE_DIR/input.log"
+# What fake-wayvnc.py paints: the last picture of the H.264 fixture (blue), and a colour of its own for ZRLE.
+H264_RGB=0,0,254
+ZRLE_RGB=200,40,200
+COLOUR_TOL=70
+
+# step <name> [detail]: a line of the phase's own log (screen-lines.txt, the workflow's summary).
+step() { echo "ATUR_E2E STEP screen $*" | tee -a "$PHASE6" "$SCREEN_LINES"; }
+metric6() { echo "ATUR_E2E METRIC $1=$2" | tee -a "$PHASE6" "$SCREEN_LINES"; }
+
+# last_value <name>: the last name=value a check of the phase printed.
+last_value() { grep -o "$1=[0-9.]*" "$PHASE6" | tail -1 | cut -d= -f2; }
+
+# The isolated server's command-line client, in its profile.
+term() ( . "$SERVER_DIR/env.sh" && "$BIN/atur-term" "$@" )
+
+fake_lines() { wc -l < "$FAKE_LOG"; }
+
+# fake_time <regex> <from-line>: the time (ms) of the first log line after <from-line> that matches.
+fake_time() { tail -n +$(($2 + 1)) "$FAKE_LOG" | grep -E -m1 "^[0-9]+ $1" | cut -d' ' -f1; }
+
+fake_untouched() { ! grep -q ' connect mode=' "$FAKE_LOG"; }
+
+# Allows the screen to the phone that is connected (older pairings of the earlier phases may linger,
+# so every connected device gets it; the line is `  <id>  <name>  connected  screen off`).
+grant_screen() {
+  local ids id
+  ids="$(term mobile | sed -nE 's/^ +([0-9a-f]{8}) +.*  connected  screen (on|off)$/\1/p')"
+  if [ -z "$ids" ]; then
+    echo "no device is connected; the computer lists:"
+    term mobile
+    return 1
+  fi
+  for id in $ids; do
+    term mobile screen "$id" on | grep "Screen sharing is on" || return 1
+    echo "screen on for device $id"
+  done
+  term mobile
+}
+
+# see_screen <name> <stats regex> <picture rgb> <other rgb> <what taps to open it>: the screen opens,
+# the stats label names the codec, the codec's colour fills the screenshot and the other one does not.
+see_screen() {
+  local name="$1" stats="$2" rgb="$3" other="$4" opener="$5" from tapped seen connect update
+  from=$(fake_lines)
+  must "$name: tap $opener" ui tap "$opener" 30 || return 1
+  tapped=$(last_value tapped_at_ms)
+  must "$name: the picture is on screen (its colour fills the screenshot)" \
+    ui colour "$rgb" "$COLOUR_TOL" 0.12 90 || return 1
+  seen=$(last_value seen_at_ms)
+  shot "phase6-$name"
+  must "$name: the stats label names the codec" ui wait-regex "$stats" 60 || return 1
+  must "$name: the bar says Live" ui wait "Live" 30 || return 1
+  must "$name: the other codec's colour is not on screen" ui no-colour "$other" "$COLOUR_TOL" 10 || return 1
+  must "$name: the phone offered H.264 (encoding 50) to the desktop" \
+    ui log-wait "$FAKE_LOG" "$from" ' encodings 50,' 10 || return 1
+  connect=$(fake_time 'connect mode=' "$from")
+  update=$(fake_time 'first-update' "$from")
+  step "$name picture" "open_to_picture_ms<=$((seen - tapped))"
+  metric6 "screen_${name}_open_to_picture_ms" "$((seen - tapped))"
+  [ -n "$connect" ] && [ -n "$update" ] && metric6 "screen_${name}_connect_to_first_update_ms" "$((update - connect))"
+  return 0
+}
+
+# tap_check <metric> <name> <picture rgb> <more picture-tap options>: a tap of the picture reaches the
+# desktop where it should; the metric is how far off it was (framebuffer pixels).
+tap_check() {
+  local metric="$1" name="$2" rgb="$3"
+  shift 3
+  must "$name" ui picture-tap --colour "$rgb" --tol "$COLOUR_TOL" --fb 320x180 --log "$FAKE_LOG" "$@" || return 1
+  metric6 "$metric" "$(last_value pointer_error_px)"
+}
+
+# input_checks <name> <picture rgb> [pointer]: what the phone sends. With `pointer` the app is still in
+# its default mouse-pointer mode and first needs a tap to click where the pointer is, then switches.
+input_checks() {
+  local name="$1" rgb="$2" with_pointer="${3:-}"
+  if [ -n "$with_pointer" ]; then
+    tap_check "screen_${name}_pointer_mode_error_px" \
+      "$name, pointer mode: a tap near a corner clicks where the pointer is (the middle)" "$rgb" \
+      --at 0.15,0.2 --expect-at 0.5,0.5 --mask 1 --tolerance 10 || return 1
+    must "switch the mouse mode to direct touch" ui tap "Mouse mode" 30 || return 1
+    must "the mode is direct touch" ui wait "Direct touch" 30 || return 1
+  fi
+  tap_check "screen_${name}_tap_a_error_px" \
+    "$name, touch mode: a tap at 25% / 75% of the picture is a click at 80,135" "$rgb" \
+    --at 0.25,0.75 --mask 1 --tolerance 8 || return 1
+  tap_check "screen_${name}_tap_b_error_px" \
+    "$name, touch mode: a tap at 80% / 20% is a click at 256,36" "$rgb" \
+    --at 0.8,0.2 --mask 1 --tolerance 8 || return 1
+  step "$name taps mapped"
+  return 0
+}
+
+# type_keys: `ab` and Enter, one key at a time, into the focused hidden input.
+type_keys() {
+  type_text ab || return 1
+  adb shell input keyevent 66
+}
+
+# More of what the phone sends, once, on the H.264 picture.
+more_input_checks() {
+  local rgb="$1" from
+  tap_check screen_h264_long_press_error_px \
+    "touch mode: a long press at 50% / 25% is a right click (mask 4) at 160,45" "$rgb" \
+    --at 0.5,0.25 --hold 700 --mask 4 --tolerance 8 || return 1
+  step "long press right button"
+  must "open the keyboard" ui tap "Keyboard" 30 || return 1
+  must "the key row is up" ui wait "Hide keyboard" 30 || return 1
+  from=$(fake_lines)
+  must "type a and b through the soft keyboard's input, then Enter" type_keys || return 1
+  must "the desktop got the down of a (keysym 97)" ui log-wait "$FAKE_LOG" "$from" ' key down 97$' 15 || return 1
+  must "the desktop got the up of a" ui log-wait "$FAKE_LOG" "$from" ' key up 97$' 15 || return 1
+  must "the desktop got b (keysym 98)" ui log-wait "$FAKE_LOG" "$from" ' key down 98$' 15 || return 1
+  must "the desktop got Enter (Return, keysym 65293)" ui log-wait "$FAKE_LOG" "$from" ' key down 65293$' 15 || return 1
+  step "keys typed"
+  must "hide the keyboard" ui tap "Hide keyboard" 30 || return 1
+  must "switch to view only" ui tap "Controlling: tap for view only" 30 || return 1
+  must "the bar offers taking control back" ui wait "View only: tap to take control" 30 || return 1
+  must "view only: a tap on the picture does not reach the desktop" \
+    ui picture-tap --colour "$rgb" --tol "$COLOUR_TOL" --log "$FAKE_LOG" --at 0.6,0.6 --none --timeout 4 || return 1
+  step "view only holds"
+  must "take control back" ui tap "View only: tap to take control" 30 || return 1
+  must "the bar says controlling again" ui wait "Controlling: tap for view only" 30 || return 1
+  tap_check screen_h264_control_again_error_px \
+    "control again: a tap at 60% / 60% is a click at 192,108" "$rgb" \
+    --at 0.6,0.6 --mask 1 --tolerance 8 || return 1
+  step "control again"
+}
+
+# Back to the Direct area with the Close button.
+close_screen() {
+  must "close the screen" ui tap "Close screen" 30 || return 1
+  must "the Direct area is back with its Screen row" ui wait "Open the computer's screen" 30 || return 1
+  must "the screen's bar is gone" ui absent "Close screen" 10 || return 1
+  step "closed"
+}
+
+phase6() {
+  PHASE_LABEL="phase 6" PHASE_FILE="$PHASE6" PHASE_SHOT=phase6
+  must "the test server has the fake desktop (start-test-server.sh ran with ATUR_TEST_SCREEN=1)" \
+    test -x "$FAKE_DIR/wayvnc" || return 1
+  echo h264 > "$FAKE_DIR/mode"
+  adb shell settings put secure show_ime_with_hard_keyboard 1
+  must "ask the server for a fifth pairing link (10.0.2.2)" \
+    "$HERE/start-test-server.sh" pair "$SERVER_DIR" 10.0.2.2 "$OUT/link6.txt" || return 1
+  must "clear the app's data" cleared || return 1
+  must "start the app signed out" launch || return 1
+  must "the login screen offers Direct without an account" \
+    ui wait "Use Direct without signing in" 120 || return 1
+  must "tap Use Direct without signing in" ui tap "Use Direct without signing in" || return 1
+  must "the Direct area shows a pairing action" ui wait "Scan pairing code" 30 || return 1
+  must "open the pairing link the way a tap on it does" open_link "$OUT/link6.txt" || return 1
+  must "the confirmation names the computer" ui wait "10.0.2.2:$PORT" 60 || return 1
+  must "tap Confirm" ui tap "Confirm" || return 1
+  must "the Direct area is connected to the computer" ui wait "Connected" 120 || return 1
+  step "paired"
+  must "the Direct area lists the Screen row (the server's handshake offers the screen)" \
+    ui wait "Open the computer's screen" 60 || return 1
+  shot phase6-direct-area
+  # Refused first: a phone is not allowed the screen until the computer says so.
+  must "tap the Screen row" ui tap "Open the computer's screen" 30 || return 1
+  must "not allowed yet: the screen shows the server's own words" ui wait "atur-term mobile screen" 60 || return 1
+  must "the bar says Not allowed" ui wait "Not allowed" 30 || return 1
+  must "nothing reached the desktop program" fake_untouched || return 1
+  shot phase6-refused
+  step "refused"
+  must "allow the screen for the phone on the computer (atur-term mobile screen <device> on)" grant_screen || return 1
+  step "granted"
+
+  # H.264: MediaCodec on the emulator.
+  see_screen h264 'H\.264 .* fps' "$H264_RGB" "$ZRLE_RGB" "Try again" || return 1
+  input_checks h264 "$H264_RGB" pointer || return 1
+  more_input_checks "$H264_RGB" || return 1
+  shot phase6-h264-input
+  step "scroll skipped" "adb has no multi-touch"
+  close_screen || return 1
+
+  # The desktop refuses H.264 (a wayvnc without GPU encoding): ZRLE pictures.
+  echo zrle > "$FAKE_DIR/mode"
+  see_screen zrle 'ZRLE .* fps' "$ZRLE_RGB" "$H264_RGB" "Open the computer's screen" || return 1
+  input_checks zrle "$ZRLE_RGB" || return 1
+  shot phase6-zrle-input
+  close_screen || return 1
+  step "done"
+}
+
+PHASE6_STATUS=0
+if want 6; then
+  phase6
+  PHASE6_STATUS=$?
+  if [ $PHASE6_STATUS -eq 0 ]; then
+    echo "PASS phase 6" | tee -a "$PHASE6"
+  fi
+  cp "$FAKE_LOG" "$OUT/fake-desktop-input.log" 2>/dev/null || true
+  echo "--- phase 6 lines"
+  cat "$SCREEN_LINES"
+fi
+
 kill $LOGCAT 2>/dev/null
-[ $PHASE1 -eq 0 ] && [ $PHASE2_STATUS -eq 0 ] && [ $PHASE3_STATUS -eq 0 ] && [ $PHASE4_STATUS -eq 0 ] && [ $PHASE5_STATUS -eq 0 ]
+[ $PHASE1 -eq 0 ] && [ $PHASE2_STATUS -eq 0 ] && [ $PHASE3_STATUS -eq 0 ] && [ $PHASE4_STATUS -eq 0 ] && [ $PHASE5_STATUS -eq 0 ] && [ $PHASE6_STATUS -eq 0 ]

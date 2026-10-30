@@ -157,6 +157,8 @@ export class FakeLink implements DirectLink {
   udpNote = "";
   route: DirectRoute | null = null;
   addresses: readonly string[] = [];
+  /** The server offers the screen channel. */
+  screen = true;
   closed = false;
   sessionList: DirectSession[] = [];
   pingMs = 12;
@@ -289,6 +291,60 @@ export class FakeLink implements DirectLink {
       transport: this.transport,
       route: this.route,
     };
+  }
+
+  readonly screenOpens: { viewOnly: boolean; h264: boolean }[] = [];
+  screenCloses = 0;
+  /** What `screenOpen` does: undefined resolves; an error rejects. */
+  screenOpenResult: DirectError | undefined = undefined;
+  readonly screenSent: { method: string; args: unknown[] }[] = [];
+
+  async screenOpen(options: { viewOnly: boolean; h264: boolean }): Promise<void> {
+    this.screenOpens.push({ ...options });
+    if (this.closed) throw new DirectError("Disconnected", "");
+    if (this.screenOpenResult) throw this.screenOpenResult;
+  }
+
+  async screenClose(): Promise<void> {
+    this.screenCloses++;
+  }
+
+  private sendScreen(method: string, args: unknown[]): boolean {
+    if (this.closed) return false;
+    this.screenSent.push({ method, args });
+    return true;
+  }
+
+  screenPointer(x: number, y: number, buttons: number): boolean {
+    return this.sendScreen("screenPointer", [x, y, buttons]);
+  }
+
+  screenScroll(x: number, y: number, dx: number, dy: number): boolean {
+    return this.sendScreen("screenScroll", [x, y, dx, dy]);
+  }
+
+  screenKey(keysym: number, down: boolean): boolean {
+    return this.sendScreen("screenKey", [keysym, down]);
+  }
+
+  screenType(text: string): boolean {
+    return this.sendScreen("screenType", [text]);
+  }
+
+  screenViewOnly(viewOnly: boolean): boolean {
+    return this.sendScreen("screenViewOnly", [viewOnly]);
+  }
+
+  screenClipboard(text: string): boolean {
+    return this.sendScreen("screenClipboard", [text]);
+  }
+
+  screenReleaseAll(): boolean {
+    return this.sendScreen("screenReleaseAll", []);
+  }
+
+  screenRefresh(): boolean {
+    return this.sendScreen("screenRefresh", []);
   }
 }
 

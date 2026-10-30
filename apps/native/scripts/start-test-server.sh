@@ -7,8 +7,12 @@
 #       has the UDP offer) in its own profile under <dir>, and with a port also turns on phone
 #       access on that port. The server offers UDP on ATUR_TERM_UDP_PORTS (default 60096-60103,
 #       the port the lossy-link proof shapes) and nothing else is opened.
-#       Writes <dir>/env.sh, which exports BIN, ATUR_TERM_DIR, ATUR_TERM_UDP_PORTS and SHELL for
-#       the next steps.
+#       With ATUR_TEST_SCREEN=1 the server also finds a desktop to mirror: a Wayland socket in a
+#       runtime folder of its own and fake-wayvnc.py (an RFB server with fixed pictures, see that
+#       file) in place of wayvnc, steered and logged through <dir>/screen (mode, input.log).
+#       Writes <dir>/env.sh, which exports BIN, ATUR_TERM_DIR, ATUR_TERM_UDP_PORTS and SHELL (and,
+#       with the fake screen, XDG_RUNTIME_DIR, WAYLAND_DISPLAY, ATUR_TERM_WAYVNC,
+#       ATUR_TERM_SCREEN_GPU and FAKE_WAYVNC_DIR) for the next steps.
 #   start-test-server.sh pair <dir> <address> <out-file>
 #       Asks that server for a pairing link naming <address> and writes the link (one line) to
 #       <out-file>. A link works once and for five minutes: call this once per pairing.
@@ -29,6 +33,27 @@ start() {
     echo "export ATUR_TERM_UDP_PORTS='${ATUR_TERM_UDP_PORTS:-60096-60103}'"
     echo "export SHELL=/bin/bash"
   } > "$dir/env.sh"
+  if [ "${ATUR_TEST_SCREEN:-}" = 1 ]; then
+    local here root
+    here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    root="$(cd "$dir" && pwd)"
+    mkdir -p -m 700 "$root/run"
+    mkdir -p "$root/screen"
+    : > "$root/screen/input.log"
+    echo h264 > "$root/screen/mode"
+    # A Wayland desktop is a socket named wayland-N in the runtime folder; nothing listens on it.
+    rm -f "$root/run/wayland-7"
+    python3 -c 'import socket, sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "$root/run/wayland-7"
+    printf '#!/bin/sh\nexec python3 %q "$@"\n' "$here/fake-wayvnc.py" > "$root/screen/wayvnc"
+    chmod +x "$root/screen/wayvnc"
+    {
+      echo "export XDG_RUNTIME_DIR='$root/run'"
+      echo "export WAYLAND_DISPLAY=wayland-7"
+      echo "export ATUR_TERM_WAYVNC='$root/screen/wayvnc'"
+      echo "export ATUR_TERM_SCREEN_GPU=0"
+      echo "export FAKE_WAYVNC_DIR='$root/screen'"
+    } >> "$dir/env.sh"
+  fi
   # shellcheck disable=SC1091
   . "$dir/env.sh"
   nohup "$BIN/atur-term-server" > "$dir/server.log" 2>&1 &

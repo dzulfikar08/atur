@@ -15,6 +15,7 @@ Pod::Spec.new do |s|
 
   s.vendored_frameworks = 'Frameworks/AturMobile.xcframework'
   s.libraries = 'resolv'
+  s.frameworks = 'AVFoundation', 'CoreMedia', 'CoreVideo', 'VideoToolbox', 'QuartzCore', 'UIKit'
 
   s.source_files = '*.{h,m,mm,swift}', 'Generated/*.swift'
   s.pod_target_xcconfig = {

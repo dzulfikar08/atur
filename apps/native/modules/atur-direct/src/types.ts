@@ -32,6 +32,10 @@ export type DirectErrorCode =
   | "Timeout"
   | "Disconnected"
   | "Server"
+  /** The computer refused `screenOpen` for this phone; the reason is the server's text, shown as is. */
+  | "ScreenNotAllowed"
+  /** The computer could not capture its screen (the reason says why, e.g. wayvnc is missing). */
+  | "ScreenUnavailable"
   | "Internal";
 
 export class DirectError extends Error {
@@ -170,7 +174,35 @@ export type DirectEvent =
   | { t: "git"; projectId: string }
   | { t: "files"; projectId: string; paths: string[] }
   | { t: "restarting" }
-  | { t: "disconnected" };
+  | { t: "disconnected" }
+  | DirectScreenEvent;
+
+/** The state of the screen channel, as the core reports it. */
+export type ScreenChannelState = "connecting" | "ready" | "closed";
+
+/** One once-a-second report of the screen picture while a screen is open. */
+export interface ScreenStats {
+  /** "h264", "zrle", ... as the core names what is arriving. */
+  codec: string;
+  fps: number;
+  kbps: number;
+  dropped: number;
+  decodeMs: number;
+}
+
+/** The screen events, pushed on the connection like the terminal ones. */
+export type DirectScreenEvent =
+  | {
+      t: "screen";
+      state: ScreenChannelState;
+      width: number;
+      height: number;
+      name: string;
+      /** Only on `closed`; "" = closed by the app. */
+      reason: string;
+    }
+  | ({ t: "screenStats" } & ScreenStats)
+  | { t: "screenClipboard"; text: string };
 
 export interface DirectFileEntry {
   name: string;

@@ -198,7 +198,7 @@ export function DirectSettings({ home = false }: { home?: boolean }) {
         <ErrorNote error={describeFailure(direct.error)} />
       ) : null}
 
-      {home ? <DirectSessionsSection /> : null}
+      {home ? <DirectSessionsSection screenRow /> : null}
 
       <SectionTitle title={paired ? "Pair again" : "Pair a computer"} />
       {scanning ? (

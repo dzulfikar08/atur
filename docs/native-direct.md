@@ -443,6 +443,76 @@ The proof build's touch trace says why: in the `late` run before, the first nati
 touches (the idle cell's 43 swipes started none: the list had nothing to scroll, so Android never took the
 gesture), 113 touches and 26 drags in all; after, 42 touches and 40 drags.
 
+## Screen over Direct
+
+The paired computer's desktop, on the same connection, without Atur Cloud: the phone opens the fork's screen
+channel (`OpenScreen`, the RFB bytes of wayvnc; see the fork's `docs/features/screen.md`). The cloud Screen page
+(`app/screen.tsx`, noVNC in a WebView) stays as the fallback.
+
+**Permission.** A paired phone may open the screen only when the computer allows it for that phone: Settings,
+Phones on the computer (the per-device "Screen" switch) or `atur-term mobile screen <device> on`. Otherwise the
+server refuses `OpenScreen` and the app shows the server's own words verbatim (`ScreenNotAllowed`). Switching it
+off closes the phone's open viewer at once.
+
+**Path.** The Rust core opens the channel and runs the RFB session. H.264 access units go to a native sink
+(`ScreenSink.on_video`), plain ZRLE pictures to `on_frame`, both drawn by the module's `AturScreenView`
+(Android `MediaCodec` into a `TextureView`; iOS `VTDecompressionSession` into an `AVSampleBufferDisplayLayer`).
+JS never sees a pixel; it sends input and lays the view out.
+
+| Layer                                                          | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `modules/atur-direct/src`                                      | `DirectConnection.screenOpen({viewOnly, h264})` / `screenClose()` (blocking calls), `screenPointer`, `screenScroll`, `screenKey`, `screenType`, `screenViewOnly`, `screenClipboard`, `screenReleaseAll`, `screenRefresh` (queued fires, in order with typing). `connection.screen` is the handshake's screen feature; `AturDirect.screenH264` the module's hardware-decoder constant. Events `screen` (`connecting`/`ready`/`closed`, size, reason), `screenStats` (codec, fps, kbps, dropped, decode ms) and `screenClipboard` ride the connection's event stream. New error codes `ScreenNotAllowed`, `ScreenUnavailable` (both carry the server's reason).                                                                                                                         |
+| `lib/direct/screen-controller.ts`                              | `openDirectScreen(manager, {h264, viewOnly})`: opens on the manager's live connection and again on every new one (a drop, a route swap), through a state machine `connecting` / `ready` / `reconnecting` / `refused` / `unavailable` / `unsupported` / `ended` / `failed` / `closed`. Opens H.264 only when the device can; `decoderFailed()` (the view's `onDecoderError`) closes and reopens with `h264:false`, and every later open stays on plain pictures. A server close with a reason and a failed open retry with the manager's backoff (1, 2, 5, then 10 s) up to 4 times; the budget resets after 10 s ready. `ScreenNotAllowed`/`ScreenUnavailable` are not retried, `Unsupported` (or a server without `screen`) says "older server". View-only gates every input method. |
+| `lib/direct/screen-input.ts`                                   | The gesture recognizer's actions in framebuffer pixels: trackpad gain, the zoomed view following the pointer, direct touch, buttons as RFB masks (1 left, 2 middle, 4 right), wheel notches (natural direction, remainder kept, at most 10 a call). Zoom/pan come from `lib/screen-view.ts`, shared with the cloud page.                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `lib/direct/screen-typing.ts`                                  | The soft keyboard's hidden input and the key row as `screenKey` / `screenType` (sticky modifiers wrap one key).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `components/direct/direct-screen.tsx`, `app/direct-screen.tsx` | The native view laid out at the zoom 1 fit rectangle and zoomed/panned by a transform (`transformOrigin` top left), a touch overlay feeding `GestureRecognizer` (multi-touch ids, its `tick` timer, haptics on hold and drag), the connection bar (mode, keyboard, view-only, fit, More, close), the key row, clipboard both ways (text), landscape unlock. The route works signed out.                                                                                                                                                                                                                                                                                                                                                                                               |
+
+**Entry points.** The Direct area lists a "Screen" row while the computer is connected and its handshake reports
+`screen`. The Panes tab's Screen button goes to `/direct-screen` in that case (for anyone signed in), else to the
+cloud `/screen` (platform owner only), as before (`lib/direct/screen-route.ts`). When Direct refuses, cannot capture
+or is too old, `/direct-screen` offers "Use Atur Cloud screen" if the user is signed in.
+
+**Picture quality** is not a phone setting here: the codec follows the device (H.264 where the hardware decodes it)
+and the server decides the rate. The cloud page's Sharp/Balanced/Low data choice does not apply and is hidden.
+The mouse mode and view-only share `lib/screen-prefs.ts` with the cloud page.
+
+**Not carried.** Images cannot be pasted (RFB carries text; the cloud page's image paste needs the bridge); the
+Paste action says so.
+
+**For e2e.** Test IDs: `screen-view` (the native view), `screen-state` (the bar's state text: Connecting, Live,
+Reconnecting, Not allowed, ...), `screen-keyboard`, `screen-viewonly`, `screen-close`, `screen-stats` (visible
+"H.264 · 30 fps · 840 kbit/s" while live), `screen-input` (the hidden text field).
+
+**Proof run (phase 6 of `native-direct`).** `scripts/e2e-direct-android.sh` phase 6 plays the screen on the same
+release APK against the isolated test server, which is started with `ATUR_TEST_SCREEN=1`
+(`scripts/start-test-server.sh`): a Wayland socket in a runtime folder of its own, so the server finds a
+"desktop", and `scripts/fake-wayvnc.py` in place of `wayvnc` (`ATUR_TERM_WAYVNC`, started with wayvnc's own
+arguments). The stand-in is a real minimal RFB 3.8 server (security None, 320x180, SetEncodings, update
+requests, key, pointer and cut-text messages). A client that offers H.264 (encoding 50) gets the access units
+of `scripts/fixtures/solid-cbp.h264` (the fork's decoder fixture: red, green, then blue, from picture 0 to 14;
+a full update request restarts it at a key frame); in `mode` `zrle` it refuses H.264 as a `wayvnc` without a GPU
+does, and everything else gets one solid ZRLE colour, so a screenshot tells the codecs apart. It logs every
+pointer, key and clipboard message with a time to `<server dir>/screen/input.log`. The host then: opens the
+Screen row while the phone is not allowed it and needs the server's own refusal words on screen and nothing at
+the desktop; allows it as a user does (`atur-term mobile screen <device> on`) and taps "Try again"; needs the
+blue of the decoded H.264 on a screenshot (Android `MediaCodec` on the emulator; `ui-assert.py colour` decodes
+`adb exec-out screencap` itself, nothing to install) and "H.264" in the stats label; taps the picture in the
+default mouse-pointer mode (the click lands where the pointer is, the middle), switches to direct touch and
+needs taps at two places and a long press (right button, mask 4) at the mapped desktop pixels within 8 px; opens
+the keyboard and needs the keys of `adb shell input text` and Enter; needs view-only to stop taps reaching the
+desktop and control to bring them back; closes to the Direct area; and repeats the open with the stand-in
+refusing H.264, needing the ZRLE colour, "ZRLE" in the stats label and a mapped tap. Two-finger scrolling is
+not driven: `adb shell input` has no multi-touch. Run it alone: `gh workflow run native-direct.yml -f phases=6`.
+
+SCREEN_RESULTS_PLACEHOLDER: the numbers of the screen run (time from the tap that opens the screen to the
+picture on a screenshot, and from the phone's connection to the first update, for H.264 and for ZRLE; the
+pointer error in desktop pixels of each tap) are filled in here after CI.
+
+Tests: `modules/atur-direct/src/connection.test.ts` (screen API under its core names, the `screen` flag, refusal
+codes keep the server's reason), `lib/direct/screen-controller.test.ts` (open, ready, refusal, decoder fallback,
+reconnect on a new connection, backoff, view-only, close), `screen-input.test.ts`, `screen-typing.test.ts`,
+`screen-text.test.ts`, `screen-route.test.ts`.
+
 ## Building it
 
 ```bash

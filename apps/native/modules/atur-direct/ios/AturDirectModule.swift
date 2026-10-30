@@ -4,6 +4,13 @@ import Foundation
 private let unknownConnection =
   #"{"error":{"code":"Disconnected","reason":"unknown connection"}}"#
 
+// Asks the connection for a key frame / full update (used by the screen view).
+private func screenRefresher(_ direct: Direct) -> @Sendable () -> Void {
+  return { [weak direct] in
+    _ = direct?.fire(method: "screenRefresh", argsJson: "{}")
+  }
+}
+
 private func internalError(_ reason: String) -> String {
   let payload: [String: Any] = ["error": ["code": "Internal", "reason": reason]]
   if let data = try? JSONSerialization.data(withJSONObject: payload),
@@ -66,6 +73,10 @@ public final class AturDirectModule: Module {
   public func definition() -> ModuleDefinition {
     Name("AturDirect")
 
+    Constants {
+      return ["screenH264": screenHardwareH264Available()]
+    }
+
     Events("message")
 
     AsyncFunction("parseLink") { (link: String) -> String in
@@ -81,6 +92,8 @@ public final class AturDirectModule: Module {
       let direct = Direct(listener: MessageForwarder(module: self, connectionId: id))
       let answer = direct.connect(credentialJson: credentialJson)
       if answer.hasPrefix(#"{"ok""#) {
+        direct.setScreenSink(sink: ScreenSinkForwarder(connectionId: id))
+        ScreenHub.shared.setRefresh(id, screenRefresher(direct))
         self.store(id, direct)?.disconnect()
       } else {
         direct.disconnect()
@@ -109,11 +122,21 @@ public final class AturDirectModule: Module {
     }
 
     AsyncFunction("disconnect") { [weak self] (id: String) in
+      ScreenHub.shared.removeRefresh(id)
       self?.remove(id)?.disconnect()
     }.runOnQueue(workerQueue)
 
     OnDestroy { [weak self] in
+      ScreenHub.shared.removeAllRefreshers()
       self?.removeAll().forEach { $0.disconnect() }
+    }
+
+    View(AturScreenView.self) {
+      Events("onFirstPicture", "onDecoderError")
+
+      Prop("connection") { (view: AturScreenView, connection: String?) in
+        view.connectionId = connection
+      }
     }
   }
 }

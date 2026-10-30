@@ -144,6 +144,8 @@ WebViews load bundled HTML from memory (`lib/webview/*.generated.ts`, built by `
 
 ## Screen (remote desktop)
 
+> **Over Direct.** With a computer paired and connected, the Panes tab's Screen button opens `app/direct-screen.tsx` instead: the same gestures and bar, but the picture comes over the direct connection and a native view draws it (H.264 hardware decode, no WebView, no Worker). This page, `/screen`, stays the fallback for the platform owner and is offered from there when Direct refuses. See [Screen over Direct](native-direct.md#screen-over-direct).
+
 `app/screen.tsx` hosts `webview/screen.ts` (noVNC). The behaviour follows Microsoft's Windows App (Remote Desktop) for iOS/Android. Pure logic lives in `lib/` and is unit-tested: `screen-gestures.ts` (gesture recognizer), `screen-view.ts` (zoom/pan geometry, pointer acceleration), `screen-session.ts` (reconnect policy).
 
 ### Mouse modes
@@ -184,7 +186,7 @@ A floating bar at the top (drag it sideways; the chevron tucks it into a status 
 
 ## Tests
 
-`bun test apps/native/lib` (also `bun run test` from the root): `ansi.test.ts` (SGR parsing, colour resolution, wide chars), `terminal-screen.test.ts` (snapshot/diff model, replay, link detection), `terminal-keys.test.ts` (modifiers, swipe steps, font sizing), `dictation-text.test.ts` (locale choice, transcript merging), `screen-gestures.test.ts` (both mouse modes: deferred tap, double click, double-tap-drag, hold, multi-finger taps, scroll vs pinch, mode switch releasing a held button), `screen-view.test.ts` (fit, pan clamping, zoom anchoring, pointer follow, acceleration), `screen-session.test.ts` (backoff, which closes retry). Bridge: `apps/bridge/src/hub.test.ts` (Ctrl letters, `paste`), `apps/bridge/src/screen.test.ts` (ping/pong off the RFB stream, liveness timeout, replace-oldest).
+`bun test apps/native/lib` (also `bun run test` from the root): `ansi.test.ts` (SGR parsing, colour resolution, wide chars), `terminal-screen.test.ts` (snapshot/diff model, replay, link detection), `terminal-keys.test.ts` (modifiers, swipe steps, font sizing), `dictation-text.test.ts` (locale choice, transcript merging), `screen-gestures.test.ts` (both mouse modes: deferred tap, double click, double-tap-drag, hold, multi-finger taps, scroll vs pinch, mode switch releasing a held button), `screen-view.test.ts` (fit, pan clamping, zoom anchoring, pointer follow, acceleration), `screen-session.test.ts` (backoff, which closes retry). The direct screen has its own: `apps/native/lib/direct/screen-*.test.ts` (see native-direct.md). Bridge: `apps/bridge/src/hub.test.ts` (Ctrl letters, `paste`), `apps/bridge/src/screen.test.ts` (ping/pong off the RFB stream, liveness timeout, replace-oldest).
 
 Transcript: `apps/bridge/src/session-transcript.test.ts` (omp and Claude Code line parsing, tool call/result folding, backwards paging over multi-chunk files and a line longer than a chunk, follow, join-mid-write, truncation reset, session switch), `apps/bridge/src/observe.test.ts` (opt-in over the real socket, input-shaped frames still closed 1008), `apps/native/lib/transcript.test.ts` (frame reducer, merge, helpers).
 
