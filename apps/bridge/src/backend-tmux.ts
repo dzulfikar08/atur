@@ -405,7 +405,7 @@ export class TmuxBackend implements PaneBackend {
    * which has not changed directory yet for a few milliseconds: wait (bounded) until it reports
    * the directory the pane was asked to start in, so the caller never sees tmux's own cwd.
    */
-  private async paneStartedIn(id: string, cwd: string | undefined): Promise<PaneSummary> {
+  private async paneStartedIn(id: string, cwd: string | null | undefined): Promise<PaneSummary> {
     let pane = await this.getPane(id);
     if (!cwd) return pane;
     let want = cwd;
