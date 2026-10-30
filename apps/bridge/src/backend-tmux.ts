@@ -7,6 +7,7 @@
  * pane user options `@atur_status` (idle|working|blocked|done), `@atur_agent`
  * and optionally `@atur_session` (see apps/bridge/hooks and docs/bridge.md).
  */
+import { realpathSync } from "node:fs";
 import { hostname } from "node:os";
 import { basename } from "node:path";
 import {
@@ -374,7 +375,7 @@ export class TmuxBackend implements PaneBackend {
       }
       throw new Error(`tmux new-session: ${res.stderr.trim() || "failed"}`);
     }
-    const pane = await this.getPane(res.stdout.trim());
+    const pane = await this.paneStartedIn(res.stdout.trim(), opts.cwd);
     return {
       workspace: { id: pane.workspaceId, label: pane.workspaceLabel, cwd: pane.cwd, paneCount: 1 },
       pane,
@@ -396,7 +397,28 @@ export class TmuxBackend implements PaneBackend {
       "-F",
       "#{pane_id}",
     ]);
-    return this.getPane(out.trim());
+    return this.paneStartedIn(out.trim(), start);
+  }
+
+  /**
+   * A pane just created with `-c <cwd>`. tmux reads `pane_current_path` from the shell process,
+   * which has not changed directory yet for a few milliseconds: wait (bounded) until it reports
+   * the directory the pane was asked to start in, so the caller never sees tmux's own cwd.
+   */
+  private async paneStartedIn(id: string, cwd: string | undefined): Promise<PaneSummary> {
+    let pane = await this.getPane(id);
+    if (!cwd) return pane;
+    let want = cwd;
+    try {
+      want = realpathSync(cwd);
+    } catch {
+      return pane; // a directory tmux could not enter either: nothing to wait for
+    }
+    for (let tries = 0; tries < 40 && pane.cwd !== want; tries++) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      pane = await this.getPane(id);
+    }
+    return pane;
   }
 
   async closePane(id: string): Promise<void> {
