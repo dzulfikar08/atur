@@ -293,3 +293,18 @@ pages.get("/e/:name", async (c) => {
     </Layout>,
   );
 });
+
+// OAuth redirect target for the Atur Terminal "atur" extension. The extension
+// reads `?code=` from the in-app tab's address, so the page only has to load:
+// static, no script, and nothing that could carry the code onward.
+pages.get("/oauth/atur-terminal", (c) => {
+  c.header("Referrer-Policy", "no-referrer");
+  c.header("Cache-Control", "no-store");
+  c.header("X-Frame-Options", "DENY");
+  return c.html(
+    <Layout title="Signed in · Atur Terminal">
+      <h1>Signed in to Atur</h1>
+      <p class="lede">You can close this tab and return to Atur Terminal.</p>
+    </Layout>,
+  );
+});

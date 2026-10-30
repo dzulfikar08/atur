@@ -271,3 +271,19 @@ describe("pages", () => {
     expect((await call("/e/missing")).status).toBe(404);
   });
 });
+
+describe("oauth redirect page", () => {
+  it("loads without auth, with hardened headers and no script", async () => {
+    const { call } = await setup();
+    const response = await call("/oauth/atur-terminal?code=secret&state=x");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
+    expect(response.headers.get("content-security-policy")).toContain("default-src 'none'");
+    const html = await response.text();
+    expect(html).toContain("You can close this tab and return to Atur Terminal.");
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("secret");
+  });
+});
