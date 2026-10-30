@@ -345,9 +345,12 @@ export function TerminalView({
   useEffect(() => {
     const wanted = waiting.current;
     if (!wanted || historyReplies <= wanted.replies) return;
+    // A queued read that follows this reply re-bases the rows: jump when the last one has landed
+    // (this effect runs again on that reply; the press's own timer is the way out if none comes).
+    if (!screen.isIdle()) return;
     stopWaiting();
     promptRun.current(wanted.direction, wanted.reads);
-  }, [historyReplies, stopWaiting]);
+  }, [historyReplies, screen, stopWaiting]);
   useEffect(() => stopWaiting, [stopWaiting]);
 
   // Prompts or rows changed: "previous prompt" may have gained or lost its target.

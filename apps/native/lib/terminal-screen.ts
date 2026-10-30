@@ -329,6 +329,14 @@ export class TerminalScreen {
     return this.olderWindow() > history.length + lines.length;
   }
 
+  /**
+   * No scrollback read is out or queued. A read that follows another one re-bases the loaded rows,
+   * so a jump computed before it lands would aim at rows that move.
+   */
+  isIdle(): boolean {
+    return this.inFlight === null && this.queued === null;
+  }
+
   /** A read failed (not a slow one: it is never coming): free the slot for the next. */
   historyFailed(): void {
     this.inFlight = null;
