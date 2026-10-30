@@ -212,6 +212,52 @@ export async function runDirectE2E(
       );
     }
 
+    // 4d. Done: an omp-titled process works, then finishes. The computer reports Done until the
+    // session is viewed; acknowledging (what opening the pane does) makes it Idle again.
+    step("done");
+    {
+      const agentSession = await link0.createSession(home.id, 80, 24);
+      let shown = 0;
+      const agentPane = openDirectPane(
+        directManager,
+        agentSession.id,
+        {
+          onSnapshot: () => {
+            shown += 1;
+          },
+        },
+        { cols: 80, rows: 24 },
+      );
+      const state = async () =>
+        (await link0.activity()).agents.find((agent) => agent.session === agentSession.id)?.state ??
+        null;
+      const until = async (wanted: string, label: string) => {
+        const limit = Date.now() + 30_000;
+        for (;;) {
+          const got = await state();
+          if (got === wanted) return;
+          if (Date.now() > limit)
+            throw new Error(`${label}: the agent is ${got}, wanted ${wanted}`);
+          await sleep(250);
+        }
+      };
+      await waitFor("the agent session's first snapshot", () => shown > 0);
+      await sleep(1000);
+      agentPane.sendInput("bash -c 'exec -a omp /bin/cat'\r");
+      await until("idle", "done: omp detected");
+      agentPane.sendInput("\x1b]0;π ⠋ Inspect files\x07\r");
+      await until("working", "done: working");
+      agentPane.sendInput("\x1b]0;π > Inspect files\x07\r");
+      await until("done", "done: finished");
+      await directManager.acknowledge(agentSession.id);
+      await until("idle", "done: acknowledged");
+      if ((await link0.activity()).events.some((event) => event.session === agentSession.id)) {
+        throw new Error("done: an unread event is left after the acknowledge");
+      }
+      agentPane.close();
+      await link0.endSession(agentSession.id);
+    }
+
     // 5. Background and foreground: the host presses Home, waits, and brings the app back.
     step("background");
     const cyclesBefore = appCycles();
