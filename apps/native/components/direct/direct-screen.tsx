@@ -368,7 +368,7 @@ export function DirectScreen() {
     <View style={chrome.root}>
       <StatusBar hidden />
 
-      <KeyboardFrame variant="fill">
+      <KeyboardFrame variant="fill" floor={insets.bottom}>
         <View style={chrome.flex} onLayout={onViewport}>
           {viewId && NativeScreenView ? (
             <View
