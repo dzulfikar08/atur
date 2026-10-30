@@ -27,6 +27,11 @@ export interface ScreenState {
   prompts: readonly number[];
   /** `history` replies taken so far: one that changes nothing else still moves this. */
   historyReplies: number;
+  /**
+   * The scrollback may hold rows the phone has not read: nothing was read yet, or output has come
+   * since the last read.
+   */
+  behind: boolean;
 }
 
 /** How a scrollback request is meant: see `TerminalScreen.loadHistory`. */
@@ -51,6 +56,13 @@ export const HISTORY_FULL_LINES = 1000;
 export const HISTORY_OLDER_STEP = 3000;
 /** At most one top-up per this long; a trailing one catches the last change. */
 const TOP_UP_INTERVAL_MS = 1500;
+/** A scrollback read that failed or never answered is asked again after this, doubling up to the cap. */
+const RETRY_FIRST_MS = 1000;
+const RETRY_MAX_MS = 8000;
+/** Less scrollback than this (and than a screenful) leaves the reader hardly anything to scroll. */
+const THIN_ROWS = 40;
+/** After a read at the bottom that added no scrollback, output asks again no sooner than this. */
+const QUIET_MS = 5000;
 /** A reply this late is presumed lost (the socket dropped): ask again. */
 const REQUEST_TIMEOUT_MS = 8000;
 /** Each row of a big read is a page share on the computer: a long read is allowed longer. */
@@ -190,6 +202,7 @@ export class TerminalScreen {
     historyBase: 0,
     prompts: [],
     historyReplies: 0,
+    behind: true,
   };
   private readonly stateListeners = new Set<() => void>();
   private readonly frameListeners = new Set<(frame: ScreenFrame) => void>();
@@ -204,6 +217,12 @@ export class TerminalScreen {
   private reachedStart = false;
   private lastTopUp = 0;
   private topUpTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Asks again after a failed or lost read (`retryLater`), and gives up on a lost one (`watchdog`). */
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private watchdog: ReturnType<typeof setTimeout> | null = null;
+  private failures = 0;
+  /** No top-up for the bottom of the pane before this time (`keepScrollable`). */
+  private quietUntil = 0;
 
   /** Stable between changes: safe as a `useSyncExternalStore` snapshot. */
   getState = (): ScreenState => this.state;
@@ -239,7 +258,12 @@ export class TerminalScreen {
 
   snapshot(ansi: string): void {
     const lines = ansi.split("\r\n");
-    this.set({ ...this.state, rows: Math.max(this.state.rows, lines.length), lines });
+    this.set({
+      ...this.state,
+      rows: Math.max(this.state.rows, lines.length),
+      lines,
+      behind: true,
+    });
     this.emit({ t: "snapshot", ansi });
   }
 
@@ -256,7 +280,7 @@ export class TerminalScreen {
     }
     if (!changed) return;
     scrollCount("diff_frame");
-    this.set({ ...this.state, lines });
+    this.set({ ...this.state, lines, behind: true });
     this.emit({ t: "diff", rows });
   }
 
@@ -269,6 +293,10 @@ export class TerminalScreen {
     this.inFlight = null;
     clearTimeout(this.topUpTimer ?? undefined);
     this.topUpTimer = null;
+    clearTimeout(this.watchdog ?? undefined);
+    this.watchdog = null;
+    clearTimeout(this.retryTimer ?? undefined);
+    this.retryTimer = null;
   }
 
   /**
@@ -287,7 +315,7 @@ export class TerminalScreen {
       this.queued = strongest(this.queued, mode);
       return;
     }
-    const effective = this.historyLoaded ? strongest(this.queued, mode) : strongest(mode, "full");
+    let effective = this.historyLoaded ? strongest(this.queued, mode) : strongest(mode, "full");
     this.queued = null;
     if (effective === "top-up") {
       const wait = TOP_UP_INTERVAL_MS - (now - this.lastTopUp);
@@ -299,10 +327,22 @@ export class TerminalScreen {
         return;
       }
       this.lastTopUp = now;
+      // Rows are appended to rows that are loaded: with none, a top-up would only be followed by
+      // a full read.
+      if (this.historyLoaded && this.state.history.length === 0) effective = "full";
     }
     const lines = this.windowFor(effective);
     scrollTrace("history_ask", { mode: effective, lines });
-    this.inFlight = { lines, mode: effective, at: now };
+    const request = { lines, mode: effective, at: now };
+    this.inFlight = request;
+    // The reply may never come (the link dropped it without an error): ask again then.
+    clearTimeout(this.watchdog ?? undefined);
+    this.watchdog = setTimeout(() => {
+      this.watchdog = null;
+      if (this.inFlight !== request) return;
+      this.inFlight = null;
+      this.retryLater();
+    }, requestTimeout(lines));
     this.historySource(lines);
   }
 
@@ -337,9 +377,59 @@ export class TerminalScreen {
     return this.inFlight === null && this.queued === null;
   }
 
-  /** A read failed (not a slow one: it is never coming): free the slot for the next. */
+  /**
+   * A read failed (not a slow one: it is never coming): free the slot, and ask again a little
+   * later while nothing is loaded.
+   */
   historyFailed(): void {
     this.inFlight = null;
+    clearTimeout(this.watchdog ?? undefined);
+    this.watchdog = null;
+    this.retryLater();
+  }
+
+  /** Scrollback has been read at least once since the pane was opened (or last reflowed). */
+  isLoaded(): boolean {
+    return this.historyLoaded;
+  }
+
+  /** Under a screenful of scrollback is loaded: the reader has little to scroll through. */
+  isThin(): boolean {
+    const { history, lines } = this.state;
+    return history.length < Math.max(lines.length, THIN_ROWS);
+  }
+
+  /**
+   * The reader is at the bottom, where scrollback is left alone (nobody sees it) unless there is
+   * hardly any: a pane opened before its output began, or whose first read failed, is one screen
+   * of rows that nothing can scroll, and a view with nothing to scroll never sends the scroll
+   * event that asks for more. So while less than a screenful is loaded, output tops it up (throttled
+   * like any top-up), and goes quiet for a while after a read that found nothing to add.
+   */
+  keepScrollable(): void {
+    if (!this.historySource || !this.isIdle() || this.retryTimer) return;
+    if (!this.historyLoaded) {
+      this.loadHistory("full");
+      return;
+    }
+    if (this.isThin() && Date.now() >= this.quietUntil) this.loadHistory("top-up");
+  }
+
+  /**
+   * A read that failed or never answered, while nothing is loaded (or another one waits): asked
+   * again, a little later each time. Scrollback must not wait for a scroll event: a pane with
+   * nothing to scroll never sends one.
+   */
+  private retryLater(): void {
+    if (!this.historySource || this.retryTimer) return;
+    if (this.historyLoaded && !this.queued) return;
+    const wait = Math.min(RETRY_MAX_MS, RETRY_FIRST_MS * 2 ** this.failures);
+    this.failures += 1;
+    scrollTrace("history_retry", { in: wait, failures: this.failures });
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.loadHistory(this.queued ?? "full");
+    }, wait);
   }
 
   private olderWindow(): number {
@@ -384,6 +474,12 @@ export class TerminalScreen {
       took: request.at ? Date.now() - request.at : -1,
     });
     this.inFlight = null;
+    this.failures = 0;
+    clearTimeout(this.watchdog ?? undefined);
+    this.watchdog = null;
+    clearTimeout(this.retryTimer ?? undefined);
+    this.retryTimer = null;
+    const before = this.state.history.length;
     const historyReplies = this.state.historyReplies + 1;
     const cut = Math.min(rows.length, Math.max(0, visible ?? this.state.lines.length));
     const scrollback = rows.slice(0, rows.length - cut);
@@ -414,6 +510,7 @@ export class TerminalScreen {
         historyBase,
         prompts: promptRows(prompts, rows.length, historyBase),
         historyReplies,
+        behind: false,
       });
     } else if (added) {
       // The window's first row sits where the loaded rows' end, less what overlaps, puts it.
@@ -424,19 +521,26 @@ export class TerminalScreen {
       const { history, historyBase } = this.state;
       // Fresh identities: these rows are not the ones on screen before.
       const fresh = historyBase + history.length + 1;
+      // Before the state changes: a listener asks whether scrollback is loaded.
+      this.historyLoaded = true;
       this.set({
         ...this.state,
         history: scrollback,
         historyBase: fresh,
         prompts: promptRows(prompts, rows.length, fresh),
         historyReplies,
+        behind: false,
       });
-      this.historyLoaded = true;
     } else {
       // A top-up that no longer reaches what is loaded: read the whole window.
       this.queued = strongest(this.queued, "full");
       this.set({ ...this.state, historyReplies });
+      this.loadHistory(this.queued);
+      return;
     }
+    // A read that left the scrollback no longer than it was found brought nothing: output does not
+    // ask again at the bottom for a while.
+    this.quietUntil = this.state.history.length > before ? 0 : Date.now() + QUIET_MS;
     if (this.queued) this.loadHistory(this.queued);
   }
 
@@ -460,7 +564,7 @@ export class TerminalScreen {
     const prompts = [...this.state.prompts.filter((row) => row < from), ...fresh].filter(
       (row) => row >= historyBase,
     );
-    this.set({ ...this.state, history, historyBase, prompts, historyReplies });
+    this.set({ ...this.state, history, historyBase, prompts, historyReplies, behind: false });
   }
 
   private set(next: ScreenState): void {

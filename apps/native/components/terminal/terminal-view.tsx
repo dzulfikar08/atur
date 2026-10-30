@@ -104,10 +104,8 @@ export function TerminalView({
   onNearTop,
   onSelectText,
 }: TerminalViewProps) {
-  const { cols, lines, history, historyBase, prompts, historyReplies } = useSyncExternalStore(
-    screen.subscribe,
-    screen.getState,
-  );
+  const { cols, lines, history, historyBase, prompts, historyReplies, behind } =
+    useSyncExternalStore(screen.subscribe, screen.getState);
   scrollCount("view_render");
   // Newest row first, for an inverted list: offset 0 is the bottom of the pane,
   // so rows changing, appearing or going at the bottom while an agent streams
@@ -148,6 +146,7 @@ export function TerminalView({
   const scroll = useRef({ offset: 0, content: 0, viewport: 0 });
   const far = useRef(false);
   const [viewportWidth, setViewportWidth] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
   /** "Previous prompt" has something to do: a prompt above the first row in view, or older rows to read. */
   const [canPrevious, setCanPrevious] = useState(false);
   /** A prompt press waiting for scrollback (a fresh top-up, or older rows) to arrive. */
@@ -162,6 +161,14 @@ export function TerminalView({
   const cellWidth = fontSize * CELL_WIDTH_EM;
   // A little slack: fallback fonts and rounding can make a row a hair wider than cols cells.
   const contentWidth = Math.max(viewportWidth, Math.ceil(cols * cellWidth * 1.03) + 12);
+
+  // A pane whose scrollback may hold rows the phone has not read (none read yet, or output since and
+  // under a screenful loaded) gets scroll room above its rows. With exactly one screen of rows the
+  // list cannot scroll, a list that cannot scroll sends no scroll event, and nothing would ask for
+  // the scrollback: the reader would swipe at a pane that holds earlier output. A drag into that
+  // room asks (STICK_SLACK px from the bottom is where the view stops being "at the bottom").
+  const wantsRange = !screen.isLoaded() || (behind && screen.isThin());
+  const scrollRange = STICK_SLACK + 2 * lineHeight;
 
   // The latest props for callbacks that must keep their identity: the list re-renders every cell
   // when `renderItem` changes, and the pinch gesture must not change mid-pinch.
@@ -387,8 +394,13 @@ export function TerminalView({
   // grid into scrollback: top it up (the screen throttles) so they appear in
   // place, below what is being read, instead of leaving a gap.
   useEffect(() => {
-    if (!stick.current && !far.current) latest.current.onScrollBack();
-  }, [lines]);
+    if (!stick.current) {
+      if (!far.current) latest.current.onScrollBack();
+    } else {
+      // At the bottom scrollback is only kept for a reader who has nothing to scroll through.
+      screen.keepScrollable();
+    }
+  }, [lines, screen]);
 
   const renderItem = useCallback(
     ({ item }: { item: Row }) => (
@@ -453,6 +465,7 @@ export function TerminalView({
             }}
             onLayout={(event) => {
               scroll.current.viewport = event.nativeEvent.layout.height;
+              setViewportHeight(event.nativeEvent.layout.height);
               refreshPrevious();
             }}
             onScroll={onScroll}
@@ -460,7 +473,14 @@ export function TerminalView({
             onContentSizeChange={onContentSizeChange}
             scrollEventThrottle={32}
             ListEmptyComponent={<Text style={styles.waiting}>waiting for output…</Text>}
-            contentContainerStyle={styles.content}
+            ListFooterComponent={
+              wantsRange ? <Text style={styles.waiting}>loading earlier output…</Text> : null
+            }
+            contentContainerStyle={
+              wantsRange
+                ? [styles.content, { minHeight: viewportHeight + scrollRange }]
+                : styles.content
+            }
           />
         </ScrollView>
         {prompts.length > 0 ? (

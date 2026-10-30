@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, jest, setSystemTime, test } from "bun:test";
 
 import { findLinks, linkAtCell } from "./terminal-links";
 import {
@@ -27,6 +27,7 @@ describe("TerminalScreen", () => {
       historyBase: 0,
       prompts: [],
       historyReplies: 0,
+      behind: true,
     });
   });
 });
@@ -452,5 +453,140 @@ describe("links", () => {
     const text = "日本 https://x.test/w";
     expect(linkAtCell(text, 4)).toBeNull();
     expect(linkAtCell(text, 5)).toBe("https://x.test/w");
+  });
+});
+
+describe("scrollback that does not wait for a scroll event", () => {
+  /** A screen whose first read found no scrollback at all: a pane opened before its output began. */
+  function empty() {
+    const { screen, asked } = wired("g1\r\ng2");
+    screen.loadHistory("full");
+    screen.setHistory(["g1", "g2"], 2);
+    return { screen, asked };
+  }
+
+  afterEach(() => {
+    jest.useRealTimers();
+    setSystemTime();
+  });
+
+  test("the scrollback is behind until a read, and behind again once output comes", () => {
+    const screen = new TerminalScreen();
+    expect(screen.getState().behind).toBe(true);
+    screen.hello(80, 2);
+    screen.snapshot("g1\r\ng2");
+    screen.setHistorySource(() => {});
+    screen.loadHistory("full");
+    screen.setHistory(["old", "g1", "g2"], 2);
+    expect(screen.getState().behind).toBe(false);
+    screen.diff([[1, "g3"]]);
+    expect(screen.getState().behind).toBe(true);
+    screen.loadHistory("top-up");
+    screen.setHistory(["old", "g1", "g3"], 2);
+    expect(screen.getState().behind).toBe(false);
+    screen.snapshot("h1\r\nh2");
+    expect(screen.getState().behind).toBe(true);
+  });
+
+  test("scrollback counts as loaded in the state a listener sees", () => {
+    const { screen } = wired("g1\r\ng2");
+    const seen: boolean[] = [];
+    screen.subscribe(() => seen.push(screen.isLoaded()));
+    screen.loadHistory("full");
+    screen.setHistory(["old", "g1", "g2"], 2);
+    expect(seen).toEqual([true]);
+  });
+
+  test("a top-up with no scrollback loaded reads the first window, not a second time", () => {
+    const { screen, asked } = empty();
+    screen.diff([[1, "g3"]]);
+    screen.loadHistory("top-up");
+    expect(asked.at(-1)).toBe(HISTORY_FULL_LINES);
+    screen.setHistory([...rowsNumbered(1, 300), "g1", "g3"], 2);
+    expect(screen.getState().history).toHaveLength(300);
+    expect(asked).toHaveLength(2);
+  });
+
+  test("output tops up a pane with next to no scrollback, and a read that finds none quiets it", () => {
+    const { screen, asked } = empty();
+    // The first read found nothing: output does not ask again for a few seconds, however much comes.
+    screen.diff([[1, "g3"]]);
+    screen.keepScrollable();
+    expect(asked).toHaveLength(1);
+    setSystemTime(new Date(Date.now() + 6000));
+    screen.keepScrollable();
+    expect(asked).toHaveLength(2);
+    screen.setHistory(["g1", "g3"], 2);
+    screen.diff([[1, "g4"]]);
+    screen.keepScrollable();
+    expect(asked).toHaveLength(2);
+    setSystemTime(new Date(Date.now() + 6000));
+    screen.keepScrollable();
+    expect(asked).toHaveLength(3);
+    screen.setHistory([...rowsNumbered(1, 300), "g1", "g4"], 2);
+    expect(screen.getState().history).toHaveLength(300);
+    // A screenful and more is loaded: the bottom is left alone.
+    screen.diff([[1, "g5"]]);
+    screen.keepScrollable();
+    expect(asked).toHaveLength(3);
+  });
+
+  test("keepScrollable reads nothing while a read is out, and reads the first window when none landed", () => {
+    const { screen, asked } = wired("g1\r\ng2");
+    screen.keepScrollable();
+    expect(asked).toEqual([HISTORY_FULL_LINES]);
+    screen.keepScrollable();
+    screen.keepScrollable();
+    expect(asked).toEqual([HISTORY_FULL_LINES]);
+  });
+
+  test("a failed read is asked again, a little later each time, until one lands", () => {
+    jest.useFakeTimers();
+    const { screen, asked } = wired("g1\r\ng2");
+    screen.loadHistory("full");
+    screen.historyFailed();
+    expect(asked).toHaveLength(1);
+    jest.advanceTimersByTime(999);
+    expect(asked).toHaveLength(1);
+    jest.advanceTimersByTime(1);
+    expect(asked).toHaveLength(2);
+    screen.historyFailed();
+    jest.advanceTimersByTime(1999);
+    expect(asked).toHaveLength(2);
+    jest.advanceTimersByTime(1);
+    expect(asked).toHaveLength(3);
+    screen.setHistory(["old", "g1", "g2"], 2);
+    expect(screen.isLoaded()).toBe(true);
+    jest.advanceTimersByTime(60_000);
+    expect(asked).toHaveLength(3);
+  });
+
+  test("a read nothing answered is given up and asked again", () => {
+    jest.useFakeTimers();
+    const { screen, asked } = wired("g1\r\ng2");
+    screen.loadHistory("full");
+    // 8 s and 4 ms a row: a 1000 row read is presumed lost after 12 s, then a second to retry.
+    jest.advanceTimersByTime(12_000 - 1);
+    expect(asked).toHaveLength(1);
+    jest.advanceTimersByTime(1);
+    expect(screen.isIdle()).toBe(true);
+    jest.advanceTimersByTime(1000);
+    expect(asked).toHaveLength(2);
+  });
+
+  test("a loaded pane does not retry a lost top-up, and a closed source stops the retries", () => {
+    jest.useFakeTimers();
+    const { screen, asked } = empty();
+    screen.diff([[1, "g3"]]);
+    screen.loadHistory("top-up");
+    screen.historyFailed();
+    jest.advanceTimersByTime(60_000);
+    expect(asked).toHaveLength(2);
+    const fresh = wired("g1");
+    fresh.screen.loadHistory("full");
+    fresh.screen.historyFailed();
+    fresh.screen.setHistorySource(null);
+    jest.advanceTimersByTime(60_000);
+    expect(fresh.asked).toHaveLength(1);
   });
 });
