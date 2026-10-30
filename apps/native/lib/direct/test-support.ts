@@ -8,6 +8,8 @@ import type {
 } from "@/lib/direct/manager";
 import {
   DirectError,
+  type ActivityEvent,
+  type ActivitySnapshot,
   type AttachInfo,
   type DirectCredential,
   type DirectEvent,
@@ -202,6 +204,17 @@ export class FakeLink implements DirectLink {
   async sessions(): Promise<DirectSession[]> {
     this.sessionsCalls++;
     return this.sessionList;
+  }
+
+  activityEvents: ActivityEvent[] = [];
+  readonly acknowledged: string[][] = [];
+
+  async activity(): Promise<ActivitySnapshot> {
+    return { agents: [], events: this.activityEvents };
+  }
+
+  async acknowledgeActivity(eventIds: string[]): Promise<void> {
+    this.acknowledged.push(eventIds);
   }
 
   async endSession(): Promise<void> {}

@@ -6,6 +6,8 @@ import { getItem, removeItem, setItem } from "@/lib/storage";
 // Storage only (no API) so session.ts can clear it on sign-out without a cycle.
 const FLAG_KEY = "atur.push.agents";
 const TOKEN_KEY = "atur.push.token";
+// Set by the Direct area's "Sign in for alerts" row; the first signed-in start turns alerts on.
+const WANTED_KEY = "atur.push.wanted";
 
 let enabled = false;
 // False until the stored flag was read or a save/clear made it authoritative.
@@ -41,10 +43,22 @@ export async function saveAgentAlerts(token: string): Promise<void> {
   await Promise.all([setItem(FLAG_KEY, "1"), setItem(TOKEN_KEY, token)]);
 }
 
+/** The user asked for alerts while signed out: register this device as soon as an account exists. */
+export function markAgentAlertsWanted(): Promise<void> {
+  return setItem(WANTED_KEY, "1");
+}
+
+/** True once per `markAgentAlertsWanted`: the flag is consumed. */
+export async function takeAgentAlertsWanted(): Promise<boolean> {
+  if ((await getItem(WANTED_KEY)) !== "1") return false;
+  await removeItem(WANTED_KEY);
+  return true;
+}
+
 /** Local state only; server-side unregistration is `disableAgentAlerts` in push.ts. */
 export async function clearAgentAlertsLocal(): Promise<void> {
   set(false);
-  await Promise.all([removeItem(FLAG_KEY), removeItem(TOKEN_KEY)]);
+  await Promise.all([removeItem(FLAG_KEY), removeItem(TOKEN_KEY), removeItem(WANTED_KEY)]);
 }
 
 /** The persisted opt-in; null until the stored value has been read. */

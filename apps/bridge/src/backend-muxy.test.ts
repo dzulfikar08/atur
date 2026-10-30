@@ -393,6 +393,9 @@ class FakeMuxy {
   sessions: FakeSession[] = [];
   projects = [{ id: "a".repeat(32), name: "Atur", directory: "/srv/atur" }];
   agents: Array<{ session: string; provider: number; state: number }> = [];
+  /** Unread indicator events; `kind` 1 is a completion. */
+  events: Array<{ id: string; session: string; kind: number }> = [];
+  acknowledged: string[][] = [];
   hello: { versions: number[]; features: number[]; version: string } = {
     versions: [2],
     features: [1],
@@ -485,7 +488,16 @@ class FakeMuxy {
         const project = this.sessions.find((s) => s.id === a.session)?.project ?? "a".repeat(32);
         w.array(4).uint(BigInt(a.session)).bytes(uuidBytes(project)).uint(a.provider).uint(a.state);
       }
-      w.array(0);
+      w.array(this.events.length);
+      for (const e of this.events) {
+        const project = this.sessions.find((s) => s.id === e.session)?.project ?? "a".repeat(32);
+        w.array(7).uint(BigInt(e.id)).uint(BigInt(e.session)).bytes(uuidBytes(project));
+        w.uint(11).uint(123).uint(e.kind).bool(false);
+      }
+    } else if (variant === 26) {
+      const ids = ((fields[1] as Cbor[])[1] as Cbor[])[0] as Cbor[];
+      this.acknowledged.push(ids.map(String));
+      w.variant(26, 0);
     } else if (variant === 21) {
       const referenced = (fields[1] as Cbor[])[1] as Cbor[];
       const sessions = (referenced[2] as Cbor[]).map(String);
@@ -610,6 +622,19 @@ describe("MuxyBackend pane list over the protocol", () => {
         : null;
     }, "refreshed panes");
     expect(panes[2]).toMatchObject({ id: "13", cwd: "/srv/x" });
+  });
+
+  test("a finished agent is done until a viewer acknowledges it, and the ack reaches the server", async () => {
+    const { server, backend } = setup();
+    server.agents = [{ session: "11", provider: 11, state: 4 }];
+    server.events = [{ id: "900", session: "11", kind: 1 }];
+    const panes = await backend.listPanes();
+    expect(panes[0]?.agentStatus).toBe("done");
+    await backend.acknowledge("11");
+    await backend.acknowledge("11");
+    expect(server.acknowledged).toEqual([["900"]]);
+    await backend.acknowledge("12");
+    expect(server.acknowledged).toHaveLength(1);
   });
 
   test("an ended session leaves the list and its pane is gone", async () => {

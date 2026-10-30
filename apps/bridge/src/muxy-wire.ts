@@ -61,6 +61,7 @@ const Req = {
   Resize: 9,
   HistoryPage: 13,
   ReadActivity: 25,
+  AcknowledgeActivity: 26,
   SyncSessionReferences: 21,
   WriteInput: 29,
   AttachWithoutResize: 39,
@@ -611,6 +612,11 @@ export const requests = {
       else w.uint(revision);
     }),
   readActivity: (id: number) => request(id, (w) => w.variant(Req.ReadActivity, 0)),
+  acknowledgeActivity: (id: number, events: readonly string[]) =>
+    request(id, (w) => {
+      w.variant(Req.AcknowledgeActivity, 1).array(events.length);
+      for (const e of events) w.uint(BigInt(e));
+    }),
   syncSessionReferences: (id: number, sessions: readonly string[]) =>
     request(id, (w) => {
       w.variant(Req.SyncSessionReferences, 3).null().uint(0).array(sessions.length);
@@ -812,13 +818,22 @@ export interface AgentActivity {
   session: string;
   /** `AgentProvider` number. */
   provider: number;
-  /** `AgentState` number: 0 unknown, 1 idle, 2 working, 3 blocked. */
+  /** `AgentState` number: 0 unknown, 1 idle, 2 working, 3 blocked, 4 done (finished, not yet looked at). */
   state: number;
+}
+
+/** An unread indicator: `kind` 0 needs attention, 1 completed. The server keeps one per session. */
+export interface ActivityEvent {
+  id: string;
+  session: string;
+  kind: number;
+  read: boolean;
 }
 
 export interface ActivitySnapshot {
   revision: U64;
   agents: AgentActivity[];
+  events: ActivityEvent[];
 }
 
 export interface ScreenSnapshot {
@@ -943,6 +958,15 @@ export function parseReply(body: Cbor): Reply {
               session: sessionIdText(f[0] as Cbor),
               provider: num(f[2] as Cbor, "provider"),
               state: num(f[3] as Cbor, "agent state"),
+            };
+          }),
+          events: (a[2] === undefined ? [] : arr(a[2], "events")).map((x): ActivityEvent => {
+            const f = arr(x, "event");
+            return {
+              id: u64(f[0] as Cbor, "event id").toString(),
+              session: sessionIdText(f[1] as Cbor),
+              kind: num(f[5] as Cbor, "event kind"),
+              read: f[6] === true,
             };
           }),
         },

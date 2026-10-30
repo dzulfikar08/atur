@@ -1014,3 +1014,29 @@ test("forgetting or being sent to the background leaves no route timers behind",
   await timers.advance(ROUTE_CHECK_MS * 3);
   expect(native.connects).toHaveLength(1);
 });
+
+test("looking at a session acknowledges only its completions, and nothing when there are none", async () => {
+  const native = new FakeNative();
+  const link = new FakeLink();
+  const event = (id: string, session: string, kind: "attention" | "completed") => ({
+    id,
+    session,
+    projectId: "p1",
+    provider: "omp",
+    timestamp: 1,
+    kind,
+  });
+  link.activityEvents = [
+    event("7", "1", "completed"),
+    event("8", "2", "completed"),
+    event("9", "1", "attention"),
+  ];
+  native.script = [link];
+  const { manager } = await setup({ native });
+  await manager.start();
+  await flush();
+  await manager.acknowledge("1");
+  expect(link.acknowledged).toEqual([["7"]]);
+  await manager.acknowledge("3");
+  expect(link.acknowledged).toHaveLength(1);
+});

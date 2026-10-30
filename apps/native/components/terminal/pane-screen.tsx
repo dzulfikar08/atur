@@ -18,10 +18,11 @@ import { SelectTextSheet } from "@/components/terminal/select-text";
 import { Transcript } from "@/components/terminal/transcript";
 import { Text, type IconName } from "@/components/ui";
 import { api } from "@/lib/api";
-import { directSessionTitle } from "@/lib/direct/session-meta";
+import { directManager } from "@/lib/direct";
+import { directAttention, directSessionTitle } from "@/lib/direct/session-meta";
 import { parsePaneTarget } from "@/lib/direct/transport-choice";
 import { useDirect } from "@/lib/direct/use-direct";
-import { paneAttention, paneTitle } from "@/lib/pane-meta";
+import { ATTENTION_LABEL, paneAttention, paneTitle } from "@/lib/pane-meta";
 import { acknowledgePane } from "@/lib/pane-seen";
 import { usePaneAttach, usePaneObserve, type PaneAttachStatus } from "@/lib/pane-streams";
 import { useSession } from "@/lib/session";
@@ -78,6 +79,15 @@ export function PaneScreen({ paneId }: { paneId: string }) {
   useEffect(() => {
     if (paneId && attention) acknowledgePane(paneId, attention);
   }, [paneId, attention]);
+
+  // On a direct session the computer holds the Done state: the view clears it for every client.
+  const directSessionId = session?.id;
+  const directDone = session?.agent?.state === "done";
+  useEffect(() => {
+    if (directSessionId && directDone) void directManager.acknowledge(directSessionId);
+  }, [directSessionId, directDone]);
+  const shown = pane ? paneAttention(pane) : session ? directAttention(session) : "shell";
+  const shownLabel = shown === "shell" ? null : ATTENTION_LABEL[shown];
 
   // Native is the default; the last choice is remembered across panes and launches.
   const [view, setView] = useState<PaneView>("native");
@@ -174,6 +184,7 @@ export function PaneScreen({ paneId }: { paneId: string }) {
               <Text style={styles.title} numberOfLines={1}>
                 {title}
               </Text>
+              {shownLabel ? <Text style={styles.attention}>{shownLabel}</Text> : null}
               <TransportBadge
                 transport={transport}
                 rttMs={direct.rttMs}
@@ -273,6 +284,7 @@ const styles = StyleSheet.create((theme) => ({
   flex: { flex: 1 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.sm, maxWidth: 240 },
   title: { fontSize: theme.fontSize.base, fontFamily: theme.fonts.bold, flexShrink: 1 },
+  attention: { fontSize: theme.fontSize.xs, color: theme.colors.mutedForeground },
   dot: { width: 8, height: 8, borderRadius: 4 },
   dotLive: { backgroundColor: theme.colors.completed },
   dotWait: { backgroundColor: theme.colors.started },

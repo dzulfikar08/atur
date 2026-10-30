@@ -2,18 +2,21 @@
 # path (apps/native/modules/atur-direct) built in, R8 on, the live API (https://app.diatur.com), and no
 # proof route (EXPO_PUBLIC_ATUR_E2E is not set). GitHub-hosted runner only.
 #
-# Signing: this branch cannot read the `release` environment (it deploys from master and v* tags only), so no
-# release keystore is used here. Expo's template signs its release build with the template's debug keystore, so
-# the APK installs on a phone with "install unknown apps" but cannot be installed over a Play install of
-# com.diatur.app (different signing key); uninstall that one first. Docs: docs/ci-release.md.
+# Signing: no release keystore is used here. Expo's template signs its release build with the template's debug
+# keystore, so the APK installs on a phone with "install unknown apps" but cannot be installed over a Play install
+# of com.diatur.app (different signing key); uninstall that one first. Docs: docs/ci-release.md.
 #
-# Run it: commit a change to `.github/release-apk-trigger` on feat/native-direct (a workflow only shows up in
-# the Actions tab for workflow_dispatch once it exists on the default branch), or dispatch it from there once merged.
+# Push alerts: the job runs in the `direct-apk` environment (master only), whose single secret GOOGLE_SERVICES_JSON
+# is the Firebase config the Play release build uses. It is written into apps/native before prebuild, so the APK
+# can register an Expo/FCM token, and removed in the last step. The `release` environment (signing keys, Play and
+# App Store credentials) is not used here.
+#
+# Run it: commit a change to `.github/release-apk-trigger` on master, or dispatch it.
 name: Native direct Android APK
 
 on:
   push:
-    branches: [feat/native-direct]
+    branches: [master]
     paths: [".github/release-apk-trigger"]
   workflow_dispatch:
 
@@ -27,6 +30,7 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-24.04
+    environment: direct-apk
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +60,19 @@ jobs:
           printf 'org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC\norg.gradle.parallel=true\n' >> ~/.gradle/gradle.properties
 
       - run: bun install --frozen-lockfile
+
+      - name: Write google-services.json (push alerts)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          [ -n "$GOOGLE_SERVICES_JSON" ] || { echo "GOOGLE_SERVICES_JSON is empty: the APK could not receive push alerts" >&2; exit 1; }
+          if [ "${GOOGLE_SERVICES_JSON:0:1}" = "{" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > apps/native/google-services.json
+          else
+            printf '%s' "$GOOGLE_SERVICES_JSON" | base64 -d > apps/native/google-services.json
+          fi
+          jq -e '.client[] | select(.client_info.android_client_info.package_name == "com.diatur.app")' apps/native/google-services.json > /dev/null \
+            || { echo "google-services.json has no com.diatur.app client" >&2; exit 1; }
 
       - name: Build the Rust core for arm64-v8a
         env:
@@ -91,6 +108,10 @@ jobs:
           BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
           unzip -l "$APK" | grep -E 'lib/[^/]+/libatur_mobile\.so'
           unzip -l "$APK" | grep -q 'lib/arm64-v8a/libatur_mobile\.so' || { echo "no arm64 Rust core in the APK" >&2; exit 1; }
+          # Push alerts need the Firebase config compiled in (the google-services plugin turns it into resources).
+          "$BT/aapt2" dump resources "$APK" | grep -q 'string/google_app_id' || { echo "no Firebase config in the APK: push alerts cannot register" >&2; exit 1; }
+          "$BT/aapt2" dump resources "$APK" | grep -q 'string/gcm_defaultSenderId' || { echo "no FCM sender id in the APK" >&2; exit 1; }
+          unzip -l "$APK" 'classes*.dex' > /dev/null
           "$BT/aapt2" dump badging "$APK" | grep -E "^package:|native-code"
           {
             echo '### Atur direct APK (arm64-v8a, live API, debug-signed)'
@@ -101,6 +122,10 @@ jobs:
             echo '```'
             echo 'Signed with the Expo template debug keystore: cannot be installed over a Play install of com.diatur.app.'
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove google-services.json
+        if: always()
+        run: rm -f apps/native/google-services.json
 
       - uses: actions/upload-artifact@v4
         with:

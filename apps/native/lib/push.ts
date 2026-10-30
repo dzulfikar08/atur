@@ -9,6 +9,7 @@ import {
   getAgentAlertsEnabled,
   getStoredPushToken,
   saveAgentAlerts,
+  takeAgentAlertsWanted,
   useAgentAlertsEnabled,
 } from "@/lib/push-state";
 
@@ -115,7 +116,13 @@ export async function disableAgentAlerts(): Promise<void> {
  * failures leave the opt-in alone so the next launch retries.
  */
 export async function syncAgentAlerts(): Promise<void> {
-  if (!platform || !(await getAgentAlertsEnabled())) return;
+  if (!platform) return;
+  // Alerts asked for in the Direct area before signing in: ask the OS and register now.
+  if (await takeAgentAlertsWanted()) {
+    await enableAgentAlerts();
+    return;
+  }
+  if (!(await getAgentAlertsEnabled())) return;
   try {
     const permission = await Notifications.getPermissionsAsync();
     if (!permission.granted) {

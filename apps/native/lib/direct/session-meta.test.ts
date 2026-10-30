@@ -24,6 +24,9 @@ test("the agent state decides what the session asks of you", () => {
   expect(directAttention(session("1", { agent: { provider: "claude", state: "working" } }))).toBe(
     "working",
   );
+  expect(directAttention(session("1", { agent: { provider: "claude", state: "done" } }))).toBe(
+    "done",
+  );
   expect(directAttention(session("1", { agent: { provider: "claude", state: "idle" } }))).toBe(
     "idle",
   );
@@ -41,8 +44,9 @@ test("only live and starting sessions open, agents that need you first, order ot
     session("5", { status: "unavailable" }),
     session("6", { agent: { provider: "codex", state: "working" } }),
     session("7"),
+    session("8", { agent: { provider: "claude", state: "done" } }),
   ];
-  expect(openableSessions(list).map((s) => s.id)).toEqual(["4", "3", "6", "1", "7"]);
+  expect(openableSessions(list).map((s) => s.id)).toEqual(["4", "8", "3", "6", "1", "7"]);
 });
 
 test("the title is the terminal's own, then the project, then the agent", () => {

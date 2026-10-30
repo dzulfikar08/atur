@@ -32,6 +32,7 @@ import {
 } from "@/lib/direct/describe";
 import { openableSessions } from "@/lib/direct/session-meta";
 import { useDirect } from "@/lib/direct/use-direct";
+import { markAgentAlertsWanted } from "@/lib/push-state";
 import { useSession } from "@/lib/session";
 import type { EchoMode, EchoStats, TransportPreference } from "@/modules/atur-direct/src/types";
 
@@ -313,9 +314,13 @@ export function DirectSettings({ home = false }: { home?: boolean }) {
             <ListRow
               icon="log-in-outline"
               title="Sign in to Atur Cloud"
-              subtitle="Issues, inbox and terminals through the cloud"
+              subtitle="Notifications when an agent finishes or needs you, issues, inbox and terminals"
               chevron
-              onPress={() => router.push("/login")}
+              onPress={() => {
+                // Direct alone has no push; the cloud account is what registers this phone.
+                void markAgentAlertsWanted().catch(() => undefined);
+                router.push("/login");
+              }}
             />
           </ListGroup>
         </>

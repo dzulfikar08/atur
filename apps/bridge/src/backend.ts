@@ -116,6 +116,8 @@ export interface PaneBackend {
   splitPane(id: string, direction: SplitDirection, cwd?: string): Promise<PaneSummary>;
   /** Close the pane and stop whatever runs in it. Throws PaneGoneError when it is already gone. */
   closePane(id: string): Promise<void>;
+  /** A viewer opened the pane: whatever it was showing as unseen ("done") counts as seen, for every client. */
+  acknowledge?(id: string): Promise<void>;
   /** The viewer left or stopped asking; sizes are restored once nobody holds one. */
   release(holder: unknown): void;
   /**

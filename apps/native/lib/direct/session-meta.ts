@@ -2,17 +2,19 @@ import { cleanPaneTitle } from "@/lib/pane-meta";
 import type { DirectSession } from "@/modules/atur-direct/src/types";
 
 /** What a direct session asks of the human, in the Panes tab's vocabulary. */
-export type DirectAttention = "needs-you" | "working" | "idle" | "shell";
+export type DirectAttention = "needs-you" | "done" | "working" | "idle" | "shell";
 
 const ATTENTION_ORDER: Record<DirectAttention, number> = {
   "needs-you": 0,
-  working: 1,
-  idle: 2,
-  shell: 3,
+  done: 1,
+  working: 2,
+  idle: 3,
+  shell: 4,
 };
 
 export const DIRECT_ATTENTION_LABEL: Record<Exclude<DirectAttention, "shell">, string> = {
   "needs-you": "Needs you",
+  done: "Done",
   working: "Working",
   idle: "Idle",
 };
@@ -22,6 +24,8 @@ export function directAttention(session: DirectSession): DirectAttention {
   switch (session.agent.state) {
     case "blocked":
       return "needs-you";
+    case "done":
+      return "done";
     case "working":
       return "working";
     default:

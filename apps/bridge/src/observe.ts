@@ -488,6 +488,9 @@ export class ObserveHub {
     } catch {
       return false;
     }
+    void this.backend.acknowledge?.(paneId).catch((e: unknown) => {
+      console.error(`acknowledge ${paneId} failed:`, e);
+    });
     let session = this.sessions.get(paneId);
     if (!session) {
       session = new ObserveSession(paneId, this.backend, (idle) => {

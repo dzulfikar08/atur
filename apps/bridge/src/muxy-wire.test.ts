@@ -48,6 +48,9 @@ describe("requests equal the frames Muxy encodes", () => {
 
   test("unit and simple requests", () => {
     expect(hex(requests.readActivity(1))).toBe("0d00000002000000000002820182181980");
+    expect(hex(requests.acknowledgeActivity(1, ["5", "300"]))).toBe(
+      "1200000002000000000002820182181a81820519012c",
+    );
     expect(hex(requests.attachWithoutResize(41, "1"))).toBe(
       "0f000000020000000000028218298218278101",
     );

@@ -498,6 +498,9 @@ export class PaneHub {
       console.error(`pane.get ${paneId} failed:`, e);
       return false;
     }
+    void this.backend.acknowledge?.(paneId).catch((e: unknown) => {
+      console.error(`acknowledge ${paneId} failed:`, e);
+    });
     let watcher = this.watchers.get(paneId);
     if (!watcher) {
       watcher = new Watcher(paneId, this.backend, (idle) => {

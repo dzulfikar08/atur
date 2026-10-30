@@ -20,6 +20,7 @@ function SessionRow({ session }: { session: DirectSession }) {
   const status = attention === "shell" ? null : DIRECT_ATTENTION_LABEL[attention];
   const dot = {
     "needs-you": theme.colors.urgent,
+    done: theme.colors.completed,
     working: theme.colors.started,
     idle: theme.colors.cancelled,
     shell: theme.colors.cancelled,

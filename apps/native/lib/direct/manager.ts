@@ -44,6 +44,8 @@ export type DirectLink = Pick<
   | "isClosed"
   | "subscribe"
   | "sessions"
+  | "activity"
+  | "acknowledgeActivity"
   | "endSession"
   | "ping"
   | "disconnect"
@@ -511,6 +513,24 @@ export class DirectManager {
       } while (run.again && conn === this.conn);
     } finally {
       if (this.refresh === run) this.refresh = null;
+    }
+  }
+
+  /**
+   * The user looked at `sessionId`: the computer drops the session's unread completion, which turns
+   * its agent from Done to Idle on every client (the desktop app and the other phones too).
+   */
+  async acknowledge(sessionId: string): Promise<void> {
+    const conn = this.conn;
+    if (!conn) return;
+    try {
+      const { events } = await conn.activity();
+      const ids = events
+        .filter((event) => event.session === sessionId && event.kind === "completed")
+        .map((event) => event.id);
+      if (ids.length > 0) await conn.acknowledgeActivity(ids);
+    } catch {
+      // The next view tries again; a stale Done is harmless.
     }
   }
 

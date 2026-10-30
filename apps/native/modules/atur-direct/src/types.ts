@@ -56,7 +56,8 @@ export class DirectError extends Error {
 }
 
 export type SessionStatus = "starting" | "live" | "ended" | "unavailable";
-export type AgentState = "unknown" | "idle" | "working" | "blocked";
+/** `done`: a turn finished and nobody has looked at the session since (any client's view clears it). */
+export type AgentState = "unknown" | "idle" | "working" | "blocked" | "done";
 
 export interface DirectProject {
   id: string;

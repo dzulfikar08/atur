@@ -216,7 +216,11 @@ const STATES: Record<number, AgentStatus> = {
   1: "idle",
   2: "working",
   3: "blocked",
+  4: "done",
 };
+
+/** `ActivityKind::Completed`. */
+const COMPLETED_EVENT = 1;
 
 export interface PaneSources {
   sessions: Iterable<SessionInfo>;
@@ -325,6 +329,8 @@ export class MuxyBackend implements PaneBackend {
   private sessions = new Map<string, SessionInfo>();
   private projects: ProjectInfo[] = [];
   private agents = new Map<string, AgentActivity>();
+  /** Unread `Completed` event ids by session; acknowledging them is what turns Done back to Idle. */
+  private completions = new Map<string, string[]>();
   private meta = new Map<string, SessionMeta>();
   private transcripts = new Map<string, { path: string | null; at: number }>();
   private metaAt = 0;
@@ -577,6 +583,19 @@ export class MuxyBackend implements PaneBackend {
     const reply = await conn.request(requests.readActivity);
     if (reply.type !== "activity") throw new Error("unexpected reply to ReadActivity");
     this.agents = new Map(reply.activity.agents.map((a) => [a.session, a]));
+    this.completions.clear();
+    for (const e of reply.activity.events) {
+      if (e.kind !== COMPLETED_EVENT || e.read) continue;
+      this.completions.set(e.session, [...(this.completions.get(e.session) ?? []), e.id]);
+    }
+  }
+
+  async acknowledge(id: string): Promise<void> {
+    const events = this.completions.get(id);
+    const conn = this.conn;
+    if (!events?.length || !conn) return;
+    this.completions.delete(id);
+    await conn.request((rid) => requests.acknowledgeActivity(rid, events));
   }
 
   /**

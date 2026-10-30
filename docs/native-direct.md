@@ -258,6 +258,29 @@ instead of the login screen (`startRoute` in `lib/direct/start-route.ts`; a tapp
 Atur Cloud plan gate holds back only the account's screens: a signed-in account without a plan sees the plan
 screen, which has a button into Direct.
 
+## Done, and notifications
+
+**Done.** `AgentState::Done` (wire value 4, `"done"` in the app) means an agent finished a turn and nobody has
+looked at the session. The server (`atur-terminal`, `muxy-server/src/activity.rs`) derives it: a session whose
+agent is idle (or that herdr reports as `done`) shows Done while it has an unread `Completed` event. Any client
+that views the session acknowledges the event and the state becomes Idle for everyone: the desktop app on
+focus, the phone's Direct pane (`DirectManager.acknowledge`, on open and when a pane reaches Done while open),
+and the bridge for cloud panes (`PaneBackend.acknowledge`, called when a phone opens a pane through `hub.ts` or
+`observe.ts`). herdr keeps reporting `done` after an acknowledge; the server remembers it was seen until the
+agent works again. Shown as **Done** in the desktop tab/agents panel (as before: accent "Finished working"),
+in the phone's Direct list and pane header, and in the cloud Panes list (`agent_status: "done"`). Needs-you
+(`blocked`) stays separate and sorts first.
+
+**Notifications.** The direct connection cannot wake a suspended app (iOS never, Android only with a
+foreground service that keeps the connection and drains the battery), so the alert path is the Atur Worker:
+the bridge posts `done` / `blocked` events with the agent's last message (read from the omp transcript) to the
+Worker, which pushes to the devices a signed-in user registered. A phone that uses Direct without an account
+has no identity the Worker can push to, and an anonymous registration endpoint would let anyone register a
+device on someone's workspace; so `direct-home` offers "Sign in to Atur Cloud" with the notification pitch,
+remembers the wish (`markAgentAlertsWanted`), and the first signed-in start asks for the OS permission and
+registers the token (`syncAgentAlerts`). The APK workflow builds with `google-services.json` (environment
+`direct-apk`, see `docs/ci-release.md`) so the debug-signed build can get an FCM token at all.
+
 ## Images in prompts
 
 `pasteImage` of the facade writes the image into the computer's Home project at `.cache/atur/pastes/<name>`
