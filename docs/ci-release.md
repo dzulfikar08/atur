@@ -2,15 +2,14 @@
 
 Store builds run on GitHub Actions, never on the laptop (no Gradle, Xcode or `expo prebuild` runs there). Two manual workflows, modelled on JoyoRogo's (`../joyorogo/docs/ci-release.md`):
 
-| Workflow              | Runs on         | Does                                                                                                                                                                                                |
-| --------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `release-android.yml` | `ubuntu-latest` | `scripts/build-native-aab.sh` (Play AAB), bundletool permission guard, artifacts + SHA-256, optional Play upload (`r0adkll/upload-google-play`). Play is the only Android channel (no sideload APK) |
-| `release-ios.yml`     | `macos-latest`  | `scripts/ios/mac-build.sh`: `expo prebuild`, pods, `xcodebuild archive` + export, IPA checks, optional TestFlight upload                                                                            |
+| Workflow              | Runs on         | Does                                                                                                                                                                                                                                                     |
+| --------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `release-android.yml` | `ubuntu-latest` | `scripts/build-native-aab.sh` (Play AAB), bundletool permission guard, artifacts + SHA-256, optional Play upload (`r0adkll/upload-google-play`). Play is the only Android channel (no sideload APK)                                                      |
+| `release-ios.yml`     | `macos-15`      | Rust core for the direct path (`modules/atur-direct/scripts/build-core.sh ios`, Rust 1.92.0), then `scripts/ios/mac-build.sh`: `expo prebuild`, pods, `xcodebuild archive` + export (Xcode `latest-stable`, 26+), IPA checks, optional TestFlight upload |
 
 Both run only on `workflow_dispatch` (tag triggers are commented out at the top of each file) and are bound to the GitHub environment `release`. The existing `ci.yml` (lint, typecheck, tests) is separate and takes no secrets.
 
-On `feat/native-direct` (the phone's direct path, `apps/native/modules/atur-direct`): `native-direct-android-apk.yml` builds an installable arm64 APK with the Rust core and no secrets. Commit a change to `.github/release-apk-trigger` to run it; the artifact `atur-android-arm64-apk` is kept 14 days. It is signed with the Expo template's debug keystore (the `release` environment is closed to this branch), so it cannot be installed over a Play install of `com.diatur.app`.
-There is no TestFlight workflow for the direct build yet: the `release` environment (and the iOS secrets in it) only deploys from `master` and `v*` tags, and `mac-build.sh` needs `modules/atur-direct/scripts/build-core.sh ios` to run first (the core artifacts are git-ignored).
+The phone's direct path (`apps/native/modules/atur-direct`) is on `master`. `native-direct-android-apk.yml` builds an installable arm64 APK with the Rust core and no secrets: commit a change to `.github/release-apk-trigger` or run it by hand; the artifact `atur-android-arm64-apk` is kept 14 days. It is signed with the Expo template's debug keystore, so it cannot be installed over a Play install of `com.diatur.app`. iOS builds of the direct path go through `release-ios.yml` above (first TestFlight upload: build 202610300339).
 
 ## Running a release
 
@@ -70,9 +69,8 @@ shred -u /tmp/dist.p12 /tmp/cert.pem
 
 The archive is signed automatically through the API key (`-allowProvisioningUpdates`); the export is manual: the job imports the `.p12` into a temporary keychain, `scripts/ios/asc-ci-profile.py` finds the certificate on App Store Connect by serial and reuses or creates the App Store profile `joyo-ci com.diatur.app <cert id>` (separate from the Linux pipeline's profile), and `mac-build.sh` exports with it as `EXPORT_PROFILE`. The script then checks the IPA: bundle id, build number, iOS 26 SDK, Apple Distribution authority, App Store profile (no device list), `get-task-allow` false, the **Sign in with Apple** entitlement, code signature, fresh `app.config`, inlined API URL and app code in `main.jsbundle`. The bundle id `com.diatur.app` already has `APPLE_ID_AUTH` enabled on the portal.
 
-TestFlight upload (`upload_testflight`) fails until the owner has created the App Store Connect app record for `com.diatur.app` (the API cannot).
+TestFlight uploads go to the "Internal" tester group only; nothing is submitted for review.
 
 ## Not yet proven by a CI run
 
 - Android: first `bundleRelease` on a runner (R8 heap, bundletool path), and the first Play upload to `com.diatur.app`.
-- iOS: the Xcode scheme/workspace name `Atur` that `expo prebuild` generates from `app.json` (`name`), the archive with automatic signing, and the `Atur.app/Info.plist` path used for the build number.
