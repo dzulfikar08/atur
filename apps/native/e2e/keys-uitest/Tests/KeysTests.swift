@@ -8,6 +8,10 @@ final class KeysTests: XCTestCase {
 
   override func setUp() {
     continueAfterFailure = false
+    // `simctl openurl` raises SpringBoard's "Open in Atur?" confirmation.
+    let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+    let open = springboard.alerts.buttons["Open"]
+    if open.waitForExistence(timeout: 15) { open.tap() }
     app.activate()
     XCTAssertTrue(app.textFields["keys-input"].waitForExistence(timeout: 30))
   }
