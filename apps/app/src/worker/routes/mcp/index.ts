@@ -26,6 +26,7 @@ import { fieldSettingsSchema, withSettings } from "../../services/customFields";
 import * as valuesRepo from "../../repositories/customFieldValues";
 import * as workspaceRepo from "../../repositories/workspaces";
 import * as linksService from "../../services/workspaceLinks";
+import { ME_TOOLS, handleMeTool, workspaceLogo } from "../../services/mcpMe";
 import { annotateSlimToolFields, slimResponse } from "./slim";
 import { canonicalStateKey } from "../../services/states";
 import * as timesheetService from "../../services/timesheet";
@@ -60,9 +61,11 @@ function err(id: number | string | null, code: number, message: string): JsonRpc
 export const TOOLS = [
   {
     name: "list_workspaces",
-    description: "List all workspaces",
+    description:
+      "List all workspaces (logo is the stored value: /api/assets/<id> needs auth, use get_workspace_logo)",
     inputSchema: { type: "object", properties: {} },
   },
+  ...ME_TOOLS,
   {
     name: "create_workspace",
     description: "Create a new workspace (calling user becomes owner and admin member)",
@@ -1702,6 +1705,16 @@ async function handleToolRaw(
             .from(schema.workspaces)
             .where(and(isNull(schema.workspaces.deletedAt), eq(schema.workspaces.ownerId, userId)));
       return rows;
+    }
+    case "whoami":
+    case "my_issues":
+    case "my_today":
+    case "list_notifications":
+    case "mark_notification_read":
+      return handleMeTool(db, toolName, params, userId);
+    case "get_workspace_logo": {
+      const workspaceId = await getWorkspaceId(db, params.workspace as string, userId);
+      return workspaceLogo(db, env, workspaceId, origin);
     }
     case "create_workspace": {
       const parsed = workspaceService.createWorkspaceSchema.safeParse(params);
