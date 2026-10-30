@@ -12,12 +12,16 @@ import { StyleSheet } from "react-native-unistyles";
  *
  * `fill` takes the remaining space of its parent; `dock` pins to the bottom
  * edge over sibling content (an accessory row floating above a full-bleed view).
+ * `floor` keeps at least that much padding while no keyboard is up (the system
+ * navigation bar, for a screen that draws under it).
  */
 export function KeyboardFrame({
   variant,
+  floor = 0,
   children,
 }: {
   variant: "fill" | "dock";
+  floor?: number;
   children: ReactNode;
 }) {
   const frame = useRef<View>(null);
@@ -43,7 +47,10 @@ export function KeyboardFrame({
   return (
     <View
       ref={frame}
-      style={[variant === "fill" ? styles.fill : styles.dock, { paddingBottom: inset }]}
+      style={[
+        variant === "fill" ? styles.fill : styles.dock,
+        { paddingBottom: Math.max(inset, floor) },
+      ]}
     >
       {children}
     </View>
