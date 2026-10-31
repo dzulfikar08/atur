@@ -1,0 +1,49 @@
+# Manual only. Pushes store-listing images to Google Play (com.diatur.app) via the Android Publisher API.
+# The listing hi-res icon / feature graphic are store assets, separate from the AAB. Uses the `release`
+# environment for PLAY_SERVICE_ACCOUNT_JSON (master-only).
+name: Play listing
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "list = dump current listing images; icon / feature = replace in every language"
+        type: choice
+        options: [list, icon, feature]
+        default: list
+
+permissions:
+  contents: read
+
+jobs:
+  listing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+
+      - run: pip install -q google-api-python-client google-auth
+
+      - name: Run
+        env:
+          ACTION: ${{ inputs.action }}
+        run: |
+          case "$ACTION" in
+            list) python scripts/play-listing.py list ;;
+            icon) python scripts/play-listing.py icon apps/native/store/icon-512.png ;;
+            feature) python scripts/play-listing.py feature apps/native/store/feature-graphic.png ;;
+          esac 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: listing-dump
+          path: listing-dump
+          if-no-files-found: ignore
