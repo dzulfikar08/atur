@@ -148,6 +148,35 @@ test("input, paste and resize go to the session; false without a connection", as
   expect(pane.sendPaste("x", false)).toBe(false);
 });
 
+test("the computer is told a grid only when it changed: not on attach, focus or redraw", async () => {
+  const first = new FakeLink();
+  const second = new FakeLink();
+  const manager = fakeManager(first);
+  const { handlers } = recorder();
+  const pane = openDirectPane(manager, "12", handlers, SIZE);
+  await flush();
+
+  // What the pane attached with is already told, however often the view lays out again.
+  pane.requestResize(80, 24);
+  pane.requestResize(80, 24);
+  expect(first.resizes).toEqual([]);
+
+  pane.requestResize(60, 40);
+  pane.requestResize(60, 40);
+  expect(first.resizes).toEqual([{ session: "12", cols: 60, rows: 40 }]);
+  pane.requestResize(80, 24);
+  expect(first.resizes).toHaveLength(2);
+
+  // A new connection attaches at the grid last asked for, which tells it.
+  pane.requestResize(70, 33);
+  manager.set(null);
+  manager.set(second);
+  await flush();
+  pane.requestResize(70, 33);
+  expect(second.attaches).toEqual([{ session: "12", cols: 70, rows: 33 }]);
+  expect(second.resizes).toEqual([]);
+});
+
 test("claiming the keyboard does nothing", async () => {
   const link = new FakeLink();
   const { handlers, calls } = recorder();
