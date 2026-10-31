@@ -36,7 +36,11 @@ export interface DirectPaneHandle {
   sendPaste(text: string, submit: boolean): boolean;
   /** The last `lines` rows with scrollback, answered through `onHistory`. */
   requestHistory(lines: number): void;
-  /** Lays the session out at this grid; also what a later reattach asks for. */
+  /**
+   * Tells the computer the grid of this view, and what a later reattach asks for. Only a grid it
+   * was not told yet is sent: attaching, focus and redraws repeat the last one. The session takes
+   * the size once this phone is the one typing; until then the phone shows the size it has.
+   */
   requestResize(cols: number, rows: number): void;
   /** Nothing to claim on the direct road. */
   claimKeyboard(): void;
@@ -55,6 +59,8 @@ export function openDirectPane(
   let current: DirectLink | null = null;
   let unsubscribeEvents: (() => void) | null = null;
   let grid = { ...size };
+  /** The grid the computer was last told on the current connection. */
+  let told = { ...size };
 
   const detach = () => {
     unsubscribeEvents?.();
@@ -88,6 +94,7 @@ export function openDirectPane(
 
   const attach = (link: DirectLink) => {
     current = link;
+    told = { ...grid };
     // Before attaching: the hello and the first snapshot can beat the answer.
     unsubscribeEvents = link.subscribe((event) => onEvent(link, event));
     link
@@ -136,7 +143,8 @@ export function openDirectPane(
     },
     requestResize(cols, rows) {
       grid = { cols, rows };
-      current?.resize(sessionId, cols, rows);
+      if (!current || (told.cols === cols && told.rows === rows)) return;
+      if (current.resize(sessionId, cols, rows)) told = { cols, rows };
     },
     claimKeyboard: noop,
     close() {

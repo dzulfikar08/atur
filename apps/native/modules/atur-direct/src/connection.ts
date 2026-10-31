@@ -161,7 +161,8 @@ export class DirectConnection {
 
   /**
    * Attaches and starts the frame stream: a `hello` and a `snapshot` event follow, then `diff`s.
-   * Attaching keeps the size another client already set; use `resize` to change it.
+   * The phone only watches until its user types: attaching keeps the size the session has, and the
+   * grid given here is what the session takes once the phone starts typing.
    */
   attach(session: string, cols: number, rows: number): Promise<AttachInfo> {
     return this.call("attach", { session, cols, rows });
@@ -181,7 +182,10 @@ export class DirectConnection {
     return this.fire("paste", { session, text, submit });
   }
 
-  /** Resizes the session for every client showing it. */
+  /**
+   * Tells the computer the grid of the phone's view (rotation, font size). The session takes it
+   * only while this phone is the one typing; telling the same grid again does nothing.
+   */
   resize(session: string, cols: number, rows: number): boolean {
     return this.fire("resize", { session, cols, rows });
   }
