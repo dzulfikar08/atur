@@ -19,16 +19,10 @@ jobs:
       - run: bun run typecheck
       # Fail on high/critical advisories; moderate ones are reported without
       # breaking the build (bun audit exits 0 for moderate).
-      # Ignored: no fixed release exists upstream, and the code paths are dev/build tooling only
-      # (never shipped in the worker bundle or the mobile app). Re-check and drop when fixed.
-      #   GHSA-vfj7-8cjw-p6xm  braces <=3.0.3 (latest is 3.0.3; glob tooling)
-      #   GHSA-86w9-cpqp-85rv  node-forge <=1.4.0 (latest is 1.4.0; @expo/cli dev-server TLS)
-      # undici and zod are overridden to fixed releases in package.json: miniflare pins a
+      # node-forge, undici and zod are overridden to fixed releases in package.json: miniflare pins a
       # vulnerable undici, and @expo/cli pins zod 3 (all of 3.x is affected by GHSA-mrhx-c7xc-m3w5;
       # its schemas only use APIs zod 4 keeps).
-      - run: >-
-          bun audit --audit-level=high
-          --ignore=GHSA-vfj7-8cjw-p6xm --ignore=GHSA-86w9-cpqp-85rv
+      - run: bun audit --audit-level=high
       - run: bun run test
       - run: bun --filter @atur/app build
       - run: bun --filter @atur/web build
