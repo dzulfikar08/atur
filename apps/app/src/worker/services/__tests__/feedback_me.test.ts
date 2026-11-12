@@ -60,7 +60,14 @@ describe.skipIf(!sqliteSupported)("signed-in feedback API (/me)", () => {
       createdAt: NOW,
     } as typeof schema.projects.$inferInsert);
     await db.insert(schema.states).values([
-      { id: "st-open", name: "Backlog", groupName: "backlog", isDefault: 1, projectId: "proj", workspaceId: "ws" },
+      {
+        id: "st-open",
+        name: "Backlog",
+        groupName: "backlog",
+        isDefault: 1,
+        projectId: "proj",
+        workspaceId: "ws",
+      },
       { id: "st-done", name: "Done", groupName: "completed", projectId: "proj", workspaceId: "ws" },
     ] as (typeof schema.states.$inferInsert)[]);
     await db.insert(schema.feedbackBoards).values({
@@ -96,12 +103,18 @@ describe.skipIf(!sqliteSupported)("signed-in feedback API (/me)", () => {
     };
   }
 
-  async function call(path: string, init: { method?: string; body?: unknown; h?: Record<string, string> } = {}) {
+  async function call(
+    path: string,
+    init: { method?: string; body?: unknown; h?: Record<string, string> } = {},
+  ) {
     const h = init.h ?? (await headers());
     return app().fetch(
       new Request(`http://localhost/api/feedback/${TOKEN}${path}`, {
         method: init.method ?? "GET",
-        headers: { ...h, ...(init.body !== undefined ? { "content-type": "application/json" } : {}) },
+        headers: {
+          ...h,
+          ...(init.body !== undefined ? { "content-type": "application/json" } : {}),
+        },
         body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
       }),
       env,
@@ -134,25 +147,49 @@ describe.skipIf(!sqliteSupported)("signed-in feedback API (/me)", () => {
 
   it("refuses a missing, wrong, widget-style or expired signature", async () => {
     expect((await call("/me/board", { h: {} })).status).toBe(401);
-    expect((await call("/me/board", { h: await headers("user-1", "ana@example.com", { secret: "nope" }) })).status).toBe(401);
-    const now = Math.floor(Date.now() / 1000);
-    expect((await call("/me/board", { h: await headers("user-1", "ana@example.com", { expires: now - 1 }) })).status).toBe(401);
     expect(
-      (await call("/me/board", { h: await headers("user-1", "ana@example.com", { expires: now + ME_MAX_AGE_SEC + 60 }) })).status,
+      (
+        await call("/me/board", {
+          h: await headers("user-1", "ana@example.com", { secret: "nope" }),
+        })
+      ).status,
+    ).toBe(401);
+    const now = Math.floor(Date.now() / 1000);
+    expect(
+      (
+        await call("/me/board", {
+          h: await headers("user-1", "ana@example.com", { expires: now - 1 }),
+        })
+      ).status,
+    ).toBe(401);
+    expect(
+      (
+        await call("/me/board", {
+          h: await headers("user-1", "ana@example.com", { expires: now + ME_MAX_AGE_SEC + 60 }),
+        })
+      ).status,
     ).toBe(401);
     // The widget's signature (id:email) does not open this API.
-    const widget = { ...(await headers()), "x-atur-signature": await hmacSha256Hex(SECRET, "user-1:ana@example.com") };
+    const widget = {
+      ...(await headers()),
+      "x-atur-signature": await hmacSha256Hex(SECRET, "user-1:ana@example.com"),
+    };
     expect((await call("/me/board", { h: widget })).status).toBe(401);
   });
 
   it("refuses a board without an identify secret", async () => {
-    await db.update(schema.feedbackBoards).set({ identifySecret: null }).where(eq(schema.feedbackBoards.id, "board"));
+    await db
+      .update(schema.feedbackBoards)
+      .set({ identifySecret: null })
+      .where(eq(schema.feedbackBoards.id, "board"));
     expect((await call("/me/board")).status).toBe(403);
   });
 
   it("lists ideas, votes as the verified email and comments", async () => {
     const idea = await report("idea", "Export GPX to Komoot");
-    let board = (await (await call("/me/board")).json()) as { items: { id: string; votes: number; voted: boolean }[] };
+    let board = (await (await call("/me/board")).json()) as {
+      items: { id: string; votes: number; voted: boolean }[];
+    };
     expect(board.items.map((i) => i.id)).toEqual([idea.id]);
     expect(board.items[0]!.voted).toBe(false);
 
@@ -161,12 +198,26 @@ describe.skipIf(!sqliteSupported)("signed-in feedback API (/me)", () => {
     board = (await (await call("/me/board")).json()) as typeof board;
     expect(board.items[0]).toMatchObject({ votes: 1, voted: true });
     // Same email from the public board (portal) sees the same vote.
-    const pub = await app().fetch(new Request(`http://localhost/api/feedback/${TOKEN}?email=ana@example.com`), env);
+    const pub = await app().fetch(
+      new Request(`http://localhost/api/feedback/${TOKEN}?email=ana@example.com`),
+      env,
+    );
     expect(((await pub.json()) as typeof board).items[0]!.voted).toBe(true);
 
-    expect((await call(`/me/items/${idea.id}/comments`, { method: "POST", body: { body: " " } })).status).toBe(400);
-    expect((await call(`/me/items/${idea.id}/comments`, { method: "POST", body: { body: "Yes please" } })).status).toBe(201);
-    const item = (await (await call(`/me/items/${idea.id}`)).json()) as { comments: { body: string }[] };
+    expect(
+      (await call(`/me/items/${idea.id}/comments`, { method: "POST", body: { body: " " } })).status,
+    ).toBe(400);
+    expect(
+      (
+        await call(`/me/items/${idea.id}/comments`, {
+          method: "POST",
+          body: { body: "Yes please" },
+        })
+      ).status,
+    ).toBe(201);
+    const item = (await (await call(`/me/items/${idea.id}`)).json()) as {
+      comments: { body: string }[];
+    };
     expect(item.comments.map((c) => c.body)).toEqual(["Yes please"]);
   });
 
@@ -185,10 +236,31 @@ describe.skipIf(!sqliteSupported)("signed-in feedback API (/me)", () => {
 
     // A staff reply (public) and an internal note.
     await db.insert(schema.issueComments).values([
-      { id: "c-staff", issueId: bug.id, actorId: "staff-1", access: "public", commentHtml: "<p>Thanks, looking</p>", createdAt: "2026-10-18T01:00:00.000Z" },
-      { id: "c-note", issueId: bug.id, actorId: "staff-1", access: "internal", commentHtml: "<p>secret</p>", createdAt: "2026-10-18T01:30:00.000Z" },
+      {
+        id: "c-staff",
+        issueId: bug.id,
+        actorId: "staff-1",
+        access: "public",
+        commentHtml: "<p>Thanks, looking</p>",
+        createdAt: "2026-10-18T01:00:00.000Z",
+      },
+      {
+        id: "c-note",
+        issueId: bug.id,
+        actorId: "staff-1",
+        access: "internal",
+        commentHtml: "<p>secret</p>",
+        createdAt: "2026-10-18T01:30:00.000Z",
+      },
     ] as (typeof schema.issueComments.$inferInsert)[]);
-    expect((await call(`/me/tickets/${bug.sequence_id}/comments`, { method: "POST", body: { body: "Here is the FIT file" } })).status).toBe(201);
+    expect(
+      (
+        await call(`/me/tickets/${bug.sequence_id}/comments`, {
+          method: "POST",
+          body: { body: "Here is the FIT file" },
+        })
+      ).status,
+    ).toBe(201);
 
     const res = await call(`/me/tickets/${bug.sequence_id}`);
     expect(res.status).toBe(200);
@@ -210,7 +282,14 @@ describe.skipIf(!sqliteSupported)("signed-in feedback API (/me)", () => {
   it("does not open another person's ticket", async () => {
     const bobs = await report("bug", "Bob's bug", "bob@example.com");
     expect((await call(`/me/tickets/${bobs.sequence_id}`)).status).toBe(404);
-    expect((await call(`/me/tickets/${bobs.sequence_id}/comments`, { method: "POST", body: { body: "hi" } })).status).toBe(404);
+    expect(
+      (
+        await call(`/me/tickets/${bobs.sequence_id}/comments`, {
+          method: "POST",
+          body: { body: "hi" },
+        })
+      ).status,
+    ).toBe(404);
     expect((await call(`/me/tickets/abc`)).status).toBe(400);
   });
 

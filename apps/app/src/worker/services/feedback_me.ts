@@ -152,7 +152,11 @@ export async function ticket(db: DbClient, me: Me, seqId: number, projectId?: st
 
 async function stateOf(db: DbClient, stateId: string, workspaceId: string) {
   const [s] = await db
-    .select({ name: schema.states.name, color: schema.states.color, group: schema.states.groupName })
+    .select({
+      name: schema.states.name,
+      color: schema.states.color,
+      group: schema.states.groupName,
+    })
     .from(schema.states)
     .where(
       and(

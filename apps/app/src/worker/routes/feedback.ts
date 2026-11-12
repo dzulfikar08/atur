@@ -147,8 +147,14 @@ feedbackRoutes
     if (!(await rateLimit(c.env, `fbme:${token}:${me.email}:comment`, 20, 60))) {
       return c.json({ message: "Too many comments. Slow down." }, 429);
     }
-    const { body } = parseOr400(feedbackMe.meCommentSchema, await c.req.json().catch(() => undefined));
-    return c.json(await feedback.addComment(db, token, c.req.param("issueId")!, body, me.email), 201);
+    const { body } = parseOr400(
+      feedbackMe.meCommentSchema,
+      await c.req.json().catch(() => undefined),
+    );
+    return c.json(
+      await feedback.addComment(db, token, c.req.param("issueId")!, body, me.email),
+      201,
+    );
   })
   .get("/me/reports", async (c) => {
     const db = getDb(c.env.DB);
@@ -167,7 +173,10 @@ feedbackRoutes
     if (!(await rateLimit(c.env, `fbme:${token}:${me.email}:reply`, 20, 60))) {
       return c.json({ message: "Too many replies. Slow down." }, 429);
     }
-    const { body } = parseOr400(feedbackMe.meCommentSchema, await c.req.json().catch(() => undefined));
+    const { body } = parseOr400(
+      feedbackMe.meCommentSchema,
+      await c.req.json().catch(() => undefined),
+    );
     const result = await feedbackMe.replyToTicket(
       db,
       me,

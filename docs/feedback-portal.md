@@ -121,27 +121,27 @@ For a host app that shows ideas, the person's reports and the changelog inside i
 `app.fit.joyorogo.com/issues`). Your **server** calls these on behalf of someone it has signed in; never the browser.
 Every request carries a short-lived signature made with the board's identify secret:
 
-| Header               | Value                                                                                   |
-| -------------------- | --------------------------------------------------------------------------------------- |
-| `X-Atur-User-Id`     | your user id                                                                            |
-| `X-Atur-User-Email`  | their email (lowercased before signing)                                                 |
-| `X-Atur-User-Name`   | optional, `encodeURIComponent`                                                          |
-| `X-Atur-Expires`     | unix seconds, now to now + 300                                                          |
-| `X-Atur-Signature`   | `hex(HMAC-SHA256(secret, "me:" + id + ":" + lowercased email + ":" + expires))`        |
+| Header              | Value                                                                           |
+| ------------------- | ------------------------------------------------------------------------------- |
+| `X-Atur-User-Id`    | your user id                                                                    |
+| `X-Atur-User-Email` | their email (lowercased before signing)                                         |
+| `X-Atur-User-Name`  | optional, `encodeURIComponent`                                                  |
+| `X-Atur-Expires`    | unix seconds, now to now + 300                                                  |
+| `X-Atur-Signature`  | `hex(HMAC-SHA256(secret, "me:" + id + ":" + lowercased email + ":" + expires))` |
 
 The `me:` prefix and the expiry mean a widget signature cannot open this API. Missing, wrong or expired: `401`; a board
 without an identify secret: `403`. No portal session is created.
 
-| Route (under `/api/feedback/<token>`)  | What                                                                                   |
-| -------------------------------------- | -------------------------------------------------------------------------------------- |
-| `GET /me/board`                        | board + ideas, `voted` for this email                                                  |
-| `GET /me/items/<id>`                   | one idea with its public comments                                                      |
-| `POST /me/items/<id>/votes`            | toggle this email's vote → `{ voted, count }`                                          |
-| `POST /me/items/<id>/comments`         | `{ body }` (plain text, ≤ 4000)                                                        |
-| `GET /me/reports`                      | `{ tickets, ideas, unverified }`: what this email filed                                |
-| `GET /me/tickets/<seq>[?project=]`     | a ticket of theirs with its public thread as text (`from: "you" \| "team"`, staff by display name only) |
-| `POST /me/tickets/<seq>/comments`      | `{ body }`: reply on their ticket (a public comment by them)                           |
-| `GET /me/changelog`                    | completed ideas of the workspace                                                       |
+| Route (under `/api/feedback/<token>`) | What                                                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `GET /me/board`                       | board + ideas, `voted` for this email                                                                   |
+| `GET /me/items/<id>`                  | one idea with its public comments                                                                       |
+| `POST /me/items/<id>/votes`           | toggle this email's vote → `{ voted, count }`                                                           |
+| `POST /me/items/<id>/comments`        | `{ body }` (plain text, ≤ 4000)                                                                         |
+| `GET /me/reports`                     | `{ tickets, ideas, unverified }`: what this email filed                                                 |
+| `GET /me/tickets/<seq>[?project=]`    | a ticket of theirs with its public thread as text (`from: "you" \| "team"`, staff by display name only) |
+| `POST /me/tickets/<seq>/comments`     | `{ body }`: reply on their ticket (a public comment by them)                                            |
+| `GET /me/changelog`                   | completed ideas of the workspace                                                                        |
 
 Votes and comments are rate limited per email (30 and 20 a minute).
 
