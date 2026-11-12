@@ -122,6 +122,16 @@ feedbackRoutes
     const me = await signedIn(c);
     return c.json(await feedback.getBoard(db, c.req.param("token")!, me.voterHash));
   })
+  .post("/me/items", async (c) => {
+    const db = getDb(c.env.DB);
+    const token = c.req.param("token")!;
+    const me = await signedIn(c);
+    if (!(await rateLimit(c.env, `fbme:${token}:${me.email}:submit`, 10, 60))) {
+      return c.json({ message: "Too many submissions. Try again shortly." }, 429);
+    }
+    const body = parseOr400(feedbackMe.meItemSchema, await c.req.json().catch(() => undefined));
+    return c.json(await feedbackMe.submit(db, token, me, body, new URL(c.req.url).origin), 201);
+  })
   .get("/me/items/:issueId", async (c) => {
     const db = getDb(c.env.DB);
     const me = await signedIn(c);
