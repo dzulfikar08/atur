@@ -62,12 +62,14 @@ load to be captured; the widget only sees what happens after it runs.
 
 Attributes:
 
-| Attribute            | Meaning                                                                       |
-| -------------------- | ----------------------------------------------------------------------------- |
-| `data-atur-token`    | Board token (required).                                                       |
-| `data-app-version`   | Your release, attached to every report.                                       |
-| `data-atur-position` | `bottom-right` (default), `bottom-left`, `top-right`, `top-left`.             |
-| `data-atur-context`  | `off` disables all automatic context capture and the fetch/XHR/console hooks. |
+| Attribute            | Meaning                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `data-atur-token`    | Board token (required).                                                                                                        |
+| `data-app-version`   | Your release, attached to every report.                                                                                        |
+| `data-atur-position` | `bottom-right` (default), `bottom-left`, `top-right`, `top-left`.                                                              |
+| `data-atur-context`  | `off` disables all automatic context capture and the fetch/XHR/console hooks.                                                  |
+| `data-atur-launcher` | `off` hides the round button; open the panel from your own UI with `Atur.open()`.                                              |
+| `data-atur-lang`     | `en` or `id`. Default: the page's `<html lang>` when the panel renders, else the browser's language; anything else is English. |
 
 The panel has three modes — **Feedback** (idea), **Report a bug** and **Get help** (both create
 tickets) — a **Capture screenshot** button and **Attach file** (PNG/JPEG/WebP/GIF/PDF/text, 10 MB,
@@ -75,7 +77,9 @@ up to 5). Screenshots render the visible viewport client-side by serializing the
 (no library, no prompt); when the browser can't rasterize the page it falls back to a single
 `getDisplayMedia` frame, which shows the browser's own consent prompt.
 
-JavaScript API: `Atur.identify(user)`, `Atur.open("idea" | "bug" | "help")`, `Atur.close()`.
+JavaScript API: `Atur.identify(user)`, `Atur.open("idea" | "bug" | "help")`, `Atur.close()`,
+`Atur.setLanguage("id" | "en" | "")` (`""` follows `<html lang>` again). `Atur.open()` may be called from your own
+button's click handler: that click does not count as a click outside the panel.
 Calls made before the script loads can be queued: `Atur.q.push(["identify", { … }])`.
 
 ### Automatic context
