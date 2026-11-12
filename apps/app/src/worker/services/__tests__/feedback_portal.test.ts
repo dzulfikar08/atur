@@ -451,6 +451,26 @@ describe.skipIf(!sqliteSupported)("feedback portal, attachments and ingest", () 
       ).rejects.toMatchObject({ status: 413 });
     });
 
+    it("takes a FIT activity file whatever type the browser declares, only with a FIT header", async () => {
+      // 14-byte FIT header: size, protocol, profile (2), data size (4), ".FIT", crc (2), then a record.
+      const FIT = new Uint8Array([
+        14, 0x20, 0x5c, 0x08, 4, 0, 0, 0, 0x2e, 0x46, 0x49, 0x54, 0, 0, 1, 2, 3, 4, 0, 0,
+      ]);
+      for (const type of ["application/octet-stream", "", "application/vnd.ant.fit"]) {
+        await expect(upload("Lari_pagi.FIT", FIT, type)).resolves.toMatchObject({
+          filename: "Lari_pagi.FIT",
+          mime: "application/vnd.ant.fit",
+        });
+      }
+      // A .fit name on other bytes, or FIT bytes under another name and a binary type, are refused.
+      await expect(upload("fake.fit", PNG, "application/octet-stream")).rejects.toMatchObject({
+        status: 415,
+      });
+      await expect(upload("run.bin", FIT, "application/octet-stream")).rejects.toMatchObject({
+        status: 415,
+      });
+    });
+
     it("attaches to the issue (image in description) and cannot be claimed twice or across boards", async () => {
       const a = await upload();
       const res = await post(`/api/feedback/${TOKEN}/items`, {

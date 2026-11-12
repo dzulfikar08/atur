@@ -72,7 +72,7 @@ Attributes:
 | `data-atur-lang`     | `en` or `id`. Default: the page's `<html lang>` when the panel renders, else the browser's language; anything else is English. |
 
 The panel has three modes — **Feedback** (idea), **Report a bug** and **Get help** (both create
-tickets) — a **Capture screenshot** button and **Attach file** (PNG/JPEG/WebP/GIF/PDF/text, 10 MB,
+tickets) — a **Capture screenshot** button and **Attach file** (PNG/JPEG/WebP/GIF/PDF/text, and `.fit` activity files checked by their header, 10 MB,
 up to 5). Screenshots render the visible viewport client-side by serializing the DOM into an SVG
 (no library, no prompt); when the browser can't rasterize the page it falls back to a single
 `getDisplayMedia` frame, which shows the browser's own consent prompt.
