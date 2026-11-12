@@ -81,7 +81,7 @@ export const upsertBoardSchema = z.object({
 // Public input is plain text. Store an escaped HTML copy for the team's internal
 // issue view, and the plain text for the public portal (rendered as React text,
 // so no XSS surface / no dangerouslySetInnerHTML anywhere).
-function toHtml(text: string): string {
+export function textToHtml(text: string): string {
   return text
     .split(/\n{2,}/)
     .map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
@@ -309,7 +309,7 @@ function reportHtml(p: {
     parts.push(`<h4>Attachments</h4>${items.join("")}`);
   }
   if (p.context) parts.push(renderContextHtml(p.context));
-  return (p.description ? toHtml(p.description) : "") + parts.join("");
+  return (p.description ? textToHtml(p.description) : "") + parts.join("");
 }
 
 export type CreatedItem = { id: string; sequence_id: number; url: string };
@@ -544,7 +544,7 @@ export async function addComment(
   if (!issue) throw new HTTPException(404, { message: "Feedback item not found" });
   const id = await feedbackRepo.addExternalComment(db, {
     issueId: issue.id,
-    commentHtml: toHtml(body),
+    commentHtml: textToHtml(body),
     commentStripped: body,
     actorId: FEEDBACK_BOT_USER_ID,
   });
