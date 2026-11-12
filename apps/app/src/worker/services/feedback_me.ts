@@ -4,7 +4,8 @@ import type { DbClient } from "../db/index";
 import * as feedbackRepo from "../repositories/feedback";
 import { and, eq, isNull } from "drizzle-orm";
 import * as schema from "../db/schema";
-import { hmacSha256Hex, safeEqual } from "../lib/identify";
+import { hmacSha256Hex, identityMessage, safeEqual } from "../lib/identify";
+import { contextSchema } from "../lib/feedbackContext";
 import * as feedback from "./feedback";
 import * as portal from "./portal";
 
@@ -35,6 +36,8 @@ export interface MeHeaders {
 }
 
 export interface Me {
+  /** The host app's user id (from X-Atur-User-Id). */
+  id: string;
   board: NonNullable<Awaited<ReturnType<typeof feedbackRepo.findBoardByToken>>>;
   email: string;
   name: string | null;
@@ -82,7 +85,7 @@ export async function resolveMe(
   // A CRM lead with this email has no users row; it can read but not reply until it has one.
   const customer = row.userId ? portal.toPortalCustomer(row) : null;
   const voterHash = await feedback.voterHashFor(email, "", "");
-  return { board, email, name, customer, voterHash };
+  return { id, board, email, name, customer, voterHash };
 }
 
 export const meCommentSchema = z.object({ body: z.string().trim().min(1).max(4000) });
@@ -187,4 +190,41 @@ export async function replyToTicket(
     projectId ?? me.board.projectId,
   );
   return { id: comment?.id ?? null };
+}
+
+/** A report or idea filed from the host app's own form, as the signed-in person (no widget). */
+export const meItemSchema = z.object({
+  title: z.string().trim().min(3).max(120),
+  description: z.string().max(4000).optional(),
+  kind: z.enum(["idea", "bug", "question"]),
+  context: contextSchema.optional(),
+  attachment_ids: z.array(z.string().uuid()).max(5).optional(),
+});
+
+/**
+ * Files it exactly like a verified widget report (feedback.createItem with an external_user signed by the board's
+ * identify secret, here on the server): a bug or question becomes this person's support ticket, an idea stays on the board.
+ */
+export async function submit(
+  db: DbClient,
+  token: string,
+  me: Me,
+  data: z.infer<typeof meItemSchema>,
+  origin: string,
+) {
+  const signature = await hmacSha256Hex(me.board.identifySecret!, identityMessage(me.id, me.email));
+  return feedback.createItem(
+    db,
+    token,
+    {
+      title: data.title,
+      description: data.description?.trim() || undefined,
+      kind: data.kind,
+      source: "api",
+      context: data.context,
+      attachment_ids: data.attachment_ids,
+      external_user: { id: me.id, email: me.email, name: me.name ?? undefined, signature },
+    },
+    origin,
+  );
 }

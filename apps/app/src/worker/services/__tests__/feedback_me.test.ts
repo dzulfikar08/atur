@@ -279,6 +279,51 @@ describe.skipIf(!sqliteSupported)("signed-in feedback API (/me)", () => {
     expect(JSON.stringify(thread)).not.toContain("secret");
   });
 
+  it("files a bug as the person's verified ticket and an idea on the board, from the host's own form", async () => {
+    const bug = await call("/me/items", {
+      method: "POST",
+      body: {
+        title: "Sync stuck at 0%",
+        description: "Since this morning",
+        kind: "bug",
+        context: { url: "https://app.fit.test/issues", app_version: "web", platform: "web" },
+      },
+    });
+    expect(bug.status).toBe(201);
+    const created = (await bug.json()) as { id: string; sequence_id: number };
+    const idea = await call("/me/items", {
+      method: "POST",
+      body: { title: "Komoot export", kind: "idea" },
+    });
+    expect(idea.status).toBe(201);
+    expect(
+      (await call("/me/items", { method: "POST", body: { title: "x", kind: "bug" } })).status,
+    ).toBe(400);
+    expect(
+      (await call("/me/items", { method: "POST", body: { title: "Valid title", kind: "nope" } }))
+        .status,
+    ).toBe(400);
+
+    const mine = (await (await call("/me/reports")).json()) as {
+      tickets: { sequence_id: number; name: string }[];
+      ideas: { name: string }[];
+      unverified: unknown[];
+    };
+    expect(mine.tickets.map((t) => t.name)).toEqual(["Sync stuck at 0%"]);
+    expect(mine.ideas.map((i) => i.name)).toEqual(["Komoot export"]);
+    expect(mine.unverified).toEqual([]);
+    const meta = await db
+      .select()
+      .from(schema.feedbackMeta)
+      .where(eq(schema.feedbackMeta.issueId, created.id));
+    expect(meta[0]).toMatchObject({
+      identityVerified: 1,
+      source: "api",
+      kind: "bug",
+      authorEmail: "ana@example.com",
+    });
+  });
+
   it("does not open another person's ticket", async () => {
     const bobs = await report("bug", "Bob's bug", "bob@example.com");
     expect((await call(`/me/tickets/${bobs.sequence_id}`)).status).toBe(404);
