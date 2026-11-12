@@ -16,6 +16,14 @@ export const BOARD_UNCLAIMED_WINDOW_MS = 24 * 60 * 60 * 1000;
 export const BOARD_UNCLAIMED_MAX_FILES = 50;
 export const BOARD_UNCLAIMED_MAX_BYTES = 200 * 1024 * 1024;
 
+/**
+ * Garmin/ANT FIT activity files (watches, bike computers, fitness apps): what a sports app's users attach to a bug
+ * report. Browsers send them as application/octet-stream or with no type at all, so a `.fit` name plus the FIT header
+ * (header size 12 or 14, ".FIT" at byte 8) is what makes one; it is stored as application/vnd.ant.fit and, like every
+ * non-image asset, served as a download.
+ */
+export const FIT_MIME = "application/vnd.ant.fit";
+
 const ALLOWED_MIME = new Set([
   "image/png",
   "image/jpeg",
@@ -23,7 +31,19 @@ const ALLOWED_MIME = new Set([
   "image/gif",
   "application/pdf",
   "text/plain",
+  FIT_MIME,
 ]);
+
+function isFit(name: string | undefined, b: Uint8Array): boolean {
+  return (
+    /\.fit$/i.test(name ?? "") &&
+    (b[0] === 12 || b[0] === 14) &&
+    b[8] === 0x2e &&
+    b[9] === 0x46 &&
+    b[10] === 0x49 &&
+    b[11] === 0x54
+  );
+}
 
 const startsWith = (b: Uint8Array, sig: number[], at = 0) => sig.every((v, i) => b[at + i] === v);
 
@@ -41,6 +61,8 @@ function bytesMatch(mime: string, b: Uint8Array): boolean {
       return startsWith(b, [0x52, 0x49, 0x46, 0x46]) && startsWith(b, [0x57, 0x45, 0x42, 0x50], 8);
     case "application/pdf":
       return startsWith(b, [0x25, 0x50, 0x44, 0x46]);
+    case FIT_MIME:
+      return b[8] === 0x2e && b[9] === 0x46 && b[10] === 0x49 && b[11] === 0x54;
     default:
       // text/plain: no NUL bytes in the head.
       return !b.subarray(0, 1024).includes(0);
@@ -70,18 +92,27 @@ export async function uploadAttachment(
   origin: string,
   botUserId: string,
 ): Promise<FeedbackAttachmentResult> {
-  const mime = (file.type || "").split(";")[0].trim().toLowerCase();
-  if (!ALLOWED_MIME.has(mime)) {
-    throw new HTTPException(415, {
-      message: "Unsupported file type. Allowed: PNG, JPEG, WebP, GIF, PDF, plain text.",
-    });
-  }
+  let mime = (file.type || "").split(";")[0].trim().toLowerCase();
   if (file.size > FEEDBACK_ATTACHMENT_MAX_BYTES) {
     throw new HTTPException(413, { message: "File too large (max 10 MB)." });
   }
   if (file.size === 0) throw new HTTPException(400, { message: "File is empty." });
+  const looksFit =
+    /\.fit$/i.test(file.name ?? "") &&
+    (mime === "" || mime === "application/octet-stream" || mime === FIT_MIME);
+  if (!looksFit && !ALLOWED_MIME.has(mime)) {
+    throw new HTTPException(415, {
+      message: "Unsupported file type. Allowed: PNG, JPEG, WebP, GIF, PDF, plain text, FIT.",
+    });
+  }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
+  if (looksFit) {
+    if (!isFit(file.name, bytes)) {
+      throw new HTTPException(415, { message: "File content does not match its type." });
+    }
+    mime = FIT_MIME;
+  }
   if (!bytesMatch(mime, bytes)) {
     throw new HTTPException(415, { message: "File content does not match its type." });
   }
