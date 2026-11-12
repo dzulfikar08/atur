@@ -1,9 +1,12 @@
 import { Hono, type Context } from "hono";
+import { HTTPException } from "hono/http-exception";
 import type { Env } from "../lib/env";
 import { getDb } from "../db/index";
 import { rateLimit } from "../lib/rateLimit";
 import * as feedback from "../services/feedback";
 import * as attachments from "../services/feedback_attachments";
+import * as feedbackMe from "../services/feedback_me";
+import * as portal from "../services/portal";
 import { parseOr400, publicJsonError } from "../lib/validate";
 
 export const feedbackRoutes = new Hono<{ Bindings: Env }>({ strict: false });
@@ -110,4 +113,99 @@ feedbackRoutes
     const { body, email } = feedback.commentSchema.parse(await c.req.json());
     const result = await feedback.addComment(db, token, c.req.param("issueId")!, body, email);
     return c.json(result, 201);
+  })
+
+  // ── Signed-in API (server to server): a host app's own feedback page acts for a person it
+  // signed in. services/feedback_me.ts has the header format; docs/feedback-portal.md too.
+  .get("/me/board", async (c) => {
+    const db = getDb(c.env.DB);
+    const me = await signedIn(c);
+    return c.json(await feedback.getBoard(db, c.req.param("token")!, me.voterHash));
+  })
+  .get("/me/items/:issueId", async (c) => {
+    const db = getDb(c.env.DB);
+    const me = await signedIn(c);
+    return c.json(
+      await feedback.getItem(db, c.req.param("token")!, c.req.param("issueId")!, me.voterHash),
+    );
+  })
+  .post("/me/items/:issueId/votes", async (c) => {
+    const db = getDb(c.env.DB);
+    const token = c.req.param("token")!;
+    const me = await signedIn(c);
+    if (!(await rateLimit(c.env, `fbme:${token}:${me.email}:vote`, 30, 60))) {
+      return c.json({ message: "Too many votes. Slow down." }, 429);
+    }
+    return c.json(
+      await feedback.voteWithHash(db, token, c.req.param("issueId")!, me.voterHash, me.email),
+    );
+  })
+  .post("/me/items/:issueId/comments", async (c) => {
+    const db = getDb(c.env.DB);
+    const token = c.req.param("token")!;
+    const me = await signedIn(c);
+    if (!(await rateLimit(c.env, `fbme:${token}:${me.email}:comment`, 20, 60))) {
+      return c.json({ message: "Too many comments. Slow down." }, 429);
+    }
+    const { body } = parseOr400(
+      feedbackMe.meCommentSchema,
+      await c.req.json().catch(() => undefined),
+    );
+    return c.json(
+      await feedback.addComment(db, token, c.req.param("issueId")!, body, me.email),
+      201,
+    );
+  })
+  .get("/me/reports", async (c) => {
+    const db = getDb(c.env.DB);
+    const me = await signedIn(c);
+    return c.json(await feedbackMe.reports(db, me));
+  })
+  .get("/me/tickets/:seq", async (c) => {
+    const db = getDb(c.env.DB);
+    const me = await signedIn(c);
+    return c.json(await feedbackMe.ticket(db, me, ticketSeq(c), c.req.query("project") || null));
+  })
+  .post("/me/tickets/:seq/comments", async (c) => {
+    const db = getDb(c.env.DB);
+    const token = c.req.param("token")!;
+    const me = await signedIn(c);
+    if (!(await rateLimit(c.env, `fbme:${token}:${me.email}:reply`, 20, 60))) {
+      return c.json({ message: "Too many replies. Slow down." }, 429);
+    }
+    const { body } = parseOr400(
+      feedbackMe.meCommentSchema,
+      await c.req.json().catch(() => undefined),
+    );
+    const result = await feedbackMe.replyToTicket(
+      db,
+      me,
+      ticketSeq(c),
+      body,
+      c.req.query("project") || null,
+    );
+    return c.json(result, 201);
+  })
+  .get("/me/changelog", async (c) => {
+    const db = getDb(c.env.DB);
+    const me = await signedIn(c);
+    return c.json(await portal.getChangelog(db, me.board.workspaceId));
   });
+
+function signedIn(c: Context<{ Bindings: Env }>) {
+  return feedbackMe.resolveMe(getDb(c.env.DB), c.req.param("token")!, {
+    id: c.req.header("x-atur-user-id"),
+    email: c.req.header("x-atur-user-email"),
+    name: c.req.header("x-atur-user-name"),
+    expires: c.req.header("x-atur-expires"),
+    signature: c.req.header("x-atur-signature"),
+  });
+}
+
+function ticketSeq(c: Context<{ Bindings: Env }>): number {
+  const seq = Number(c.req.param("seq"));
+  if (!Number.isInteger(seq) || seq < 1) {
+    throw new HTTPException(400, { message: "Invalid ticket number" });
+  }
+  return seq;
+}
