@@ -25,6 +25,120 @@
   const apiBase = origin + "/api/feedback/" + encodeURIComponent(token);
   const appVersion = script.getAttribute("data-app-version") || "";
   const captureContext = script.getAttribute("data-atur-context") !== "off";
+  const showLauncher = script.getAttribute("data-atur-launcher") !== "off";
+
+  // ── Language: data-atur-lang / Atur.setLanguage(), else the page's <html lang> at render time, else the browser ──
+
+  const STRINGS = {
+    en: {
+      "idea.label": "Feedback",
+      "idea.title": "Share an idea or feedback",
+      "idea.ph": "What would you like to see?",
+      "bug.label": "Report a bug",
+      "bug.title": "Report a bug",
+      "bug.ph": "What went wrong?",
+      "help.label": "Get help",
+      "help.title": "Get help",
+      "help.ph": "What do you need help with?",
+      open: "Open feedback and support",
+      dialog: "Feedback and support",
+      maxFiles: "You can attach up to {n} files.",
+      uploadFailed: "Could not upload {name}",
+      capturing: "Capturing screenshot…",
+      captureFallback:
+        "Couldn't render the page automatically. Your browser will ask to share this tab for a single frame.",
+      shotCancelled: "Screenshot cancelled.",
+      shotFailed: "Couldn't capture a screenshot. You can attach a file instead.",
+      titleShort: "Please add a short summary (3+ characters).",
+      failed: "Something went wrong. Please try again.",
+      network: "Network error. Please try again.",
+      detailsPh: "Add details (optional)",
+      attachFiles: "Attach files",
+      remove: "Remove {name}",
+      summary: "Summary",
+      details: "Details",
+      email: "Email (so we can reply)",
+      capture: "Capture screenshot",
+      attach: "Attach file",
+      contextNote: "Page URL, browser details and recent errors are sent with your report.",
+      sending: "Sending…",
+      uploading: "Uploading…",
+      send: "Send",
+      thanks: "Thank you!",
+      received: "We received your report{seq}.",
+      track: "Track it in the portal",
+      another: "Send another",
+      sent: "Sent",
+      close: "Close",
+      closed: "Submissions are currently closed.",
+      ideas: "Browse ideas & roadmap",
+      mine: "My requests",
+    },
+    id: {
+      "idea.label": "Masukan",
+      "idea.title": "Bagikan ide atau masukan",
+      "idea.ph": "Apa yang ingin kamu lihat?",
+      "bug.label": "Laporkan bug",
+      "bug.title": "Laporkan bug",
+      "bug.ph": "Apa yang bermasalah?",
+      "help.label": "Minta bantuan",
+      "help.title": "Minta bantuan",
+      "help.ph": "Apa yang bisa kami bantu?",
+      open: "Buka masukan dan bantuan",
+      dialog: "Masukan dan bantuan",
+      maxFiles: "Kamu bisa melampirkan paling banyak {n} berkas.",
+      uploadFailed: "Gagal mengunggah {name}",
+      capturing: "Mengambil tangkapan layar…",
+      captureFallback:
+        "Halaman tidak bisa digambar otomatis. Browser akan meminta izin berbagi tab ini untuk satu gambar.",
+      shotCancelled: "Tangkapan layar dibatalkan.",
+      shotFailed: "Tangkapan layar gagal. Kamu bisa melampirkan berkas.",
+      titleShort: "Tulis ringkasan singkat (minimal 3 karakter).",
+      failed: "Terjadi kesalahan. Coba lagi.",
+      network: "Koneksi bermasalah. Coba lagi.",
+      detailsPh: "Tambahkan detail (opsional)",
+      attachFiles: "Lampirkan berkas",
+      remove: "Hapus {name}",
+      summary: "Ringkasan",
+      details: "Detail",
+      email: "Email (agar kami bisa membalas)",
+      capture: "Ambil tangkapan layar",
+      attach: "Lampirkan berkas",
+      contextNote: "URL halaman, info browser, dan error terbaru ikut terkirim bersama laporanmu.",
+      sending: "Mengirim…",
+      uploading: "Mengunggah…",
+      send: "Kirim",
+      thanks: "Terima kasih!",
+      received: "Laporanmu sudah kami terima{seq}.",
+      track: "Pantau di portal",
+      another: "Kirim lagi",
+      sent: "Terkirim",
+      close: "Tutup",
+      closed: "Pengiriman sedang ditutup.",
+      ideas: "Lihat ide & roadmap",
+      mine: "Permintaan saya",
+    },
+  };
+  let langOverride = script.getAttribute("data-atur-lang") || "";
+
+  function lang() {
+    const raw = String(
+      langOverride || document.documentElement.lang || navigator.language || "en",
+    ).toLowerCase();
+    const base = raw.split(/[-_]/)[0];
+    // "in" is the old ISO code for Indonesian that some Android browsers still report.
+    if (base === "in") return "id";
+    return STRINGS[base] ? base : "en";
+  }
+
+  function t(key, vars) {
+    let text = STRINGS[lang()][key];
+    if (text === undefined) text = STRINGS.en[key];
+    Object.keys(vars || {}).forEach((k) => {
+      text = text.split("{" + k + "}").join(String(vars[k]));
+    });
+    return text;
+  }
 
   // ── Automatic context: last 20 console errors + failed fetch/XHR requests ──
 
@@ -198,6 +312,11 @@
     },
     close: function () {
       if (ui) ui.close();
+    },
+    // setLanguage("id" | "en" | ""): "" follows the page's <html lang> again.
+    setLanguage: function (code) {
+      langOverride = code ? String(code) : "";
+      if (ui) ui.relabel();
     },
   };
   let ui = null;
@@ -630,28 +749,11 @@
     "top-right": { top: "20px", right: "20px" },
     "top-left": { top: "20px", left: "20px" },
   };
+  // Labels, titles and placeholders come from STRINGS ("<id>.label", "<id>.title", "<id>.ph").
   const MODES = [
-    {
-      id: "idea",
-      kind: "idea",
-      label: "Feedback",
-      title: "Share an idea or feedback",
-      ph: "What would you like to see?",
-    },
-    {
-      id: "bug",
-      kind: "bug",
-      label: "Report a bug",
-      title: "Report a bug",
-      ph: "What went wrong?",
-    },
-    {
-      id: "help",
-      kind: "question",
-      label: "Get help",
-      title: "Get help",
-      ph: "What do you need help with?",
-    },
+    { id: "idea", kind: "idea" },
+    { id: "bug", kind: "bug" },
+    { id: "help", kind: "question" },
   ];
   const MAX_FILES = 5;
 
@@ -711,16 +813,16 @@
 
   const bubble = document.createElement("button");
   bubble.className = "bubble";
-  bubble.setAttribute("aria-label", "Open feedback and support");
+  bubble.setAttribute("aria-label", t("open"));
   bubble.setAttribute("aria-expanded", "false");
   bubble.innerHTML =
     '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
-  shadow.appendChild(bubble);
+  if (showLauncher) shadow.appendChild(bubble);
 
   const panel = document.createElement("div");
   panel.className = "panel";
   panel.setAttribute("role", "dialog");
-  panel.setAttribute("aria-label", "Feedback and support");
+  panel.setAttribute("aria-label", t("dialog"));
   shadow.appendChild(panel);
 
   function el(tag, attrs, children) {
@@ -750,8 +852,10 @@
     host.style.top = p.top || "auto";
     host.style.right = p.right || "auto";
     host.style.left = p.left || "auto";
-    panel.style.bottom = p.bottom ? "68px" : "auto";
-    panel.style.top = p.top ? "68px" : "auto";
+    // Without the launcher the panel takes the bubble's place, next to the host page's own button.
+    const gap = showLauncher ? "68px" : "0";
+    panel.style.bottom = p.bottom ? gap : "auto";
+    panel.style.top = p.top ? gap : "auto";
     panel.style.right = p.right ? "0" : "auto";
     panel.style.left = p.left ? "0" : "auto";
     host.style.setProperty("--brand", brand);
@@ -772,7 +876,7 @@
 
   function uploadFile(file) {
     if (files.length >= MAX_FILES) {
-      errorMsg = "You can attach up to " + MAX_FILES + " files.";
+      errorMsg = t("maxFiles", { n: MAX_FILES });
       return render();
     }
     const entry = {
@@ -800,26 +904,25 @@
           entry.id = res.j.id;
         } else {
           files = files.filter((f) => f !== entry);
-          errorMsg = res.j.message || "Could not upload " + entry.name;
+          errorMsg = res.j.message || t("uploadFailed", { name: entry.name });
         }
         render();
       })
       .catch(() => {
         entry.uploading = false;
         files = files.filter((f) => f !== entry);
-        errorMsg = "Could not upload " + entry.name;
+        errorMsg = t("uploadFailed", { name: entry.name });
         render();
       });
   }
 
   function captureScreenshot() {
-    statusMsg = "Capturing screenshot…";
+    statusMsg = t("capturing");
     errorMsg = "";
     render();
     return captureViaDom()
       .catch(() => {
-        statusMsg =
-          "Couldn't render the page automatically. Your browser will ask to share this tab for a single frame.";
+        statusMsg = t("captureFallback");
         render();
         return captureViaDisplayMedia();
       })
@@ -834,10 +937,7 @@
       })
       .catch((e) => {
         statusMsg = "";
-        errorMsg =
-          e && e.name === "NotAllowedError"
-            ? "Screenshot cancelled."
-            : "Couldn't capture a screenshot. You can attach a file instead.";
+        errorMsg = e && e.name === "NotAllowedError" ? t("shotCancelled") : t("shotFailed");
         render();
       });
   }
@@ -845,7 +945,7 @@
   function submit() {
     const title = formState.title.trim();
     if (title.length < 3) {
-      errorMsg = "Please add a short summary (3+ characters).";
+      errorMsg = t("titleShort");
       return render();
     }
     busy = true;
@@ -886,13 +986,13 @@
           });
           files = [];
         } else {
-          errorMsg = res.j.message || "Something went wrong. Please try again.";
+          errorMsg = res.j.message || t("failed");
         }
         render();
       })
       .catch(() => {
         busy = false;
-        errorMsg = "Network error. Please try again.";
+        errorMsg = t("network");
         render();
       });
   }
@@ -903,7 +1003,7 @@
     const title = el("input", {
       type: "text",
       maxlength: "120",
-      placeholder: mode.ph,
+      placeholder: t(mode.id + ".ph"),
       id: "t",
       autocomplete: "off",
       oninput: (e) => (formState.title = e.target.value),
@@ -911,7 +1011,7 @@
     title.value = formState.title;
     const desc = el("textarea", {
       maxlength: "4000",
-      placeholder: "Add details (optional)",
+      placeholder: t("detailsPh"),
       id: "d",
       oninput: (e) => (formState.description = e.target.value),
     });
@@ -930,7 +1030,7 @@
       multiple: "",
       class: "sr",
       accept: "image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain",
-      "aria-label": "Attach files",
+      "aria-label": t("attachFiles"),
     });
     picker.addEventListener("change", () => {
       Array.from(picker.files || []).forEach(uploadFile);
@@ -946,7 +1046,7 @@
           el("span", { text: f.uploading ? f.name + " …" : f.name }),
           el("button", {
             type: "button",
-            "aria-label": "Remove " + f.name,
+            "aria-label": t("remove", { name: f.name }),
             text: "×",
             onclick: () => {
               files = files.filter((x) => x !== f);
@@ -959,21 +1059,21 @@
     );
 
     const form = el("form", { novalidate: "" }, [
-      el("label", {}, [el("span", { text: "Summary" }), title]),
-      el("label", {}, [el("span", { text: "Details" }), desc]),
-      showEmail ? el("label", {}, [el("span", { text: "Email (so we can reply)" }), email]) : null,
+      el("label", {}, [el("span", { text: t("summary") }), title]),
+      el("label", {}, [el("span", { text: t("details") }), desc]),
+      showEmail ? el("label", {}, [el("span", { text: t("email") }), email]) : null,
       el("div", { class: "row" }, [
         el("button", {
           type: "button",
           class: "btn",
           id: "shot",
-          text: "Capture screenshot",
+          text: t("capture"),
           onclick: captureScreenshot,
         }),
         el("button", {
           type: "button",
           class: "btn",
-          text: "Attach file",
+          text: t("attach"),
           onclick: () => picker.click(),
         }),
         picker,
@@ -983,7 +1083,7 @@
       captureContext
         ? el("p", {
             class: "note",
-            text: "Page URL, browser details and recent errors are sent with your report.",
+            text: t("contextNote"),
           })
         : null,
       errorMsg ? el("p", { class: "err", role: "alert", text: errorMsg }) : null,
@@ -991,7 +1091,7 @@
         type: "submit",
         class: "btn submit",
         id: "send",
-        text: busy ? "Sending…" : uploading ? "Uploading…" : "Send",
+        text: busy ? t("sending") : uploading ? t("uploading") : t("send"),
         ...(busy || uploading ? { disabled: "" } : {}),
       }),
     ]);
@@ -1005,13 +1105,12 @@
   function renderDone() {
     const link = doneInfo && doneInfo.url;
     return el("div", { class: "ok" }, [
-      el("h3", { text: "Thank you!" }),
+      el("h3", { text: t("thanks") }),
       el("p", {
         class: "note",
-        text:
-          "We received your report" +
-          (doneInfo && doneInfo.sequence_id ? " (#" + doneInfo.sequence_id + ")" : "") +
-          ".",
+        text: t("received", {
+          seq: doneInfo && doneInfo.sequence_id ? " (#" + doneInfo.sequence_id + ")" : "",
+        }),
       }),
       link
         ? el("p", {}, [
@@ -1019,7 +1118,7 @@
               href: link,
               target: "_blank",
               rel: "noopener",
-              text: "Track it in the portal",
+              text: t("track"),
             }),
           ])
         : null,
@@ -1027,7 +1126,7 @@
         el("button", {
           type: "button",
           class: "btn",
-          text: "Send another",
+          text: t("another"),
           onclick: () => {
             view = "form";
             render();
@@ -1041,17 +1140,22 @@
     const active = shadow.activeElement && shadow.activeElement.id;
     const scroll = panel.scrollTop;
     panel.textContent = "";
+    panel.setAttribute("aria-label", t("dialog"));
+    bubble.setAttribute("aria-label", t("open"));
     panel.appendChild(
       el("div", { class: "head" }, [
-        el("h2", { text: view === "done" ? "Sent" : mode.title }),
-        el("button", { class: "x", "aria-label": "Close", text: "×", onclick: () => api.close() }),
+        el("h2", { text: view === "done" ? t("sent") : t(mode.id + ".title") }),
+        el("button", {
+          class: "x",
+          "aria-label": t("close"),
+          text: "×",
+          onclick: () => api.close(),
+        }),
       ]),
     );
     if (!boardCfg.allow_submit) {
       panel.appendChild(
-        el("div", { class: "ok" }, [
-          el("p", { class: "note", text: "Submissions are currently closed." }),
-        ]),
+        el("div", { class: "ok" }, [el("p", { class: "note", text: t("closed") })]),
       );
     } else if (view === "done") {
       panel.appendChild(renderDone());
@@ -1066,7 +1170,7 @@
               class: "tab",
               role: "tab",
               "aria-selected": String(m.id === mode.id),
-              text: m.label,
+              text: t(m.id + ".label"),
               onclick: () => {
                 mode = m;
                 errorMsg = "";
@@ -1087,9 +1191,9 @@
             href: ideas,
             target: "_blank",
             rel: "noopener",
-            text: "Browse ideas & roadmap",
+            text: t("ideas"),
           }),
-          el("a", { href: mine, target: "_blank", rel: "noopener", text: "My requests" }),
+          el("a", { href: mine, target: "_blank", rel: "noopener", text: t("mine") }),
         ]),
       );
     }
@@ -1111,6 +1215,7 @@
       if (found) mode = found;
     }
     view = "form";
+    openedAt = Date.now();
     panel.classList.add("open");
     bubble.setAttribute("aria-expanded", "true");
     render();
@@ -1128,14 +1233,23 @@
     if (panel.classList.contains("open")) close();
     else open();
   });
+  // A host button that calls Atur.open() opens the panel in its own click handler; that same click then reaches the
+  // document, so a click right after opening is not "outside".
+  let openedAt = 0;
   document.addEventListener("click", (e) => {
+    if (Date.now() - openedAt < 300) return;
     if (panel.classList.contains("open") && !host.contains(e.target)) close();
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") close();
   });
 
-  ui = { open: open, close: close, syncIdentity: syncIdentity };
+  function relabel() {
+    if (panel.classList.contains("open")) render();
+    else bubble.setAttribute("aria-label", t("open"));
+  }
+
+  ui = { open: open, close: close, syncIdentity: syncIdentity, relabel: relabel };
 
   function mount() {
     document.body.appendChild(host);
